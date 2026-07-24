@@ -40,5 +40,8 @@ mac:
 dmg:
   writeUpdateInfo: false
 # owner/repo are inferred from the git remote in CI; GH_TOKEN authorises the upload.
+# releaseType: release publishes immediately (not a draft) so the download page's
+# /releases/latest/download/ links resolve without a manual "publish" click.
 publish:
   provider: github
+  releaseType: release
