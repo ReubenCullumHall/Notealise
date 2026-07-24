@@ -1,0 +1,135 @@
+/* ===========================================================================
+   theme.css — fonts + design tokens (rule 5)
+
+   All visual values live here as CSS custom properties; app.css and the editor
+   only ever reference them. Colours are stored as bare "R G B" channel triples
+   (ported from legacy/src/index.css) so any consumer can add its own alpha via
+   rgb(var(--x) / <a>). Swapping [data-theme] on <html> re-skins everything; dark
+   is the default. Fonts are bundled woff2 (no CDN) — see ./assets/fonts/.
+   =========================================================================== */
+
+/* ---- bundled fonts ------------------------------------------------------- */
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('./assets/fonts/inter-400.woff2') format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('./assets/fonts/inter-500.woff2') format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('./assets/fonts/inter-600.woff2') format('woff2'); }
+@font-face { font-family: 'Fraunces'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('./assets/fonts/fraunces-400.woff2') format('woff2'); }
+@font-face { font-family: 'Fraunces'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('./assets/fonts/fraunces-600.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('./assets/fonts/jetbrainsmono-400.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('./assets/fonts/jetbrainsmono-500.woff2') format('woff2'); }
+
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ---- colour ramps -------------------------------------------------------- */
+/* --wash is the direction a translucent overlay leans: white on dark, black on
+   light — it keeps every hover/selection tint working in both themes. */
+:root,
+:root[data-theme='dark'] {
+  --paper: 0 0 0;
+  --surface: 22 22 22;
+  --brand-50: 20 20 20;
+  --brand-100: 31 31 31;
+  --brand-200: 43 43 43;
+  --brand-300: 74 74 74;
+  --brand-400: 92 92 92;
+  --brand-500: 143 143 143;
+  --brand-600: 216 216 216;
+  --brand-700: 228 228 228;
+  --ink-900: 214 214 214;
+  --ink-800: 202 202 202;
+  --ink-700: 184 184 184;
+  --ink-600: 163 163 163;
+  --ink-500: 140 140 140;
+  --ink-400: 118 118 118;
+  --ink-300: 97 97 97;
+  --wash: 255 255 255;
+  --code-bg: 11 11 11;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.6), 0 8px 24px -8px rgba(0, 0, 0, 0.8);
+  --shadow-float: 0 2px 4px rgba(0, 0, 0, 0.6), 0 18px 40px -12px rgba(0, 0, 0, 0.9);
+  color-scheme: dark;
+
+  /* editor syntax tokens (read by editor/highlight.ts) */
+  --ed-muted: rgb(var(--ink-500));
+  --ed-bullet: rgb(var(--ink-400));
+  --ed-code: #e08aad;
+  --ed-link: #6ab0ff;
+
+  /* colour/highlight palette — highlight (hl) background + text colour (tc) */
+  --hl-amber: hsl(40 48% 30%);   --tc-amber: hsl(40 78% 66%);
+  --hl-coral: hsl(14 52% 34%);   --tc-coral: hsl(14 82% 72%);
+  --hl-rose: hsl(342 44% 34%);   --tc-rose: hsl(342 78% 74%);
+  --hl-violet: hsl(273 40% 38%); --tc-violet: hsl(273 72% 78%);
+  --hl-sky: hsl(205 52% 32%);    --tc-sky: hsl(205 82% 70%);
+  --hl-teal: hsl(178 44% 27%);   --tc-teal: hsl(178 60% 62%);
+  --hl-sage: hsl(140 38% 27%);   --tc-sage: hsl(140 52% 64%);
+  --hl-slate: hsl(218 20% 36%);  --tc-slate: hsl(218 26% 74%);
+}
+
+:root[data-theme='light'] {
+  --paper: 247 247 246;
+  --surface: 255 255 255;
+  --brand-50: 237 237 235;
+  --brand-100: 226 226 224;
+  --brand-200: 210 210 208;
+  --brand-300: 176 176 173;
+  --brand-400: 138 138 135;
+  --brand-500: 106 106 104;
+  --brand-600: 29 29 28;
+  --brand-700: 15 15 15;
+  --ink-900: 26 26 25;
+  --ink-800: 44 44 43;
+  --ink-700: 68 68 66;
+  --ink-600: 91 91 89;
+  --ink-500: 117 117 114;
+  --ink-400: 140 140 137;
+  --ink-300: 163 163 160;
+  --wash: 0 0 0;
+  --code-bg: 241 241 239;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 24px -10px rgba(0, 0, 0, 0.16);
+  --shadow-float: 0 2px 4px rgba(0, 0, 0, 0.06), 0 18px 40px -14px rgba(0, 0, 0, 0.22);
+  color-scheme: light;
+
+  --ed-muted: rgb(var(--ink-500));
+  --ed-bullet: rgb(var(--ink-400));
+  --ed-code: #b5325a;
+  --ed-link: #2563eb;
+
+  --hl-amber: hsl(40 90% 85%);   --tc-amber: hsl(40 62% 38%);
+  --hl-coral: hsl(14 90% 88%);   --tc-coral: hsl(14 68% 48%);
+  --hl-rose: hsl(342 88% 90%);   --tc-rose: hsl(342 62% 48%);
+  --hl-violet: hsl(273 72% 90%); --tc-violet: hsl(273 52% 54%);
+  --hl-sky: hsl(205 88% 86%);    --tc-sky: hsl(205 72% 42%);
+  --hl-teal: hsl(178 62% 80%);   --tc-teal: hsl(178 66% 32%);
+  --hl-sage: hsl(140 55% 83%);   --tc-sage: hsl(140 46% 36%);
+  --hl-slate: hsl(218 30% 87%);  --tc-slate: hsl(218 18% 44%);
+}
+
+/* ---- density ------------------------------------------------------------- */
+/* Only the sidebar tree reads these; the editor keeps its own reading size. */
+:root,
+:root[data-density='cozy'] {
+  --row-py: 6px;   --row-gap: 3px;  --row-radius: 10px; --row-title: 14px;
+  --row-icon: 16px; --row-indent: 14px; --row-pad0: 10px;
+}
+:root[data-density='large'] {
+  --row-py: 9px;   --row-gap: 4px;  --row-radius: 12px; --row-title: 15px;
+  --row-icon: 18px; --row-indent: 18px; --row-pad0: 12px;
+}
+:root[data-density='compact'] {
+  --row-py: 3px;   --row-gap: 2px;  --row-radius: 7px;  --row-title: 13px;
+  --row-icon: 15px; --row-indent: 12px; --row-pad0: 8px;
+}
+:root[data-density='ultra'] {
+  --row-py: 1px;   --row-gap: 1px;  --row-radius: 5px;  --row-title: 12px;
+  --row-icon: 13px; --row-indent: 10px; --row-pad0: 6px;
+}

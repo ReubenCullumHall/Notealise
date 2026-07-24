@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vault — Notes</title>
+
+    <!-- Tailwind (runtime; we'll compile it properly when we package for Tauri) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+    <!-- Theme + density are stored in localStorage and applied here, before the
+         first paint, so a light-theme user never sees a black flash on load. -->
+    <script>
+      (function () {
+        try {
+          var s = JSON.parse(localStorage.getItem('vault.settings.v1')) || {};
+          document.documentElement.dataset.theme = s.theme === 'light' ? 'light' : 'dark';
+          document.documentElement.dataset.density = s.density || 'cozy';
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+          document.documentElement.dataset.density = 'cozy';
+        }
+      })();
+    </script>
+
+    <script>
+      /* Every colour is an "R G B" channel triple in a CSS variable (see
+         src/index.css), so swapping [data-theme] on <html> re-skins the whole
+         app without touching a single className. The <alpha-value> placeholder
+         is what keeps Tailwind's opacity modifiers (bg-surface/45) working. */
+      const rgb = (v) => `rgb(var(${v}) / <alpha-value>)`;
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              display: ['Fraunces', 'serif'],
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+              mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+            },
+            colors: {
+              /* monochrome accent: low numbers are the quietest fills and
+                 borders, 500 is the neutral mid used for selection washes,
+                 600/700 are the strongest contrast (hover/active only) */
+              brand: {
+                50: rgb('--brand-50'), 100: rgb('--brand-100'), 200: rgb('--brand-200'),
+                300: rgb('--brand-300'), 400: rgb('--brand-400'), 500: rgb('--brand-500'),
+                600: rgb('--brand-600'), 700: rgb('--brand-700'),
+              },
+              /* text ramp: 900 is the strongest (never pure black/white),
+                 300 the most muted */
+              ink: {
+                900: rgb('--ink-900'), 800: rgb('--ink-800'), 700: rgb('--ink-700'),
+                600: rgb('--ink-600'), 500: rgb('--ink-500'), 400: rgb('--ink-400'),
+                300: rgb('--ink-300'),
+              },
+              paper: rgb('--paper'),
+              surface: rgb('--surface'),
+            },
+            boxShadow: {
+              card: 'var(--shadow-card)',
+              float: 'var(--shadow-float)',
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

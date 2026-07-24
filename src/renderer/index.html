@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-density="cozy">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notes</title>
+    <script>
+      // The preload bridge exposes the cached theme synchronously as
+      // window.mdnotesTheme (read from userData) BEFORE this script runs, so the
+      // first paint is already the correct theme/density — no flash. The static
+      // data-* on <html> above is the fallback if the cache is unavailable.
+      (function () {
+        try {
+          var c = window.mdnotesTheme || {}
+          var root = document.documentElement
+          root.dataset.theme = c.theme === 'light' ? 'light' : 'dark'
+          root.dataset.density = c.density || 'cozy'
+        } catch (e) {
+          /* keep the static dark/cozy fallback */
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

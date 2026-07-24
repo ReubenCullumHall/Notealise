@@ -1,0 +1,44 @@
+# electron-builder — packages the electron-vite build (out/) into installers.
+# Windows -> NSIS .exe, macOS -> universal .dmg. Unsigned for the MVP (testers
+# click through the OS "unverified developer" warning). Artifact names are fixed
+# (no version) so the download page can link to a stable /releases/latest/download/ URL.
+appId: com.notesapp.desktop
+productName: Notes
+directories:
+  output: release
+  buildResources: build
+# Ship the built app (out/) + production node_modules; exclude source, the legacy
+# browser app, the download site, docs and configs the desktop build never uses.
+files:
+  - out/**
+  - package.json
+  - '!**/.vscode/**'
+  - '!src/**'
+  - '!legacy/**'
+  - '!site/**'
+  - '!docs/**'
+  - '!.github/**'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{.oxlintrc.json,CLAUDE.md,PROJECT-CONTEXT-BRIEF.md,run-legacy.bat,vercel.json}'
+win:
+  target: nsis
+  artifactName: ${productName}-Setup.${ext}
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: always
+  shortcutName: ${productName}
+mac:
+  target:
+    - target: dmg
+      arch: universal
+  category: public.app-category.productivity
+  artifactName: ${productName}.${ext}
+  # Unsigned MVP build — do not attempt to sign or notarize.
+  identity: null
+dmg:
+  writeUpdateInfo: false
+# owner/repo are inferred from the git remote in CI; GH_TOKEN authorises the upload.
+publish:
+  provider: github

@@ -1,0 +1,317 @@
+/* ===========================================================================
+   Theme tokens
+   Colours are stored as bare "R G B" channels so both Tailwind (via
+   rgb(var(--x) / <alpha-value>) in index.html) and plain CSS below can add
+   their own alpha. Swapping [data-theme] on <html> re-skins everything.
+   --wash is the direction a translucent overlay leans: white on dark, black
+   on light — it keeps every hover/selection tint working in both themes.
+   =========================================================================== */
+:root,
+:root[data-theme="dark"] {
+  --paper: 0 0 0;
+  --surface: 22 22 22;
+  --brand-50: 20 20 20;
+  --brand-100: 31 31 31;
+  --brand-200: 43 43 43;
+  --brand-300: 74 74 74;
+  --brand-400: 92 92 92;
+  --brand-500: 143 143 143;
+  --brand-600: 216 216 216;
+  --brand-700: 228 228 228;
+  --ink-900: 214 214 214;
+  --ink-800: 202 202 202;
+  --ink-700: 184 184 184;
+  --ink-600: 163 163 163;
+  --ink-500: 140 140 140;
+  --ink-400: 118 118 118;
+  --ink-300: 97 97 97;
+  --wash: 255 255 255;
+  --code-bg: 11 11 11;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.6), 0 8px 24px -8px rgba(0, 0, 0, 0.8);
+  --shadow-float: 0 2px 4px rgba(0, 0, 0, 0.6), 0 18px 40px -12px rgba(0, 0, 0, 0.9);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --paper: 247 247 246;
+  --surface: 255 255 255;
+  --brand-50: 237 237 235;
+  --brand-100: 226 226 224;
+  --brand-200: 210 210 208;
+  --brand-300: 176 176 173;
+  --brand-400: 138 138 135;
+  --brand-500: 106 106 104;
+  --brand-600: 29 29 28;
+  --brand-700: 15 15 15;
+  --ink-900: 26 26 25;
+  --ink-800: 44 44 43;
+  --ink-700: 68 68 66;
+  --ink-600: 91 91 89;
+  --ink-500: 117 117 114;
+  --ink-400: 140 140 137;
+  --ink-300: 163 163 160;
+  --wash: 0 0 0;
+  --code-bg: 241 241 239;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 24px -10px rgba(0, 0, 0, 0.16);
+  --shadow-float: 0 2px 4px rgba(0, 0, 0, 0.06), 0 18px 40px -14px rgba(0, 0, 0, 0.22);
+  color-scheme: light;
+}
+
+/* ===========================================================================
+   Density — how tightly the sidebar packs notes and folders.
+   Only the sidebar tree reads these; the editor keeps its own reading size.
+   =========================================================================== */
+:root,
+:root[data-density="cozy"] {
+  --row-py: 8px;
+  --row-gap: 8px;
+  --row-radius: 12px;
+  --row-title: 14px;
+  --row-sub: 12px;
+  --row-icon: 16px;
+  --row-indent: 14px;
+  --row-pad0: 8px;
+  --row-sub-display: block;
+}
+:root[data-density="large"] {
+  --row-py: 11px;
+  --row-gap: 10px;
+  --row-radius: 14px;
+  --row-title: 15px;
+  --row-sub: 12.5px;
+  --row-icon: 18px;
+  --row-indent: 18px;
+  --row-pad0: 10px;
+  --row-sub-display: block;
+}
+:root[data-density="compact"] {
+  --row-py: 4px;
+  --row-gap: 6px;
+  --row-radius: 8px;
+  --row-title: 13px;
+  --row-sub: 11px;
+  --row-icon: 15px;
+  --row-indent: 12px;
+  --row-pad0: 6px;
+  --row-sub-display: block;
+}
+/* one line per item, no previews — maximum items per screen */
+:root[data-density="ultra"] {
+  --row-py: 1px;
+  --row-gap: 5px;
+  --row-radius: 5px;
+  --row-title: 12px;
+  --row-sub: 11px;
+  --row-icon: 13px;
+  --row-indent: 10px;
+  --row-pad0: 5px;
+  --row-sub-display: none;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  color: rgb(var(--ink-900));
+  -webkit-font-smoothing: antialiased;
+  background-color: rgb(var(--paper));
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgb(var(--wash) / 0.16); border-radius: 999px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--wash) / 0.28); background-clip: content-box; }
+
+.spring { transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes fade-in {
+  from { opacity: 0; transform: translate3d(0, 5px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+/* translate3d keeps it on the compositor; easeOutExpo settles instead of stopping */
+.fade-in { animation: fade-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Theme changes only animate the colour properties, and only for the moment
+   they're changing — a permanent global transition would tax every hover. */
+.theming, .theming *, .theming *::before, .theming *::after {
+  transition: background-color 260ms ease, border-color 260ms ease, color 260ms ease,
+              fill 260ms ease, stroke 260ms ease, box-shadow 260ms ease, outline-color 260ms ease !important;
+}
+/* ---- settings window: grows out of the settings icon ----
+   The window scales up from a speck at the gear (JS points transform-origin at
+   the button), a little flatter than it is wide so it reads as being drawn out
+   rather than just zoomed.
+
+   Three rules keep this smooth, all of them learned the hard way:
+
+   1. TWO keyframes per animation, never more. A timing function is re-applied
+      between *every* pair of keyframes, so the old 0/45/75/100 version ran
+      ease-out three separate times — three little accelerate-decelerate bursts,
+      which is exactly what "jerky" was.
+   2. Transform and opacity are separate animations, so the fade can finish
+      early without dragging the movement's easing around with it.
+   3. Only transform and opacity, ever. Blur and border-radius in here forced a
+      full repaint of a 720x600 panel every frame; will-change plus
+      backface-visibility give it its own layer, rasterised once then reused.
+
+   .run is added a frame after mount (see SettingsPanel), so the browser has
+   already paid for laying out the panel before frame 0 of the animation. */
+.genie {
+  opacity: 0;
+  border-radius: 20px;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+/* CLOSING MUST USE ITS OWN @keyframes NAMES. Swapping a class only restarts an
+   animation if the animation-name list actually changes; reusing a name with
+   `reverse` just retargets the existing animation, which by then has long since
+   finished — so it never re-enters its active phase and never fires a second
+   `animationend`. The panel unmounts on that event, so reusing the names left a
+   full-screen overlay in the DOM swallowing every click until a reload. Hence
+   the -out pairs below, written forwards rather than reversed. */
+.genie.run {
+  animation: genie-scale 420ms cubic-bezier(0.22, 1, 0.36, 1) both,
+             genie-fade 240ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+.genie.run.closing {
+  animation: genie-scale-out 260ms cubic-bezier(0.5, 0, 0.85, 0.35) both,
+             genie-fade-out 200ms 60ms cubic-bezier(0.5, 0, 1, 0.5) both;
+}
+
+@keyframes genie-scale {
+  from { transform: scale(0.16, 0.28); }
+  to   { transform: scale(1, 1); }
+}
+@keyframes genie-scale-out {
+  from { transform: scale(1, 1); }
+  to   { transform: scale(0.16, 0.28); }
+}
+@keyframes genie-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes genie-fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+.genie-backdrop { will-change: opacity; animation: fade-op 280ms cubic-bezier(0.33, 1, 0.68, 1) both; }
+.genie-backdrop.closing { animation: fade-op-out 220ms cubic-bezier(0.5, 0, 1, 0.5) both; }
+@keyframes fade-op { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-op-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* a movement this big is exactly what motion sensitivity flags, so drop to a fade */
+@media (prefers-reduced-motion: reduce) {
+  .genie.run { animation: genie-fade 160ms ease both; }
+  .genie.run.closing { animation: genie-fade-out 140ms ease both; }
+}
+
+/* ---- bin: the lid hinges open when something goes in ---- */
+.bin-lid {
+  transform-box: fill-box;
+  transform-origin: 8% 90%;
+  transition: transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.lid-open .bin-lid { transform: translate(0.5px, -2px) rotate(-22deg); }
+
+/* ---- sidebar tree: folders, drag & drop ---- */
+.chev { transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+.chev.open { transform: rotate(90deg); }
+
+.tree-row {
+  position: relative;
+  padding-top: var(--row-py);
+  padding-bottom: var(--row-py);
+  gap: var(--row-gap);
+  border-radius: var(--row-radius);
+  /* deliberately not transitioning padding: it would relayout every row in the
+     sidebar on every frame of a density change. Paint-only properties here. */
+  transition: background-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease,
+              outline-color 0.18s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tree-row.dragging { opacity: 0.35; transform: scale(0.985); }
+
+/* row typography follows the density setting. These own the metrics outright —
+   the matching Tailwind utilities are deliberately absent from the JSX so we
+   never depend on which stylesheet the browser loaded last. */
+.tree-title { display: block; font-size: var(--row-title); line-height: 1.35; }
+.tree-sub { font-size: var(--row-sub); display: var(--row-sub-display); line-height: 1.35; }
+/* `.tree-row svg` outranks Tailwind's `.h-4 .w-4` on specificity, so every icon
+   in a row (doc, folder, chevron, grip, hover actions) scales together */
+.tree-row svg { width: var(--row-icon); height: var(--row-icon); }
+
+/* ⌘/ctrl-click selection */
+.tree-row.row-picked {
+  background: rgb(var(--wash) / 0.10);
+  box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.22);
+}
+.tree-row.row-picked:hover { background: rgb(var(--wash) / 0.13); }
+/* the open note, when it's also selected — outline, because .row-picked already
+   owns box-shadow and would beat Tailwind's ring utilities */
+.tree-row.row-picked.is-open {
+  outline: 1px solid rgb(var(--brand-300) / 0.7);
+  outline-offset: -1px;
+}
+
+/* the 3x2 grip: quiet until you hover the row, always on once selected */
+.grip {
+  opacity: 0;
+  transition: opacity 0.18s ease, color 0.18s ease;
+}
+.tree-row:hover .grip, .grip.is-on { opacity: 1; }
+.tree-row:hover .grip:hover { color: rgb(var(--ink-800)); }
+
+/* insertion line when reordering */
+@keyframes line-in { from { opacity: 0; transform: scaleX(0.55); } to { opacity: 1; transform: none; } }
+.tree-row.drop-before::before,
+.tree-row.drop-after::after {
+  content: ""; position: absolute; left: 8px; right: 8px; height: 2px;
+  background: rgb(var(--ink-800)); border-radius: 2px; pointer-events: none;
+  transform-origin: left center;
+  animation: line-in 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.tree-row.drop-before::before { top: -1px; }
+.tree-row.drop-after::after { bottom: -1px; }
+
+/* highlight when dropping into a folder */
+.tree-row.drop-into {
+  background: rgb(var(--wash) / 0.09);
+  outline: 2px solid rgb(var(--wash) / 0.3);
+  outline-offset: -2px;
+  transform: scale(1.012);
+}
+
+/* ---- rendered markdown (reading view) ---- */
+.prose-note { color: rgb(var(--ink-700)); font-size: 16px; line-height: 1.7; }
+.prose-note h1 { font-family: Fraunces, serif; font-weight: 600; font-size: 2rem; line-height: 1.15; letter-spacing: -0.02em; color: rgb(var(--ink-900)); margin: 0.2em 0 0.5em; }
+.prose-note h2 { font-family: Fraunces, serif; font-weight: 600; font-size: 1.5rem; color: rgb(var(--ink-900)); margin: 1.3em 0 0.5em; }
+.prose-note h3 { font-weight: 600; font-size: 1.15rem; color: rgb(var(--ink-900)); margin: 1.2em 0 0.4em; }
+.prose-note p { margin: 0.7em 0; }
+.prose-note a { color: rgb(var(--ink-900)); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: rgb(var(--wash) / 0.35); }
+.prose-note a:hover { text-decoration-color: rgb(var(--wash) / 0.7); }
+.prose-note ul, .prose-note ol { margin: 0.6em 0; padding-left: 1.4em; }
+.prose-note ul { list-style: disc; }
+.prose-note ol { list-style: decimal; }
+.prose-note li { margin: 0.25em 0; }
+/* the browser default checkbox is a harsh solid square, so draw our own in grey */
+.prose-note li input[type=checkbox] {
+  appearance: none; -webkit-appearance: none;
+  position: relative; width: 1em; height: 1em; margin-right: 0.5em;
+  vertical-align: -0.12em; cursor: pointer;
+  border: 1px solid rgb(var(--ink-300)); border-radius: 4px;
+  background: rgb(var(--wash) / 0.04);
+  transition: background 0.15s, border-color 0.15s;
+}
+.prose-note li input[type=checkbox]:hover { border-color: rgb(var(--ink-500)); }
+.prose-note li input[type=checkbox]:checked { background: rgb(var(--brand-500)); border-color: rgb(var(--brand-500)); }
+.prose-note li input[type=checkbox]:checked::after {
+  content: ""; position: absolute; left: 0.3em; top: 0.1em;
+  width: 0.2em; height: 0.45em;
+  border: solid rgb(var(--paper)); border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.prose-note blockquote { border-left: 3px solid rgb(var(--brand-300)); padding-left: 1em; margin: 0.9em 0; color: rgb(var(--ink-500)); font-style: italic; }
+.prose-note code { font-family: 'JetBrains Mono', monospace; font-size: 0.86em; background: rgb(var(--wash) / 0.07); padding: 0.15em 0.4em; border-radius: 6px; color: rgb(var(--ink-800)); }
+.prose-note pre { background: rgb(var(--code-bg)); color: rgb(var(--ink-800)); padding: 1em 1.15em; border-radius: 14px; overflow-x: auto; margin: 0.9em 0; border: 1px solid rgb(var(--wash) / 0.09); }
+.prose-note pre code { background: none; color: inherit; padding: 0; font-size: 0.85em; }
+.prose-note hr { border: none; border-top: 1px solid rgb(var(--wash) / 0.12); margin: 1.6em 0; }
+.prose-note table { border-collapse: collapse; margin: 0.9em 0; width: 100%; }
+.prose-note th, .prose-note td { border: 1px solid rgb(var(--wash) / 0.12); padding: 0.4em 0.7em; text-align: left; }
+.prose-note th { background: rgb(var(--wash) / 0.05); font-weight: 600; color: rgb(var(--ink-800)); }
+.prose-note img { max-width: 100%; border-radius: 12px; }
+.prose-note a.wikilink { color: rgb(var(--ink-800)); background: rgb(var(--wash) / 0.08); border-radius: 5px; padding: 0.05em 0.32em; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.prose-note a.wikilink:hover { background: rgb(var(--wash) / 0.16); }
+.prose-note a.wikilink.wikilink-new { color: rgb(var(--ink-500)); background: rgb(var(--wash) / 0.04); border-bottom: 1px dashed rgb(var(--ink-300)); }

@@ -1,0 +1,39 @@
+name: Release
+
+# Push a version tag (e.g. v0.1.0) to build installers on both OSes and attach
+# them to a GitHub Release. macOS is required to produce the .dmg — it can't be
+# built on Windows, which is why this runs on a matrix of runners.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # allow the workflow to create/upload the GitHub Release
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build renderer/main/preload
+        run: npm run build
+
+      - name: Package installer & publish to the Release
+        run: npx --no-install electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Unsigned MVP: don't let electron-builder try to find a signing identity.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
