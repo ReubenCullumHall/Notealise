@@ -1,8 +1,15 @@
 name: Release
 
-# Push a version tag (e.g. v0.1.0) to build installers on both OSes and attach
-# them to a GitHub Release. macOS is required to produce the .dmg — it can't be
-# built on Windows, which is why this runs on a matrix of runners.
+# Push a version tag to build installers on both OSes and attach them to a
+# GitHub Release. macOS is required to produce the .dmg — it can't be built on
+# Windows, which is why the build runs on a matrix of runners.
+#
+# Two kinds of tag:
+#   v0.2.0         -> a normal release. Becomes `releases/latest`, publishes
+#                     `latest.yml`, and every installed app updates to it.
+#   v0.2.0-beta.1  -> a PRERELEASE. Publishes `beta.yml`, is excluded from
+#                     `releases/latest` by GitHub, and only reaches installs that
+#                     opted into test builds. See docs/release-checklist.md.
 on:
   push:
     tags:
@@ -12,7 +19,24 @@ permissions:
   contents: write # allow the workflow to create/upload the GitHub Release
 
 jobs:
+  # Nothing gets packaged until this passes. A tag that fails typecheck, lint or
+  # tests must never turn into an installer that updates itself onto real
+  # machines — this job is the whole point of the gate.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
   build:
+    needs: verify
     strategy:
       fail-fast: false
       matrix:
@@ -31,8 +55,22 @@ jobs:
       - name: Build renderer/main/preload
         run: npm run build
 
+      # A tag containing "-" is a prerelease (v0.2.0-beta.1). It must be
+      # published as a GitHub prerelease, otherwise electron-builder.yml's
+      # `releaseType: release` would make it `releases/latest` and push a test
+      # build to every user and to the download page.
+      - name: Decide release type
+        id: kind
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            echo "type=prerelease" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=release" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Package installer & publish to the Release
-        run: npx --no-install electron-builder --publish always
+        run: npx --no-install electron-builder --publish always --config.publish.releaseType=${{ steps.kind.outputs.type }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Unsigned MVP: don't let electron-builder try to find a signing identity.

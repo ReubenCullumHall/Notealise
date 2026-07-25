@@ -1,0 +1,27 @@
+name: Verify
+
+# The same checks the Release workflow gates on, but run on every push so a
+# problem is found before a tag exists — a tag is public the moment it's pushed,
+# and deleting one that has already built is messier than never pushing it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      # Proves the production bundle builds. Packaging into an installer is the
+      # Release workflow's job; this only has to catch a build that can't finish.
+      - run: npm run build

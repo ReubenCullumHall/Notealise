@@ -1,0 +1,12 @@
+# Read ONLY by `NOTES_TEST_UPDATER=1 npm run dev` (src/main/updater.ts).
+#
+# electron-updater looks for this file at app.getAppPath() — the repo root in
+# dev — when forceDevUpdateConfig is set. It mirrors what electron-builder writes
+# into resources/app-update.yml for a packaged build, so a dev run checks the
+# same live GitHub feed real installs do.
+#
+# This file never ships: electron-builder.yml's `files:` is a whitelist of
+# `out/**` + `package.json`, so nothing at the repo root is packaged.
+provider: github
+owner: ReubenCullumHall
+repo: Notes-app

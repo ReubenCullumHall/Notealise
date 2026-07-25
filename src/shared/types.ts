@@ -83,6 +83,9 @@ export interface VaultApi {
   installUpdate(): void
   /** Turn background auto-update on/off; persisted in userData. */
   setAutoUpdate(on: boolean): Promise<UpdateStatus>
+  /** Opt in/out of prerelease (beta) builds; persisted in userData. Checks the
+   *  newly selected channel immediately. */
+  setBetaChannel(on: boolean): Promise<UpdateStatus>
   /** Open the GitHub releases page in the default browser. */
   openReleases(): void
   /** Subscribe to update state changes; returns an unsubscribe function. */

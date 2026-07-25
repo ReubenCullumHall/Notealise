@@ -28,6 +28,7 @@ export const CH = {
   downloadUpdate: 'update:download',
   installUpdate: 'update:install',
   setAutoUpdate: 'update:setAuto',
+  setBetaChannel: 'update:setBeta',
   openReleases: 'update:openReleases',
   getAppVersion: 'app:version',
   /** main -> renderer: update progress/state changed */

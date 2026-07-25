@@ -29,6 +29,7 @@ const api: VaultApi = {
   downloadUpdate: () => ipcRenderer.invoke(CH.downloadUpdate),
   installUpdate: () => ipcRenderer.send(CH.installUpdate),
   setAutoUpdate: (on) => ipcRenderer.invoke(CH.setAutoUpdate, on),
+  setBetaChannel: (on) => ipcRenderer.invoke(CH.setBetaChannel, on),
   openReleases: () => ipcRenderer.send(CH.openReleases),
   onUpdateStatus: (cb) => {
     const listener = (_e: unknown, status: UpdateStatus): void => cb(status)

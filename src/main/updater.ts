@@ -1,8 +1,15 @@
 import { app, BrowserWindow, shell } from 'electron'
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 import electronUpdater from 'electron-updater'
 import { CH } from '../shared/channels'
 import { getUpdatePrefs, saveUpdatePrefs } from './config'
-import { RELEASES_URL, type UpdateStatus } from '../shared/update'
+import {
+  BETA_CHANNEL,
+  isPrereleaseVersion,
+  RELEASES_URL,
+  type UpdateStatus
+} from '../shared/update'
 
 // The only file that imports electron-updater. It reads the `latest.yml` that
 // electron-builder already publishes beside Notes-Setup.exe on every GitHub
@@ -26,16 +33,35 @@ function updater(): typeof electronUpdater.autoUpdater {
   return cached
 }
 
+/** Opt-in dev testing. `AppUpdater.js:278` enables the updater when
+ *  `app.isPackaged || forceDevUpdateConfig`, falling back to `dev-app-update.yml`
+ *  at `app.getAppPath()` — the repo root in dev. So `NOTES_TEST_UPDATER=1
+ *  npm run dev` exercises the real check → download → sha512 verify path without
+ *  packaging or publishing anything. Off by default: nobody wants a dev run
+ *  quietly downloading 100 MB.
+ *
+ *  To see it actually FIND something, temporarily lower `version` in
+ *  package.json — in dev the updater compares against that. */
+const devTest = process.env.NOTES_TEST_UPDATER === '1'
+
 /** Two reasons the app can't update itself, both of which must be reported
  *  rather than thrown:
- *   - dev: autoUpdater has no dev-app-update.yml and throws if asked to check.
+ *   - dev: autoUpdater has no update config and throws if asked to check
+ *     (unless devTest above supplies dev-app-update.yml).
  *   - macOS: the build is unsigned (electron-builder.yml `identity: null`) and
  *     Squirrel.Mac REFUSES to apply an unsigned update. That is a signature
  *     check, not a warning — it needs an Apple Developer ID + notarization. */
 function unsupportedReason(): string | null {
-  if (!app.isPackaged) return 'Updates are disabled in development builds.'
+  if (!app.isPackaged && !devTest) return 'Updates are disabled in development builds.'
   if (process.platform === 'darwin') {
     return 'Automatic updates need a signed macOS build. Download the new version instead.'
+  }
+  // `npm run package:dir` (gate 1) produces a genuinely packaged app — isPackaged
+  // is true — but electron-builder only writes app-update.yml when it builds an
+  // installer target, so there is no feed to read. Without this the gate-1 smoke
+  // test shows a scary "Cannot find app-update.yml" error that means nothing.
+  if (app.isPackaged && !existsSync(path.join(process.resourcesPath, 'app-update.yml'))) {
+    return 'This is an unpackaged test build (package:dir), so it has no update feed.'
   }
   return null
 }
@@ -63,6 +89,7 @@ function wire(): void {
   const au = updater()
   au.autoInstallOnAppQuit = true
   au.logger = null
+  if (devTest) au.forceDevUpdateConfig = true
 
   au.on('checking-for-update', () => setStatus({ state: 'checking' }))
   au.on('update-not-available', () => setStatus({ state: 'none' }))
@@ -82,6 +109,29 @@ function wire(): void {
   au.on('error', (err) => setStatus({ state: 'error', message: err?.message ?? String(err) }))
 }
 
+/** Point the updater at the stable or the beta feed.
+ *
+ *  A build that is ITSELF a prerelease already follows beta without help:
+ *  `AppUpdater` sets `allowPrerelease` from the running version, and
+ *  `GitHubProvider` falls back to the version's own prerelease tag as the
+ *  channel. So this only has to handle the two deliberate cases — a stable build
+ *  opting in, and a beta build opting back out.
+ *
+ *  Setting `channel` also sets `allowDowngrade = true`, which is exactly what
+ *  leaving beta requires: 0.2.0-beta.2 → 0.2.0 stable is a downgrade in semver
+ *  terms, and without it a tester would be stranded on the beta forever. */
+function applyChannel(beta: boolean): void {
+  const au = updater()
+  if (beta) {
+    au.channel = BETA_CHANNEL
+    au.allowPrerelease = true
+  } else if (isPrereleaseVersion(app.getVersion())) {
+    // running a beta but opting out: aim at stable and allow the step back down
+    au.channel = 'latest'
+    au.allowPrerelease = false
+  }
+}
+
 /** Prepare the updater and, if auto-update is on, start the background schedule.
  *  Safe to call in dev and on macOS — it just parks in `unsupported`. */
 export async function initUpdater(): Promise<void> {
@@ -91,7 +141,8 @@ export async function initUpdater(): Promise<void> {
     return
   }
   wire()
-  const { autoUpdate } = await getUpdatePrefs()
+  const { autoUpdate, betaChannel } = await getUpdatePrefs()
+  applyChannel(betaChannel)
   updater().autoDownload = autoUpdate
   if (!autoUpdate) return
 
@@ -138,17 +189,44 @@ export async function downloadUpdate(): Promise<UpdateStatus> {
  *  still runs first, so unsaved edits are written before the installer starts. */
 export function installNow(): void {
   if (status.state !== 'ready') return
+  // A dev run can download and verify an update but cannot replace itself — the
+  // installer needs a real install to write over. Say so rather than failing
+  // somewhere confusing inside Squirrel.
+  if (!app.isPackaged) {
+    setStatus({
+      state: 'error',
+      message: 'Downloaded and verified, but a dev build cannot install itself. Use a packaged build.'
+    })
+    return
+  }
   // isSilent=false so the NSIS installer shows its progress; isForceRunAfter=true
   // so the app comes back up on the new version.
   updater().quitAndInstall(false, true)
 }
 
+// Both setters read-modify-write the whole prefs object. Saving a single field
+// would drop the other one — the same clobber that used to live in saveVault.
+
 export async function setAutoUpdate(on: boolean): Promise<UpdateStatus> {
-  await saveUpdatePrefs({ autoUpdate: on })
+  const prefs = await getUpdatePrefs()
+  await saveUpdatePrefs({ ...prefs, autoUpdate: on })
   if (!unsupportedReason()) {
     wire()
     updater().autoDownload = on
     if (on) void checkNow()
+  }
+  return status
+}
+
+/** Opt this install in or out of prerelease builds. Checks immediately, because
+ *  the whole point is to see the other channel's version straight away. */
+export async function setBetaChannel(on: boolean): Promise<UpdateStatus> {
+  const prefs = await getUpdatePrefs()
+  await saveUpdatePrefs({ ...prefs, betaChannel: on })
+  if (!unsupportedReason()) {
+    wire()
+    applyChannel(on)
+    void checkNow()
   }
   return status
 }

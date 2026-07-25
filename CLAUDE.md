@@ -46,11 +46,17 @@ rule to match the code.
    `bg-surface/45` and `rgb(var(--surface) / 0.45)` are the same thing. Spacing, radius and
    typography come from Tailwind utilities on the components. See rule 8.
 
-8. **The legacy app is the visual source of truth.** `legacy/` (localhost:5173) is the canonical
-   look; the Electron UI is kept in step with it. Legacy is styled with Tailwind v3 utility
-   classes, so this app is too — **copy the `className` string from `legacy/src/App.jsx` rather
-   than re-deriving px values by eye.** That eyeballing is exactly what made the two apps drift
-   apart before. Tailwind is a build-time dependency here (`postcss.config.js`); the CDN script
+8. **The legacy app is the visual source of truth — and READ-ONLY.** `legacy/` (localhost:5173) is
+   the canonical *look*; the Electron UI is kept in step with it. Legacy is styled with Tailwind v3
+   utility classes, so this app is too — **copy the `className` string from `legacy/src/App.jsx`
+   rather than re-deriving px values by eye.** That eyeballing is exactly what made the two apps
+   drift apart before.
+   **New features are built in the Electron app (`npm run dev`), never in legacy first.** Legacy is
+   a *different program* — a browser app on `localStorage`, its own `.jsx`, no vault, no IPC, no
+   updater. Building there and porting means implementing everything twice, and the second
+   implementation drifts from the first; that drift is the "needed lots of tweaking" tax. Anything
+   touching files, autosave, the bin, menus or updates can't be prototyped there at all. Consult
+   legacy for *how something looks*; build in `npm run dev`, which is the real app with hot reload. Tailwind is a build-time dependency here (`postcss.config.js`); the CDN script
    legacy uses must never ship, since the app is offline-first.
    What deliberately stays in `app.css` is what `legacy/src/index.css` also keeps out of Tailwind:
    the sidebar row metrics (`.tree-row` / `.tree-title` / `.tree-sub` own the density variables
@@ -114,6 +120,9 @@ notes-app/
   postcss.config.js         tailwind + autoprefixer; electron-vite picks it up automatically
   tsconfig*.json            root refs + tsconfig.node.json (main+preload) / .web.json (renderer)
   package.json              scripts + deps ("main": out/main/index.js)
+  dev-app-update.yml        ONLY read by NOTES_TEST_UPDATER=1 npm run dev; never packaged
+  docs/release-checklist.md the four gates, the release ritual, and how to recover a bad release
+  .github/workflows/        verify.yml (every push) + release.yml (v* tags; verify gates packaging)
   src/
     main/                   MAIN PROCESS — the only code allowed to touch fs
       index.ts              app lifecycle + BrowserWindow (contextIsolation on, nodeIntegration off)
@@ -159,11 +168,21 @@ npm --prefix ".\notes-app" run typecheck  # tsc, node + web projects
 npm --prefix ".\notes-app" run lint       # oxlint
 ```
 
+```powershell
+npm --prefix ".\notes-app" run test       # vitest, pure modules only
+npm --prefix ".\notes-app" run package:dir  # REAL packaged app, no installer -> release/win-unpacked/
+```
+
 `dev` opens a native **Electron window**, not a browser tab — there is no localhost URL.
-There is **no test runner configured yet.** Do not assume `npm test` exists; adding one is a
-new dependency — ask first.
+
+**Tests are `vitest`, and cover pure logic only** (`*.test.ts` beside the module): `colorModel`,
+`organise/model`, `shared/workspace`, `shared/settings`, `shared/update`, `main/filenames`. No React
+and no Electron — those need a different kind of harness and are not worth the weight yet. Adding
+any *other* dependency still needs asking.
 
 ## Shipping a release ("push that update to Vercel")
+
+**Read `docs/release-checklist.md` before releasing.** Short version below.
 
 The Vercel page (`site/`) is **not** where a release lives. It always links at
 `releases/latest/download/`, so redeploying it ships nothing — pushing `site/` alone produces a
@@ -189,9 +208,19 @@ a dismissible warning. There is also no `latest-mac.yml` and no `.zip` (mac upda
 deferred by decision, revisit at marketing time. Until then the Mac build shows the same UI, but
 the button opens the releases page and Settings says why.
 
-**Auto-update cannot be tested in dev** — `autoUpdater` is inert unless `app.isPackaged`, so
-`updater.ts` reports `unsupported` there on purpose. The only real test is installing the previous
-release and watching it pick the new one up.
+**Beta channel.** A tag containing `-` (`v0.2.0-beta.1`) is published as a GitHub **prerelease**:
+electron-builder writes `beta.yml` instead of `latest.yml`, GitHub excludes prereleases from
+`releases/latest` (so the download page keeps serving stable with no change), and stable installs
+have `allowPrerelease === false` and never see it. Testers opt in via **Settings → Updates →
+Receive test builds**, or just by installing a beta once. Turning it off steps back down to stable —
+which works only because setting `channel` also sets `allowDowngrade`.
+
+**Testing updates without releasing.** `NOTES_TEST_UPDATER=1 npm run dev` sets
+`forceDevUpdateConfig`, so electron-updater reads `dev-app-update.yml` and talks to the live feed
+(`AppUpdater.js:278` enables on `isPackaged || forceDevUpdateConfig`). Lower `version` in
+`package.json` to make it find something. `quitAndInstall` still needs a real install — dev covers
+check → download → sha512 verify, and `installNow` says so plainly rather than failing inside
+Squirrel.
 
 ## Current state vs target
 
@@ -278,6 +307,12 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
 - First `electron` run may download its binary (~100 MB) — let it finish.
 - `out/` is the build dir (gitignored). `node_modules` lives under OneDrive — installs work but
   sync churn is possible; moving the project out of OneDrive is a later cleanup.
+- **`npm run package:dir` can fail with `EPERM ... rename 'win-unpacked.tmp' -> 'win-unpacked'`.**
+  Same OneDrive cause as the vault's rename problem, but on electron-builder's own output: it drops
+  a ~215 MB tree into `release/`, OneDrive starts syncing it, and the final rename hits a held
+  handle. `release/` is gitignored but **gitignore means nothing to OneDrive.** Fix: delete
+  `release/` and re-run (`Remove-Item release -Recurse -Force`). Proper fix: exclude `release/` and
+  `node_modules/` from OneDrive sync, or move the project off OneDrive.
 - Browser-era gotchas (File System Access API, `localhost` vs `file://`, Vite dev port) now
   apply only to `legacy/`. The **legacy app is the canonical look** the Electron UI is kept in
   sync with; the user runs it as a local live server. Launch it with `notes-app/run-legacy.bat`

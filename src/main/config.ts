@@ -6,13 +6,15 @@ import { DEFAULT_UPDATE_PREFS, normalizeUpdatePrefs, type UpdatePrefs } from '..
 // App-level config lives in userData — NEVER inside the vault itself. In-vault
 // config belongs in <vault>/.mdnotes/. Two things qualify, for the same reason:
 // the app must know them *before* any vault is open.
-//   - vaultPath:  which vault to reopen
-//   - autoUpdate: a property of this install, not of a folder of notes
+//   - vaultPath:   which vault to reopen
+//   - autoUpdate:  a property of this install, not of a folder of notes
+//   - betaChannel: likewise — this machine is a test machine, or it isn't
 const configPath = (): string => path.join(app.getPath('userData'), 'config.json')
 
 interface AppConfig {
   vaultPath?: string
   autoUpdate?: boolean
+  betaChannel?: boolean
 }
 
 async function read(): Promise<AppConfig> {
@@ -60,9 +62,12 @@ export async function saveVault(vaultPath: string): Promise<void> {
 /** Update preferences for this install (not for the open vault). */
 export async function getUpdatePrefs(): Promise<UpdatePrefs> {
   const cfg = await read()
-  return normalizeUpdatePrefs({ autoUpdate: cfg.autoUpdate ?? DEFAULT_UPDATE_PREFS.autoUpdate })
+  return normalizeUpdatePrefs({
+    autoUpdate: cfg.autoUpdate ?? DEFAULT_UPDATE_PREFS.autoUpdate,
+    betaChannel: cfg.betaChannel ?? DEFAULT_UPDATE_PREFS.betaChannel
+  })
 }
 
 export async function saveUpdatePrefs(prefs: UpdatePrefs): Promise<void> {
-  await update({ autoUpdate: prefs.autoUpdate })
+  await update({ autoUpdate: prefs.autoUpdate, betaChannel: prefs.betaChannel })
 }

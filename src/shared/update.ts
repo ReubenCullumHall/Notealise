@@ -33,18 +33,35 @@ export interface UpdateStatus {
  *  alongside the vault path — the exception CLAUDE.md rule 2 already carves out. */
 export interface UpdatePrefs {
   autoUpdate: boolean
+  /** Receive prerelease (`x.y.z-beta.n`) builds. Off for everyone by default —
+   *  this is how a tester is opted in without affecting real users, who keep
+   *  reading `latest.yml` and never see a beta at all. */
+  betaChannel: boolean
 }
 
-export const DEFAULT_UPDATE_PREFS: UpdatePrefs = { autoUpdate: true }
+export const DEFAULT_UPDATE_PREFS: UpdatePrefs = { autoUpdate: true, betaChannel: false }
 
 /** Coerce arbitrary parsed JSON into valid prefs. Never throws. */
 export function normalizeUpdatePrefs(raw: unknown): UpdatePrefs {
   const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   return {
     autoUpdate:
-      typeof v.autoUpdate === 'boolean' ? v.autoUpdate : DEFAULT_UPDATE_PREFS.autoUpdate
+      typeof v.autoUpdate === 'boolean' ? v.autoUpdate : DEFAULT_UPDATE_PREFS.autoUpdate,
+    betaChannel:
+      typeof v.betaChannel === 'boolean' ? v.betaChannel : DEFAULT_UPDATE_PREFS.betaChannel
   }
 }
+
+/** The prerelease channel name. Must match the tag suffix used when releasing
+ *  (`v0.2.0-beta.1`), because electron-builder derives the channel file name
+ *  (`beta.yml`) from the version's prerelease component. */
+export const BETA_CHANNEL = 'beta'
+
+/** True when this build is itself a prerelease. Such a build follows the beta
+ *  channel automatically (electron-updater sets `allowPrerelease` from the
+ *  running version), so the toggle should read as on and can't sensibly be off
+ *  without downgrading first. */
+export const isPrereleaseVersion = (version: string): boolean => version.includes('-')
 
 /** Where a user goes when the app can't update itself (macOS, or a hard error). */
 export const RELEASES_URL = 'https://github.com/ReubenCullumHall/Notes-app/releases/latest'

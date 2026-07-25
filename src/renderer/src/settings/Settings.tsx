@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 import { ACCENT_MODES, ACCENTS, DENSITIES, THEMES, type AppSettings } from './model'
 import { Icon, type IconName } from '../icons'
-import type { UpdateStatus } from '../../../shared/update'
+import { isPrereleaseVersion, type UpdateStatus } from '../../../shared/update'
 
 interface Props {
   settings: AppSettings
@@ -352,6 +352,7 @@ function UpdatesSection(): React.JSX.Element {
   const [version, setVersion] = useState('')
   const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [autoUpdate, setAuto] = useState(true)
+  const [beta, setBeta] = useState(false)
 
   useEffect(() => {
     void (async () => {
@@ -359,6 +360,9 @@ function UpdatesSection(): React.JSX.Element {
       setVersion(s.version)
       setStatus(s.status)
       setAuto(s.prefs.autoUpdate)
+      // A prerelease build follows beta whether or not the pref says so, so show
+      // the switch as on rather than lying about what it will actually receive.
+      setBeta(s.prefs.betaChannel || isPrereleaseVersion(s.version))
     })()
     return window.api.onUpdateStatus(setStatus)
   }, [])
@@ -408,6 +412,26 @@ function UpdatesSection(): React.JSX.Element {
             {blocked
               ? 'Not available on this build'
               : 'Downloads new versions quietly and applies them when you quit.'}
+          </span>
+        </button>
+      </div>
+
+      <div className="mode-row">
+        <button
+          className={'mode-btn' + (beta && !blocked ? ' on' : '')}
+          aria-pressed={beta && !blocked}
+          disabled={blocked}
+          onClick={() => {
+            const next = !beta
+            setBeta(next)
+            void window.api.setBetaChannel(next)
+          }}
+        >
+          <span className="t">Receive test builds</span>
+          <span className="s">
+            {blocked
+              ? 'Not available on this build'
+              : 'Early versions, for helping test. They can be rough — turn this off to go back to the stable release.'}
           </span>
         </button>
       </div>
