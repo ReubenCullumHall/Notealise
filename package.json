@@ -1,7 +1,7 @@
 {
   "name": "notes-app",
   "private": true,
-  "version": "0.2.0-beta.1",
+  "version": "0.2.0-beta.2",
   "description": "A local-first Markdown editor — your notes stay as plain .md files on disk.",
   "author": "Notes",
   "main": "./out/main/index.js",

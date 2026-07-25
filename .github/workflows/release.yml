@@ -55,22 +55,40 @@ jobs:
       - name: Build renderer/main/preload
         run: npm run build
 
-      # A tag containing "-" is a prerelease (v0.2.0-beta.1). It must be
-      # published as a GitHub prerelease, otherwise electron-builder.yml's
-      # `releaseType: release` would make it `releases/latest` and push a test
-      # build to every user and to the download page.
-      - name: Decide release type
+      # A tag containing "-" is a prerelease (v0.2.0-beta.1) and needs TWO things
+      # set, both of which electron-builder gets wrong by default here:
+      #
+      # 1. releaseType=prerelease. Otherwise electron-builder.yml's
+      #    `releaseType: release` makes the beta `releases/latest` and pushes a
+      #    test build to every user and to the download page.
+      #
+      # 2. channel=beta. electron-builder deliberately does NOT infer the channel
+      #    from the version for the GitHub provider (app-builder-lib
+      #    updateInfoBuilder.js: "for GitHub should be pre-release way be used"),
+      #    so without this it writes `latest.yml` even for 0.2.0-beta.1.
+      #    electron-updater asks for `beta.yml` first and only falls back to
+      #    `latest.yml` (GitHubProvider.js:133,139) — a channel shouldn't depend
+      #    on an undocumented fallback, so name it explicitly.
+      - name: Decide release type and channel
         id: kind
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
-            echo "type=prerelease" >> "$GITHUB_OUTPUT"
+          tag="${GITHUB_REF_NAME#v}"                 # 0.2.0-beta.1
+          if [[ "$tag" == *-* ]]; then
+            pre="${tag#*-}"                          # beta.1
+            channel="${pre%%.*}"                     # beta
+            echo "args=--config.publish.releaseType=prerelease --config.publish.channel=${channel}" >> "$GITHUB_OUTPUT"
+            echo "what=prerelease -> ${channel}.yml" >> "$GITHUB_OUTPUT"
           else
-            echo "type=release" >> "$GITHUB_OUTPUT"
+            echo "args=--config.publish.releaseType=release" >> "$GITHUB_OUTPUT"
+            echo "what=release -> latest.yml" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Package installer & publish to the Release
-        run: npx --no-install electron-builder --publish always --config.publish.releaseType=${{ steps.kind.outputs.type }}
+        run: |
+          echo "Publishing as: ${{ steps.kind.outputs.what }}"
+          npx --no-install electron-builder --publish always ${{ steps.kind.outputs.args }}
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Unsigned MVP: don't let electron-builder try to find a signing identity.

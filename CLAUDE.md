@@ -208,7 +208,12 @@ a dismissible warning. There is also no `latest-mac.yml` and no `.zip` (mac upda
 deferred by decision, revisit at marketing time. Until then the Mac build shows the same UI, but
 the button opens the releases page and Settings says why.
 
-**Beta channel.** A tag containing `-` (`v0.2.0-beta.1`) is published as a GitHub **prerelease**:
+**Beta channel.** A tag containing `-` (`v0.2.0-beta.1`) is published as a GitHub **prerelease**.
+CI must pass **both** `--config.publish.releaseType=prerelease` *and*
+`--config.publish.channel=beta` — electron-builder does **not** infer the channel from the version
+for the GitHub provider (it assumes you'll use the prerelease flag instead), so without the second
+flag a beta ships `latest.yml`. electron-updater asks for `beta.yml` first and only falls back to
+`latest.yml`, so it would limp along undetected; don't rely on that. With both set:
 electron-builder writes `beta.yml` instead of `latest.yml`, GitHub excludes prereleases from
 `releases/latest` (so the download page keeps serving stable with no change), and stable installs
 have `allowPrerelease === false` and never see it. Testers opt in via **Settings → Updates →

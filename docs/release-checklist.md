@@ -87,12 +87,18 @@ git tag v0.2.0-beta.1
 git push; git push --tags
 ```
 
-Any tag containing `-` is published as a **GitHub prerelease**. That does three things for free:
+Any tag containing `-` is published as a **GitHub prerelease**, and CI names the channel from the
+tag's prerelease part (`-beta.1` → `beta`). Three consequences:
 
 1. `beta.yml` is published instead of `latest.yml`, so only installs on the beta channel see it.
 2. GitHub excludes prereleases from `releases/latest`, so **the download page keeps serving
    stable** with no change needed.
 3. Stable installs have `allowPrerelease === false` and never look at it.
+
+**After the build, check the release carries `beta.yml` and NOT `latest.yml`.** A beta that ships
+`latest.yml` still works — electron-updater falls back to it — so this fails silently. It caught us
+once already: electron-builder does not infer the channel from the version for GitHub releases, and
+CI has to pass `--config.publish.channel` explicitly.
 
 **Making a tester:** they install a beta build once, *or* turn on **Settings → Updates → Receive
 test builds**. Both routes stick. Turning it off returns them to stable (that step down in version
