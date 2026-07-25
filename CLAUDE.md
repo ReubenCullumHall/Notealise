@@ -238,10 +238,13 @@ entries leave the tree for free. Still pending:
   surfaced to the renderer.
   *When comparing against localhost, open the same folder there* — in browser-storage mode legacy
   says "Local notes" / "Saved in this browser", which are its storage-mode strings, not a mismatch.
-- **Settings (partial).** Still the single modal: theme, density, accent, accent mode. Legacy's
-  four-section "genie" window is not ported — startup behaviour, accent *scope*, `freeArrange`,
-  `archiveSort` persistence, and date/number/timezone formatting (`legacy/src/intl.js`) are all
-  still to come. `freeArrange` and `archiveSort` exist in the code but are not yet persisted.
+- **Settings (partial).** The **shell is now legacy's genie window** — centred 720×600, faded
+  `bg-paper/50 backdrop-blur-[5px]` backdrop, left section nav, scrollable content pane, and the
+  scale-from-the-gear animation (`.genie` in `app.css`, ported verbatim). Two of legacy's four
+  sections exist: **Appearance** (theme, accent, accent mode, density) and **Updates**.
+  **General** (startup) and **Formatting** (date/number/timezone, `legacy/src/intl.js`) are absent
+  rather than empty — they arrive with the settings behind them. Accent *scope*, and persisting
+  `freeArrange` / `archiveSort` (both exist in code, neither is saved), are also still to come.
 - **Remaining editor live-preview** (lists beyond the bullet, tables, fenced code, images,
   multi-line `$$`) — new decoration passes in `livePreview.ts` (see `docs/decorations.md`).
 
@@ -251,6 +254,13 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
 ## Gotchas (append as you learn)
 
 - Node is not on a fresh shell's PATH — prepend `C:\Program Files\nodejs`.
+- **`position: fixed` does not escape the sidebar.** The `<aside>` carries `backdrop-blur`, and
+  **`backdrop-filter` makes an element a containing block for fixed-position descendants** — so a
+  `fixed inset-0` overlay rendered anywhere inside it is pinned to the 288px sidebar, not the
+  viewport. The bottom strip is additionally `pointer-events-none`, which such an overlay inherits.
+  This is what made the settings modal open as an unclickable side panel. **Any full-window overlay
+  must `createPortal` to `document.body`** (see `settings/Settings.tsx`). Legacy dodges it by
+  rendering `SettingsPanel` at the App root instead — either is fine, in-place is not.
 - **A vault inside OneDrive (or Dropbox/iCloud) breaks a bare `fs.rename`.** The sync client
   briefly holds a handle on the file, so the atomic write's final rename fails with `EPERM`
   (also seen: `EACCES`, `EBUSY`) and the user's edit is lost. Every rename in `vault.ts` and
