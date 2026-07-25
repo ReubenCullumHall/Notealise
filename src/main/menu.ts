@@ -1,5 +1,6 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { CH } from '../shared/channels'
+import { checkNow } from './updater'
 
 function sendMenuCommand(cmd: string): void {
   const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
@@ -13,8 +14,32 @@ function sendMenuCommand(cmd: string): void {
 // editor with the right per-platform shortcuts.
 export function installMenu(): void {
   const isMac = process.platform === 'darwin'
+  const checkForUpdates: MenuItemConstructorOptions = {
+    label: 'Check for Updates…',
+    click: () => void checkNow()
+  }
   const template: MenuItemConstructorOptions[] = [
-    ...(isMac ? [{ role: 'appMenu' } as MenuItemConstructorOptions] : []),
+    // macOS convention puts "Check for Updates" in the app menu, right under
+    // "About"; on Windows there is no app menu, so it goes in File.
+    ...(isMac
+      ? [
+          {
+            label: 'Notes',
+            submenu: [
+              { role: 'about' },
+              checkForUpdates,
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' }
+            ]
+          } as MenuItemConstructorOptions
+        ]
+      : []),
     {
       label: 'File',
       submenu: [
@@ -25,6 +50,7 @@ export function installMenu(): void {
           click: () => sendMenuCommand('new-folder')
         },
         { type: 'separator' },
+        ...(isMac ? [] : [checkForUpdates, { type: 'separator' } as MenuItemConstructorOptions]),
         isMac ? { role: 'close' } : { role: 'quit' }
       ]
     },

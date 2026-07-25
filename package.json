@@ -1,7 +1,7 @@
 {
   "name": "notes-app",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A local-first Markdown editor — your notes stay as plain .md files on disk.",
   "author": "Notes",
   "main": "./out/main/index.js",
@@ -28,6 +28,7 @@
     "@lezer/markdown": "^1.7.2",
     "chokidar": "^4.0.3",
     "dompurify": "^3.4.12",
+    "electron-updater": "^6.8.9",
     "katex": "^0.18.1",
     "marked": "^18.0.7",
     "react": "^19.2.7",

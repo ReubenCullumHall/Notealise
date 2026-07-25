@@ -1,0 +1,50 @@
+// In-app update contract, shared by main, preload and renderer.
+// Pure types + validation, no fs and no DOM (mirrors shared/settings.ts).
+//
+// The feed itself is already published: electron-builder writes `latest.yml`
+// next to `Notes-Setup.exe` on every GitHub release because electron-builder.yml
+// sets `publish: provider: github`. This is just the app learning to read it.
+
+/** Where the app is in the update cycle. One flat union so the renderer can
+ *  switch on `state` and never has to reason about which fields are present. */
+export type UpdateState =
+  | 'idle' // nothing checked yet this session
+  | 'checking'
+  | 'none' // checked, already on the newest version
+  | 'available' // newer version exists (downloading only if auto-download is on)
+  | 'downloading'
+  | 'ready' // downloaded and staged; applies on quit
+  | 'error'
+  | 'unsupported' // dev build, or a platform that can't self-update (macOS)
+
+export interface UpdateStatus {
+  state: UpdateState
+  /** the version being offered (available/downloading/ready), else undefined */
+  version?: string
+  /** 0-100 while downloading */
+  percent?: number
+  /** human-readable reason for `error` / `unsupported` */
+  message?: string
+}
+
+/** Machine-level update preferences. Deliberately NOT part of AppSettings: those
+ *  live per-vault in <vault>/.mdnotes/settings.json, and "auto-update" is a
+ *  property of this install, not of a folder of notes. Stored in userData
+ *  alongside the vault path — the exception CLAUDE.md rule 2 already carves out. */
+export interface UpdatePrefs {
+  autoUpdate: boolean
+}
+
+export const DEFAULT_UPDATE_PREFS: UpdatePrefs = { autoUpdate: true }
+
+/** Coerce arbitrary parsed JSON into valid prefs. Never throws. */
+export function normalizeUpdatePrefs(raw: unknown): UpdatePrefs {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  return {
+    autoUpdate:
+      typeof v.autoUpdate === 'boolean' ? v.autoUpdate : DEFAULT_UPDATE_PREFS.autoUpdate
+  }
+}
+
+/** Where a user goes when the app can't update itself (macOS, or a hard error). */
+export const RELEASES_URL = 'https://github.com/ReubenCullumHall/Notes-app/releases/latest'

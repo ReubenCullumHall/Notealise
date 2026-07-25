@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { CH } from '../shared/channels'
 import { saveVault } from './config'
 import { ensureMdnotes } from './mdnotes'
@@ -13,6 +13,15 @@ import {
   trashEntries,
   updateEntries
 } from './workspace'
+import {
+  checkNow,
+  currentStatus,
+  downloadUpdate,
+  installNow,
+  openReleasesPage,
+  setAutoUpdate
+} from './updater'
+import { getUpdatePrefs } from './config'
 import { startWatching } from './watcher'
 import type { AppSettings } from '../shared/settings'
 import type { EntryMeta } from '../shared/workspace'
@@ -84,6 +93,17 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.trashEntries, (_e, paths: string[]) => trashEntries(paths))
   ipcMain.handle(CH.restoreEntries, (_e, ids: string[]) => restoreEntries(ids))
   ipcMain.handle(CH.purgeEntries, (_e, ids?: string[]) => purgeEntries(ids))
+  ipcMain.handle(CH.getUpdateState, async () => ({
+    version: app.getVersion(),
+    status: currentStatus(),
+    prefs: await getUpdatePrefs()
+  }))
+  ipcMain.handle(CH.checkForUpdate, () => checkNow())
+  ipcMain.handle(CH.downloadUpdate, () => downloadUpdate())
+  ipcMain.handle(CH.setAutoUpdate, (_e, on: boolean) => setAutoUpdate(on))
+  ipcMain.on(CH.installUpdate, () => installNow())
+  ipcMain.on(CH.openReleases, () => void openReleasesPage())
+
   // Synchronous: the preload bridge reads this before first paint. Re-register
   // cleanly so a re-created window never stacks duplicate listeners.
   ipcMain.removeAllListeners(CH.settingsCache)

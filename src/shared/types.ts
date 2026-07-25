@@ -3,6 +3,7 @@
 
 import type { AppSettings } from './settings'
 import type { EntryMeta, Workspace } from './workspace'
+import type { UpdatePrefs, UpdateStatus } from './update'
 
 /** A node in the vault file tree. `path` is always vault-relative, POSIX-style
  *  ("/" separators), and "" denotes the vault root. */
@@ -69,6 +70,23 @@ export interface VaultApi {
   /** Permanently remove binned items — the only path that reaches the OS trash.
    *  Pass no ids to empty the bin entirely. */
   purgeEntries(ids?: string[]): Promise<Workspace>
+
+  // --- in-app updates -------------------------------------------------------
+  /** This build's version, and the current update state + preference. */
+  getUpdateState(): Promise<{ version: string; status: UpdateStatus; prefs: UpdatePrefs }>
+  /** Ask the GitHub feed whether a newer version exists. */
+  checkForUpdate(): Promise<UpdateStatus>
+  /** Download an offered update (used when auto-download is off). On a platform
+   *  that can't self-update this opens the releases page instead. */
+  downloadUpdate(): Promise<UpdateStatus>
+  /** Apply a staged update: flushes, quits, runs the installer, relaunches. */
+  installUpdate(): void
+  /** Turn background auto-update on/off; persisted in userData. */
+  setAutoUpdate(on: boolean): Promise<UpdateStatus>
+  /** Open the GitHub releases page in the default browser. */
+  openReleases(): void
+  /** Subscribe to update state changes; returns an unsubscribe function. */
+  onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
 
   /** Subscribe to external-change events; returns an unsubscribe function. */
   onVaultChanged(cb: (change: VaultChange) => void): () => void

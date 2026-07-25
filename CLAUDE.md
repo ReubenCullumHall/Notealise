@@ -15,9 +15,11 @@ rule to match the code.
 
 2. **App config lives in `.mdnotes/` inside the vault** — theme/appearance (`settings.json`),
    organisation (`workspace.json`: order, pins, archive flags, the bin's index), the bin itself
-   (`trash/`), and later window state. Mirrors how Obsidian uses `.obsidian/`. The one exception
-   is the chosen vault path itself, which lives in `userData` (the app must know it *before* a
-   vault is open). Never write app config into note frontmatter unless it is genuinely a
+   (`trash/`), and later window state. Mirrors how Obsidian uses `.obsidian/`. The exceptions live
+   in `userData/config.json`, and both are properties of *this install* rather than of a vault:
+   the chosen vault path (the app must know it *before* a vault is open) and the auto-update
+   preference (per-vault would mean updates are on for one folder and off for another).
+   Never write app config into note frontmatter unless it is genuinely a
    property of *that* note. Every sidecar must be *losable*: delete `workspace.json` and you
    lose ordering and pins, never a note (rule 1).
 
@@ -86,7 +88,8 @@ Ships on Windows + macOS; a vault must survive moving between them. All of this 
 Electron · React · TypeScript · Vite (via **electron-vite**) · CodeMirror 6 · **Tailwind CSS v3**
 (build-time, via `postcss` + `autoprefixer`). File watching: `chokidar`. Math rendering: `katex`.
 Reading-view markdown render: `marked` + `dompurify` (sanitised — the only place note HTML is
-turned into DOM). Lint: `oxlint`.
+turned into DOM). In-app updates: `electron-updater` (electron-builder's own companion — it reads
+the `latest.yml` feed the release workflow already publishes). Lint: `oxlint`.
 
 Tailwind is pinned to **v3** on purpose: `legacy/` runs the v3 Play CDN, and v4 changes what
 several classes legacy uses actually mean (`outline-none`, the default `ring` width, the shadow
@@ -107,7 +110,8 @@ notes-app/
   src/
     main/                   MAIN PROCESS — the only code allowed to touch fs
       index.ts              app lifecycle + BrowserWindow (contextIsolation on, nodeIntegration off)
-      config.ts             vault path persisted in userData/config.json (never inside the vault)
+      config.ts             vault path + autoUpdate in userData/config.json (never inside the vault)
+      updater.ts            the ONLY importer of electron-updater; dev + macOS guards, status push
       vault.ts              path boundary + all fs ops (list/read/atomic-write/create/rename/bin)
       workspace.ts          .mdnotes/workspace.json: order/pins/archive/bin (debounced, atomic)
       settings.ts           .mdnotes/settings.json (appearance) + userData pre-paint mirror
@@ -119,6 +123,7 @@ notes-app/
     shared/                 contract imported by main, preload, renderer
       types.ts              TreeNode, VaultChange, VaultApi
       workspace.ts          EntryMeta / TrashItem / Workspace + normalise + path re-keying
+      update.ts             UpdateStatus / UpdatePrefs contract + normalise
       channels.ts           IPC channel names
     renderer/
       index.html            renderer entry
@@ -126,6 +131,7 @@ notes-app/
         Sidebar.tsx         header/archive toggle, nav bar, pinned, archive & bin views, bottom strip
         TreeView.tsx        the row renderers: 2-line rows, multi-select, drag-reorder
         organise/model.ts   pure derivation: sorting, archive inheritance, pinned hoisting
+        update/             UpdateBanner: the quiet "update ready" strip in the sidebar footer
         theme.css           tokens (R G B ramps + density) + bundled @font-face; Tailwind reads them
         app.css             @tailwind directives + only what legacy keeps out of Tailwind (see rule 8)
         assets/fonts/       bundled woff2 (Inter / Fraunces / JetBrains Mono) — no CDN
@@ -150,12 +156,47 @@ npm --prefix ".\notes-app" run lint       # oxlint
 There is **no test runner configured yet.** Do not assume `npm test` exists; adding one is a
 new dependency — ask first.
 
+## Shipping a release ("push that update to Vercel")
+
+The Vercel page (`site/`) is **not** where a release lives. It always links at
+`releases/latest/download/`, so redeploying it ships nothing — pushing `site/` alone produces a
+byte-identical page. **The release is the git tag.** The ritual:
+
+```powershell
+# bump "version" in package.json, then:
+git commit -am "vX.Y.Z: <what changed>"
+git tag vX.Y.Z
+git push && git push --tags        # the v* tag is what triggers GitHub Actions
+```
+
+Actions builds the NSIS `.exe` + the `.dmg`, and — because `electron-builder.yml` sets
+`publish: provider: github` — also publishes **`latest.yml`** (the update feed) and
+**`Notes-Setup.exe.blockmap`** (so an installed app downloads only the changed chunks, not the
+whole ~103 MB). Installed apps poll that feed; the download page keys off the same
+`releases/latest`. One tag updates both.
+
+**macOS cannot auto-update, and it is not a code bug.** `electron-builder.yml` sets
+`identity: null`, and Squirrel.Mac *refuses to apply an unsigned update* — a signature check, not
+a dismissible warning. There is also no `latest-mac.yml` and no `.zip` (mac updates need a zip;
+`dmg: writeUpdateInfo: false`). Fixing it needs an Apple Developer ID (~$99/yr) + notarization —
+deferred by decision, revisit at marketing time. Until then the Mac build shows the same UI, but
+the button opens the releases page and Settings says why.
+
+**Auto-update cannot be tested in dev** — `autoUpdater` is inert unless `app.isPackaged`, so
+`updater.ts` reports `unsupported` there on purpose. The only real test is installing the previous
+release and watching it pick the new one up.
+
 ## Current state vs target
 
 The Electron foundation, vault layer, CM6 editor (live preview, colour/highlight, LaTeX,
 autosave), the theme/token system, the sidebar (icons + drag-to-move into folders,
 `TreeView.tsx`/`icons.tsx`), the note-title header (editable + word count), and the Edit/Read
 **reading view** (`reader/ReadingView.tsx`, marked+dompurify+katex) are **built**.
+
+**In-app updates (built).** Windows installs update themselves: a new version downloads quietly,
+a strip appears above "Switch folder", and it applies on quit. Settings → Updates has the version,
+an auto-update toggle, and a manual check; there's also File → Check for Updates…. See
+**Shipping a release** above for the tag ritual and the macOS caveat.
 
 **Spaces — removed (2026-07-25), do not reintroduce.** Top-level folders were briefly hoisted out
 of the tree into an Arc-style rail. That is *precisely* what stopped the app matching the legacy

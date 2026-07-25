@@ -22,6 +22,16 @@ export const CH = {
   trashEntries: 'workspace:trash',
   restoreEntries: 'workspace:restore',
   purgeEntries: 'workspace:purge',
+  /** renderer -> main: in-app updates (electron-updater over the GitHub feed) */
+  getUpdateState: 'update:get',
+  checkForUpdate: 'update:check',
+  downloadUpdate: 'update:download',
+  installUpdate: 'update:install',
+  setAutoUpdate: 'update:setAuto',
+  openReleases: 'update:openReleases',
+  getAppVersion: 'app:version',
+  /** main -> renderer: update progress/state changed */
+  updateStatus: 'update:status',
   /** main -> renderer: debounced external-change notification */
   changed: 'vault:changed',
   /** main -> renderer: an application-menu item was invoked */

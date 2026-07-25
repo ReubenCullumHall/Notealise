@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import type { AppSettings } from '../../shared/settings'
+import type { UpdateStatus } from '../../shared/update'
+import { UpdateBanner } from './update/UpdateBanner'
 import { BinIcon, Icon } from './icons'
 import { SettingsButton } from './settings/Settings'
 import { SearchBar, SearchResults, type SearchHit } from './Search'
@@ -40,6 +42,7 @@ interface Props {
   onToggleWithArchived: () => void
   searchHits: SearchHit[] | null
   onOpenSearchHit: (hit: SearchHit) => void
+  update: UpdateStatus
 
   actions: TreeActions & {
     onNewNote: () => void
@@ -153,6 +156,7 @@ export function Sidebar({
   onToggleWithArchived,
   searchHits,
   onOpenSearchHit,
+  update,
   actions
 }: Props): React.JSX.Element {
   const [view, setView] = useState<View>('notes')
@@ -512,6 +516,8 @@ export function Sidebar({
             <span>{dragging ? 'Drop here to bin' : `Move ${selCount} to bin`}</span>
           </div>
         )}
+
+        <UpdateBanner status={update} canSelfUpdate={update.state !== 'unsupported'} />
 
         <button
           onClick={actions.onPickVault}

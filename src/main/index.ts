@@ -4,6 +4,7 @@ import { CH } from '../shared/channels'
 import { getSavedVault } from './config'
 import { activateVault, registerIpc } from './ipc'
 import { installMenu } from './menu'
+import { initUpdater } from './updater'
 import { stopWatching } from './watcher'
 
 function createWindow(): BrowserWindow {
@@ -40,6 +41,9 @@ app.whenReady().then(async () => {
   // renderer shows the folder picker (getVault() returns null).
   const saved = await getSavedVault()
   if (saved) activateVault(saved)
+
+  // Parks in `unsupported` in dev and on macOS; never throws, never blocks boot.
+  void initUpdater()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

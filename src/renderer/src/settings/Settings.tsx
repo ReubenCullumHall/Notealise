@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ACCENT_MODES, ACCENTS, DENSITIES, THEMES, type AppSettings } from './model'
 import { Icon } from '../icons'
+import type { UpdateStatus } from '../../../shared/update'
 
 interface Props {
   settings: AppSettings
@@ -169,8 +170,109 @@ function SettingsModal({
               })}
             </div>
           </section>
+
+          {/* Updates */}
+          <UpdatesSection />
         </div>
       </div>
     </div>
+  )
+}
+
+/** The Updates section: which version you're on, whether to update in the
+ *  background, a manual check, and the live status. Self-contained — it talks to
+ *  main directly rather than threading update state through the settings props,
+ *  because it is the only place that needs the version and the preference. */
+function UpdatesSection(): React.JSX.Element {
+  const [version, setVersion] = useState('')
+  const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' })
+  const [autoUpdate, setAuto] = useState(true)
+
+  useEffect(() => {
+    void (async () => {
+      const s = await window.api.getUpdateState()
+      setVersion(s.version)
+      setStatus(s.status)
+      setAuto(s.prefs.autoUpdate)
+    })()
+    return window.api.onUpdateStatus(setStatus)
+  }, [])
+
+  const blocked = status.state === 'unsupported'
+  const busy = status.state === 'checking' || status.state === 'downloading'
+
+  const line = ((): string => {
+    switch (status.state) {
+      case 'checking':
+        return 'Checking…'
+      case 'none':
+        return "You're on the latest version."
+      case 'available':
+        return `Version ${status.version} is available.`
+      case 'downloading':
+        return `Downloading ${status.version}… ${status.percent ?? 0}%`
+      case 'ready':
+        return `Version ${status.version} is ready — restart to apply.`
+      case 'error':
+        return `Couldn't check: ${status.message ?? 'unknown error'}`
+      case 'unsupported':
+        return status.message ?? 'Updates are unavailable on this build.'
+      default:
+        return ''
+    }
+  })()
+
+  return (
+    <section className="settings-group">
+      <h3>Updates</h3>
+      <p className="hint">
+        {version ? `You're running version ${version}.` : 'Checking your version…'}
+      </p>
+
+      <div className="mode-row">
+        <button
+          className={'mode-btn' + (autoUpdate && !blocked ? ' on' : '')}
+          aria-pressed={autoUpdate && !blocked}
+          disabled={blocked}
+          onClick={() => {
+            const next = !autoUpdate
+            setAuto(next)
+            void window.api.setAutoUpdate(next)
+          }}
+        >
+          <span className="t">Update automatically</span>
+          <span className="s">
+            {blocked
+              ? 'Not available on this build'
+              : 'Downloads new versions quietly and applies them when you quit.'}
+          </span>
+        </button>
+      </div>
+
+      <div className="mode-row">
+        <button
+          className="mini"
+          disabled={busy}
+          onClick={() => {
+            if (blocked) window.api.openReleases()
+            else void window.api.checkForUpdate()
+          }}
+        >
+          {blocked ? 'Open downloads page' : busy ? 'Checking…' : 'Check now'}
+        </button>
+        {status.state === 'ready' && (
+          <button className="mini" onClick={() => window.api.installUpdate()}>
+            Restart &amp; install
+          </button>
+        )}
+        {status.state === 'available' && !blocked && (
+          <button className="mini" onClick={() => void window.api.downloadUpdate()}>
+            Download
+          </button>
+        )}
+      </div>
+
+      {line && <p className="hint">{line}</p>}
+    </section>
   )
 }

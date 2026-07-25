@@ -10,6 +10,7 @@ import { applySettings } from './settings/model'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/settings'
 import { Sidebar } from './Sidebar'
 import type { SearchHit } from './Search'
+import type { UpdateStatus } from '../../shared/update'
 import { Icon } from './icons'
 import { findNode, isArchived, sortSiblings } from './organise/model'
 
@@ -52,6 +53,9 @@ export default function App(): React.JSX.Element {
   const [withArchived, setWithArchived] = useState(false)
   const [cacheVersion, setCacheVersion] = useState(0)
   const contentCache = useRef<Map<string, string>>(new Map())
+  // In-app updates. `unsupported` covers a dev build and unsigned macOS; the
+  // banner and Settings both read it, so it lives here and flows down.
+  const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' })
   const [notice, setNotice] = useState<string | null>(null)
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const flash = useCallback((msg: string): void => {
@@ -377,6 +381,12 @@ export default function App(): React.JSX.Element {
   }
   useEffect(() => window.api.onMenuCommand((cmd) => menuHandler.current(cmd)), [])
 
+  // Update state: seed once, then follow the pushes from main.
+  useEffect(() => {
+    void window.api.getUpdateState().then((s) => setUpdate(s.status))
+    return window.api.onUpdateStatus(setUpdate)
+  }, [])
+
   // flush unsaved edits when the window loses focus and just before the app quits
   useEffect(() => {
     const onBlur = (): void => void flush()
@@ -522,6 +532,7 @@ export default function App(): React.JSX.Element {
         onToggleWithArchived={() => setWithArchived((a) => !a)}
         searchHits={searchHits}
         onOpenSearchHit={openSearchResult}
+        update={update}
         actions={{
           onOpen: (p) => void openNote(p),
           onContext: openMenu,

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { CH } from '../shared/channels'
 import type { VaultApi, VaultChange } from '../shared/types'
+import type { UpdateStatus } from '../shared/update'
 
 // The single, typed bridge between renderer and main. With contextIsolation the
 // renderer can only reach the filesystem through these calls — every path is
@@ -23,6 +24,19 @@ const api: VaultApi = {
   trashEntries: (paths) => ipcRenderer.invoke(CH.trashEntries, paths),
   restoreEntries: (ids) => ipcRenderer.invoke(CH.restoreEntries, ids),
   purgeEntries: (ids) => ipcRenderer.invoke(CH.purgeEntries, ids),
+  getUpdateState: () => ipcRenderer.invoke(CH.getUpdateState),
+  checkForUpdate: () => ipcRenderer.invoke(CH.checkForUpdate),
+  downloadUpdate: () => ipcRenderer.invoke(CH.downloadUpdate),
+  installUpdate: () => ipcRenderer.send(CH.installUpdate),
+  setAutoUpdate: (on) => ipcRenderer.invoke(CH.setAutoUpdate, on),
+  openReleases: () => ipcRenderer.send(CH.openReleases),
+  onUpdateStatus: (cb) => {
+    const listener = (_e: unknown, status: UpdateStatus): void => cb(status)
+    ipcRenderer.on(CH.updateStatus, listener)
+    return () => {
+      ipcRenderer.removeListener(CH.updateStatus, listener)
+    }
+  },
   onVaultChanged: (cb) => {
     const listener = (_e: unknown, change: VaultChange): void => cb(change)
     ipcRenderer.on(CH.changed, listener)
