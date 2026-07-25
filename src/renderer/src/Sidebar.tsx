@@ -246,27 +246,13 @@ export function Sidebar({
         </div>
       )}
 
+      {/* The header is the vault name alone — the archive toggle moved down to
+          the bottom strip, beside the bin, since both are shelf views and they
+          read as a pair there. */}
       <div className="flex items-center gap-2 px-4 pt-4 pb-2.5">
         <p className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-ink-900" title={vaultName}>
           {vaultName}
         </p>
-        <button
-          onClick={() => {
-            setView((v) => (v === 'archive' ? 'notes' : 'archive'))
-            onQuery('')
-          }}
-          title={inArchive ? 'Back to your notes' : 'Archived notes'}
-          aria-pressed={inArchive}
-          className={
-            'flex shrink-0 items-center gap-1 rounded-lg border-none px-1.5 py-1 text-[11px] font-medium tabular-nums outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-            (inArchive
-              ? 'bg-brand-500/15 text-brand-600 hover:bg-brand-500/15'
-              : 'bg-transparent text-ink-400 hover:bg-brand-500/10 hover:text-brand-600')
-          }
-        >
-          <Icon name="archive" className="h-4 w-4" />
-          {archivedNodes.length > 0 && <span>{archivedNodes.length}</span>}
-        </button>
       </div>
 
       <SearchBar
@@ -571,6 +557,21 @@ export function Sidebar({
             <BinIcon className="h-4 w-4" />
           </span>
           {workspace.trash.length > 0 && <span>{workspace.trash.length}</span>}
+        </button>
+        <button
+          onClick={() => {
+            setView((v) => (v === 'archive' ? 'notes' : 'archive'))
+            onQuery('')
+          }}
+          title={inArchive ? 'Back to your notes' : 'Archived notes'}
+          aria-pressed={inArchive}
+          className={
+            'pointer-events-auto flex h-10 min-w-10 shrink-0 items-center justify-center gap-1 rounded-xl border border-ink-300/30 px-2 text-[11px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
+            (inArchive ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500')
+          }
+        >
+          <Icon name="archive" className="h-4 w-4" />
+          {archivedNodes.length > 0 && <span>{archivedNodes.length}</span>}
         </button>
       </div>
     </aside>

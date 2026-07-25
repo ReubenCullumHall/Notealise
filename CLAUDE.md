@@ -30,6 +30,13 @@ rule to match the code.
 4. **Markdown must degrade.** Any file this app writes must open sensibly in Obsidian, VS Code,
    and GitHub. Custom syntax dialects are forbidden. Where Markdown lacks a feature (e.g. text
    colour), use inline HTML — valid CommonMark — never an invented delimiter.
+   **Colour is the one place this app deliberately diverges from legacy.** Legacy writes
+   `<span style="color:#d0574a">`; this app writes `<mark class="hl-NAME">` /
+   `<span class="tc-NAME">` against the named palette in `editor/palette.ts`. Class names are
+   theme-aware — `--hl-NAME` / `--tc-NAME` have separate light and dark values, so a note stays
+   legible on both themes, which a baked-in hex cannot do. The trade is that another editor
+   renders `<mark>` but drops the text colour. Do not "restore" the hex form: it would break
+   `colorModel.ts` and orphan the colours in every note already written.
 
 5. **Colours are CSS custom properties; layout is Tailwind.** No hardcoded hex and no hardcoded
    box-shadow anywhere in component code. The token layer is `src/renderer/src/theme.css` (ramps,
