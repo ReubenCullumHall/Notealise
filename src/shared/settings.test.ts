@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, normalizeSettings } from './settings'
-import { DEFAULT_UPDATE_PREFS, isPrereleaseVersion, normalizeUpdatePrefs } from './update'
+import {
+  DEFAULT_UPDATE_PREFS,
+  defaultBetaChannel,
+  isPrereleaseVersion,
+  normalizeUpdatePrefs,
+  shouldFollowBeta
+} from './update'
 
 // Both of these read files a user can hand-edit or a sync client can half-write.
 // The contract is the same in each case: never throw, fall back to the default.
@@ -82,5 +88,41 @@ describe('isPrereleaseVersion', () => {
   it('treats a plain version as stable', () => {
     expect(isPrereleaseVersion('0.1.4')).toBe(false)
     expect(isPrereleaseVersion('1.0.0')).toBe(false)
+  })
+})
+
+// This is the rule that decides who receives unfinished software, so it gets
+// tested from both directions rather than trusted.
+describe('shouldFollowBeta', () => {
+  it('REFUSES beta on a stable build even when the preference says yes', () => {
+    // the case that matters: someone downloads the app and hand-edits
+    // `"betaChannel": true` into config.json, or replays the IPC call. A stable
+    // build must still never receive a test build.
+    expect(shouldFollowBeta(true, '0.2.0')).toBe(false)
+    expect(shouldFollowBeta(true, '1.0.0')).toBe(false)
+  })
+
+  it('follows beta on a build that is itself a prerelease', () => {
+    expect(shouldFollowBeta(true, '0.2.0-beta.1')).toBe(true)
+  })
+
+  it('lets a tester opt back out, so nobody is stranded on a beta', () => {
+    expect(shouldFollowBeta(false, '0.2.0-beta.1')).toBe(false)
+  })
+
+  it('leaves an ordinary stable install alone', () => {
+    expect(shouldFollowBeta(false, '0.2.0')).toBe(false)
+  })
+})
+
+describe('defaultBetaChannel', () => {
+  it('keeps a fresh beta install on beta when config.json has no key', () => {
+    // with a flat `false` default this build read as stable and immediately
+    // downgraded itself off the channel it was installed for
+    expect(defaultBetaChannel('0.2.0-beta.1')).toBe(true)
+  })
+
+  it('keeps a fresh stable install on stable', () => {
+    expect(defaultBetaChannel('0.2.0')).toBe(false)
   })
 })

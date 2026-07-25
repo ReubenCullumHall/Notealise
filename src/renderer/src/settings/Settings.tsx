@@ -360,15 +360,14 @@ function UpdatesSection(): React.JSX.Element {
       setVersion(s.version)
       setStatus(s.status)
       setAuto(s.prefs.autoUpdate)
-      // A prerelease build follows beta whether or not the pref says so, so show
-      // the switch as on rather than lying about what it will actually receive.
-      setBeta(s.prefs.betaChannel || isPrereleaseVersion(s.version))
+      setBeta(s.prefs.betaChannel)
     })()
     return window.api.onUpdateStatus(setStatus)
   }, [])
 
   const blocked = status.state === 'unsupported'
   const busy = status.state === 'checking' || status.state === 'downloading'
+  const isBeta = isPrereleaseVersion(version)
 
   const line = ((): string => {
     switch (status.state) {
@@ -394,7 +393,11 @@ function UpdatesSection(): React.JSX.Element {
   return (
     <section className="settings-group">
       <h3>Updates</h3>
-      <p className="hint">{version ? `You're running version ${version}.` : 'Checking your version…'}</p>
+      <p className="hint">
+        {version
+          ? `You're running version ${version}${isBeta ? ' — a test build.' : '.'}`
+          : 'Checking your version…'}
+      </p>
 
       <div className="mode-row">
         <button
@@ -416,25 +419,31 @@ function UpdatesSection(): React.JSX.Element {
         </button>
       </div>
 
-      <div className="mode-row">
-        <button
-          className={'mode-btn' + (beta && !blocked ? ' on' : '')}
-          aria-pressed={beta && !blocked}
-          disabled={blocked}
-          onClick={() => {
-            const next = !beta
-            setBeta(next)
-            void window.api.setBetaChannel(next)
-          }}
-        >
-          <span className="t">Receive test builds</span>
-          <span className="s">
-            {blocked
-              ? 'Not available on this build'
-              : 'Early versions, for helping test. They can be rough — turn this off to go back to the stable release.'}
-          </span>
-        </button>
-      </div>
+      {/* Only a build that is ALREADY a test build offers this, so an ordinary
+          download has no route onto the beta channel. It's kept here (rather
+          than removed) so a tester can turn it off and come back to stable.
+          Main enforces the same rule — this is presentation, not the gate. */}
+      {isBeta && (
+        <div className="mode-row">
+          <button
+            className={'mode-btn' + (beta && !blocked ? ' on' : '')}
+            aria-pressed={beta && !blocked}
+            disabled={blocked}
+            onClick={() => {
+              const next = !beta
+              setBeta(next)
+              void window.api.setBetaChannel(next)
+            }}
+          >
+            <span className="t">Receive test builds</span>
+            <span className="s">
+              {blocked
+                ? 'Not available on this build'
+                : 'Early versions, for helping test. They can be rough — turn this off to go back to the stable release.'}
+            </span>
+          </button>
+        </div>
+      )}
 
       <div className="mode-row">
         <button

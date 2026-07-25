@@ -4,12 +4,7 @@ import path from 'node:path'
 import electronUpdater from 'electron-updater'
 import { CH } from '../shared/channels'
 import { getUpdatePrefs, saveUpdatePrefs } from './config'
-import {
-  BETA_CHANNEL,
-  isPrereleaseVersion,
-  RELEASES_URL,
-  type UpdateStatus
-} from '../shared/update'
+import { BETA_CHANNEL, RELEASES_URL, shouldFollowBeta, type UpdateStatus } from '../shared/update'
 
 // The only file that imports electron-updater. It reads the `latest.yml` that
 // electron-builder already publishes beside Notes-Setup.exe on every GitHub
@@ -89,7 +84,11 @@ function wire(): void {
   const au = updater()
   au.autoInstallOnAppQuit = true
   au.logger = null
-  if (devTest) au.forceDevUpdateConfig = true
+  // `&& !app.isPackaged` matters: in a packaged build this would send
+  // electron-updater looking for dev-app-update.yml *inside the asar*, where it
+  // does not exist, silently breaking updates for anyone who happened to have
+  // the variable set in their environment.
+  if (devTest && !app.isPackaged) au.forceDevUpdateConfig = true
 
   au.on('checking-for-update', () => setStatus({ state: 'checking' }))
   au.on('update-not-available', () => setStatus({ state: 'none' }))
@@ -111,25 +110,17 @@ function wire(): void {
 
 /** Point the updater at the stable or the beta feed.
  *
- *  A build that is ITSELF a prerelease already follows beta without help:
- *  `AppUpdater` sets `allowPrerelease` from the running version, and
- *  `GitHubProvider` falls back to the version's own prerelease tag as the
- *  channel. So this only has to handle the two deliberate cases — a stable build
- *  opting in, and a beta build opting back out.
- *
- *  Setting `channel` also sets `allowDowngrade = true`, which is exactly what
- *  leaving beta requires: 0.2.0-beta.2 → 0.2.0 stable is a downgrade in semver
- *  terms, and without it a tester would be stranded on the beta forever. */
-function applyChannel(beta: boolean): void {
+ *  Setting `channel` also sets `allowDowngrade = true`. That is wanted in both
+ *  directions: leaving beta means stepping 0.2.0-beta.2 → 0.2.0, which is a
+ *  downgrade in semver terms and would otherwise strand the tester; and on
+ *  stable it is what makes the rollback in docs/release-checklist.md work — when
+ *  a bad release is demoted, `releases/latest` falls back and installs move
+ *  *down* onto the last good version. */
+function applyChannel(pref: boolean): void {
+  const beta = shouldFollowBeta(pref, app.getVersion())
   const au = updater()
-  if (beta) {
-    au.channel = BETA_CHANNEL
-    au.allowPrerelease = true
-  } else if (isPrereleaseVersion(app.getVersion())) {
-    // running a beta but opting out: aim at stable and allow the step back down
-    au.channel = 'latest'
-    au.allowPrerelease = false
-  }
+  au.channel = beta ? BETA_CHANNEL : 'latest'
+  au.allowPrerelease = beta
 }
 
 /** Prepare the updater and, if auto-update is on, start the background schedule.
@@ -219,13 +210,19 @@ export async function setAutoUpdate(on: boolean): Promise<UpdateStatus> {
 }
 
 /** Opt this install in or out of prerelease builds. Checks immediately, because
- *  the whole point is to see the other channel's version straight away. */
+ *  the whole point is to see the other channel's version straight away.
+ *
+ *  Turning it ON is refused on a stable build. Settings hides the control there,
+ *  but the renderer is not a trust boundary — the rule is enforced here, so
+ *  neither a crafted IPC call nor a hand-edited config.json opts a stranger into
+ *  test builds. Turning it OFF is always allowed, or a tester would be stuck. */
 export async function setBetaChannel(on: boolean): Promise<UpdateStatus> {
+  const next = shouldFollowBeta(on, app.getVersion())
   const prefs = await getUpdatePrefs()
-  await saveUpdatePrefs({ ...prefs, betaChannel: on })
+  await saveUpdatePrefs({ ...prefs, betaChannel: next })
   if (!unsupportedReason()) {
     wire()
-    applyChannel(on)
+    applyChannel(next)
     void checkNow()
   }
   return status

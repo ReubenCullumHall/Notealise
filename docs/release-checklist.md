@@ -51,6 +51,18 @@ an *installer* target, so a `--dir` build has no feed. Settings will say
 
 Smoke test in the packaged window: open a vault · create and edit a note (confirm it's on disk) ·
 colour a selection · Settings opens centred and scrolls · archive and restore something.
+Also confirm **Settings shows no "Receive test builds"** and **View has no Developer Tools** — both
+are supposed to be absent from stable builds.
+
+**Two traps when the installed app is also running:**
+
+- They share `userData`, so you get "Unable to move the cache" errors and can corrupt each other's
+  config. Launch the test build with its own profile:
+  `.\release\win-unpacked\Notes.exe --user-data-dir=$env:TEMP\notes-test`
+- **Don't check whether it booted with `Start-Process -PassThru` + `$p.HasExited`.** That reports on
+  a launcher stub, not Electron's process tree, and gives both false failures *and* false passes.
+  Check by path instead:
+  `Get-Process Notes | Where-Object { $_.Path -like "*win-unpacked*" }`
 
 ### Gate 2 — installed
 

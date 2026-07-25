@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
+import { app, BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron'
 import { CH } from '../shared/channels'
 import { checkNow } from './updater'
 
@@ -55,7 +55,32 @@ export function installMenu(): void {
       ]
     },
     { role: 'editMenu' },
-    { role: 'viewMenu' },
+    {
+      label: 'View',
+      // Electron's stock `viewMenu` role bundles Reload, Force Reload and Toggle
+      // Developer Tools. A shipped build shouldn't hand those to someone who
+      // just downloaded a notes app: they read as a developer build, and Reload
+      // can throw away an edit that hasn't hit the 400ms autosave yet. Dropping
+      // the items also drops their F12 / Ctrl+Shift+I accelerators.
+      //
+      // This is polish, not a security control — an Electron app can always be
+      // inspected by someone determined. `npm run dev` keeps the full set.
+      submenu: [
+        ...(app.isPackaged
+          ? []
+          : ([
+              { role: 'reload' },
+              { role: 'forceReload' },
+              { role: 'toggleDevTools' },
+              { type: 'separator' }
+            ] as MenuItemConstructorOptions[])),
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
     { role: 'windowMenu' }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))

@@ -1,7 +1,12 @@
 import { app } from 'electron'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { DEFAULT_UPDATE_PREFS, normalizeUpdatePrefs, type UpdatePrefs } from '../shared/update'
+import {
+  DEFAULT_UPDATE_PREFS,
+  defaultBetaChannel,
+  normalizeUpdatePrefs,
+  type UpdatePrefs
+} from '../shared/update'
 
 // App-level config lives in userData — NEVER inside the vault itself. In-vault
 // config belongs in <vault>/.mdnotes/. Two things qualify, for the same reason:
@@ -59,12 +64,21 @@ export async function saveVault(vaultPath: string): Promise<void> {
   await update({ vaultPath })
 }
 
-/** Update preferences for this install (not for the open vault). */
+/** Update preferences for this install (not for the open vault).
+ *
+ *  `betaChannel` defaults to *what kind of build this is*, not to a constant. A
+ *  tester installing a fresh beta has no key in config.json, and the flat
+ *  `false` default made that build read "stable" and immediately downgrade
+ *  itself off the beta channel — the exact opposite of installing a beta. So an
+ *  absent key means "follow this build's own type"; only an explicit key
+ *  overrides. (The constant in shared/update.ts stays `false`: it is the safe
+ *  answer for a stable build, and this version-aware default is main-process
+ *  policy, since main is the only place `app.getVersion()` exists.) */
 export async function getUpdatePrefs(): Promise<UpdatePrefs> {
   const cfg = await read()
   return normalizeUpdatePrefs({
     autoUpdate: cfg.autoUpdate ?? DEFAULT_UPDATE_PREFS.autoUpdate,
-    betaChannel: cfg.betaChannel ?? DEFAULT_UPDATE_PREFS.betaChannel
+    betaChannel: cfg.betaChannel ?? defaultBetaChannel(app.getVersion())
   })
 }
 

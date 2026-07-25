@@ -57,11 +57,32 @@ export function normalizeUpdatePrefs(raw: unknown): UpdatePrefs {
  *  (`beta.yml`) from the version's prerelease component. */
 export const BETA_CHANNEL = 'beta'
 
-/** True when this build is itself a prerelease. Such a build follows the beta
- *  channel automatically (electron-updater sets `allowPrerelease` from the
- *  running version), so the toggle should read as on and can't sensibly be off
- *  without downgrading first. */
+/** True when this build is itself a prerelease (`0.2.0-beta.1`). */
 export const isPrereleaseVersion = (version: string): boolean => version.includes('-')
+
+/**
+ * Whether an install should actually follow the beta channel.
+ *
+ * **Beta is honoured only on a build that is itself a prerelease.** An ordinary
+ * download therefore has no route onto test builds — not via the UI, not via a
+ * crafted IPC call, and not by hand-editing `betaChannel: true` into
+ * `config.json`. The only way in is installing a beta build, which comes from us.
+ *
+ * Kept here, pure and tested, because it is the rule that decides who receives
+ * unfinished software. `main/updater.ts` enforces it; the Settings toggle merely
+ * reflects it.
+ */
+export function shouldFollowBeta(pref: boolean, version: string): boolean {
+  return pref && isPrereleaseVersion(version)
+}
+
+/** What `betaChannel` means when `config.json` doesn't mention it: follow this
+ *  build's own type. A fresh beta install has no key, and defaulting it to a
+ *  flat `false` made that build read as stable and immediately downgrade itself
+ *  off the channel it was installed for. */
+export function defaultBetaChannel(version: string): boolean {
+  return isPrereleaseVersion(version)
+}
 
 /** Where a user goes when the app can't update itself (macOS, or a hard error). */
 export const RELEASES_URL = 'https://github.com/ReubenCullumHall/Notes-app/releases/latest'
