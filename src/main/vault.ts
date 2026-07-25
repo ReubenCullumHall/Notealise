@@ -115,6 +115,31 @@ async function resolveEol(abs: string): Promise<boolean> {
 }
 
 // ---------------------------------------------------------------------------
+// Renames, retried. On Windows a file can be briefly locked by something else
+// holding a handle — OneDrive syncing it, an antivirus scanner, a search
+// indexer — and `rename` then fails with EPERM/EACCES/EBUSY. It is transient:
+// the lock is released in tens of milliseconds. Without this, an autosave onto
+// a synced vault (a very normal setup) fails and the user's edit is lost, which
+// is the worst bug this app could have. Retry with a short backoff, then give up
+// and surface the real error.
+// ---------------------------------------------------------------------------
+const TRANSIENT = new Set(['EPERM', 'EACCES', 'EBUSY'])
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+export async function renameWithRetry(from: string, to: string, attempts = 6): Promise<void> {
+  for (let i = 0; ; i++) {
+    try {
+      await fs.rename(from, to)
+      return
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code ?? ''
+      if (i >= attempts - 1 || !TRANSIENT.has(code)) throw e
+      await sleep(30 * 2 ** i) // 30, 60, 120, 240, 480ms — ~0.9s total
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Echo guard: paths the app itself just wrote, so the watcher can ignore its
 // own writes and not loop. ~1.5s TTL.
 // ---------------------------------------------------------------------------
@@ -132,13 +157,53 @@ export function wasRecentlyWritten(abs: string): boolean {
 // Tree
 // ---------------------------------------------------------------------------
 function ignored(name: string): boolean {
-  // dotfiles + dot-folders (covers .mdnotes/) and node_modules
+  // dotfiles + dot-folders (covers .mdnotes/, and so the bin) and node_modules
   return name.startsWith('.') || name === 'node_modules'
 }
 function compareNodes(a: TreeNode, b: TreeNode): number {
   if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
   return a.name.localeCompare(b.name)
 }
+
+// The second line of a sidebar row. Only the head of the file is read — a tree
+// walk touches every note, so reading them whole would make a large vault crawl.
+const PREVIEW_BYTES = 400
+const PREVIEW_CHARS = 90
+
+/** Strip the markdown that would read as noise in a one-line preview, then
+ *  collapse whitespace. Mirrors legacy's `preview()` (legacy/src/App.jsx:66). */
+function toPreview(raw: string): string {
+  return raw
+    .replace(/^---\r?\n[\s\S]*?\r?\n---/, '') // frontmatter block
+    .replace(/^#{1,6}\s+/gm, '') // heading marks
+    .replace(/^\s{0,3}>\s?/gm, '') // blockquote marks
+    .replace(/^\s*[-*+]\s+(\[[ xX]\]\s*)?/gm, '') // bullets + task boxes
+    .replace(/`{1,3}/g, '')
+    .replace(/[*_~]/g, '')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // links/images → their text
+    .replace(/<[^>]+>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, PREVIEW_CHARS)
+}
+
+/** Read just the head of a note for its preview. Never throws — an unreadable
+ *  file must not fail the whole tree, it just gets no second line. */
+async function readPreview(abs: string): Promise<string | undefined> {
+  let fh: Awaited<ReturnType<typeof fs.open>> | null = null
+  try {
+    fh = await fs.open(abs, 'r')
+    const buf = Buffer.alloc(PREVIEW_BYTES)
+    const { bytesRead } = await fh.read(buf, 0, PREVIEW_BYTES, 0)
+    const text = toPreview(buf.subarray(0, bytesRead).toString('utf8'))
+    return text || undefined
+  } catch {
+    return undefined
+  } finally {
+    await fh?.close().catch(() => {})
+  }
+}
+
 async function readDir(absDir: string): Promise<TreeNode[]> {
   const entries = await fs.readdir(absDir, { withFileTypes: true })
   const nodes: TreeNode[] = []
@@ -148,7 +213,7 @@ async function readDir(absDir: string): Promise<TreeNode[]> {
     if (e.isDirectory()) {
       nodes.push({ name: e.name, path: toRel(abs), type: 'dir', children: await readDir(abs) })
     } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
-      nodes.push({ name: e.name, path: toRel(abs), type: 'file' })
+      nodes.push({ name: e.name, path: toRel(abs), type: 'file', preview: await readPreview(abs) })
     }
   }
   nodes.sort(compareNodes)
@@ -187,7 +252,14 @@ export async function writeNote(relPath: string, content: string): Promise<void>
   }
   markWrite(abs)
   markWrite(tmp)
-  await fs.rename(tmp, abs)
+  try {
+    await renameWithRetry(tmp, abs)
+  } catch (e) {
+    // Don't leave the scratch file behind in the user's vault when the rename
+    // loses — it's a dotfile so nothing shows it, and they accumulate silently.
+    await fs.unlink(tmp).catch(() => {})
+    throw e
+  }
 }
 
 /** Create `<dirPath>/<name>.md` (dirPath "" = vault root). Name is sanitised for
@@ -245,10 +317,10 @@ export async function renameEntry(fromPath: string, toPath: string): Promise<str
   if (caseOnly) {
     const tmp = path.join(dir, `.${safe}.${randomBytes(6).toString('hex')}.casetmp`)
     markWrite(tmp)
-    await fs.rename(fromAbs, tmp)
-    await fs.rename(tmp, toAbs)
+    await renameWithRetry(fromAbs, tmp)
+    await renameWithRetry(tmp, toAbs)
   } else {
-    await fs.rename(fromAbs, toAbs)
+    await renameWithRetry(fromAbs, toAbs)
   }
 
   // carry the remembered line-ending across the rename
@@ -260,12 +332,70 @@ export async function renameEntry(fromPath: string, toPath: string): Promise<str
   return toRel(toAbs)
 }
 
-/** Move to the OS trash — never a hard unlink, so deletes are recoverable.
- *  `shell` is imported lazily so the rest of this module (all node:fs/path) can
- *  be exercised outside the Electron runtime. */
-export async function deleteEntry(relPath: string): Promise<void> {
+// ---------------------------------------------------------------------------
+// The bin. Deleting moves an entry into <vault>/.mdnotes/trash/ rather than
+// handing it to the OS, so it stays recoverable in-app the way localhost's bin
+// is. `.mdnotes/` is already skipped by `ignored()` and by the watcher, so a
+// binned entry leaves the tree for free. Emptying the bin is the ONLY path that
+// reaches the OS trash — nothing here ever hard-unlinks a note.
+// ---------------------------------------------------------------------------
+const TRASH_DIR = '.mdnotes/trash'
+
+/** Absolute path of a binned entry. The id prefix keeps two notes of the same
+ *  name from colliding in the flat trash folder. */
+function trashAbs(id: string, name: string): string {
+  return resolveInVault(`${TRASH_DIR}/${id}-${name}`)
+}
+
+/** Move an entry into the bin. Returns the id needed to restore it. */
+export async function trashEntry(relPath: string): Promise<{ id: string; type: 'dir' | 'file' }> {
   const abs = resolveInVault(relPath)
+  if (path.relative(requireVault(), abs) === '') throw new Error('Cannot delete the vault root')
+  const stat = await fs.stat(abs)
+  const id = randomBytes(6).toString('hex')
+  const dest = trashAbs(id, path.basename(abs))
+  await fs.mkdir(path.dirname(dest), { recursive: true })
+  markWrite(abs)
+  markWrite(dest)
+  await renameWithRetry(abs, dest)
+  return { id, type: stat.isDirectory() ? 'dir' : 'file' }
+}
+
+/** Put a binned entry back at `to`. Its original parent may have been deleted or
+ *  renamed since, so the folder is recreated; a name collision is resolved by
+ *  suffixing rather than failing, so Restore always succeeds. Returns the actual
+ *  rel path it landed at. */
+export async function restoreEntry(id: string, name: string, to: string): Promise<string> {
+  const src = trashAbs(id, name)
+  const destRaw = resolveInVault(to)
+  const dir = path.dirname(destRaw)
+  await fs.mkdir(dir, { recursive: true })
+
+  const ext = path.extname(name)
+  const stem = ext ? name.slice(0, -ext.length) : name
+  let candidate = path.join(dir, name)
+  for (let n = 2; await nameTaken(dir, path.basename(candidate)); n++) {
+    candidate = path.join(dir, `${stem} (${n})${ext}`)
+  }
+  assertInVault(candidate)
+  assertPathLength(candidate)
+  markWrite(src)
+  markWrite(candidate)
+  await renameWithRetry(src, candidate)
+  return toRel(candidate)
+}
+
+/** Permanently remove a binned entry — hands it to the OS trash, so even this is
+ *  recoverable outside the app. `shell` is imported lazily so the rest of this
+ *  module (all node:fs/path) can be exercised outside the Electron runtime. */
+export async function purgeTrashItem(id: string, name: string): Promise<void> {
+  const abs = trashAbs(id, name)
   markWrite(abs)
   const { shell } = await import('electron')
-  await shell.trashItem(abs)
+  try {
+    await shell.trashItem(abs)
+  } catch {
+    // Already gone (bin emptied outside the app, or a failed earlier move) —
+    // the caller still drops the record, so the bin doesn't keep a dead row.
+  }
 }

@@ -1,9 +1,16 @@
-/* Component styles. Every visual value is a token from theme.css (rule 5) —
-   no hardcoded hex for themeable surfaces. Theme is driven by [data-theme] on
-   <html>, density by [data-density]; both are set before first paint. */
-* {
-  box-sizing: border-box;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Layout, spacing and typography are Tailwind utility classes on the components
+   — the same class strings the legacy app at localhost:5173 uses, so the two
+   stay in step. Colours remain theme.css tokens either way (Tailwind's brand /
+   ink / paper / surface read the same R G B variables).
+
+   What stays here is exactly what legacy/src/index.css keeps out of Tailwind:
+   the sidebar row metrics (they own the density variables outright, so they can
+   never lose a specificity fight to a utility), the rendered-markdown styles,
+   the CodeMirror DOM (which utilities can't reach), and the keyframes. */
 html,
 body,
 #root {
@@ -97,45 +104,30 @@ button.icon:hover {
   color: rgb(var(--ink-800));
 }
 
-/* --- layout --- */
-.app {
-  height: 100%;
-  display: grid;
-  grid-template-columns: 260px 1fr;
+/* --- animation (legacy/src/index.css) --- */
+.spring {
+  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.sidebar {
-  background: rgb(var(--surface));
-  border-right: 1px solid rgb(var(--wash) / 0.08);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  user-select: none;
+@keyframes fade-in {
+  from { opacity: 0; transform: translate3d(0, 5px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
-.sidebar-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-bottom: 1px solid rgb(var(--wash) / 0.08);
-}
-.vault-name {
-  flex: 1;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tree-scroll {
-  flex: 1;
-  overflow: auto;
-  padding: 6px;
-}
-.empty {
-  padding: 12px;
-  font-size: 13px;
+/* translate3d keeps it on the compositor; easeOutExpo settles instead of stopping */
+.fade-in {
+  animation: fade-in 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* --- tree --- */
+/* Theme changes only animate the colour properties, and only for the moment
+   they're changing — a permanent global transition would tax every hover. */
+.theming, .theming *, .theming *::before, .theming *::after {
+  transition: background-color 260ms ease, border-color 260ms ease, color 260ms ease,
+              fill 260ms ease, stroke 260ms ease, box-shadow 260ms ease, outline-color 260ms ease !important;
+}
+
+/* --- sidebar tree ---
+   These own the density metrics outright — the matching Tailwind utilities are
+   deliberately absent from the JSX so we never depend on which rule the browser
+   resolved last. Ported from legacy/src/index.css. */
 .tree {
   list-style: none;
   margin: 0;
@@ -149,98 +141,83 @@ button.icon:hover {
   outline-offset: -4px;
   border-radius: 8px;
 }
-.row {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: var(--row-py) 8px;
-  margin: var(--row-gap) 0;
+
+.tree-row {
+  position: relative;
+  padding-top: var(--row-py);
+  padding-bottom: var(--row-py);
+  gap: var(--row-gap);
   border-radius: var(--row-radius);
-  font-size: var(--row-title);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background-color 0.16s ease, color 0.16s ease, opacity 0.16s ease;
+  /* deliberately not transitioning padding: it would relayout every row in the
+     sidebar on every frame of a density change. Paint-only properties here. */
+  transition: background-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease,
+              outline-color 0.18s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.row:hover {
-  background: rgb(var(--wash) / 0.06);
+.tree-row.dragging { opacity: 0.35; transform: scale(0.985); }
+
+/* row typography follows the density setting */
+.tree-title { display: block; font-size: var(--row-title); line-height: 1.35; }
+.tree-sub { font-size: var(--row-sub); display: var(--row-sub-display); line-height: 1.35; }
+/* `.tree-row svg` outranks Tailwind's `.h-4 .w-4` on specificity, so every icon
+   in a row (doc, folder, chevron, grip) scales together */
+.tree-row svg { width: var(--row-icon); height: var(--row-icon); }
+
+.chev { transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+.chev.open { transform: rotate(90deg); }
+
+/* the 3x2 grip: quiet until you hover the row */
+.grip {
+  opacity: 0;
+  transition: opacity 0.18s ease, color 0.18s ease;
 }
-/* Active-file indicator / drop target read the active space's accent, falling
-   back to the neutral brand ramp when no space colour is set (the Home space). */
-.row.active {
-  background: rgb(var(--space-accent, var(--brand-500)) / 0.16);
-  color: rgb(var(--space-accent, var(--brand-600)));
+.tree-row:hover .grip, .grip.is-on { opacity: 1; }
+.tree-row:hover .grip:hover { color: rgb(var(--ink-800)); }
+
+/* ctrl/cmd-click selection */
+.tree-row.row-picked {
+  background: rgb(var(--wash) / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.22);
 }
-.row.dragging {
-  opacity: 0.4;
-}
-.row.drop-into {
-  background: rgb(var(--space-accent, var(--brand-500)) / 0.16);
-  outline: 1px solid rgb(var(--space-accent, var(--brand-400)) / 0.6);
+.tree-row.row-picked:hover { background: rgb(var(--wash) / 0.13); }
+/* the open note, when it's also selected — outline, because .row-picked already
+   owns box-shadow and would beat Tailwind's ring utilities */
+.tree-row.row-picked.is-open {
+  outline: 1px solid rgb(var(--brand-300) / 0.7);
   outline-offset: -1px;
 }
-.grip {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: rgb(var(--ink-300));
-  opacity: 0;
-  cursor: grab;
-  transition: opacity 0.15s ease;
+
+/* insertion line when reordering */
+@keyframes line-in {
+  from { opacity: 0; transform: scaleX(0.55); }
+  to { opacity: 1; transform: none; }
 }
-.grip:active {
-  cursor: grabbing;
+.tree-row.drop-before::before,
+.tree-row.drop-after::after {
+  content: ""; position: absolute; left: 8px; right: 8px; height: 2px;
+  background: rgb(var(--ink-800)); border-radius: 2px; pointer-events: none;
+  transform-origin: left center;
+  animation: line-in 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.row:hover .grip {
-  opacity: 1;
-}
-.grip svg {
-  width: 15px;
-  height: 15px;
-}
-.twisty {
-  width: var(--row-icon);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: rgb(var(--ink-400));
-}
-.twisty svg {
-  width: calc(var(--row-icon) * 0.72);
-  height: calc(var(--row-icon) * 0.72);
-}
-.chev {
-  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.chev.open {
-  transform: rotate(90deg);
-}
-.row-icon {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  color: rgb(var(--ink-400));
-}
-.row-icon svg {
-  width: var(--row-icon);
-  height: var(--row-icon);
-}
-.row.active .row-icon,
-.row.active .chev {
-  color: rgb(var(--space-accent, var(--brand-600)));
-}
-.label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.tree-row.drop-before::before { top: -1px; }
+.tree-row.drop-after::after { bottom: -1px; }
+
+/* highlight when dropping into a folder */
+.tree-row.drop-into {
+  background: rgb(var(--wash) / 0.09);
+  outline: 2px solid rgb(var(--wash) / 0.3);
+  outline-offset: -2px;
+  transform: scale(1.012);
 }
 
-/* --- viewer / editor pane --- */
-.viewer-pane {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+/* --- the bin: the lid hinges open when something goes in --- */
+.bin-lid {
+  transform-box: fill-box;
+  transform-origin: 8% 90%;
+  transition: transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+.lid-open .bin-lid { transform: translate(0.5px, -2px) rotate(-22deg); }
+
+/* --- viewer / editor pane --- */
 .cm-host {
   flex: 1;
   min-height: 0;
@@ -254,109 +231,10 @@ button.icon:hover {
 }
 .cm-editor .cm-selectionBackground,
 .cm-editor.cm-focused .cm-selectionBackground {
-  background: rgb(var(--space-accent, var(--brand-400)) / 0.35) !important;
+  background: rgb(var(--brand-400) / 0.35) !important;
 }
 .cm-editor .cm-cursor {
   border-left-color: rgb(var(--ink-800));
-}
-
-/* --- editor header (title + word count) --- */
-.editor-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 20px 8px;
-}
-.note-title {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: none;
-  outline: none;
-  font-family: var(--font-serif);
-  font-size: 19px;
-  font-weight: 600;
-  color: rgb(var(--ink-900));
-  padding: 0;
-}
-.note-title::placeholder {
-  color: rgb(var(--ink-300));
-}
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-.word-count {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: rgb(var(--ink-400));
-}
-.mode-toggle {
-  padding: 4px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  background: rgb(var(--wash) / 0.06);
-  border: 1px solid rgb(var(--wash) / 0.12);
-  color: rgb(var(--ink-700));
-}
-.mode-toggle:hover {
-  background: rgb(var(--wash) / 0.1);
-  color: rgb(var(--brand-600));
-}
-
-/* --- editor format toolbar (centred, like localhost) --- */
-.editor-toolbar {
-  display: flex;
-  justify-content: center;
-  padding: 2px 12px 6px;
-  border-bottom: 1px solid rgb(var(--wash) / 0.08);
-  user-select: none;
-}
-.fmt-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.fmt-btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: 13px;
-  line-height: 1;
-  border-radius: 7px;
-  background: transparent;
-  border-color: transparent;
-  color: rgb(var(--ink-500));
-}
-.fmt-btn:hover {
-  background: rgb(var(--wash) / 0.08);
-  color: rgb(var(--ink-800));
-}
-.fmt-btn.bold {
-  font-weight: 700;
-}
-.fmt-btn.italic {
-  font-style: italic;
-  font-family: var(--font-serif);
-}
-.fmt-btn.underline {
-  text-decoration: underline;
-}
-.fmt-btn.strike {
-  text-decoration: line-through;
-}
-.fmt-btn.latex {
-  font-style: italic;
-  font-family: var(--font-serif);
-}
-.fmt-sep {
-  width: 1px;
-  height: 18px;
-  background: rgb(var(--wash) / 0.14);
-  margin: 0 5px;
 }
 
 /* --- rendered math (KaTeX) --- */
@@ -386,10 +264,12 @@ button.icon:hover {
   inset: 0;
   overflow: auto;
 }
+/* the reading column: legacy is `mx-auto w-full max-w-2xl px-8 py-8` */
 .read-layer .prose-note {
-  max-width: 46rem;
+  width: 100%;
+  max-width: 42rem;
   margin: 0 auto;
-  padding: 28px 28px 40vh;
+  padding: 2rem;
 }
 .prose-note {
   color: rgb(var(--ink-700));
@@ -926,503 +806,6 @@ button.icon:hover {
   color: rgb(var(--ink-400));
 }
 
-/* ===========================================================================
-   Spaces — the top-level organisational layer. A spaces rail sits at the bottom
-   of the sidebar (Arc-style); the file tree above shows the selected space. The
-   active space's colour arrives as --space-accent on the .app wrapper, so the
-   pieces below (and the active-row/selection rules above) tint themselves.
-   =========================================================================== */
-
-/* active-space label bar, between the header and the tree */
-.space-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px 4px;
-}
-.space-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: rgb(var(--space-accent, var(--brand-500)));
-  box-shadow: 0 0 0 2px rgb(var(--space-accent, var(--brand-500)) / 0.2);
-}
-.space-label {
-  font-family: var(--font-serif);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: rgb(var(--ink-700));
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* the tree view slides/fades in on a space switch (direction set by App) */
-.space-view {
-  animation: space-fade 0.18s ease both;
-}
-.space-view[data-slide='left'] {
-  animation: space-slide-left 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-.space-view[data-slide='right'] {
-  animation: space-slide-right 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-@keyframes space-fade {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes space-slide-left {
-  from { opacity: 0; transform: translateX(-16px); }
-  to { opacity: 1; transform: none; }
-}
-@keyframes space-slide-right {
-  from { opacity: 0; transform: translateX(16px); }
-  to { opacity: 1; transform: none; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .space-view,
-  .space-view[data-slide] {
-    animation: space-fade 0.12s ease both;
-  }
-}
-
-/* the rail of space buttons */
-.space-rail {
-  border-top: 1px solid rgb(var(--wash) / 0.08);
-  padding: 8px;
-}
-.space-rail-track {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-}
-.space-rail-track::-webkit-scrollbar {
-  display: none;
-}
-/* --btn-accent is the per-space colour channels, injected inline by the rail;
-   it falls back to the neutral brand ramp (Home, or a themeless button). */
-.space-btn {
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 600;
-  color: rgb(var(--ink-800));
-  background: rgb(var(--btn-accent, var(--brand-400)) / 0.16);
-  border: 1px solid rgb(var(--btn-accent, var(--brand-400)) / 0.3);
-  cursor: pointer;
-  transition: transform 0.14s ease, box-shadow 0.16s ease, background-color 0.16s ease,
-    border-color 0.16s ease;
-}
-.space-btn:hover {
-  transform: translateY(-1px);
-  background: rgb(var(--btn-accent, var(--brand-400)) / 0.22);
-}
-.space-btn.on {
-  background: rgb(var(--btn-accent, var(--brand-500)) / 0.28);
-  border-color: rgb(var(--btn-accent, var(--brand-500)) / 0.9);
-  box-shadow: 0 0 0 1px rgb(var(--btn-accent, var(--brand-500)) / 0.45),
-    0 4px 16px -5px rgb(var(--btn-accent, var(--brand-500)) / 0.65);
-}
-.space-btn.dragging {
-  opacity: 0.4;
-}
-.space-btn.reorder-over {
-  box-shadow: inset 3px 0 0 rgb(var(--btn-accent, var(--brand-500)));
-}
-.space-btn.note-over {
-  outline: 2px dashed rgb(var(--btn-accent, var(--brand-400)) / 0.85);
-  outline-offset: 2px;
-}
-.space-glyph {
-  pointer-events: none;
-  line-height: 1;
-}
-.space-rail-end {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 10px;
-}
-.space-rail-end.active {
-  outline: 2px dashed rgb(var(--wash) / 0.2);
-  outline-offset: 2px;
-}
-.space-add {
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  flex-shrink: 0;
-  font-size: 18px;
-  line-height: 1;
-  border-radius: 10px;
-  border: 1px dashed rgb(var(--wash) / 0.2);
-  background: transparent;
-  color: rgb(var(--ink-400));
-}
-.space-add:hover {
-  color: rgb(var(--ink-700));
-  border-color: rgb(var(--wash) / 0.35);
-  background: rgb(var(--wash) / 0.04);
-}
-
-/* bottom-of-sidebar "open a different folder as the vault" button */
-.sidebar-foot {
-  padding: 8px;
-  border-top: 1px solid rgb(var(--wash) / 0.08);
-}
-.open-folder-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 13px;
-  background: rgb(var(--wash) / 0.04);
-  color: rgb(var(--ink-600));
-}
-.open-folder-btn:hover {
-  background: rgb(var(--wash) / 0.08);
-  color: rgb(var(--ink-800));
-}
-.open-folder-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* right-click-a-space colour picker popover */
-.space-pop {
-  position: fixed;
-  z-index: 101;
-  width: 236px;
-  padding: 12px;
-  background: rgb(var(--surface));
-  color: rgb(var(--ink-900));
-  border: 1px solid rgb(var(--wash) / 0.1);
-  border-radius: 14px;
-  box-shadow: var(--shadow-float);
-  animation: settings-in 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.space-pop-title {
-  font-family: var(--font-serif);
-  font-weight: 600;
-  font-size: 13px;
-  color: rgb(var(--ink-800));
-  margin-bottom: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.space-pop-swatches {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.space-swatch {
-  width: 100%;
-  aspect-ratio: 1;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid rgb(var(--wash) / 0.18);
-  cursor: pointer;
-  transition: transform 0.12s ease;
-}
-.space-swatch:hover {
-  transform: scale(1.12);
-}
-.space-swatch.on {
-  outline: 2px solid rgb(var(--ink-800));
-  outline-offset: 2px;
-}
-.space-pop-hex {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.space-hex-preview {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  flex-shrink: 0;
-  border: 1px solid rgb(var(--wash) / 0.18);
-}
-.space-pop-hex input {
-  flex: 1;
-  min-width: 0;
-  padding: 6px 8px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: inherit;
-  background: rgb(var(--wash) / 0.05);
-  border: 1px solid rgb(var(--wash) / 0.14);
-  border-radius: 8px;
-}
-.space-pop-hex input:focus {
-  outline: none;
-  border-color: rgb(var(--brand-400));
-}
-.space-pop-icons {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 4px;
-  margin-bottom: 12px;
-}
-.space-icon-choice {
-  aspect-ratio: 1;
-  padding: 0;
-  font-size: 14px;
-  line-height: 1;
-  border-radius: 7px;
-  background: transparent;
-  border: 1px solid transparent;
-  cursor: pointer;
-}
-.space-icon-choice:hover {
-  background: rgb(var(--wash) / 0.08);
-}
-.space-icon-choice.on {
-  background: rgb(var(--wash) / 0.12);
-  border-color: rgb(var(--wash) / 0.2);
-}
-.space-pop-actions {
-  display: flex;
-  gap: 8px;
-}
-.space-pop-actions button {
-  flex: 1;
-  padding: 6px 8px;
-  font-size: 12.5px;
-}
-.space-pop-actions .danger {
-  color: #e5484d;
-}
-.space-pop-actions .danger:hover {
-  background: #e5484d;
-  border-color: #e5484d;
-  color: #fff;
-}
-
-/* ---- search (Spotlight-style pill, ported from the original app) --------- */
-.search-wrap {
-  padding: 8px 10px 2px;
-}
-.search-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 6px 5px 10px;
-  border-radius: 999px;
-  background: rgb(var(--wash) / 0.05);
-  border: 1px solid rgb(var(--wash) / 0.12);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.search-pill:focus-within {
-  border-color: rgb(var(--space-accent, var(--brand-400)));
-  box-shadow: 0 0 0 3px rgb(var(--space-accent, var(--brand-400)) / 0.15);
-}
-.search-ico {
-  display: inline-flex;
-  flex-shrink: 0;
-  color: rgb(var(--ink-400));
-}
-.search-ico svg {
-  width: 15px;
-  height: 15px;
-}
-.search-input {
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  background: transparent;
-  border: none;
-  outline: none;
-  font-size: 13px;
-  color: rgb(var(--ink-900));
-}
-.search-input::placeholder {
-  color: rgb(var(--ink-300));
-}
-.search-clear {
-  display: inline-flex;
-  flex-shrink: 0;
-  padding: 3px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: rgb(var(--ink-400));
-}
-.search-clear:hover {
-  background: rgb(var(--wash) / 0.08);
-  color: rgb(var(--ink-800));
-}
-.search-clear svg {
-  width: 13px;
-  height: 13px;
-}
-.search-sep {
-  width: 1px;
-  height: 16px;
-  flex-shrink: 0;
-  background: rgb(var(--wash) / 0.14);
-}
-.search-toggle {
-  display: inline-flex;
-  flex-shrink: 0;
-  padding: 4px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: rgb(var(--ink-400));
-}
-.search-toggle:hover {
-  background: rgb(var(--wash) / 0.08);
-  color: rgb(var(--ink-700));
-}
-.search-toggle.on {
-  background: rgb(var(--space-accent, var(--brand-500)) / 0.18);
-  color: rgb(var(--space-accent, var(--brand-600)));
-}
-.search-toggle svg {
-  width: 14px;
-  height: 14px;
-}
-
-.search-results {
-  padding: 4px 0;
-}
-.search-count {
-  padding: 4px 12px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgb(var(--ink-400));
-}
-.search-empty {
-  padding: 24px 16px;
-  text-align: center;
-  font-size: 13px;
-}
-.search-row {
-  align-items: flex-start;
-}
-.search-row-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.search-snippet {
-  margin-top: 1px;
-  font-size: 11px;
-  color: rgb(var(--ink-400));
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.search-badge {
-  flex-shrink: 0;
-  align-self: center;
-  padding: 2px 7px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 500;
-  background: rgb(var(--wash) / 0.07);
-  color: rgb(var(--ink-400));
-}
-
-/* the little + on the active-space label row */
-.space-head .space-label {
-  flex: 1;
-}
-.space-head-add {
-  margin-left: auto;
-  display: inline-flex;
-  padding: 2px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: rgb(var(--ink-400));
-}
-.space-head-add:hover {
-  background: rgb(var(--wash) / 0.08);
-  color: rgb(var(--ink-700));
-}
-.space-head-add svg {
-  width: 14px;
-  height: 14px;
-}
-
-/* ---- Settings › Spaces manager ------------------------------------------- */
-.spaces-admin {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
-}
-.spaces-admin-empty {
-  padding: 8px 2px;
-  font-size: 12.5px;
-}
-.space-admin-row {
-  border: 1px solid rgb(var(--wash) / 0.08);
-  border-radius: 12px;
-  background: rgb(var(--wash) / 0.02);
-  overflow: hidden;
-}
-.space-admin-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-}
-.space-admin-dot {
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  border: 1px solid rgb(var(--wash) / 0.15);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.space-admin-glyph {
-  line-height: 1;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-.space-admin-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.space-admin-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
 .mini {
   padding: 3px 8px;
   font-size: 12px;
@@ -1452,29 +835,4 @@ button.icon:hover {
   width: 13px;
   height: 13px;
   vertical-align: -2px;
-}
-.space-admin-palette {
-  padding: 10px 10px;
-  border-top: 1px solid rgb(var(--wash) / 0.06);
-}
-.space-admin-palette .space-pop-hex {
-  margin-bottom: 0;
-}
-.add-space-btn {
-  margin-top: 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 10px;
-  background: rgb(var(--wash) / 0.04);
-  color: rgb(var(--ink-700));
-  font-size: 13px;
-}
-.add-space-btn:hover {
-  background: rgb(var(--wash) / 0.08);
-}
-.add-space-btn svg {
-  width: 15px;
-  height: 15px;
 }

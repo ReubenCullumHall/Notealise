@@ -1,20 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { EditorView } from '@codemirror/view'
 import type { TreeNode } from '../../shared/types'
-import type { SpacesMap } from '../../shared/spaces'
-import { TreeView } from './TreeView'
+import type { Workspace } from '../../shared/workspace'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { CodeEditor } from './editor'
 import { FormatToolbar } from './editor/FormatToolbar'
-import { SettingsButton } from './settings/Settings'
 import { ReadingView } from './reader/ReadingView'
 import { applySettings } from './settings/model'
 import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/settings'
-import { SpaceRail } from './spaces/SpaceRail'
-import { SpacePopover } from './spaces/SpacePopover'
-import { deriveSpaces, hexToChannels, type Space } from './spaces/model'
-import { SearchBar, SearchResults, type SearchHit } from './Search'
+import { Sidebar } from './Sidebar'
+import type { SearchHit } from './Search'
 import { Icon } from './icons'
+import { findNode, isArchived, sortSiblings } from './organise/model'
 
 // --- small path helpers (renderer works in vault-relative POSIX paths) ---
 const parentOf = (p: string): string => {
@@ -30,10 +27,13 @@ const baseName = (osPath: string): string => osPath.split(/[\\/]/).filter(Boolea
 const stripMd = (s: string): string => (s.toLowerCase().endsWith('.md') ? s.slice(0, -3) : s)
 const countWords = (t: string): number => (t.trim().match(/\S+/g) ?? []).length
 
+const EMPTY_WS: Workspace = { entries: {}, trash: [] }
+
 export default function App(): React.JSX.Element {
   const [ready, setReady] = useState(false)
   const [vault, setVault] = useState<string | null>(null)
   const [tree, setTree] = useState<TreeNode[]>([])
+  const [workspace, setWorkspace] = useState<Workspace>(EMPTY_WS)
   const [openPath, setOpenPath] = useState<string | null>(null)
   const [content, setContent] = useState('')
   const [wordCount, setWordCount] = useState(0)
@@ -45,16 +45,11 @@ export default function App(): React.JSX.Element {
   const [readSource, setReadSource] = useState('')
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
-  // Spaces: raw presentation metadata (folder name → colour/icon/order), the
-  // currently selected space ('' = the synthetic Home space of loose root notes),
-  // the right-click popover, and the swipe/switch slide direction for animation.
-  const [spaces, setSpaces] = useState<SpacesMap>({})
-  const [activeSpace, setActiveSpace] = useState<string>('')
-  const [spacePop, setSpacePop] = useState<{ x: number; y: number; space: Space } | null>(null)
-  const [slideDir, setSlideDir] = useState<'left' | 'right' | null>(null)
-  // Search (spotlight pill). `deep` also matches note contents, not just titles.
+  // Search (spotlight pill). `deep` also matches note contents, not just titles;
+  // `withArchived` lets shelved notes back into the results.
   const [query, setQuery] = useState('')
   const [deep, setDeep] = useState(false)
+  const [withArchived, setWithArchived] = useState(false)
   const [cacheVersion, setCacheVersion] = useState(0)
   const contentCache = useRef<Map<string, string>>(new Map())
   const [notice, setNotice] = useState<string | null>(null)
@@ -121,8 +116,8 @@ export default function App(): React.JSX.Element {
   const loadTree = useCallback(async (): Promise<void> => {
     setTree(await window.api.listTree())
   }, [])
-  const loadSpaces = useCallback(async (): Promise<void> => {
-    setSpaces(await window.api.getSpaces())
+  const loadWorkspace = useCallback(async (): Promise<void> => {
+    setWorkspace(await window.api.getWorkspace())
   }, [])
 
   // Appearance: load the active vault's settings (or cached defaults) and apply
@@ -165,20 +160,17 @@ export default function App(): React.JSX.Element {
       setReady(true)
       if (v) {
         await loadTree()
-        await loadSpaces()
+        await loadWorkspace()
       }
       await loadSettings()
     })()
-  }, [loadTree, loadSpaces, loadSettings])
+  }, [loadTree, loadWorkspace, loadSettings])
 
-  // external changes → refresh the tree (and the open note if it changed). A
-  // folder created/removed in Finder/Explorer shows up (or disappears) as a
-  // space here, auto-coloured, without a reload.
+  // external changes → refresh the tree (and the open note if it changed)
   useEffect(() => {
     return window.api.onVaultChanged(async ({ paths }) => {
       contentCache.current.clear() // note contents may have changed on disk
       await loadTree()
-      await loadSpaces()
       const p = openPathRef.current
       if (p && paths.includes(p)) {
         if (dirtyRef.current && dirtyRef.current.path === p) return // don't clobber unsaved edits
@@ -191,15 +183,16 @@ export default function App(): React.JSX.Element {
         }
       }
     })
-  }, [loadTree, loadSpaces])
+  }, [loadTree])
 
   const pick = async (): Promise<void> => {
     const v = await window.api.pickVault()
     if (v) {
       setVault(v)
-      setActiveSpace('') // a fresh vault starts on Home
+      setOpenPath(null)
+      setContent('')
       await loadTree()
-      await loadSpaces()
+      await loadWorkspace()
       await loadSettings() // a vault may carry its own saved appearance
     }
   }
@@ -214,7 +207,7 @@ export default function App(): React.JSX.Element {
 
   // After a rename/move, keep the open note and any pending unsaved buffer
   // pointed at the entry's new path (covers a moved folder's descendants too).
-  const remapPath = (oldPath: string, newRel: string): void => {
+  const remapOpen = (oldPath: string, newRel: string): void => {
     const d = dirtyRef.current
     if (d) {
       if (d.path === oldPath) d.path = newRel
@@ -227,156 +220,193 @@ export default function App(): React.JSX.Element {
     })
   }
 
-  // Drag-and-drop: move an entry into folder `toDir` ("" = vault root). The file
-  // is physically moved via renameEntry; guards mirror the tree's canDrop.
-  const move = (fromPath: string, toDir: string): Promise<void> =>
-    run(async () => {
-      if (toDir === fromPath || toDir.startsWith(fromPath + '/')) return // into self/descendant
-      const dest = joinPath(toDir, nameOf(fromPath))
-      if (dest === fromPath) return // already there
-      const actualRel = await window.api.renameEntry(fromPath, dest)
-      await loadTree()
-      remapPath(fromPath, actualRel)
-    })
-
-  // --- spaces ---------------------------------------------------------------
-  // Derive the ordered rail (Home + one space per top-level folder) from the tree
-  // and the stored metadata. Resolve the active space, always falling back to
-  // Home if the selected folder has gone (deleted/renamed externally).
-  const spaceList = useMemo(() => deriveSpaces(tree, spaces), [tree, spaces])
-  const activeSpaceObj = spaceList.find((s) => s.name === activeSpace) ?? spaceList[0]
-  const activeSpaceName = activeSpaceObj.name
-
-  useEffect(() => {
-    if (!spaceList.some((s) => s.name === activeSpace)) setActiveSpace('')
-  }, [spaceList, activeSpace])
-
-  // The active space's colour becomes a scoped CSS variable on the app wrapper,
-  // so accents elsewhere (active row, focus rings, glow) pick it up without the
-  // colour being threaded through as a prop. Home stays neutral (brand fallback).
-  const accentStyle = useMemo<React.CSSProperties | undefined>(() => {
-    const ch = activeSpaceObj.color ? hexToChannels(activeSpaceObj.color) : null
-    return ch ? ({ ['--space-accent']: ch } as React.CSSProperties) : undefined
-  }, [activeSpaceObj.color])
-
-  // Refs so the stable wheel/swipe listener always sees the latest list + active.
-  const spaceListRef = useRef(spaceList)
-  spaceListRef.current = spaceList
-  const activeSpaceRef = useRef(activeSpaceName)
-  activeSpaceRef.current = activeSpaceName
-
-  const switchSpace = useCallback((name: string, dir: 'left' | 'right' | null): void => {
-    setSlideDir(dir)
-    setActiveSpace(name)
-  }, [])
-
-  // Move `delta` spaces along the rail (+1 = next/right, -1 = previous/left).
-  const switchByOffset = useCallback(
-    (delta: 1 | -1): void => {
-      const list = spaceListRef.current
-      const cur = Math.max(0, list.findIndex((s) => s.name === activeSpaceRef.current))
-      const next = cur + delta
-      if (next < 0 || next >= list.length) return
-      switchSpace(list[next].name, delta === 1 ? 'right' : 'left')
-    },
-    [switchSpace]
-  )
-
-  const recolorSpace = (name: string, color: string): void =>
-    void run(async () => setSpaces(await window.api.updateSpace(name, { color })))
-  const setSpaceIcon = (name: string, icon: string): void =>
-    void run(async () => setSpaces(await window.api.updateSpace(name, { icon })))
-  const reorderSpaces = (names: string[]): void =>
-    void run(async () => setSpaces(await window.api.reorderSpaces(names)))
-
-  const renameSpace = (space: Space): Promise<void> =>
-    run(async () => {
-      const next = await ask('Rename space', space.name)
-      if (next == null || !next.trim() || next.trim() === space.name) return
-      const res = await window.api.renameSpace(space.name, next.trim())
-      setSpaces(res.spaces)
-      await loadTree()
-      remapPath(space.name, res.name) // keep an open note inside the space pointed right
-      if (activeSpaceRef.current === space.name) setActiveSpace(res.name)
-      if (res.name !== next.trim()) flash(`Renamed to "${res.name}" (adjusted for cross-platform safety)`)
-    })
-
-  const deleteSpace = (space: Space): Promise<void> =>
-    run(async () => {
-      if (!window.confirm(`Move the space "${space.name}" and all its notes to the trash?`)) return
-      setSpaces(await window.api.deleteSpace(space.name))
-      await loadTree()
-      if (activeSpaceRef.current === space.name) setActiveSpace('')
-      // drop the open note / pending write if it lived inside the deleted space
-      const inside = (p: string | null): boolean => !!p && (p === space.name || p.startsWith(space.name + '/'))
-      if (inside(dirtyRef.current?.path ?? null)) {
-        dirtyRef.current = null
-        if (saveTimer.current) clearTimeout(saveTimer.current)
-      }
-      if (inside(openPath)) {
-        setOpenPath(null)
-        setContent('')
-      }
-    })
-
-  const newSpace = (): Promise<void> =>
-    run(async () => {
-      const name = await ask('New space name', 'New space')
-      if (name == null || !name.trim()) return
-      const rel = await window.api.createFolder(name.trim()) // top-level folder = a space
-      await loadTree()
-      await loadSpaces()
-      setActiveSpace(rel) // createFolder returns the (top-level) folder name
-      if (rel !== name.trim()) flash(`Created as "${rel}" (adjusted for cross-platform safety)`)
-    })
-
-  const openSpacePopover = (e: React.MouseEvent, space: Space): void =>
-    setSpacePop({ x: e.clientX, y: e.clientY, space })
-
-  // Two-finger trackpad swipe across the sidebar switches spaces, Arc-style. Only
-  // horizontal-dominant wheels count (vertical stays scrolling); one gesture =
-  // one switch (a momentum burst is locked out after the first step).
-  const sidebarRef = useRef<HTMLElement>(null)
-  useEffect(() => {
-    const el = sidebarRef.current
-    if (!el) return
-    let accum = 0
-    let locked = false
-    let idle: ReturnType<typeof setTimeout> | null = null
-    const onWheel = (e: WheelEvent): void => {
-      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return // vertical scroll — leave it alone
-      e.preventDefault() // suppress history-nav / rubber-band on horizontal swipe
-      if (locked) return
-      accum += e.deltaX
-      if (idle) clearTimeout(idle)
-      idle = setTimeout(() => (accum = 0), 140) // a pause forgets a partial swipe
-      if (Math.abs(accum) < 60) return
-      const delta: 1 | -1 = accum > 0 ? 1 : -1
-      accum = 0
-      locked = true
-      setTimeout(() => (locked = false), 450)
-      switchByOffset(delta)
+  /** Forget an open note / pending write that has just left the vault. */
+  const forgetIfInside = (roots: string[]): void => {
+    const inside = (p: string | null): boolean =>
+      !!p && roots.some((r) => p === r || p.startsWith(r + '/'))
+    if (inside(dirtyRef.current?.path ?? null)) {
+      dirtyRef.current = null
+      if (saveTimer.current) clearTimeout(saveTimer.current)
     }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [switchByOffset, vault])
+    setOpenPath((cur) => {
+      if (!inside(cur)) return cur
+      setContent('')
+      return null
+    })
+  }
+
+  // --- organise actions ------------------------------------------------------
+
+  /** Move entries into `toDir`, optionally positioned around `anchor`. The files
+   *  really move (renameEntry); the sibling order is then recorded in the
+   *  sidecar, since the filesystem alone is only alphabetical. */
+  const move = (paths: string[], toDir: string, anchor: string | null, after: boolean): void =>
+    void run(async () => {
+      const landed: string[] = []
+      for (const from of paths) {
+        if (toDir === from || toDir.startsWith(from + '/')) continue // into self/descendant
+        const dest = joinPath(toDir, nameOf(from))
+        if (dest === from) {
+          landed.push(from) // already in this folder — a pure reorder
+          continue
+        }
+        const actual = await window.api.renameEntry(from, dest)
+        remapOpen(from, actual)
+        landed.push(actual)
+      }
+      const fresh = await window.api.listTree()
+      setTree(fresh)
+
+      // Re-sequence the destination folder: take its children in display order,
+      // pull out the ones that moved, and splice them back at the anchor.
+      const siblings =
+        toDir === '' ? fresh : (findNode(fresh, toDir)?.children ?? [])
+      const ws = await window.api.getWorkspace()
+      const ordered = sortSiblings(siblings, ws, false).map((n) => n.path)
+      const moved = new Set(landed)
+      const rest = ordered.filter((p) => !moved.has(p))
+      let at = rest.length
+      if (anchor) {
+        const i = rest.indexOf(anchor)
+        if (i >= 0) at = after ? i + 1 : i
+      }
+      const next = [...rest.slice(0, at), ...landed.filter((p) => ordered.includes(p)), ...rest.slice(at)]
+      setWorkspace(await window.api.reorderEntries(next))
+    })
+
+  const togglePin = (paths: string[], pinned: boolean): void =>
+    void run(async () => setWorkspace(await window.api.updateEntries(paths, { pinned })))
+
+  const setArchived = (paths: string[], archived: boolean): void =>
+    void run(async () =>
+      setWorkspace(
+        await window.api.updateEntries(paths, {
+          archived,
+          archivedAt: archived ? Date.now() : undefined
+        })
+      )
+    )
+
+  const trash = (paths: string[]): void =>
+    void run(async () => {
+      if (!paths.length) return
+      setWorkspace(await window.api.trashEntries(paths))
+      await loadTree()
+      forgetIfInside(paths)
+    })
+
+  const restoreFromBin = (ids: string[]): void =>
+    void run(async () => {
+      setWorkspace(await window.api.restoreEntries(ids))
+      await loadTree()
+    })
+
+  const purge = (ids?: string[]): void =>
+    void run(async () => setWorkspace(await window.api.purgeEntries(ids)))
+
+  const newNote = (dir: string): Promise<void> =>
+    run(async () => {
+      const name = await ask('New note name', 'Untitled')
+      if (name == null || !name.trim()) return
+      const rel = await window.api.createNote(dir, name)
+      await loadTree()
+      await openNote(rel)
+      const actual = nameOf(rel)
+      if (stripMd(actual) !== stripMd(name.trim()))
+        flash(`Created as "${actual}" (adjusted for cross-platform safety)`)
+    })
+
+  const newFolder = (dir: string): Promise<void> =>
+    run(async () => {
+      const name = await ask('New folder name', 'New folder')
+      if (name == null || !name.trim()) return
+      const rel = await window.api.createFolder(joinPath(dir, name.trim()))
+      await loadTree()
+      const actual = nameOf(rel)
+      if (actual !== name.trim())
+        flash(`Created as "${actual}" (adjusted for cross-platform safety)`)
+    })
+
+  const rename = (node: TreeNode): Promise<void> =>
+    run(async () => {
+      const next = await ask('Rename', nameOf(node.path))
+      if (next == null || !next.trim() || next.trim() === nameOf(node.path)) return
+      const to = joinPath(parentOf(node.path), next.trim())
+      const actualRel = await window.api.renameEntry(node.path, to)
+      await loadTree()
+      await loadWorkspace()
+      remapOpen(node.path, actualRel)
+      const actualName = nameOf(actualRel)
+      if (stripMd(actualName) !== stripMd(next.trim()))
+        flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
+    })
+
+  // Toggle Edit/Read. Entering Read snapshots the live editor buffer (so unsaved
+  // edits render); leaving just hides the reading layer over the still-mounted editor.
+  const toggleRead = (): void => {
+    if (reading) {
+      setReading(false)
+      return
+    }
+    setReadSource(editorViewRef.current?.state.doc.toString() ?? content)
+    setReading(true)
+  }
+
+  const openMenu = (e: React.MouseEvent, node: TreeNode | null): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    const dir = node == null ? '' : node.type === 'dir' ? node.path : parentOf(node.path)
+    const items: MenuItem[] = [
+      { label: 'New note', onClick: () => void newNote(dir) },
+      { label: 'New folder', onClick: () => void newFolder(dir) }
+    ]
+    if (node) {
+      items.push({ label: 'Rename', onClick: () => void rename(node) })
+      items.push({ label: 'Move to bin', danger: true, onClick: () => trash([node.path]) })
+    }
+    setMenu({ x: e.clientX, y: e.clientY, items })
+  }
+
+  // Route application-menu commands (New Note / New Folder) to the current
+  // handlers via a ref, so the subscription mounts once but never goes stale.
+  const menuHandler = useRef<(cmd: string) => void>(() => {})
+  menuHandler.current = (cmd: string): void => {
+    if (!vault) return
+    if (cmd === 'new-note') void newNote('')
+    else if (cmd === 'new-folder') void newFolder('')
+  }
+  useEffect(() => window.api.onMenuCommand((cmd) => menuHandler.current(cmd)), [])
+
+  // flush unsaved edits when the window loses focus and just before the app quits
+  useEffect(() => {
+    const onBlur = (): void => void flush()
+    window.addEventListener('blur', onBlur)
+    return () => window.removeEventListener('blur', onBlur)
+  }, [flush])
+  useEffect(() => {
+    return window.api.onBeforeQuit(() => {
+      void flush().finally(() => window.api.notifyFlushed())
+    })
+  }, [flush])
 
   // --- search ---------------------------------------------------------------
-  // Every note in the vault, flattened, tagged with the top-level space it lives
-  // in (first path segment; '' = Home). The basis for both title and deep search.
+  // Every note in the vault, flattened and tagged with whether it's archived.
   const allNotes = useMemo<SearchHit[]>(() => {
     const out: SearchHit[] = []
     const walk = (nodes: TreeNode[]): void => {
       for (const n of nodes) {
         if (n.type === 'file') {
-          const seg = n.path.includes('/') ? n.path.slice(0, n.path.indexOf('/')) : ''
-          out.push({ path: n.path, title: stripMd(nameOf(n.path)), space: seg, spaceLabel: seg || 'Home' })
+          out.push({
+            path: n.path,
+            title: stripMd(nameOf(n.path)),
+            archived: isArchived(workspace, n.path)
+          })
         } else if (n.children) walk(n.children)
       }
     }
     walk(tree)
     return out
-  }, [tree])
+  }, [tree, workspace])
 
   // Deep search reads every note's contents once (lazily, cached), then bumps a
   // version so the hit list recomputes. Titles are always searched instantly.
@@ -408,6 +438,7 @@ export default function App(): React.JSX.Element {
     void cacheVersion // recompute when the content cache fills
     const hits: SearchHit[] = []
     for (const n of allNotes) {
+      if (n.archived && !withArchived) continue
       if (n.title.toLowerCase().includes(q)) {
         hits.push(n)
         continue
@@ -428,10 +459,9 @@ export default function App(): React.JSX.Element {
       }
     }
     return hits
-  }, [query, deep, allNotes, cacheVersion])
+  }, [query, deep, withArchived, allNotes, cacheVersion])
 
   const openSearchResult = (h: SearchHit): void => {
-    switchSpace(h.space, null)
     void openNote(h.path)
     setQuery('')
   }
@@ -454,110 +484,12 @@ export default function App(): React.JSX.Element {
       const fname = next.toLowerCase().endsWith('.md') ? next : `${next}.md`
       const actualRel = await window.api.renameEntry(p, joinPath(parentOf(p), fname))
       await loadTree()
-      remapPath(p, actualRel)
+      await loadWorkspace()
+      remapOpen(p, actualRel)
       const actualName = stripMd(nameOf(actualRel))
       setTitleDraft(actualName)
       if (actualName !== next) flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
     })
-
-  const newNote = (dir: string): Promise<void> =>
-    run(async () => {
-      const name = await ask('New note name', 'Untitled')
-      if (name == null || !name.trim()) return
-      const rel = await window.api.createNote(dir, name)
-      await loadTree()
-      await openNote(rel)
-      const actual = nameOf(rel)
-      if (stripMd(actual) !== stripMd(name.trim())) flash(`Created as "${actual}" (adjusted for cross-platform safety)`)
-    })
-
-  const newFolder = (dir: string): Promise<void> =>
-    run(async () => {
-      const name = await ask('New folder name', 'New folder')
-      if (name == null || !name.trim()) return
-      const rel = await window.api.createFolder(joinPath(dir, name.trim()))
-      await loadTree()
-      const actual = nameOf(rel)
-      if (actual !== name.trim()) flash(`Created as "${actual}" (adjusted for cross-platform safety)`)
-    })
-
-  const rename = (node: TreeNode): Promise<void> =>
-    run(async () => {
-      const next = await ask('Rename', nameOf(node.path))
-      if (next == null || !next.trim() || next.trim() === nameOf(node.path)) return
-      const to = joinPath(parentOf(node.path), next.trim())
-      const actualRel = await window.api.renameEntry(node.path, to)
-      await loadTree()
-      remapPath(node.path, actualRel)
-      const actualName = nameOf(actualRel)
-      if (stripMd(actualName) !== stripMd(next.trim())) flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
-    })
-
-  const del = (node: TreeNode): Promise<void> =>
-    run(async () => {
-      if (!window.confirm(`Move "${nameOf(node.path)}" to the trash?`)) return
-      await window.api.deleteEntry(node.path)
-      await loadTree()
-      // drop any pending write for a note we just trashed (don't recreate it)
-      const d = dirtyRef.current
-      if (d && (d.path === node.path || d.path.startsWith(node.path + '/'))) {
-        dirtyRef.current = null
-        if (saveTimer.current) clearTimeout(saveTimer.current)
-      }
-      if (openPath === node.path || (openPath && openPath.startsWith(node.path + '/'))) {
-        setOpenPath(null)
-        setContent('')
-      }
-    })
-
-  // Toggle Edit/Read. Entering Read snapshots the live editor buffer (so unsaved
-  // edits render); leaving just hides the reading layer over the still-mounted editor.
-  const toggleRead = (): void => {
-    if (reading) {
-      setReading(false)
-      return
-    }
-    setReadSource(editorViewRef.current?.state.doc.toString() ?? content)
-    setReading(true)
-  }
-
-  const openMenu = (e: React.MouseEvent, node: TreeNode | null): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    // Background right-click creates inside the active space's folder ('' = Home/root).
-    const dir = node == null ? activeSpaceName : node.type === 'dir' ? node.path : parentOf(node.path)
-    const items: MenuItem[] = [
-      { label: 'New note', onClick: () => void newNote(dir) },
-      { label: 'New folder', onClick: () => void newFolder(dir) }
-    ]
-    if (node) {
-      items.push({ label: 'Rename', onClick: () => void rename(node) })
-      items.push({ label: 'Delete', danger: true, onClick: () => void del(node) })
-    }
-    setMenu({ x: e.clientX, y: e.clientY, items })
-  }
-
-  // Route application-menu commands (New Note / New Folder) to the current
-  // handlers via a ref, so the subscription mounts once but never goes stale.
-  const menuHandler = useRef<(cmd: string) => void>(() => {})
-  menuHandler.current = (cmd: string): void => {
-    if (!vault) return
-    if (cmd === 'new-note') void newNote(activeSpaceName)
-    else if (cmd === 'new-folder') void newFolder(activeSpaceName)
-  }
-  useEffect(() => window.api.onMenuCommand((cmd) => menuHandler.current(cmd)), [])
-
-  // flush unsaved edits when the window loses focus and just before the app quits
-  useEffect(() => {
-    const onBlur = (): void => void flush()
-    window.addEventListener('blur', onBlur)
-    return () => window.removeEventListener('blur', onBlur)
-  }, [flush])
-  useEffect(() => {
-    return window.api.onBeforeQuit(() => {
-      void flush().finally(() => window.api.notifyFlushed())
-    })
-  }, [flush])
 
   if (!ready) return <div className="center muted">Loading…</div>
 
@@ -574,93 +506,47 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <div className="app" style={accentStyle}>
-      <aside className="sidebar" ref={sidebarRef} onContextMenu={(e) => openMenu(e, null)}>
-        <header className="sidebar-head" title={vault}>
-          <span className="vault-name">{baseName(vault)}</span>
-          <SettingsButton
-            settings={settings}
-            onChange={changeSettings}
-            spacesAdmin={{
-              spaces: spaceList,
-              onAdd: () => void newSpace(),
-              onRename: (s) => void renameSpace(s),
-              onRecolor: recolorSpace,
-              onReorder: reorderSpaces,
-              onDelete: (s) => void deleteSpace(s)
-            }}
-          />
-          <button className="icon" title="New note" onClick={() => void newNote(activeSpaceName)}>
-            +
-          </button>
-        </header>
+    <div className="flex h-full w-full">
+      <Sidebar
+        vaultName={baseName(vault)}
+        tree={tree}
+        workspace={workspace}
+        openPath={openPath}
+        settings={settings}
+        onChangeSettings={(p) => void changeSettings(p)}
+        query={query}
+        onQuery={setQuery}
+        deep={deep}
+        onToggleDeep={() => setDeep((d) => !d)}
+        withArchived={withArchived}
+        onToggleWithArchived={() => setWithArchived((a) => !a)}
+        searchHits={searchHits}
+        onOpenSearchHit={openSearchResult}
+        actions={{
+          onOpen: (p) => void openNote(p),
+          onContext: openMenu,
+          onMove: move,
+          onTogglePin: togglePin,
+          onTrash: trash,
+          onRestore: (paths) => setArchived(paths, false),
+          onNewNoteIn: (dir) => void newNote(dir),
+          onNewFolderIn: (dir) => void newFolder(dir),
+          onRename: (node) => void rename(node),
+          onNewNote: () => void newNote(''),
+          onNewFolder: () => void newFolder(''),
+          onArchive: setArchived,
+          onRestoreFromBin: restoreFromBin,
+          onPurge: purge,
+          onPickVault: () => void pick()
+        }}
+      />
 
-        <SearchBar query={query} onQuery={setQuery} deep={deep} onToggleDeep={() => setDeep((d) => !d)} />
-
-        {searchHits !== null ? (
-          <div className="tree-scroll">
-            <SearchResults hits={searchHits} activePath={openPath} onOpen={openSearchResult} deep={deep} />
-          </div>
-        ) : (
-          <>
-            <div className="space-head" title={activeSpaceObj.isHome ? 'Notes loose at the vault root' : activeSpaceObj.label}>
-              <span
-                className="space-dot"
-                style={activeSpaceObj.color ? { background: activeSpaceObj.color } : undefined}
-              />
-              <span className="space-label">{activeSpaceObj.label}</span>
-              <button className="space-head-add" title="New note here" aria-label="New note here" onClick={() => void newNote(activeSpaceName)}>
-                <Icon name="plus" />
-              </button>
-            </div>
-
-            <div className="tree-scroll">
-              <div className="space-view" key={activeSpaceName} data-slide={slideDir ?? undefined}>
-                {activeSpaceObj.nodes.length === 0 ? (
-                  <p className="muted empty">
-                    {activeSpaceObj.isHome
-                      ? 'No loose notes here. Right-click to create one, or add a space in Settings.'
-                      : 'This space is empty. Right-click to add a note.'}
-                  </p>
-                ) : (
-                  <TreeView
-                    nodes={activeSpaceObj.nodes}
-                    rootDir={activeSpaceName}
-                    openPath={openPath}
-                    onOpen={(p) => void openNote(p)}
-                    onContext={openMenu}
-                    onMove={(from, to) => void move(from, to)}
-                  />
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        <SpaceRail
-          spaces={spaceList}
-          activeName={activeSpaceName}
-          onSelect={(name) => switchSpace(name, null)}
-          onContext={openSpacePopover}
-          onReorder={reorderSpaces}
-          onDropNote={(from, to) => void move(from, to)}
-          onNewSpace={() => void newSpace()}
-        />
-
-        <div className="sidebar-foot">
-          <button className="open-folder-btn" onClick={() => void pick()} title="Open a different folder as your vault">
-            <Icon name="folder" />
-            <span>Open folder…</span>
-          </button>
-        </div>
-      </aside>
-
-      <main className="viewer-pane">
+      <main className="flex min-w-0 flex-1 flex-col">
         {openPath ? (
           <>
-            <div className="editor-header">
+            <div className="flex items-center gap-3 border-b border-ink-300/25 bg-surface/40 px-5 py-3 backdrop-blur">
               <input
-                className="note-title"
+                className="min-w-0 flex-1 truncate bg-transparent font-display text-lg font-semibold text-ink-900 outline-none placeholder:text-ink-300"
                 value={titleDraft}
                 placeholder="Untitled"
                 title={openPath}
@@ -676,24 +562,19 @@ export default function App(): React.JSX.Element {
                   }
                 }}
               />
-              <div className="header-right">
-                <span className="word-count">
-                  {wordCount} {wordCount === 1 ? 'word' : 'words'}
-                </span>
-                <button
-                  className="mode-toggle"
-                  title={reading ? 'Back to editing' : 'Reading view'}
-                  onClick={toggleRead}
-                >
-                  {reading ? 'Edit' : 'Read'}
-                </button>
-              </div>
+              <span className="hidden shrink-0 text-xs text-ink-300 sm:block">
+                {wordCount} {wordCount === 1 ? 'word' : 'words'}
+              </span>
+              <button
+                className="flex shrink-0 items-center gap-1.5 rounded-full border-none bg-surface/70 px-3.5 py-1.5 text-sm font-medium text-ink-700 shadow-card outline-none transition duration-200 spring hover:-translate-y-0.5 hover:bg-surface/70 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
+                title={reading ? 'Back to editing' : 'Reading view'}
+                onClick={toggleRead}
+              >
+                <Icon name={reading ? 'edit' : 'eye'} className="h-4 w-4" />
+                <span>{reading ? 'Edit' : 'Read'}</span>
+              </button>
             </div>
-            {!reading && (
-              <div className="editor-toolbar">
-                <FormatToolbar viewRef={editorViewRef} />
-              </div>
-            )}
+            {!reading && <FormatToolbar viewRef={editorViewRef} />}
             <div className="pane-body">
               <div className="edit-layer" style={{ display: reading ? 'none' : 'flex' }}>
                 <CodeEditor
@@ -712,32 +593,19 @@ export default function App(): React.JSX.Element {
             </div>
           </>
         ) : (
-          <div className="center muted">Select a note to view it.</div>
+          <div className="flex flex-1 items-center justify-center">
+            <div className="text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface/70 text-brand-300 shadow-card">
+                <Icon name="doc" className="h-8 w-8" />
+              </div>
+              <p className="font-display text-xl text-ink-700">Pick a note, or start a new one</p>
+              <p className="mt-1 text-sm text-ink-500">Your Markdown formats as you type.</p>
+            </div>
+          </div>
         )}
       </main>
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
-
-      {spacePop && (
-        <SpacePopover
-          space={spaceList.find((s) => s.name === spacePop.space.name) ?? spacePop.space}
-          x={spacePop.x}
-          y={spacePop.y}
-          onClose={() => setSpacePop(null)}
-          onRecolor={(hex) => recolorSpace(spacePop.space.name, hex)}
-          onSetIcon={(icon) => setSpaceIcon(spacePop.space.name, icon)}
-          onRename={() => {
-            const s = spacePop.space
-            setSpacePop(null)
-            void renameSpace(s)
-          }}
-          onDelete={() => {
-            const s = spacePop.space
-            setSpacePop(null)
-            void deleteSpace(s)
-          }}
-        />
-      )}
 
       {notice && <div className="notice">{notice}</div>}
 

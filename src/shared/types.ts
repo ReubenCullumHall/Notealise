@@ -2,7 +2,7 @@
 // Pure types only — safe to import from any process.
 
 import type { AppSettings } from './settings'
-import type { SpaceMeta, SpacesMap } from './spaces'
+import type { EntryMeta, Workspace } from './workspace'
 
 /** A node in the vault file tree. `path` is always vault-relative, POSIX-style
  *  ("/" separators), and "" denotes the vault root. */
@@ -13,6 +13,9 @@ export interface TreeNode {
   type: 'dir' | 'file'
   /** present only when type === 'dir' */
   children?: TreeNode[]
+  /** files only: a short plain-text snippet of the note's opening, for the
+   *  second line of a sidebar row. Absent when the file couldn't be read. */
+  preview?: string
 }
 
 /** Pushed to the renderer (debounced) when the watcher sees external changes.
@@ -39,27 +42,34 @@ export interface VaultApi {
   createNote(dirPath: string, name: string): Promise<string>
   /** Create a folder; final segment sanitised. Returns the actual rel path. */
   createFolder(path: string): Promise<string>
-  /** Rename/move; target segment sanitised. Returns the actual new rel path. */
+  /** Rename/move; target segment sanitised. Migrates the entry's workspace.json
+   *  key (and its descendants'). Returns the actual new rel path. */
   renameEntry(from: string, to: string): Promise<string>
-  /** Move an entry to the OS trash (never a hard delete). */
-  deleteEntry(path: string): Promise<void>
   /** Appearance settings for the active vault (or cached defaults if none). */
   getSettings(): Promise<AppSettings>
   /** Merge a partial settings change; persists and returns the full result. */
   setSettings(partial: Partial<AppSettings>): Promise<AppSettings>
-  /** Presentation metadata for every space (folder name → colour/icon/order). */
-  getSpaces(): Promise<SpacesMap>
-  /** Merge a partial change into one space's metadata; persists (debounced,
-   *  atomic) and returns the full map. */
-  updateSpace(name: string, partial: SpaceMeta): Promise<SpacesMap>
-  /** Persist a new left-to-right order for the rail; returns the full map. */
-  reorderSpaces(names: string[]): Promise<SpacesMap>
-  /** Rename a space: rename the top-level folder AND migrate its spaces.json key
-   *  in one operation, rolling back the folder move if the metadata write fails.
-   *  Returns the actual (sanitised) new name and the full map. */
-  renameSpace(oldName: string, newName: string): Promise<{ name: string; spaces: SpacesMap }>
-  /** Send a space's folder (and its notes) to the OS trash and drop its metadata. */
-  deleteSpace(name: string): Promise<SpacesMap>
+
+  // --- workspace: order / pins / archive / bin (.mdnotes/workspace.json) -----
+  /** The whole organisation sidecar for the active vault. */
+  getWorkspace(): Promise<Workspace>
+  /** Merge a partial change into one entry's metadata (pin, archive, collapse);
+   *  persists (debounced, atomic) and returns the full workspace. */
+  updateEntry(path: string, partial: EntryMeta): Promise<Workspace>
+  /** Merge a partial change into many entries at once — one write for a whole
+   *  multi-select action, instead of one per row. */
+  updateEntries(paths: string[], partial: EntryMeta): Promise<Workspace>
+  /** Record a new sibling order: each path is assigned its index. Notes and
+   *  folders share one sequence per parent. */
+  reorderEntries(paths: string[]): Promise<Workspace>
+  /** Move entries into the recoverable bin (<vault>/.mdnotes/trash/). */
+  trashEntries(paths: string[]): Promise<Workspace>
+  /** Put binned items back where they came from, by trash id. */
+  restoreEntries(ids: string[]): Promise<Workspace>
+  /** Permanently remove binned items — the only path that reaches the OS trash.
+   *  Pass no ids to empty the bin entirely. */
+  purgeEntries(ids?: string[]): Promise<Workspace>
+
   /** Subscribe to external-change events; returns an unsubscribe function. */
   onVaultChanged(cb: (change: VaultChange) => void): () => void
   /** Subscribe to application-menu commands (e.g. "new-note"); returns unsubscribe. */

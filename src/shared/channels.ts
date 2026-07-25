@@ -9,18 +9,19 @@ export const CH = {
   createNote: 'vault:createNote',
   createFolder: 'vault:createFolder',
   renameEntry: 'vault:renameEntry',
-  deleteEntry: 'vault:deleteEntry',
   /** renderer -> main: read/write appearance settings (.mdnotes/settings.json) */
   getSettings: 'settings:get',
   setSettings: 'settings:set',
   /** renderer(preload) -> main, SYNCHRONOUS: cached theme/density for pre-paint */
   settingsCache: 'settings:cache',
-  /** renderer -> main: spaces presentation metadata (.mdnotes/spaces.json) */
-  getSpaces: 'spaces:get',
-  updateSpace: 'spaces:update',
-  reorderSpaces: 'spaces:reorder',
-  renameSpace: 'spaces:rename',
-  deleteSpace: 'spaces:delete',
+  /** renderer -> main: order/pins/archive/bin (.mdnotes/workspace.json) */
+  getWorkspace: 'workspace:get',
+  updateEntry: 'workspace:updateEntry',
+  updateEntries: 'workspace:updateEntries',
+  reorderEntries: 'workspace:reorder',
+  trashEntries: 'workspace:trash',
+  restoreEntries: 'workspace:restore',
+  purgeEntries: 'workspace:purge',
   /** main -> renderer: debounced external-change notification */
   changed: 'vault:changed',
   /** main -> renderer: an application-menu item was invoked */

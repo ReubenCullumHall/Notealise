@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { ACCENT_MODES, ACCENTS, DENSITIES, THEMES, type AppSettings } from './model'
-import { SpacesSection, type SpacesAdmin } from '../spaces/SpacesSection'
+import { Icon } from '../icons'
 
 interface Props {
   settings: AppSettings
   onChange: (partial: Partial<AppSettings>) => void
-  spacesAdmin: SpacesAdmin
 }
 
 // Fixed swatch colours for the theme preview cards, so each card always shows
@@ -15,21 +14,22 @@ const THEME_PREVIEW: Record<AppSettings['theme'], { side: string; main: string; 
   light: { side: '#ffffff', main: '#f7f7f6', line: '#a3a3a3' }
 }
 
-export function SettingsButton({ settings, onChange, spacesAdmin }: Props): React.JSX.Element {
+/** The gear. It lives in the sidebar's bottom-left strip, beside the bin, the
+ *  way legacy pins it (legacy/src/App.jsx:997-1015) — hence the card styling and
+ *  hover lift rather than a flat header button. */
+export function SettingsButton({ settings, onChange }: Props): React.JSX.Element {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button className="icon" title="Settings" aria-label="Settings" onClick={() => setOpen(true)}>
-        ⚙
+      <button
+        className="pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink-300/30 bg-surface/90 text-ink-500 shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:bg-surface/90 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
+        title="Settings"
+        aria-label="Settings"
+        onClick={() => setOpen(true)}
+      >
+        <Icon name="gear" className="h-4 w-4" />
       </button>
-      {open && (
-        <SettingsModal
-          settings={settings}
-          onChange={onChange}
-          spacesAdmin={spacesAdmin}
-          onClose={() => setOpen(false)}
-        />
-      )}
+      {open && <SettingsModal settings={settings} onChange={onChange} onClose={() => setOpen(false)} />}
     </>
   )
 }
@@ -37,7 +37,6 @@ export function SettingsButton({ settings, onChange, spacesAdmin }: Props): Reac
 function SettingsModal({
   settings,
   onChange,
-  spacesAdmin,
   onClose
 }: Props & { onClose: () => void }): React.JSX.Element {
   useEffect(() => {
@@ -68,9 +67,6 @@ function SettingsModal({
         </div>
 
         <div className="settings-body">
-          {/* Spaces */}
-          <SpacesSection {...spacesAdmin} />
-
           {/* Theme */}
           <section className="settings-group">
             <h3>Theme</h3>

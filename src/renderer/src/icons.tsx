@@ -18,6 +18,13 @@ export type IconName =
   | 'check'
   | 'x'
   | 'dots'
+  | 'edit'
+  | 'eye'
+  | 'filePlus'
+  | 'folderPlus'
+  | 'sliders'
+  | 'text'
+  | 'sort'
 
 // Each entry is the inner SVG for a 24×24 viewBox. Stroke icons inherit the
 // wrapper's stroke; filled marks set their own fill and clear the stroke.
@@ -30,6 +37,13 @@ const PATHS: Record<IconName, React.JSX.Element> = {
   ),
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />,
   chevron: <path d="M9 6l6 6-6 6" />,
+  edit: <path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z" />,
+  eye: (
+    <>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
   grip: (
     <g fill="currentColor" stroke="none">
       <circle cx="9" cy="6" r="1.35" />
@@ -84,12 +98,63 @@ const PATHS: Record<IconName, React.JSX.Element> = {
   ),
   check: <path d="M5 12l4 4L19 7" />,
   x: <path d="M6 6l12 12M18 6L6 18" />,
+  filePlus: (
+    <>
+      <path d="M13 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9z" />
+      <path d="M13 3v6h6" />
+      <path d="M12 12v5M9.5 14.5h5" />
+    </>
+  ),
+  folderPlus: (
+    <>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+      <path d="M12 10.5v5M9.5 13h5" />
+    </>
+  ),
+  sliders: (
+    <>
+      <path d="M4 8h9M18 8h2M4 16h2M11 16h9" />
+      <circle cx="15.5" cy="8" r="2" />
+      <circle cx="8.5" cy="16" r="2" />
+    </>
+  ),
+  text: <path d="M4 6h16M4 11h16M4 16h9" />,
+  sort: (
+    <>
+      <path d="M4 6h9M4 12h6M4 18h3" />
+      <path d="M17 5v13M14 15l3 3 3-3" />
+    </>
+  ),
   dots: (
     <g fill="currentColor" stroke="none">
       <circle cx="12" cy="6" r="1.5" />
       <circle cx="12" cy="12" r="1.5" />
       <circle cx="12" cy="18" r="1.5" />
     </g>
+  )
+}
+
+/** The bin is its own component, not a PATHS entry: the lid is a separate <g> so
+ *  CSS can hinge it open (see .bin-lid in app.css) — the visual cue that
+ *  something just went in. Ported from legacy/src/App.jsx:51-60. */
+export function BinIcon({ className }: { className?: string }): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <g className="bin-lid">
+        <path d="M4 7h16" />
+        <path d="M9.5 7V5.6A1.6 1.6 0 0 1 11 4h2a1.6 1.6 0 0 1 1.5 1.6V7" />
+      </g>
+      <path d="M6.2 9l.6 10.1a1.6 1.6 0 0 0 1.6 1.5h7.2a1.6 1.6 0 0 0 1.6-1.5L17.8 9" />
+    </svg>
   )
 }
 

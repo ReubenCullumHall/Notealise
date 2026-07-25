@@ -14,14 +14,15 @@ const api: VaultApi = {
   createNote: (dir, name) => ipcRenderer.invoke(CH.createNote, dir, name),
   createFolder: (p) => ipcRenderer.invoke(CH.createFolder, p),
   renameEntry: (from, to) => ipcRenderer.invoke(CH.renameEntry, from, to),
-  deleteEntry: (p) => ipcRenderer.invoke(CH.deleteEntry, p),
   getSettings: () => ipcRenderer.invoke(CH.getSettings),
   setSettings: (partial) => ipcRenderer.invoke(CH.setSettings, partial),
-  getSpaces: () => ipcRenderer.invoke(CH.getSpaces),
-  updateSpace: (name, partial) => ipcRenderer.invoke(CH.updateSpace, name, partial),
-  reorderSpaces: (names) => ipcRenderer.invoke(CH.reorderSpaces, names),
-  renameSpace: (oldName, newName) => ipcRenderer.invoke(CH.renameSpace, oldName, newName),
-  deleteSpace: (name) => ipcRenderer.invoke(CH.deleteSpace, name),
+  getWorkspace: () => ipcRenderer.invoke(CH.getWorkspace),
+  updateEntry: (p, partial) => ipcRenderer.invoke(CH.updateEntry, p, partial),
+  updateEntries: (paths, partial) => ipcRenderer.invoke(CH.updateEntries, paths, partial),
+  reorderEntries: (paths) => ipcRenderer.invoke(CH.reorderEntries, paths),
+  trashEntries: (paths) => ipcRenderer.invoke(CH.trashEntries, paths),
+  restoreEntries: (ids) => ipcRenderer.invoke(CH.restoreEntries, ids),
+  purgeEntries: (ids) => ipcRenderer.invoke(CH.purgeEntries, ids),
   onVaultChanged: (cb) => {
     const listener = (_e: unknown, change: VaultChange): void => cb(change)
     ipcRenderer.on(CH.changed, listener)
