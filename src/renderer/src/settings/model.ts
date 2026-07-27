@@ -29,6 +29,11 @@ export const ACCENT_MODES: { id: AppSettings['accentMode']; label: string; hint:
   { id: 'tint', label: 'Tinted', hint: 'Surfaces and controls take it too.' }
 ]
 
+export const STARTUPS: { id: AppSettings['startup']; label: string; hint: string }[] = [
+  { id: 'empty', label: 'Start empty', hint: 'Open on the blank screen and pick a note.' },
+  { id: 'last', label: 'Reopen last note', hint: 'Go straight back to whatever you were writing.' }
+]
+
 export const ACCENTS: { id: string; label: string; hue: number | null }[] = [
   { id: 'default', label: 'Default', hue: null },
   { id: 'red', label: 'Red', hue: 6 },

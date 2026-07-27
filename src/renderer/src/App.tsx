@@ -12,6 +12,7 @@ import { Sidebar } from './Sidebar'
 import type { SearchHit } from './Search'
 import type { UpdateStatus } from '../../shared/update'
 import { Icon } from './icons'
+import { formatNumber } from './intl'
 import { findNode, isArchived, sortSiblings } from './organise/model'
 
 // --- small path helpers (renderer works in vault-relative POSIX paths) ---
@@ -117,8 +118,10 @@ export default function App(): React.JSX.Element {
     [flush]
   )
 
-  const loadTree = useCallback(async (): Promise<void> => {
-    setTree(await window.api.listTree())
+  const loadTree = useCallback(async (): Promise<TreeNode[]> => {
+    const t = await window.api.listTree()
+    setTree(t)
+    return t
   }, [])
   const loadWorkspace = useCallback(async (): Promise<void> => {
     setWorkspace(await window.api.getWorkspace())
@@ -131,10 +134,11 @@ export default function App(): React.JSX.Element {
     setSettings(next)
     applySettings(next)
   }, [])
-  const loadSettings = useCallback(async (): Promise<void> => {
+  const loadSettings = useCallback(async (): Promise<AppSettings> => {
     const s = await window.api.getSettings()
     setSettings(s)
     applySettings(s)
+    return s
   }, [])
 
   const openNote = useCallback(
@@ -156,19 +160,35 @@ export default function App(): React.JSX.Element {
     [flush]
   )
 
-  // initial load: open the saved vault, or fall through to the picker
+  // initial load: open the saved vault, or fall through to the picker. Startup
+  // "Reopen last note" is a one-time check here, against the freshly loaded
+  // tree — the note may since have been renamed or binned, in which case this
+  // just leaves the blank screen rather than erroring.
   useEffect(() => {
     void (async () => {
       const v = await window.api.getVault()
       setVault(v)
       setReady(true)
+      let loadedTree: TreeNode[] = []
       if (v) {
-        await loadTree()
+        loadedTree = await loadTree()
         await loadWorkspace()
       }
-      await loadSettings()
+      const s = await loadSettings()
+      if (v && s.startup === 'last' && s.lastNotePath && findNode(loadedTree, s.lastNotePath)) {
+        await openNote(s.lastNotePath)
+      }
     })()
-  }, [loadTree, loadWorkspace, loadSettings])
+  }, [loadTree, loadWorkspace, loadSettings, openNote])
+
+  // Remember whichever note is open, regardless of the current startup
+  // preference — so turning "Reopen last note" on later picks up naturally
+  // instead of being stuck on whatever was open when the toggle was flipped.
+  // Bypasses changeSettings: this shouldn't re-run applySettings on every click.
+  useEffect(() => {
+    if (!openPath) return
+    void window.api.setSettings({ lastNotePath: openPath })
+  }, [openPath])
 
   // external changes → refresh the tree (and the open note if it changed)
   useEffect(() => {
@@ -308,27 +328,20 @@ export default function App(): React.JSX.Element {
   const purge = (ids?: string[]): void =>
     void run(async () => setWorkspace(await window.api.purgeEntries(ids)))
 
+  // No naming prompt — a click should just create the thing. A collision
+  // (another "Untitled") is resolved by main with a " (2)", " (3)"... suffix,
+  // same convention restoreEntry already uses. Rename afterwards if wanted.
   const newNote = (dir: string): Promise<void> =>
     run(async () => {
-      const name = await ask('New note name', 'Untitled')
-      if (name == null || !name.trim()) return
-      const rel = await window.api.createNote(dir, name)
+      const rel = await window.api.createNote(dir)
       await loadTree()
       await openNote(rel)
-      const actual = nameOf(rel)
-      if (stripMd(actual) !== stripMd(name.trim()))
-        flash(`Created as "${actual}" (adjusted for cross-platform safety)`)
     })
 
   const newFolder = (dir: string): Promise<void> =>
     run(async () => {
-      const name = await ask('New folder name', 'New folder')
-      if (name == null || !name.trim()) return
-      const rel = await window.api.createFolder(joinPath(dir, name.trim()))
+      await window.api.createFolder(dir)
       await loadTree()
-      const actual = nameOf(rel)
-      if (actual !== name.trim())
-        flash(`Created as "${actual}" (adjusted for cross-platform safety)`)
     })
 
   const rename = (node: TreeNode): Promise<void> =>
@@ -574,7 +587,7 @@ export default function App(): React.JSX.Element {
                 }}
               />
               <span className="hidden shrink-0 text-xs text-ink-300 sm:block">
-                {wordCount} {wordCount === 1 ? 'word' : 'words'}
+                {formatNumber(wordCount, settings.numberFormat)} {wordCount === 1 ? 'word' : 'words'}
               </span>
               <button
                 className="flex shrink-0 items-center gap-1.5 rounded-full border-none bg-surface/70 px-3.5 py-1.5 text-sm font-medium text-ink-700 shadow-card outline-none transition duration-200 spring hover:-translate-y-0.5 hover:bg-surface/70 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"

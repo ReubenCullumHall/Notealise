@@ -63,6 +63,18 @@ const parentOf = (p: string): string => {
 const padFor = (depth: number): string =>
   `calc(var(--row-pad0) + ${depth} * var(--row-indent))`
 
+/** Hover-only actions (new note, new folder, trash, unset pin/star…) float over
+ *  the row instead of reserving flow width — `opacity-0` alone still occupies
+ *  layout space, which is what was starving the name column and shoving the
+ *  visible content to the left of the row even at rest. `always` actions (a
+ *  set pin, restore in a shelf view) stay in flow beside them since they're
+ *  meant to be visible without hovering. */
+const ROW_ACTIONS_CLASS =
+  'absolute right-1.5 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md ' +
+  'bg-surface/95 px-1 py-0.5 opacity-0 shadow-card backdrop-blur-sm pointer-events-none ' +
+  'transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto ' +
+  'focus-within:opacity-100 focus-within:pointer-events-auto'
+
 /** A quiet hover action on a row. `always` keeps it visible (a set pin). */
 function RowBtn({
   onClick,
@@ -83,7 +95,7 @@ function RowBtn({
       title={title}
       aria-label={title}
       className={
-        'shrink-0 rounded border-none bg-transparent p-0.5 outline-none transition-colors hover:bg-transparent ' +
+        'inline-flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0.5 outline-none transition-colors hover:bg-transparent ' +
         (always ? 'opacity-100 ' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 ') +
         (tone === 'brand' ? 'text-brand-500 hover:text-brand-600' : 'text-ink-300 hover:text-brand-600')
       }
@@ -308,26 +320,41 @@ export function TreeView({
           </RowBtn>
         ) : (
           <>
-            <RowBtn
-              title={isPinned ? 'Unpin' : 'Pin to favourites'}
-              tone={isPinned ? 'brand' : 'ink'}
-              always={isPinned}
-              onClick={(e) => {
-                e.stopPropagation()
-                onTogglePin([node.path], !isPinned)
-              }}
-            >
-              <Icon name={isPinned ? 'starFilled' : 'star'} />
-            </RowBtn>
-            <RowBtn
-              title="Move to bin"
-              onClick={(e) => {
-                e.stopPropagation()
-                onTrash([node.path])
-              }}
-            >
-              <Icon name="trash" />
-            </RowBtn>
+            {isPinned && (
+              <RowBtn
+                title="Unpin"
+                tone="brand"
+                always
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onTogglePin([node.path], !isPinned)
+                }}
+              >
+                <Icon name="starFilled" />
+              </RowBtn>
+            )}
+            <div className={ROW_ACTIONS_CLASS}>
+              {!isPinned && (
+                <RowBtn
+                  title="Pin to favourites"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTogglePin([node.path], !isPinned)
+                  }}
+                >
+                  <Icon name="star" />
+                </RowBtn>
+              )}
+              <RowBtn
+                title="Move to bin"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onTrash([node.path])
+                }}
+              >
+                <Icon name="trash" />
+              </RowBtn>
+            </div>
           </>
         )}
       </div>
@@ -360,20 +387,26 @@ export function TreeView({
           }}
         >
           {!shelved && grip(node.path)}
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              toggle(node.path)
-            }}
-            title={expandedNow ? 'Collapse' : 'Expand'}
-            className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
-          >
-            <span className={'chev inline-flex' + (expandedNow ? ' open' : '')}>
-              <Icon name="chevron" />
+          {/* Chevron + folder icon share a tight inner gap, distinct from the
+              row's wider --row-gap between other elements — both already
+              toggle the same collapse, so the space between them is just
+              dead air, not a meaningful separation. */}
+          <span className="flex shrink-0 items-center gap-0.5">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                toggle(node.path)
+              }}
+              title={expandedNow ? 'Collapse' : 'Expand'}
+              className="inline-flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0.5 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
+            >
+              <span className={'chev inline-flex' + (expandedNow ? ' open' : '')}>
+                <Icon name="chevron" />
+              </span>
+            </button>
+            <span className={picked(node.path) ? 'text-brand-600' : 'text-brand-500/80'}>
+              <Icon name="folder" />
             </span>
-          </button>
-          <span className={'shrink-0 ' + (picked(node.path) ? 'text-brand-600' : 'text-brand-500/80')}>
-            <Icon name="folder" />
           </span>
           <button
             onClick={(e) => {
@@ -403,57 +436,72 @@ export function TreeView({
             </RowBtn>
           ) : (
             <>
-              <RowBtn
-                title="New note in folder"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onNewNoteIn(node.path)
-                }}
-              >
-                <Icon name="filePlus" />
-              </RowBtn>
-              <RowBtn
-                title="New subfolder"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onNewFolderIn(node.path)
-                }}
-              >
-                <Icon name="folderPlus" />
-              </RowBtn>
-              <RowBtn
-                title={isPinned ? 'Unpin folder' : 'Pin folder'}
-                tone={isPinned ? 'brand' : 'ink'}
-                always={isPinned}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onTogglePin([node.path], !isPinned)
-                }}
-              >
-                <Icon name={isPinned ? 'starFilled' : 'star'} />
-              </RowBtn>
-              {organize && (
-                <>
-                  <RowBtn
-                    title="Rename folder"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onRename(node)
-                    }}
-                  >
-                    <Icon name="edit" />
-                  </RowBtn>
-                  <RowBtn
-                    title="Move folder to bin"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onTrash([node.path])
-                    }}
-                  >
-                    <Icon name="trash" />
-                  </RowBtn>
-                </>
+              {isPinned && (
+                <RowBtn
+                  title="Unpin folder"
+                  tone="brand"
+                  always
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTogglePin([node.path], !isPinned)
+                  }}
+                >
+                  <Icon name="starFilled" />
+                </RowBtn>
               )}
+              <div className={ROW_ACTIONS_CLASS}>
+                <RowBtn
+                  title="New note in folder"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onNewNoteIn(node.path)
+                  }}
+                >
+                  <Icon name="filePlus" />
+                </RowBtn>
+                <RowBtn
+                  title="New subfolder"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onNewFolderIn(node.path)
+                  }}
+                >
+                  <Icon name="folderPlus" />
+                </RowBtn>
+                {!isPinned && (
+                  <RowBtn
+                    title="Pin folder"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onTogglePin([node.path], !isPinned)
+                    }}
+                  >
+                    <Icon name="star" />
+                  </RowBtn>
+                )}
+                {organize && (
+                  <>
+                    <RowBtn
+                      title="Rename folder"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onRename(node)
+                      }}
+                    >
+                      <Icon name="edit" />
+                    </RowBtn>
+                    <RowBtn
+                      title="Move folder to bin"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onTrash([node.path])
+                      }}
+                    >
+                      <Icon name="trash" />
+                    </RowBtn>
+                  </>
+                )}
+              </div>
             </>
           )}
         </div>

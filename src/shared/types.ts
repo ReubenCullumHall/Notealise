@@ -38,11 +38,12 @@ export interface VaultApi {
   listTree(): Promise<TreeNode[]>
   readNote(path: string): Promise<string>
   writeNote(path: string, content: string): Promise<void>
-  /** Create `<dirPath>/<name>.md`. The name is sanitised for cross-platform
-   *  safety; returns the actual (possibly corrected) vault-relative path. */
-  createNote(dirPath: string, name: string): Promise<string>
-  /** Create a folder; final segment sanitised. Returns the actual rel path. */
-  createFolder(path: string): Promise<string>
+  /** Create `<dirPath>/Untitled.md` ("" = vault root), or "Untitled (2).md"
+   *  etc. if that name's taken. Returns the vault-relative path it landed at. */
+  createNote(dirPath: string): Promise<string>
+  /** Create a "New folder" (or "New folder (2)" etc.) inside `dirPath`.
+   *  Returns the vault-relative path it landed at. */
+  createFolder(dirPath: string): Promise<string>
   /** Rename/move; target segment sanitised. Migrates the entry's workspace.json
    *  key (and its descendants'). Returns the actual new rel path. */
   renameEntry(from: string, to: string): Promise<string>

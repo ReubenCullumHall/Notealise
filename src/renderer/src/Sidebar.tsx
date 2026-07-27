@@ -201,7 +201,7 @@ export function Sidebar({
   const commonTreeProps = {
     workspace,
     openPath,
-    freeArrange: false,
+    freeArrange: settings.freeArrange,
     organize,
     selection,
     onSelectionChange: setSelection,

@@ -131,18 +131,10 @@ export const ARCHIVE_SORTS: { id: ArchiveSort; label: string; short: string }[] 
 const stripMd = (s: string): string => (s.toLowerCase().endsWith('.md') ? s.slice(0, -3) : s)
 export const labelOf = (n: TreeNode): string => (n.type === 'dir' ? n.name : stripMd(n.name))
 
-export function sortArchived(nodes: TreeNode[], ws: Workspace, sort: ArchiveSort): TreeNode[] {
-  const at = (n: TreeNode): number => metaOf(ws, n.path).archivedAt ?? 0
-  return [...nodes].sort((a, b) => {
-    if (sort === 'recent') return at(b) - at(a)
-    if (sort === 'oldest') return at(a) - at(b)
-    if (sort === 'az') return labelOf(a).localeCompare(labelOf(b))
-    return labelOf(b).localeCompare(labelOf(a))
-  })
-}
-
 /** Relative-day stamp for the archive/bin subtitle ("Today", "Yesterday", or a
- *  short date). Intl formatting proper is a later settings feature. */
+ *  short date). Intl formatting proper is a later settings feature — legacy's
+ *  own archive/bin rows don't read the Formatting settings either (see
+ *  legacy/src/App.jsx:68), they're a fixed absolute date; this stays as-is. */
 export function onDate(ms: number | undefined): string | null {
   if (!ms) return null
   const d = new Date(ms)
@@ -156,3 +148,14 @@ export function onDate(ms: number | undefined): string | null {
   if (days === 1) return 'yesterday'
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
 }
+
+export function sortArchived(nodes: TreeNode[], ws: Workspace, sort: ArchiveSort): TreeNode[] {
+  const at = (n: TreeNode): number => metaOf(ws, n.path).archivedAt ?? 0
+  return [...nodes].sort((a, b) => {
+    if (sort === 'recent') return at(b) - at(a)
+    if (sort === 'oldest') return at(a) - at(b)
+    if (sort === 'az') return labelOf(a).localeCompare(labelOf(b))
+    return labelOf(b).localeCompare(labelOf(a))
+  })
+}
+

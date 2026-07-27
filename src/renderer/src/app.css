@@ -237,6 +237,14 @@ button.icon:hover {
   border-left-color: rgb(var(--ink-800));
 }
 
+/* The slash-command popup's own styling (rounded card, tokened colours) lives
+   in editor/highlight.ts as an EditorView.theme() extension, ported from
+   legacy/src/livePreview.js — CodeMirror themes registered that way already
+   outrank the library's own baseTheme, so no !important fight is needed here. */
+.cm-tooltip.cm-tooltip-autocomplete {
+  animation: fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* --- rendered math (KaTeX) --- */
 .cm-math-display {
   display: block;

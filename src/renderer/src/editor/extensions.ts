@@ -5,6 +5,7 @@ import { drawSelection, EditorView, keymap } from '@codemirror/view'
 import { editorStyling } from './highlight'
 import { livePreview } from './livePreview'
 import { applyColor } from './colorCommands'
+import { completionExtension } from './completions'
 import { bold, insertMath, italic, strike, underline } from './formatCommands'
 import { DEFAULT_HL } from './palette'
 
@@ -28,6 +29,7 @@ export function baseExtensions(): Extension[] {
     EditorView.lineWrapping,
     drawSelection(),
     livePreview,
-    editorStyling
+    editorStyling,
+    completionExtension()
   ]
 }

@@ -72,8 +72,8 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.listTree, () => listTree())
   ipcMain.handle(CH.readNote, (_e, p: string) => readNote(p))
   ipcMain.handle(CH.writeNote, (_e, p: string, content: string) => writeNote(p, content))
-  ipcMain.handle(CH.createNote, (_e, dir: string, name: string) => createNote(dir, name))
-  ipcMain.handle(CH.createFolder, (_e, p: string) => createFolder(p))
+  ipcMain.handle(CH.createNote, (_e, dir: string) => createNote(dir))
+  ipcMain.handle(CH.createFolder, (_e, dir: string) => createFolder(dir))
   // Rename and re-key together: the filesystem move happens first (it's the part
   // that can fail), then the sidecar follows it so pins and order survive a move.
   ipcMain.handle(CH.renameEntry, async (_e, from: string, to: string) => {

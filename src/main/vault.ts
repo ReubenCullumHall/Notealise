@@ -262,34 +262,41 @@ export async function writeNote(relPath: string, content: string): Promise<void>
   }
 }
 
-/** Create `<dirPath>/<name>.md` (dirPath "" = vault root). Name is sanitised for
- *  cross-platform safety; returns the actual (possibly corrected) rel path. */
-export async function createNote(dirPath: string, name: string): Promise<string> {
-  const { name: safe } = sanitizeFilename(name)
-  const fname = safe.toLowerCase().endsWith('.md') ? safe : `${safe}.md`
-  const abs = resolveInVault(dirPath ? `${dirPath}/${fname}` : fname)
-  assertPathLength(abs)
-  if (await nameTaken(path.dirname(abs), path.basename(abs))) {
-    throw new Error('A note or folder with that name already exists')
+/** First available "<stem><ext>" in `dirAbs`; suffixes " (2)", " (3)"... on a
+ *  collision rather than failing. Shared by createNote/createFolder (there's
+ *  no user-typed name to collide with any more — creating one is a single
+ *  click) and by restoreEntry (whose original name may have been retaken
+ *  since deletion). */
+async function uniqueName(dirAbs: string, stem: string, ext: string): Promise<string> {
+  let candidate = `${stem}${ext}`
+  for (let n = 2; await nameTaken(dirAbs, candidate); n++) {
+    candidate = `${stem} (${n})${ext}`
   }
+  return candidate
+}
+
+/** Create `<dirPath>/Untitled.md` (dirPath "" = vault root), or "Untitled
+ *  (2).md" etc. if that name's taken. Renaming, if wanted, happens afterwards
+ *  via renameEntry. Returns the actual rel path it landed at. */
+export async function createNote(dirPath: string): Promise<string> {
+  const dirAbs = resolveInVault(dirPath)
+  const fname = await uniqueName(dirAbs, 'Untitled', '.md')
+  const abs = path.join(dirAbs, fname)
+  assertPathLength(abs)
   markWrite(abs)
   const fh = await fs.open(abs, 'wx') // 'wx' throws if the exact name already exists
   await fh.close()
   return toRel(abs)
 }
 
-/** Create a folder at `relPath`; the final segment is sanitised. Returns the
- *  actual (possibly corrected) rel path. */
-export async function createFolder(relPath: string): Promise<string> {
-  const absRaw = resolveInVault(relPath)
-  const dir = path.dirname(absRaw)
-  const { name: safe } = sanitizeFilename(path.basename(absRaw))
-  const abs = path.join(dir, safe)
-  assertInVault(abs)
+/** Create a folder named "New folder" (or "New folder (2)" etc. if that's
+ *  taken) inside `dirPath` ("" = vault root). Returns the actual rel path it
+ *  landed at. */
+export async function createFolder(dirPath: string): Promise<string> {
+  const dirAbs = resolveInVault(dirPath)
+  const fname = await uniqueName(dirAbs, 'New folder', '')
+  const abs = path.join(dirAbs, fname)
   assertPathLength(abs)
-  if (await nameTaken(dir, safe)) {
-    throw new Error('A note or folder with that name already exists')
-  }
   markWrite(abs)
   await fs.mkdir(abs)
   return toRel(abs)
@@ -373,10 +380,7 @@ export async function restoreEntry(id: string, name: string, to: string): Promis
 
   const ext = path.extname(name)
   const stem = ext ? name.slice(0, -ext.length) : name
-  let candidate = path.join(dir, name)
-  for (let n = 2; await nameTaken(dir, path.basename(candidate)); n++) {
-    candidate = path.join(dir, `${stem} (${n})${ext}`)
-  }
+  const candidate = path.join(dir, await uniqueName(dir, stem, ext))
   assertInVault(candidate)
   assertPathLength(candidate)
   markWrite(src)
