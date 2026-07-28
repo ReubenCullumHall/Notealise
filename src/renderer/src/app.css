@@ -209,6 +209,11 @@ button.icon:hover {
   transform: scale(1.012);
 }
 
+/* Sidebar collapse + resize, under live evaluation (Sidebar.tsx) — not yet
+   logged to CHANGELOG.md's Unreleased. Below a width threshold the nav
+   buttons (Note / Folder) drop their text label, icon-only. */
+.sidebar-narrow .tb-label { display: none; }
+
 /* --- the bin: the lid hinges open when something goes in --- */
 .bin-lid {
   transform-box: fill-box;
@@ -216,6 +221,16 @@ button.icon:hover {
   transition: transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .lid-open .bin-lid { transform: translate(0.5px, -2px) rotate(-22deg); }
+
+/* --- the archive chest: same hinge cue as the bin, on its own <g> so the
+   two icons animate independently even though they share the .lid-open
+   marker class. --- */
+.archive-lid {
+  transform-box: fill-box;
+  transform-origin: 8% 90%;
+  transition: transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.lid-open .archive-lid { transform: translate(0.5px, -2px) rotate(-22deg); }
 
 /* --- viewer / editor pane --- */
 .cm-host {
@@ -254,6 +269,21 @@ button.icon:hover {
 .math-error {
   color: #e5484d;
   font-family: var(--font-mono);
+}
+
+/* --- fenced code blocks (editor/livePreview.ts's fencedCodePass) ---
+   Matches the reading view's .prose-note pre exactly (rule 8: same look in
+   Edit and Read), applied per-line via box-decoration-break since a mark
+   decoration wraps each line's segment separately rather than one box. */
+.cm-fenced-code {
+  display: inline;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: rgb(var(--ink-800));
+  background: rgb(var(--code-bg));
+  padding: 0.15em 0.6em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 /* --- reading view (Edit/Read) --- */

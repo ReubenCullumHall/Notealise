@@ -20,6 +20,10 @@ export interface AppSettings {
   accentMode: AccentMode
   /** off: folders sit above notes at each level; on: one shared drag order */
   freeArrange: boolean
+  /** off: the Note/Folder/Organize nav buttons always show their text label.
+   *  on: they're icon-only, centred as a group — same look the sidebar
+   *  already falls back to on its own once dragged narrower than ~220px. */
+  compactNav: boolean
   /** what to show when a vault opens */
   startup: StartupId
   /** vault-relative path of the last note that was open; drives "Reopen last note" */
@@ -37,6 +41,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accent: 'default',
   accentMode: 'text',
   freeArrange: false,
+  compactNav: false,
   startup: 'empty',
   lastNotePath: null,
   dateFormat: 'relative',
@@ -65,6 +70,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       ? (s.accentMode as AccentMode)
       : DEFAULT_SETTINGS.accentMode,
     freeArrange: typeof s.freeArrange === 'boolean' ? s.freeArrange : DEFAULT_SETTINGS.freeArrange,
+    compactNav: typeof s.compactNav === 'boolean' ? s.compactNav : DEFAULT_SETTINGS.compactNav,
     startup: STARTUPS.includes(s.startup as StartupId) ? (s.startup as StartupId) : DEFAULT_SETTINGS.startup,
     lastNotePath: typeof s.lastNotePath === 'string' ? s.lastNotePath : null,
     dateFormat: DATE_FORMATS.includes(s.dateFormat as DateFormatId)

@@ -48,7 +48,11 @@ export interface Deco {
 export type Push = (from: number, to: number, deco: Decoration, atomic: boolean) => void
 export type Pass = (view: EditorView, active: Set<number>, push: Push) => void
 
-/** Lines touched by any selection range — their syntax is revealed for editing. */
+/** Lines touched by any selection range — their syntax is revealed for editing.
+ *  Only right for constructs that consume a whole line on their own (a heading
+ *  or a list/quote marker never has unrelated text following it after the
+ *  construct ends) — see `overlapsSelection` for anything that can share a
+ *  line with other text, like emphasis or a link. */
 function activeLineSet(view: EditorView): Set<number> {
   const doc = view.state.doc
   const set = new Set<number>()
@@ -60,8 +64,17 @@ function activeLineSet(view: EditorView): Set<number> {
   return set
 }
 
-// Leaf mark nodes whose text is concealed on inactive lines.
-const HIDE = new Set(['HeaderMark', 'EmphasisMark', 'StrikethroughMark', 'QuoteMark'])
+/** Whether any selection range overlaps [from, to) — used for marks whose
+ *  construct can share a line with unrelated text (emphasis, inline code,
+ *  links, colour tags, inline math): finishing "*italic*" and typing on past
+ *  it should re-conceal the asterisks even though the cursor is still on that
+ *  line, which a same-line check alone can't tell apart. */
+export function overlapsSelection(view: EditorView, from: number, to: number): boolean {
+  for (const r of view.state.selection.ranges) {
+    if (r.from <= to && r.to >= from) return true
+  }
+  return false
+}
 
 // Pass 1: standard markdown marks, located in the syntax tree.
 const markdownPass: Pass = (view, active, push) => {
@@ -72,37 +85,52 @@ const markdownPass: Pass = (view, active, push) => {
       from,
       to,
       enter: (node) => {
-        if (active.has(doc.lineAt(node.from).number)) return // reveal active line(s)
         const name = node.name
 
         if (name === 'ListMark') {
+          if (active.has(doc.lineAt(node.from).number)) return
           if (/^[-*+]$/.test(doc.sliceString(node.from, node.to))) {
             push(node.from, node.to, bulletDeco, true)
           }
           return
         }
+        if (name === 'HeaderMark' || name === 'QuoteMark') {
+          if (active.has(doc.lineAt(node.from).number)) return
+          let end = node.to
+          // also swallow the single space after "# " and "> "
+          if (doc.sliceString(end, end + 1) === ' ') end++
+          push(node.from, end, hideDeco, true)
+          return
+        }
+        if (name === 'EmphasisMark' || name === 'StrikethroughMark') {
+          // the enclosing Emphasis/StrongEmphasis/Strikethrough span, not the
+          // mark's own (single-line) range or the whole line
+          const parent = node.node.parent
+          if (parent && overlapsSelection(view, parent.from, parent.to)) return
+          push(node.from, node.to, hideDeco, true)
+          return
+        }
         if (name === 'CodeMark') {
           // inline-code backticks only, never fenced-code fences
           const parent = node.node.parent
-          if (parent && parent.name === 'InlineCode') push(node.from, node.to, hideDeco, true)
+          if (parent && parent.name === 'InlineCode') {
+            if (overlapsSelection(view, parent.from, parent.to)) return
+            push(node.from, node.to, hideDeco, true)
+          }
           return
         }
         if (name === 'LinkMark') {
+          const parent = node.node.parent
+          if (parent && overlapsSelection(view, parent.from, parent.to)) return
           push(node.from, node.to, hideDeco, true) // [ ] ( )
           return
         }
         if (name === 'URL') {
           const parent = node.node.parent
-          if (parent && parent.name === 'Link') push(node.from, node.to, hideDeco, true)
-          return
-        }
-        if (HIDE.has(name)) {
-          let end = node.to
-          // also swallow the single space after "# " and "> "
-          if ((name === 'HeaderMark' || name === 'QuoteMark') && doc.sliceString(end, end + 1) === ' ') {
-            end++
+          if (parent && parent.name === 'Link') {
+            if (overlapsSelection(view, parent.from, parent.to)) return
+            push(node.from, node.to, hideDeco, true)
           }
-          push(node.from, end, hideDeco, true)
         }
       }
     })
@@ -154,10 +182,9 @@ function detectColorOpen(text: string): { tag: 'mark' | 'span'; deco: Decoration
   return null
 }
 
-const colorPass: Pass = (view, active, push) => {
+const colorPass: Pass = (view, _active, push) => {
   const doc = view.state.doc
   const tree = syntaxTree(view.state)
-  const lineActive = (pos: number): boolean => active.has(doc.lineAt(pos).number)
   interface Open {
     tag: string
     deco: Decoration
@@ -185,8 +212,13 @@ const colorPass: Pass = (view, active, push) => {
           stack.splice(i, 1)
           if (node.from > o.contentStart) {
             push(o.contentStart, node.from, o.deco, false) // style the content (not atomic)
-            if (!lineActive(o.openStart)) push(o.openStart, o.contentStart, hideDeco, true) // hide open tag
-            if (!lineActive(node.from)) push(node.from, node.to, hideDeco, true) // hide close tag
+            // one check over the whole tag pair, not per-tag-line: finishing a
+            // coloured span and typing on past it (same line) should re-conceal
+            // both tags, not just whichever one happens to share the cursor's line
+            if (!overlapsSelection(view, o.openStart, node.to)) {
+              push(o.openStart, o.contentStart, hideDeco, true) // hide open tag
+              push(node.from, node.to, hideDeco, true) // hide close tag
+            }
           }
           break
         }
@@ -195,8 +227,45 @@ const colorPass: Pass = (view, active, push) => {
   }
 }
 
+// Pass 3: fenced code blocks. The fences (```lang / ```) hide off the cursor
+// line, same as every other mark; the content between them is always styled
+// as a block (styling never hides anything, so it's safe to show while
+// editing too — same principle as colorPass's content mark). Only the fence
+// TEXT is hidden, not its trailing newline: CM6 requires a block-level
+// decoration to replace an actual line break, and that's a bigger mechanism
+// than a single mark warrants here — so the fence's line shows as a blank
+// line rather than collapsing away entirely. `CodeMark`/`CodeInfo`/`CodeText`
+// are FencedCode's own children (verified against the real @lezer/markdown
+// tree, not guessed), so this never touches inline-code's CodeMark.
+const fencedCodeMark = Decoration.mark({ class: 'cm-fenced-code' })
+const fencedCodePass: Pass = (view, active, push) => {
+  const doc = view.state.doc
+  const tree = syntaxTree(view.state)
+  const lineActive = (pos: number): boolean => active.has(doc.lineAt(pos).number)
+  for (const { from, to } of view.visibleRanges) {
+    tree.iterate({
+      from,
+      to,
+      enter: (node) => {
+        if (node.name !== 'FencedCode') return
+        let contentFrom = -1
+        let contentTo = -1
+        for (let c = node.node.firstChild; c; c = c.nextSibling) {
+          if (c.name === 'CodeMark' || c.name === 'CodeInfo') {
+            if (!lineActive(c.from)) push(c.from, c.to, hideDeco, true)
+          } else if (c.name === 'CodeText') {
+            contentFrom = c.from
+            contentTo = c.to
+          }
+        }
+        if (contentFrom !== -1) push(contentFrom, contentTo, fencedCodeMark, false)
+      }
+    })
+  }
+}
+
 /** The ordered list of decoration passes. Append to extend the engine. */
-export const PASSES: Pass[] = [markdownPass, colorPass, mathPass]
+export const PASSES: Pass[] = [markdownPass, colorPass, mathPass, fencedCodePass]
 
 function build(view: EditorView): { decorations: DecorationSet; hidden: DecorationSet } {
   const active = activeLineSet(view)

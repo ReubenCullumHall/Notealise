@@ -42,7 +42,6 @@ interface Props extends TreeActions {
   workspace: Workspace
   openPath: string | null
   freeArrange: boolean
-  organize: boolean
   mode: RowMode
   selection: Selection
   onSelectionChange: (next: Selection) => void
@@ -110,7 +109,6 @@ export function TreeView({
   workspace,
   openPath,
   freeArrange,
-  organize,
   mode,
   selection,
   onSelectionChange,
@@ -154,7 +152,7 @@ export function TreeView({
   }
   const clearSel = (): void => onSelectionChange({ paths: new Set() })
 
-  // ----- drag & drop (always on — no need to enter Organize) -----
+  // ----- drag & drop (always on) -----
   const startDrag = (e: React.DragEvent, path: string): void => {
     // Dragging a row that's part of the selection carries the whole selection.
     const carry = picked(path) ? [...selection.paths] : [path]
@@ -479,28 +477,6 @@ export function TreeView({
                     <Icon name="star" />
                   </RowBtn>
                 )}
-                {organize && (
-                  <>
-                    <RowBtn
-                      title="Rename folder"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onRename(node)
-                      }}
-                    >
-                      <Icon name="edit" />
-                    </RowBtn>
-                    <RowBtn
-                      title="Move folder to bin"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onTrash([node.path])
-                      }}
-                    >
-                      <Icon name="trash" />
-                    </RowBtn>
-                  </>
-                )}
               </div>
             </>
           )}
@@ -549,6 +525,9 @@ export function TreeView({
       onDrop={drop}
       onClick={(e) => {
         if (e.target === e.currentTarget) clearSel()
+      }}
+      onContextMenu={(e) => {
+        if (e.target === e.currentTarget) onContext(e, null)
       }}
     >
       {ordered.map((n) => renderRow(n, 0))}

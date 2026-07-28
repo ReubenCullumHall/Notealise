@@ -26,6 +26,7 @@ export type IconName =
   | 'text'
   | 'sort'
   | 'sun'
+  | 'panelLeft'
 
 // Each entry is the inner SVG for a 24×24 viewBox. Stroke icons inherit the
 // wrapper's stroke; filled marks set their own fill and clear the stroke.
@@ -138,6 +139,12 @@ const PATHS: Record<IconName, React.JSX.Element> = {
       <circle cx="12" cy="12" r="4" />
       <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
     </>
+  ),
+  panelLeft: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 3v18" />
+    </>
   )
 }
 
@@ -161,6 +168,29 @@ export function BinIcon({ className }: { className?: string }): React.JSX.Elemen
         <path d="M9.5 7V5.6A1.6 1.6 0 0 1 11 4h2a1.6 1.6 0 0 1 1.5 1.6V7" />
       </g>
       <path d="M6.2 9l.6 10.1a1.6 1.6 0 0 0 1.6 1.5h7.2a1.6 1.6 0 0 0 1.6-1.5L17.8 9" />
+    </svg>
+  )
+}
+
+/** Same hinge trick as `BinIcon` (see .archive-lid in app.css), so the archive
+ *  chest's lid pops open on the same cue: a note just landed in it. */
+export function ArchiveIcon({ className }: { className?: string }): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <g className="archive-lid">
+        <path d="M3 5h18v4H3z" />
+      </g>
+      <path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
+      <path d="M10 13h4" />
     </svg>
   )
 }

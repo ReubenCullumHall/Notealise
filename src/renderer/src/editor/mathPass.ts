@@ -2,7 +2,7 @@ import { Decoration, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import type { SyntaxNode } from '@lezer/common'
 import katex from 'katex'
-import type { Pass } from './livePreview'
+import { overlapsSelection, type Pass } from './livePreview'
 
 // LaTeX math via KaTeX. Block math is $$…$$, inline is $…$ (both valid CommonMark
 // math, so files still render in Obsidian/GitHub). Off the cursor line the math is
@@ -113,12 +113,15 @@ function scanMath(
 }
 
 /** Decoration pass (appended to livePreview's PASSES). */
-export const mathPass: Pass = (view, active, push) => {
+export const mathPass: Pass = (view, _active, push) => {
   const tree = syntaxTree(view.state)
   const doc = view.state.doc
   for (const { from, to } of view.visibleRanges) {
     scanMath(doc.sliceString(from, to), from, (mFrom, mTo, latex, display) => {
-      if (active.has(doc.lineAt(mFrom).number)) return // reveal raw on the cursor line
+      // the math span itself, not the whole line: finishing "$x$" and typing on
+      // past it (same line) should re-render it even though the cursor is
+      // still on that line
+      if (overlapsSelection(view, mFrom, mTo)) return
       if (inCode(tree.resolveInner(mFrom, 1))) return
       push(mFrom, mTo, Decoration.replace({ widget: new MathWidget(latex, display) }), true)
     })

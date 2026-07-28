@@ -44,6 +44,7 @@ const I = {
   restore: <Icon path={<><path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.7L3 8" /><path d="M3 3.5V8h4.5" /></>} />,
   text: <Icon path={<path d="M4 6h16M4 11h16M4 16h9" />} />,
   sort: <Icon path={<><path d="M4 6h9M4 12h6M4 18h3" /><path d="M17 5v13M14 15l3 3 3-3" /></>} />,
+  panelLeft: <Icon path={<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18" /></>} />,
 };
 
 /* The lid is its own <g> so CSS can hinge it open — the visual cue that
@@ -160,7 +161,7 @@ function Sidebar({
   onBin, onRestoreFromBin, onPurge, onEmptyBin, binNudge, onDismissNudge,
   onTogglePin, onTogglePinFolder, onArchive, onArchiveFolders,
   onToggleFolder, onRenameFolder, onMoveItems, onOpenFolder,
-  archiveSort, onArchiveSort, freeArrange, accent, accentMode, accentScope, theme,
+  archiveSort, onArchiveSort, freeArrange, compactNav, accent, accentMode, accentScope, theme,
 }) {
   const asideRef = useRef(null);
   /* A sidebar-scoped tint lives on the <aside>, so the cascade contains it.
@@ -176,11 +177,38 @@ function Sidebar({
   const [view, setView] = useState("notes");        // "notes" | "archive" | "bin"
   const [deep, setDeep] = useState(true);           // search note contents, not just titles
   const [withArchived, setWithArchived] = useState(true);
-  const [organize, setOrganize] = useState(false);
   const [renaming, setRenaming] = useState(null);   // folder id being renamed
   const [drag, setDrag] = useState(null);           // { noteIds:[], folderIds:[] } being dragged
   const [hint, setHint] = useState(null);           // drop target hint
   const [sel, setSel] = useState({ notes: new Set(), folders: new Set() }); // ⌘/ctrl-click multi-select
+
+  /* ---- PROTOTYPE ONLY, localhost:5173 (legacy) — collapsible / resizable
+     sidebar. Not a decided feature; not ported to the Electron app. If this
+     sticks, rebuild it there instead of copying this block. ---- */
+  const SIDEBAR_MIN = 200, SIDEBAR_MAX = 480, SIDEBAR_DEFAULT = 288, SIDEBAR_NARROW = 220;
+  const [collapsed, setCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
+  const [resizing, setResizing] = useState(false);
+  const narrow = !collapsed && sidebarWidth <= SIDEBAR_NARROW;
+  // Icon-only nav buttons: automatic once narrow, or permanent via
+  // Settings -> Arranging -> "Icons only".
+  const navCompact = narrow || compactNav;
+  const startResize = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    setResizing(true);
+    const onMove = (ev) => {
+      setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startWidth + (ev.clientX - startX))));
+    };
+    const onUp = () => {
+      setResizing(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }, [sidebarWidth]);
 
   const tree = useMemo(() => makeTree(folders), [folders]);
   const validIds = useMemo(() => new Set(folders.map((f) => f.id)), [folders]);
@@ -360,7 +388,7 @@ function Sidebar({
     return () => window.removeEventListener("keydown", h);
   }, []);
 
-  /* ----- drag & drop (always on — no need to enter Organize) ----- */
+  /* ----- drag & drop (always on) ----- */
   const startDrag = (e, kind, id) => {
     // dragging something outside the selection makes it the selection
     const inSel = kind === "note" ? sel.notes.has(id) : sel.folders.has(id);
@@ -685,7 +713,7 @@ function Sidebar({
             )
           ) : (
             <>
-              {!isRen && !organize && (
+              {!isRen && (
                 <>
                   <RowBtn onClick={() => onNewNoteIn(f.id)} title="New note in folder">{I.filePlus}</RowBtn>
                   {canSub && <RowBtn onClick={() => addSubfolder(f.id)} title="New subfolder">{I.folderPlus}</RowBtn>}
@@ -695,12 +723,6 @@ function Sidebar({
                 tone={f.pinned ? "brand" : "ink"} always={f.pinned}>
                 {f.pinned ? I.starFilled : I.star}
               </RowBtn>
-              {!isRen && organize && (
-                <>
-                  <RowBtn onClick={() => setRenaming(f.id)} title="Rename folder">{I.edit}</RowBtn>
-                  <RowBtn onClick={() => onBin([], [f.id])} title="Move folder to bin">{I.trash}</RowBtn>
-                </>
-              )}
             </>
           )}
         </div>
@@ -722,7 +744,20 @@ function Sidebar({
   };
 
   return (
-    <aside ref={asideRef} className="relative flex h-full w-72 shrink-0 flex-col border-r border-ink-300/25 bg-surface/45 backdrop-blur">
+    <>
+    <aside ref={asideRef}
+      style={{ width: collapsed ? 0 : sidebarWidth }}
+      className={"relative flex h-full shrink-0 flex-col overflow-hidden bg-surface/45 backdrop-blur " +
+        (collapsed ? "" : "border-r border-ink-300/25 ") +
+        (resizing ? "" : "transition-[width] duration-150 ") +
+        (navCompact ? "sidebar-narrow" : "")}>
+      {/* PROTOTYPE (localhost only) — drag the right edge to resize. Suspended
+          mid-drag so React state, not the browser's native cursor, drives it. */}
+      {!collapsed && (
+        <div onMouseDown={startResize} title="Drag to resize"
+          className={"absolute right-0 top-0 z-40 h-full w-1.5 cursor-col-resize select-none " +
+            (resizing ? "bg-brand-400/60" : "hover:bg-brand-400/40")} />
+      )}
       {/* The drop target exists only while you're dragging, and overlays the
           vault name rather than pushing the tree down — a row appearing
           mid-drag would move the rows out from under your cursor. */}
@@ -749,18 +784,16 @@ function Sidebar({
         </div>
       )}
 
-      {/* Archive lives up here, clear of the controls you actually use all day.
-          The drop target is separate — it only exists mid-drag (below). */}
+      {/* Archive toggle moved to the bottom-left strip, beside the bin — matches
+          the Electron app's layout, where both shelf views read as a pair. */}
       <div className="flex items-center gap-2 px-4 pt-4 pb-2.5">
         <p className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-ink-900" title={vaultName}>
           {vaultName}
         </p>
-        <button onClick={() => { setView((v) => (v === "archive" ? "notes" : "archive")); setQ(""); }}
-          title={inArchive ? "Back to your notes" : "Archived notes"} aria-pressed={inArchive}
-          className={"flex shrink-0 items-center gap-1 rounded-lg px-1.5 py-1 text-[11px] font-medium tabular-nums outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 " +
-            (inArchive ? "bg-brand-500/15 text-brand-600" : "text-ink-400 hover:bg-brand-500/10 hover:text-brand-600")}>
-          {I.archive}
-          {archived.length > 0 && <span>{archived.length}</span>}
+        {/* PROTOTYPE (localhost only) — collapse the sidebar */}
+        <button onClick={() => setCollapsed(true)} title="Collapse sidebar"
+          className="flex shrink-0 items-center justify-center rounded-lg p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300">
+          {I.panelLeft}
         </button>
       </div>
 
@@ -790,21 +823,10 @@ function Sidebar({
 
       {/* ---- navigation bar (hidden in the archive and the bin: nothing here
               applies to a shelf view — the search pill above stays either way) ---- */}
-      <div className={`flex items-center gap-1 px-3 pb-1.5 ${inArchive || inBin ? "hidden" : ""}`}>
-        <TB onClick={onNewNote} title="New note (Ctrl+N)">{I.filePlus}<span>Note</span></TB>
-        <TB onClick={handleNewFolder} title="New folder">{I.folderPlus}<span>Folder</span></TB>
-        <div className="flex-1" />
-        <TB onClick={() => { setOrganize((o) => !o); setRenaming(null); }} active={organize}
-          title="Rearrange, rename & delete folders">
-          {organize ? I.x : I.sliders}<span>{organize ? "Done" : "Organize"}</span>
-        </TB>
+      <div className={`flex items-center justify-center gap-1 px-3 pb-1.5 ${inArchive || inBin ? "hidden" : ""}`}>
+        <TB onClick={onNewNote} title="New note (Ctrl+N)">{I.filePlus}<span className="tb-label">Note</span></TB>
+        <TB onClick={handleNewFolder} title="New folder">{I.folderPlus}<span className="tb-label">Folder</span></TB>
       </div>
-
-      {organize && !s && !inBin && (
-        <p className="mx-3 mb-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] leading-snug text-brand-600">
-          Rename or delete folders · nest up to {MAX_FOLDER_DEPTH + 1} layers · click <b>Done</b> when finished.
-        </p>
-      )}
 
       {selCount > 1 && (
         <div className="fade-in mx-3 mb-1.5 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] text-brand-600">
@@ -990,11 +1012,12 @@ function Sidebar({
         </p>
       </div>
 
-      {/* The bottom strip: bin button, then the tray filling the empty run of
-          sidebar beside it. Laid out as one flex row so the tray follows the bin
-          button however wide its count makes it. The row itself is inert —
-          only the controls inside it take clicks. */}
-      <div className="pointer-events-none fixed bottom-3 left-[58px] z-50 flex w-[218px] items-end gap-2">
+      {/* The bottom strip: bin, then archive (matches the Electron app's
+          grouping — both are shelf views and read as a pair), then the tray
+          filling whatever's left. One flex row so the tray follows however
+          wide the two buttons before it are. The row itself is inert — only
+          the controls inside it take clicks. */}
+      <div className="pointer-events-none fixed bottom-3 left-[58px] z-50 flex w-[266px] items-end gap-2">
         {/* Immediately right of the settings gear. Also a drop target, so the
             lid opens whichever way something reaches the bin. */}
         <button
@@ -1012,6 +1035,16 @@ function Sidebar({
             (inBin || (hint && hint.kind === "trash") ? "bg-brand-500/15 text-brand-600" : "bg-surface/90 text-ink-500")}>
           <span className={lidOpen ? "lid-open" : ""}><BinIcon /></span>
           {binned.length > 0 && <span>{binned.length}</span>}
+        </button>
+
+        <button
+          onClick={() => { setView((v) => (v === "archive" ? "notes" : "archive")); setQ(""); }}
+          title={inArchive ? "Back to your notes" : "Archived notes"}
+          aria-pressed={inArchive}
+          className={"pointer-events-auto flex h-10 min-w-10 shrink-0 items-center justify-center gap-1 rounded-xl border border-ink-300/30 px-2 text-[11px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 " +
+            (inArchive ? "bg-brand-500/15 text-brand-600" : "bg-surface/90 text-ink-500")}>
+          {I.archive}
+          {archived.length > 0 && <span>{archived.length}</span>}
         </button>
 
         {binNudge && (
@@ -1032,6 +1065,16 @@ function Sidebar({
         )}
       </div>
     </aside>
+    {/* PROTOTYPE (localhost only) — a sibling of <aside>, not a fixed
+        descendant of it: the aside's own backdrop-blur makes it a containing
+        block for position:fixed, which would trap this at width 0. */}
+    {collapsed && (
+      <button onClick={() => setCollapsed(false)} title="Show sidebar"
+        className="fixed left-2 top-3 z-40 flex items-center justify-center rounded-lg border border-ink-300/30 bg-surface/90 p-1.5 text-ink-500 shadow-card backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100">
+        {I.panelLeft}
+      </button>
+    )}
+    </>
   );
 }
 
@@ -1395,6 +1438,17 @@ function Arranging({ settings, onChange }) {
         Your arrangement is stored the same way either way, so switching this on and back off
         never scrambles anything.
       </p>
+
+      <h3 className="mt-6 font-display text-[15px] font-semibold text-ink-900">Nav buttons</h3>
+      <p className="mt-0.5 text-[12px] text-ink-500">Note / Folder, above the sidebar's note list.</p>
+      <div className="mt-3">
+        <ToggleRow
+          on={settings.compactNav}
+          onClick={() => onChange("compactNav", !settings.compactNav)}
+          label="Icons only"
+          hint="Drop the text labels once you know what each icon does — they centre as a small group instead. Hover still shows what each one does. The sidebar already does this on its own once you drag it narrower than ~220px; this makes it permanent at any width."
+        />
+      </div>
     </>
   );
 }
@@ -2098,7 +2152,7 @@ export default function App() {
         onToggleFolder={toggleFolder} onRenameFolder={renameFolder}
         onMoveItems={moveItems} onOpenFolder={openFolder}
         archiveSort={settings.archiveSort} onArchiveSort={(v) => changeSetting("archiveSort", v)}
-        freeArrange={settings.freeArrange}
+        freeArrange={settings.freeArrange} compactNav={settings.compactNav}
         accent={settings.accent} accentMode={settings.accentMode}
         accentScope={settings.accentScope} theme={settings.theme} />
       <Editor note={active} editing={editing} setEditing={setEditing} onChange={updateContent}

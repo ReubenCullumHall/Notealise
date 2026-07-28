@@ -150,7 +150,7 @@ export const ARCHIVE_SORTS = [
 export const DEFAULTS = {
   theme: "dark", density: "cozy",
   accent: "default", accentMode: "text", accentScope: "sidebar",
-  archiveSort: "recent", freeArrange: false,
+  archiveSort: "recent", freeArrange: false, compactNav: false,
   startup: "empty", dateFormat: "relative", numberFormat: "default", timezone: "system",
 };
 
@@ -167,6 +167,7 @@ export function loadSettings() {
       accentScope: oneOf(ACCENT_SCOPES, s.accentScope) ? s.accentScope : DEFAULTS.accentScope,
       archiveSort: oneOf(ARCHIVE_SORTS, s.archiveSort) ? s.archiveSort : DEFAULTS.archiveSort,
       freeArrange: typeof s.freeArrange === "boolean" ? s.freeArrange : DEFAULTS.freeArrange,
+      compactNav: typeof s.compactNav === "boolean" ? s.compactNav : DEFAULTS.compactNav,
       startup: oneOf(STARTUPS, s.startup) ? s.startup : DEFAULTS.startup,
       dateFormat: oneOf(DATE_FORMATS, s.dateFormat) ? s.dateFormat : DEFAULTS.dateFormat,
       numberFormat: oneOf(NUMBER_FORMATS, s.numberFormat) ? s.numberFormat : DEFAULTS.numberFormat,

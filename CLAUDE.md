@@ -74,6 +74,16 @@ rule to match the code.
    passes review and fails on Windows). Never assume a dot-prefixed folder is hidden on Windows,
    or that the filesystem is case-sensitive. See **Cross-platform rules** below.
 
+9. **Flag redundancy as it appears — don't quietly resolve it either way.** When a new capability
+   supersedes or duplicates something already in the app — a UI shortcut that drag-and-drop, a
+   context menu, or another feature already covers just as well — say so before moving on, and
+   let the user decide whether the old path gets removed, kept, or replaced. Example: TreeView's
+   Organize-mode rename/delete buttons on folder rows became dead weight once drag-and-drop was
+   made unconditional and the right-click context menu already covered rename + move-to-bin for
+   every node — that redundancy sat unflagged and unremoved until the user noticed it themselves.
+   Don't silently leave a stale, now-redundant affordance in place "just in case," and don't
+   silently delete it without saying why, either.
+
 ## Cross-platform rules
 
 Ships on Windows + macOS; a vault must survive moving between them. All of this lives in main.
@@ -184,12 +194,28 @@ any *other* dependency still needs asking.
 
 **Read `docs/release-checklist.md` before releasing.** Short version below.
 
+**Tracking pending changes (`CHANGELOG.md`).** Its `## [Unreleased]` section is the running list
+of what's built and verified since the last tag — read *that* to answer "what would a release
+include right now," never scan the codebase for it. It's populated incrementally: once a feature
+is built AND the user has verified it works in the **live Electron app** (`npm run dev`) — not
+`legacy/`, which never ships (rule 8) — ask whether to add it to the next update or scrap it. If
+kept, append one line to `Unreleased` in the same terse, user-facing style as past tag messages
+(e.g. "Add KaTeX inline math rendering in the editor"). Don't log automatically and don't log on
+the strength of unit tests alone — this is specifically gated on the user's own live-app check.
+
+When the user says "push the latest update" (or similar — see the ritual below), read
+`Unreleased` first, sanity-check it against `git status` and `git log vX.Y.Z..HEAD --stat` (cheap
+and targeted, not a full-repo scan), then run the gates. When tagging, move the `Unreleased`
+bullets under a new `## [x.y.z] - YYYY-MM-DD` heading in the same commit that bumps
+`package.json`'s version.
+
 The Vercel page (`site/`) is **not** where a release lives. It always links at
 `releases/latest/download/`, so redeploying it ships nothing — pushing `site/` alone produces a
 byte-identical page. **The release is the git tag.** The ritual:
 
 ```powershell
-# bump "version" in package.json, then:
+# bump "version" in package.json, move CHANGELOG.md's Unreleased bullets under a new
+# ## [x.y.z] - YYYY-MM-DD heading, then:
 git commit -am "vX.Y.Z: <what changed>"
 git tag vX.Y.Z
 git push && git push --tags        # the v* tag is what triggers GitHub Actions
@@ -279,8 +305,9 @@ entries leave the tree for free. Still pending:
   **General** (startup) and **Formatting** (date/number/timezone, `legacy/src/intl.js`) are absent
   rather than empty — they arrive with the settings behind them. Accent *scope*, and persisting
   `freeArrange` / `archiveSort` (both exist in code, neither is saved), are also still to come.
-- **Remaining editor live-preview** (lists beyond the bullet, tables, fenced code, images,
-  multi-line `$$`) — new decoration passes in `livePreview.ts` (see `docs/decorations.md`).
+- **Remaining editor live-preview** (lists beyond the bullet, tables, images) — new decoration
+  passes in `livePreview.ts` (see `docs/decorations.md`). Fenced code blocks and multi-line `$$`
+  math are done as of 2026-07-28.
 
 When you do work here, move *toward* the rules; never add code that deepens a gap (e.g. a
 direct-`fs` call in the renderer, config written into the vault's notes, hardcoded style values).

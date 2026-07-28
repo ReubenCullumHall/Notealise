@@ -121,23 +121,23 @@
    rows, and --row-sub-display is what collapses a row to one line at ultra. */
 :root,
 :root[data-density='cozy'] {
-  --row-py: 8px;   --row-gap: 8px;  --row-radius: 12px; --row-title: 14px;
+  --row-py: 8px;   --row-gap: 6px;  --row-radius: 12px; --row-title: 14px;
   --row-sub: 12px; --row-icon: 16px; --row-indent: 14px; --row-pad0: 8px;
   --row-sub-display: block;
 }
 :root[data-density='large'] {
-  --row-py: 11px;  --row-gap: 10px; --row-radius: 14px; --row-title: 15px;
+  --row-py: 11px;  --row-gap: 7px; --row-radius: 14px; --row-title: 15px;
   --row-sub: 12.5px; --row-icon: 18px; --row-indent: 18px; --row-pad0: 10px;
   --row-sub-display: block;
 }
 :root[data-density='compact'] {
-  --row-py: 4px;   --row-gap: 6px;  --row-radius: 8px;  --row-title: 13px;
+  --row-py: 4px;   --row-gap: 5px;  --row-radius: 8px;  --row-title: 13px;
   --row-sub: 11px; --row-icon: 15px; --row-indent: 12px; --row-pad0: 6px;
   --row-sub-display: block;
 }
 /* one line per item, no previews — maximum items per screen */
 :root[data-density='ultra'] {
-  --row-py: 1px;   --row-gap: 5px;  --row-radius: 5px;  --row-title: 12px;
+  --row-py: 1px;   --row-gap: 4px;  --row-radius: 5px;  --row-title: 12px;
   --row-sub: 11px; --row-icon: 13px; --row-indent: 10px; --row-pad0: 5px;
   --row-sub-display: none;
 }

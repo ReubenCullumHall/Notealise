@@ -64,7 +64,7 @@
 :root,
 :root[data-density="cozy"] {
   --row-py: 8px;
-  --row-gap: 8px;
+  --row-gap: 6px;
   --row-radius: 12px;
   --row-title: 14px;
   --row-sub: 12px;
@@ -75,7 +75,7 @@
 }
 :root[data-density="large"] {
   --row-py: 11px;
-  --row-gap: 10px;
+  --row-gap: 7px;
   --row-radius: 14px;
   --row-title: 15px;
   --row-sub: 12.5px;
@@ -86,7 +86,7 @@
 }
 :root[data-density="compact"] {
   --row-py: 4px;
-  --row-gap: 6px;
+  --row-gap: 5px;
   --row-radius: 8px;
   --row-title: 13px;
   --row-sub: 11px;
@@ -98,7 +98,7 @@
 /* one line per item, no previews — maximum items per screen */
 :root[data-density="ultra"] {
   --row-py: 1px;
-  --row-gap: 5px;
+  --row-gap: 4px;
   --row-radius: 5px;
   --row-title: 12px;
   --row-sub: 11px;
@@ -314,4 +314,10 @@ body {
 .prose-note img { max-width: 100%; border-radius: 12px; }
 .prose-note a.wikilink { color: rgb(var(--ink-800)); background: rgb(var(--wash) / 0.08); border-radius: 5px; padding: 0.05em 0.32em; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .prose-note a.wikilink:hover { background: rgb(var(--wash) / 0.16); }
+
+/* PROTOTYPE ONLY (localhost:5173 / legacy) — collapsible + resizable sidebar.
+   Not a decided feature; do not port this block to the Electron app without
+   a separate decision. Below a width threshold the nav buttons (Note / Folder)
+   drop their text label and fall back to icon-only. */
+.sidebar-narrow .tb-label { display: none; }
 .prose-note a.wikilink.wikilink-new { color: rgb(var(--ink-500)); background: rgb(var(--wash) / 0.04); border-bottom: 1px dashed rgb(var(--ink-300)); }

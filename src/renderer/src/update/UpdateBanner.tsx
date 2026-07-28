@@ -5,8 +5,8 @@ import { Icon } from '../icons'
 // small and non-modal: an update must never interrupt writing, so this is the
 // only thing an available update does until you choose to restart.
 //
-// It borrows the Organize-hint styling from Sidebar.tsx rather than introducing
-// new CSS, so it sits in the same visual language as the rest of the sidebar.
+// It borrows the same inline-hint styling used elsewhere in the sidebar
+// (rounded, tinted strip) rather than introducing new CSS.
 
 interface Props {
   status: UpdateStatus

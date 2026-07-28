@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import type { AppSettings } from '../../shared/settings'
 import type { UpdateStatus } from '../../shared/update'
 import { UpdateBanner } from './update/UpdateBanner'
-import { BinIcon, Icon } from './icons'
+import { ArchiveIcon, BinIcon, Icon } from './icons'
 import { SettingsButton } from './settings/Settings'
 import { SearchBar, SearchResults, type SearchHit } from './Search'
 import { TreeView, type Selection, type TreeActions } from './TreeView'
@@ -23,8 +23,8 @@ import {
 
 // The whole sidebar, ported from the legacy prototype's `Sidebar`
 // (legacy/src/App.jsx:157-1036) so the two apps read as the same product:
-// header + archive toggle, the spotlight search pill, the Note/Folder/Organize
-// bar, a Pinned section, the tree, and the archive and bin shelf views.
+// header + archive toggle, the spotlight search pill, the Note/Folder bar, a
+// Pinned section, the tree, and the archive and bin shelf views.
 
 interface Props {
   vaultName: string
@@ -160,12 +160,47 @@ export function Sidebar({
   actions
 }: Props): React.JSX.Element {
   const [view, setView] = useState<View>('notes')
-  const [organize, setOrganize] = useState(false)
   const [selection, setSelection] = useState<Selection>({ paths: new Set() })
   const [dragging, setDragging] = useState<string[] | null>(null)
   const [archiveSort, setArchiveSort] = useState<ArchiveSort>('recent')
   const [dropZone, setDropZone] = useState<'archive' | 'trash' | null>(null)
   const [lidClick, setLidClick] = useState(false)
+  const [archiveLidClick, setArchiveLidClick] = useState(false)
+
+  // Collapse + resize, under live evaluation — not yet logged to CHANGELOG.md's
+  // Unreleased (see CLAUDE.md "Tracking pending changes"); ask before adding it
+  // once it's been tried here. Ported from the legacy prototype
+  // (legacy/src/App.jsx), which stays legacy-only per rule 8.
+  const SIDEBAR_MIN = 200
+  const SIDEBAR_MAX = 480
+  const SIDEBAR_DEFAULT = 288
+  const SIDEBAR_NARROW = 220
+  const [collapsed, setCollapsed] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
+  const [resizing, setResizing] = useState(false)
+  const narrow = !collapsed && sidebarWidth <= SIDEBAR_NARROW
+  // Icon-only nav buttons: automatic once the sidebar's dragged narrow, or
+  // permanent if the user opted in under Settings -> Arranging.
+  const compactNav = narrow || settings.compactNav
+  const startResize = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      const startX = e.clientX
+      const startWidth = sidebarWidth
+      setResizing(true)
+      const onMove = (ev: MouseEvent): void => {
+        setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startWidth + (ev.clientX - startX))))
+      }
+      const onUp = (): void => {
+        setResizing(false)
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+      }
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+    },
+    [sidebarWidth]
+  )
 
   const inArchive = view === 'archive'
   const inBin = view === 'bin'
@@ -179,6 +214,13 @@ export function Sidebar({
     setTimeout(() => setLidClick(false), 420)
   }
   const lidOpen = lidClick || dropZone === 'trash'
+
+  // Same cue on the archive chest.
+  const flipArchiveLid = (): void => {
+    setArchiveLidClick(true)
+    setTimeout(() => setArchiveLidClick(false), 420)
+  }
+  const archiveLidOpen = archiveLidClick || dropZone === 'archive'
 
   // Live tree = everything not archived; pinned entries are hoisted out of it
   // into their own section so they can't appear twice.
@@ -202,7 +244,6 @@ export function Sidebar({
     workspace,
     openPath,
     freeArrange: settings.freeArrange,
-    organize,
     selection,
     onSelectionChange: setSelection,
     dragging,
@@ -211,41 +252,32 @@ export function Sidebar({
   }
 
   return (
+    <>
     <aside
-      className="relative flex h-full w-72 shrink-0 select-none flex-col border-r border-ink-300/25 bg-surface/45 backdrop-blur"
+      style={{ width: collapsed ? 0 : sidebarWidth }}
+      className={
+        'relative flex h-full shrink-0 select-none flex-col overflow-hidden bg-surface/45 backdrop-blur ' +
+        (collapsed ? '' : 'border-r border-ink-300/25 ') +
+        (resizing ? '' : 'transition-[width] duration-150 ') +
+        (compactNav ? 'sidebar-narrow' : '')
+      }
       onContextMenu={(e) => {
         if (e.target === e.currentTarget) actions.onContext(e, null)
       }}
     >
-      {/* The archive drop target exists only while dragging, and overlays the
-          vault name rather than pushing the tree down — a row appearing mid-drag
-          would move the rows out from under your cursor. */}
-      {dragging && !inBin && !inArchive && (
+      {/* Under live evaluation (see note above the state block) — drag the
+          right edge to resize. Transition is suspended mid-drag so React
+          state, not the browser's cursor, drives it. */}
+      {!collapsed && (
         <div
-          onDragOver={(e) => {
-            e.preventDefault()
-            setDropZone('archive')
-          }}
-          onDragLeave={() => setDropZone((z) => (z === 'archive' ? null : z))}
-          onDrop={(e) => {
-            e.preventDefault()
-            actions.onArchive(dragging, true)
-            setDragging(null)
-            setDropZone(null)
-            clearSel()
-          }}
+          onMouseDown={startResize}
+          title="Drag to resize"
           className={
-            'fade-in absolute inset-x-2 top-2 z-30 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-surface px-3 py-3 text-[12px] font-medium transition-all duration-200 ' +
-            (dropZone === 'archive'
-              ? 'border-brand-400 text-brand-600 ring-4 ring-brand-500/15'
-              : 'border-ink-300/40 text-ink-400')
+            'absolute right-0 top-0 z-40 h-full w-1.5 cursor-col-resize select-none ' +
+            (resizing ? 'bg-brand-400/60' : 'hover:bg-brand-400/40')
           }
-        >
-          <Icon name="archive" className="h-4 w-4" />
-          <span>Drop here to archive</span>
-        </div>
+        />
       )}
-
       {/* The header is the vault name alone — the archive toggle moved down to
           the bottom strip, beside the bin, since both are shelf views and they
           read as a pair there. */}
@@ -253,6 +285,13 @@ export function Sidebar({
         <p className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-ink-900" title={vaultName}>
           {vaultName}
         </p>
+        <button
+          onClick={() => setCollapsed(true)}
+          title="Collapse sidebar"
+          className="flex shrink-0 items-center justify-center rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"
+        >
+          <Icon name="panelLeft" className="h-4 w-4" />
+        </button>
       </div>
 
       <SearchBar
@@ -265,31 +304,20 @@ export function Sidebar({
       />
 
       {/* hidden in the shelf views: nothing here applies to them */}
-      <div className={'flex items-center gap-1 px-3 pb-1.5 ' + (inArchive || inBin ? 'hidden' : '')}>
+      <div
+        className={
+          'flex items-center justify-center gap-1 px-3 pb-1.5 ' + (inArchive || inBin ? 'hidden' : '')
+        }
+      >
         <TB onClick={actions.onNewNote} title="New note (Ctrl+N)">
           <Icon name="filePlus" className="h-4 w-4" />
-          <span>Note</span>
+          <span className="tb-label">Note</span>
         </TB>
         <TB onClick={actions.onNewFolder} title="New folder">
           <Icon name="folderPlus" className="h-4 w-4" />
-          <span>Folder</span>
-        </TB>
-        <div className="flex-1" />
-        <TB
-          onClick={() => setOrganize((o) => !o)}
-          active={organize}
-          title="Rename & delete folders"
-        >
-          <Icon name={organize ? 'x' : 'sliders'} className="h-4 w-4" />
-          <span>{organize ? 'Done' : 'Organize'}</span>
+          <span className="tb-label">Folder</span>
         </TB>
       </div>
-
-      {organize && !searching && !inBin && (
-        <p className="mx-3 mb-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] leading-snug text-brand-600">
-          Rename or delete folders · click <b>Done</b> when finished.
-        </p>
-      )}
 
       {selCount > 1 && (
         <div className="fade-in mx-3 mb-1.5 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] text-brand-600">
@@ -314,6 +342,9 @@ export function Sidebar({
           }
           onClick={(e) => {
             if (e.target === e.currentTarget) clearSel()
+          }}
+          onContextMenu={(e) => {
+            if (e.target === e.currentTarget) actions.onContext(e, null)
           }}
         >
           {/* a search always searches everywhere, so it outranks the shelf views */}
@@ -452,55 +483,23 @@ export function Sidebar({
           </button>
         )}
 
-        {/* Mirrors the archive drop zone at the top: only when there's something
-            to delete, and overlays rather than resizing the tree. */}
-        {!inBin && (dragging || selCount > 0) && (
-          <div
-            role={dragging ? undefined : 'button'}
-            tabIndex={dragging ? undefined : 0}
-            onDragOver={
-              dragging
-                ? (e) => {
-                    e.preventDefault()
-                    setDropZone('trash')
-                  }
-                : undefined
-            }
-            onDragLeave={dragging ? () => setDropZone((z) => (z === 'trash' ? null : z)) : undefined}
-            onDrop={
-              dragging
-                ? (e) => {
-                    e.preventDefault()
-                    actions.onTrash(dragging)
-                    flipLid()
-                    setDragging(null)
-                    setDropZone(null)
-                    clearSel()
-                  }
-                : undefined
-            }
-            onClick={
-              dragging
-                ? undefined
-                : () => {
-                    actions.onTrash([...selection.paths])
-                    flipLid()
-                    clearSel()
-                  }
-            }
-            className={
-              'fade-in absolute inset-x-2 bottom-full z-30 mb-2 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-surface px-3 py-3 text-[12px] font-medium outline-none transition-all duration-200 ' +
-              (dragging ? '' : 'cursor-pointer ') +
-              (dropZone === 'trash'
-                ? 'border-brand-400 text-brand-600 ring-4 ring-brand-500/15'
-                : 'border-ink-300/40 text-ink-400 hover:border-brand-300 hover:text-brand-600')
-            }
+        {/* A click-to-bin action for a multi-select, not a drop target — while
+            dragging, the bin button itself (bottom strip) highlights instead,
+            so there's no separate "drop here" banner competing for attention. */}
+        {!inBin && !dragging && selCount > 0 && (
+          <button
+            onClick={() => {
+              actions.onTrash([...selection.paths])
+              flipLid()
+              clearSel()
+            }}
+            className="fade-in absolute inset-x-2 bottom-full z-30 mb-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-ink-300/40 bg-surface px-3 py-3 text-[12px] font-medium text-ink-400 outline-none transition-all duration-200 hover:border-brand-300 hover:text-brand-600"
           >
             <span className={lidOpen ? 'lid-open' : ''}>
               <BinIcon className="h-4 w-4" />
             </span>
-            <span>{dragging ? 'Drop here to bin' : `Move ${selCount} to bin`}</span>
-          </div>
+            <span>Move {selCount} to bin</span>
+          </button>
         )}
 
         <UpdateBanner status={update} canSelfUpdate={update.state !== 'unsupported'} />
@@ -518,9 +517,14 @@ export function Sidebar({
         </p>
       </div>
 
-      {/* The bottom strip: settings, then the bin beside it — same slot legacy
-          puts them in. Absolute so it overlays the footer's reserved padding. */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-40 flex items-end gap-2">
+      {/* The bottom strip: settings (untouched, still h-10 w-10), then bin +
+          archive at the same h-10 height but growing to fill whatever's left
+          of the sidebar's current width — wider drop targets since both are
+          dropped into constantly, without standing taller than the gear.
+          Under live evaluation, not yet logged to CHANGELOG.md's Unreleased.
+          inset-x-3 (rather than a fixed width) is what lets them track the
+          sidebar's width as it's resized. */}
+      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-40 flex items-end gap-2">
         <SettingsButton settings={settings} onChange={onChangeSettings} />
         <button
           onClick={() => {
@@ -547,7 +551,7 @@ export function Sidebar({
           title={inBin ? 'Back to your notes' : 'Bin — deleted notes wait here'}
           aria-pressed={inBin}
           className={
-            'pointer-events-auto flex h-10 min-w-10 shrink-0 items-center justify-center gap-1 rounded-xl border border-ink-300/30 px-2 text-[11px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
+            'pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
             (inBin || dropZone === 'trash'
               ? 'bg-brand-500/15 text-brand-600'
               : 'bg-surface/90 text-ink-500')
@@ -562,18 +566,52 @@ export function Sidebar({
           onClick={() => {
             setView((v) => (v === 'archive' ? 'notes' : 'archive'))
             onQuery('')
+            flipArchiveLid()
+          }}
+          onDragOver={(e) => {
+            if (!dragging) return
+            e.preventDefault()
+            setDropZone('archive')
+          }}
+          onDragLeave={() => setDropZone((z) => (z === 'archive' ? null : z))}
+          onDrop={(e) => {
+            e.preventDefault()
+            if (dragging) {
+              actions.onArchive(dragging, true)
+              flipArchiveLid()
+              clearSel()
+            }
+            setDragging(null)
+            setDropZone(null)
           }}
           title={inArchive ? 'Back to your notes' : 'Archived notes'}
           aria-pressed={inArchive}
           className={
-            'pointer-events-auto flex h-10 min-w-10 shrink-0 items-center justify-center gap-1 rounded-xl border border-ink-300/30 px-2 text-[11px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
-            (inArchive ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500')
+            'pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
+            (inArchive || dropZone === 'archive'
+              ? 'bg-brand-500/15 text-brand-600'
+              : 'bg-surface/90 text-ink-500')
           }
         >
-          <Icon name="archive" className="h-4 w-4" />
+          <span className={archiveLidOpen ? 'lid-open' : ''}>
+            <ArchiveIcon className="h-4 w-4" />
+          </span>
           {archivedNodes.length > 0 && <span>{archivedNodes.length}</span>}
         </button>
       </div>
     </aside>
+    {/* A sibling of <aside>, not a fixed descendant of it: the aside's own
+        backdrop-blur makes it a containing block for position:fixed, which
+        would trap this at width 0 once collapsed. */}
+    {collapsed && (
+      <button
+        onClick={() => setCollapsed(false)}
+        title="Show sidebar"
+        className="fixed left-2 top-3 z-40 flex items-center justify-center rounded-lg border border-ink-300/30 bg-surface/90 p-1.5 text-ink-500 shadow-card backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
+      >
+        <Icon name="panelLeft" className="h-4 w-4" />
+      </button>
+    )}
+    </>
   )
 }

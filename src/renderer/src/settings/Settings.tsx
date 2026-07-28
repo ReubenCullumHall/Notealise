@@ -594,6 +594,17 @@ function Arranging({ settings, onChange }: Props): React.JSX.Element {
         Your arrangement is stored the same way either way, so switching this on and back off never scrambles
         anything.
       </p>
+
+      <h3 className="mt-6 font-display text-[15px] font-semibold text-ink-900">Nav buttons</h3>
+      <p className="mt-0.5 text-[12px] text-ink-500">Note / Folder, above the sidebar's note list.</p>
+      <div className="mt-3">
+        <ToggleRow
+          on={settings.compactNav}
+          onClick={() => onChange({ compactNav: !settings.compactNav })}
+          label="Icons only"
+          hint="Drop the text labels once you know what each icon does — they centre as a small group instead. Hover still shows what each one does. The sidebar already does this on its own once you drag it narrower than ~220px; this makes it permanent at any width."
+        />
+      </div>
     </>
   )
 }

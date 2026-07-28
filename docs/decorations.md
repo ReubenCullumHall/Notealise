@@ -78,8 +78,36 @@ would need a `StateField` instead (future).
 `colorPass` also conceals the legacy inline-style colour form (`<span style="color:#hex">` /
 `background-color`), not just this app's palette classes, so old notes render clean here too.
 
+### The fenced-code pass (`fencedCodePass`, implemented)
+
+Walks `FencedCode` nodes (verified against the real `@lezer/markdown` tree: `CodeMark` ×2 +
+`CodeInfo` + `CodeText`, all direct children — not guessed). The two `CodeMark` fences and the
+`CodeInfo` language tag hide independently, exactly like every other mark (each reveals only when
+*its own* line is active — there's no special whole-block reveal, matching how `colorPass` treats
+its open/close tags). The `CodeText` content always gets `Decoration.mark({class:
+'cm-fenced-code'})`, matching the reading view's `.prose-note pre` look (`--code-bg` background,
+monospace) via `box-decoration-break: clone` since a mark spanning multiple lines renders as one
+DOM fragment per line, not one box. **No per-language syntax token colouring** — that would need a
+new dependency (a CodeMirror language package or a highlighter), which needs asking first; this
+only gives fenced code the same "styled block" treatment the reading view already has.
+
+### Multi-line `$$` math (`blockMath.ts`, implemented — a StateField, not a Pass)
+
+`mathPass` still owns single-line `$$…$$` and inline `$…$`. A `$$` alone on its own line, with a
+later line that's also just `$$`, is block math whose *source* spans multiple lines — CM6 requires
+`block: true` for a decoration that replaces an actual line break, and a block replacement's range
+must exactly cover whole lines (line-start to the start of the following line, or to the document
+end). That's different enough from the atomic-range trick the rest of this file uses that it lives
+in its own `StateField` (`editor/blockMath.ts`), rebuilding on `docChanged`/selection change and
+providing decorations via `.provide(f => EditorView.decorations.from(f))` — kept separate from
+`PASSES` so it can't interact with `atomicRanges`. Reveal is whole-block (cursor anywhere inside
+the `$$…$$` range shows raw source), unlike the per-line reveal everywhere else, since editing LaTeX
+is naturally a whole-block operation. Verified via a CDP smoke test (dispatch transactions directly
+against the `EditorView`, inspect the resulting DOM): renders correctly, reveals/re-conceals on
+cursor movement, and — importantly — an *unclosed* fence or `$$` (the normal state while actively
+typing) never throws; it's simply left raw until closed.
+
 ## Not handled yet
 
-Lists (beyond the bullet swap), tables, fenced code blocks, images, and multi-line `$$` math
-source are deliberately left for later — each is a new `Pass` (or, for line-crossing math, a
-`StateField`).
+Lists (beyond the bullet swap), tables, and images are deliberately left for later — each is a new
+`Pass`.
