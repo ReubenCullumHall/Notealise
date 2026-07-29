@@ -1,39 +1,42 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ACCENT_MODES, ACCENTS, DENSITIES, STARTUPS, THEMES, type AppSettings } from './model'
+import { STARTUPS, type AppSettings } from './model'
 import { Icon, type IconName } from '../icons'
+import { Select, SettingRow } from './primitives'
+import { Spaces, type SpaceActions } from './Spaces'
+import { Collection } from './Collection'
 import { DATE_FORMATS, NUMBER_FORMATS, formatDate, localZone, timezones } from '../intl'
 import { isPrereleaseVersion, type UpdateStatus } from '../../../shared/update'
 
+/** What a plain settings section needs. Kept free of `spaceActions` so General
+ *  and Formatting don't have to carry a dependency only Spaces uses. */
 interface Props {
   settings: AppSettings
   onChange: (partial: Partial<AppSettings>) => void
 }
 
-// Fixed swatch colours for the theme preview cards, so each card always shows
-// its own theme regardless of the theme currently in effect.
-const THEME_PREVIEW: Record<AppSettings['theme'], { side: string; main: string; line: string }> = {
-  dark: { side: '#161616', main: '#000000', line: '#8f8f8f' },
-  light: { side: '#ffffff', main: '#f7f7f6', line: '#a3a3a3' }
-}
+/** …plus the folder operations the Spaces page needs, which are owned by App. */
+type ShellProps = Props & { spaceActions: SpaceActions }
 
-type SectionId = 'general' | 'appearance' | 'arranging' | 'formatting' | 'updates'
+type SectionId = 'general' | 'spaces' | 'formatting' | 'collection' | 'updates' | 'reportBug'
 
 // Legacy's SECTIONS + SECTION_ICON (legacy/src/settings.js:35, legacy/src/App.jsx:1042).
-// Updates has no legacy counterpart (there's no updater there) and is appended
-// after Formatting, same spot it already occupied here.
+// Appearance / Arranging / Shortcuts are NOT here: they belong to a space now,
+// and live inside Spaces. Spaces, Your collection, Updates and Report a bug have
+// no legacy counterpart.
 const SECTIONS: { id: SectionId; label: string; icon: IconName }[] = [
   { id: 'general', label: 'General', icon: 'sliders' },
-  { id: 'appearance', label: 'Appearance', icon: 'sun' },
-  { id: 'arranging', label: 'Arranging', icon: 'grip' },
+  { id: 'spaces', label: 'Spaces', icon: 'spaces' },
   { id: 'formatting', label: 'Formatting', icon: 'text' },
-  { id: 'updates', label: 'Updates', icon: 'restore' }
+  { id: 'collection', label: 'Your collection', icon: 'library' },
+  { id: 'updates', label: 'Updates', icon: 'restore' },
+  { id: 'reportBug', label: 'Report a bug', icon: 'flag' }
 ]
 
 /** The gear. It lives in the sidebar's bottom-left strip, beside the bin, the
  *  way legacy pins it (legacy/src/App.jsx:997-1015) — hence the card styling and
  *  hover lift rather than a flat header button. */
-export function SettingsButton({ settings, onChange }: Props): React.JSX.Element {
+export function SettingsButton({ settings, onChange, spaceActions }: ShellProps): React.JSX.Element {
   const [mounted, setMounted] = useState(false) // in the DOM, including while closing
   const [armed, setArmed] = useState(false) // laid out, safe to animate
   const [closing, setClosing] = useState(false)
@@ -116,7 +119,7 @@ export function SettingsButton({ settings, onChange }: Props): React.JSX.Element
       <button
         ref={btn}
         className={
-          'pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink-300/30 shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
+          'btn-edge pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink-300/30 shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
           (open ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500')
         }
         title="Settings"
@@ -148,6 +151,7 @@ export function SettingsButton({ settings, onChange }: Props): React.JSX.Element
               winRef={win}
               settings={settings}
               onChange={onChange}
+              spaceActions={spaceActions}
               onClose={close}
               armed={armed}
               closing={closing}
@@ -169,11 +173,12 @@ function SettingsWindow({
   winRef,
   settings,
   onChange,
+  spaceActions,
   onClose,
   armed,
   closing,
   onAnimationEnd
-}: Props & {
+}: ShellProps & {
   winRef: React.RefObject<HTMLDivElement | null>
   onClose: () => void
   armed: boolean
@@ -234,311 +239,16 @@ function SettingsWindow({
             actually scroll instead of stretching the window past its height. */}
         <div className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5">
           {section === 'general' && <General settings={settings} onChange={onChange} />}
-          {section === 'appearance' && <Appearance settings={settings} onChange={onChange} />}
-          {section === 'arranging' && <Arranging settings={settings} onChange={onChange} />}
+          {section === 'spaces' && (
+            <Spaces settings={settings} onChange={onChange} actions={spaceActions} />
+          )}
           {section === 'formatting' && <Formatting settings={settings} onChange={onChange} />}
+          {section === 'collection' && <Collection />}
           {section === 'updates' && <UpdatesSection />}
+          {section === 'reportBug' && <ReportBug />}
         </div>
       </div>
     </div>
-  )
-}
-
-function Appearance({ settings, onChange }: Props): React.JSX.Element {
-  return (
-    <>
-      <section className="settings-group">
-        <h3>Theme</h3>
-        <p className="hint">Applies to the whole app, editor included.</p>
-        <div className="theme-cards">
-          {THEMES.map((t) => {
-            const p = THEME_PREVIEW[t.id]
-            const on = settings.theme === t.id
-            return (
-              <button
-                key={t.id}
-                className={'theme-card' + (on ? ' on' : '')}
-                aria-pressed={on}
-                onClick={() => onChange({ theme: t.id })}
-              >
-                <span className="preview" aria-hidden="true">
-                  <span className="side" style={{ background: p.side }} />
-                  <span className="main" style={{ background: p.main }} />
-                </span>
-                <span className="label-row">
-                  {on ? '✓ ' : ''}
-                  {t.label}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
-      <section className="settings-group">
-        <h3>Accent</h3>
-        <p className="hint">Pick a colour, then choose how far it reaches. Works with either theme.</p>
-        <div className="accent-dots">
-          {ACCENTS.map((a) => {
-            const on = settings.accent === a.id
-            const bg =
-              a.hue == null
-                ? settings.theme === 'light'
-                  ? '#1a1a1a'
-                  : '#e8e8e8'
-                : `hsl(${a.hue} 50% 55%)`
-            return (
-              <button
-                key={a.id}
-                className={'accent-dot' + (on ? ' on' : '')}
-                title={a.label}
-                aria-label={a.label}
-                aria-pressed={on}
-                style={{ background: bg }}
-                onClick={() => onChange({ accent: a.id })}
-              />
-            )
-          })}
-        </div>
-        <div className="mode-row">
-          {ACCENT_MODES.map((m) => {
-            const on = settings.accentMode === m.id
-            return (
-              <button
-                key={m.id}
-                className={'mode-btn' + (on ? ' on' : '')}
-                aria-pressed={on}
-                onClick={() => onChange({ accentMode: m.id })}
-              >
-                <span className="t">{m.label}</span>
-                <span className="s">{m.hint}</span>
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
-      <section className="settings-group">
-        <h3>Density</h3>
-        <p className="hint">How tightly notes and folders pack in the sidebar.</p>
-        <div className="density-list">
-          {DENSITIES.map((d) => {
-            const on = settings.density === d.id
-            return (
-              <button
-                key={d.id}
-                className={'density-row' + (on ? ' on' : '')}
-                aria-pressed={on}
-                onClick={() => onChange({ density: d.id })}
-              >
-                <span className="density-bars" style={{ gap: d.bar.gap }} aria-hidden="true">
-                  {[0, 1, 2].map((i) => (
-                    <span key={i} style={{ height: d.bar.h }} />
-                  ))}
-                </span>
-                <span className="meta">
-                  <span className="t">{d.label}</span>
-                  <span className="s">{d.hint}</span>
-                </span>
-                {on ? <span aria-hidden="true">✓</span> : null}
-              </button>
-            )
-          })}
-        </div>
-      </section>
-    </>
-  )
-}
-
-/** Title and description on the left, control on the right — ported from
- *  legacy/src/App.jsx's SettingRow, used by Formatting's rows below. */
-function SettingRow({
-  title,
-  desc,
-  children
-}: {
-  title: string
-  desc: string
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <div className="flex items-start gap-4 py-3.5">
-      <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-semibold text-ink-900">{title}</span>
-        <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">{desc}</span>
-      </span>
-      <span className="shrink-0 pt-0.5">{children}</span>
-    </div>
-  )
-}
-
-interface SelectOption {
-  id: string
-  label: string
-  example?: string | null
-}
-
-/** A dropdown that shows each option's live example underneath its label, so
- *  you pick the shape you want rather than decoding a name. `filter` turns on
- *  a search box, which the timezone list needs — there are several hundred.
- *  Ported from legacy/src/App.jsx's Select. */
-function Select({
-  value,
-  options,
-  onChange,
-  filter = false,
-  align = 'right'
-}: {
-  value: string
-  options: SelectOption[]
-  onChange: (id: string) => void
-  filter?: boolean
-  align?: 'left' | 'right'
-}): React.JSX.Element {
-  const [open, setOpen] = useState(false)
-  const [q, setQ] = useState('')
-  const box = useRef<HTMLSpanElement>(null)
-  const current = options.find((o) => o.id === value) || options[0]
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent): void => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        setOpen(false)
-      }
-    }
-    window.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey, true)
-    return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey, true)
-    }
-  }, [open])
-
-  const shown = q
-    ? options.filter((o) => (o.label + ' ' + (o.example || '')).toLowerCase().includes(q.toLowerCase()))
-    : options
-
-  return (
-    <span ref={box} className="relative inline-flex">
-      <button
-        onClick={() => {
-          setOpen((o) => !o)
-          setQ('')
-        }}
-        aria-expanded={open}
-        className={
-          'flex items-center gap-1.5 rounded-lg border border-ink-300/30 px-2.5 py-1.5 text-[12.5px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-          (open ? 'bg-brand-500/12 text-brand-600' : 'bg-surface/70 text-ink-700 hover:text-brand-600')
-        }
-      >
-        <span className="max-w-[150px] truncate">{current ? current.label : value}</span>
-        <span className={'inline-flex text-ink-400 transition-transform duration-200 ' + (open ? 'rotate-90' : '')}>
-          <Icon name="chevron" className="h-4 w-4" />
-        </span>
-      </button>
-
-      {open && (
-        <div
-          className={
-            'fade-in absolute top-9 z-40 w-max min-w-[190px] rounded-xl border border-ink-300/25 bg-surface p-1 shadow-float ' +
-            (align === 'right' ? 'right-0' : 'left-0')
-          }
-        >
-          {filter && (
-            <input
-              autoFocus
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search…"
-              className="mb-1 w-full rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-[12px] text-ink-900 outline-none placeholder:text-ink-400"
-            />
-          )}
-          <div className="max-h-64 overflow-y-auto">
-            {shown.length === 0 && <p className="px-2.5 py-2 text-[12px] text-ink-400">No matches.</p>}
-            {shown.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => {
-                  onChange(o.id)
-                  setOpen(false)
-                }}
-                className={
-                  'flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition duration-150 ' +
-                  (o.id === value ? 'bg-brand-500/12' : 'hover:bg-brand-500/8')
-                }
-              >
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={
-                      'block truncate text-[12.5px] ' + (o.id === value ? 'font-medium text-brand-600' : 'text-ink-700')
-                    }
-                  >
-                    {o.label}
-                  </span>
-                  {o.example && <span className="block truncate text-[11px] text-ink-400">{o.example}</span>}
-                </span>
-                <span className={'shrink-0 text-brand-600 ' + (o.id === value ? 'opacity-100' : 'opacity-0')}>
-                  <Icon name="check" className="h-4 w-4" />
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </span>
-  )
-}
-
-/** Knob is bg-surface so it contrasts with the track in both themes: dark knob
- *  on a grey track in dark mode, white knob on grey in light. */
-function Switch({ on }: { on: boolean }): React.JSX.Element {
-  return (
-    <span
-      className={
-        'relative h-5 w-9 shrink-0 rounded-full transition duration-200 ' + (on ? 'bg-brand-500' : 'bg-ink-300/40')
-      }
-    >
-      <span
-        className={
-          'absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow-card transition-all duration-200 ' +
-          (on ? 'left-[18px]' : 'left-0.5')
-        }
-      />
-    </span>
-  )
-}
-
-function ToggleRow({
-  on,
-  onClick,
-  label,
-  hint
-}: {
-  on: boolean
-  onClick: () => void
-  label: string
-  hint: string
-}): React.JSX.Element {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={on}
-      className={
-        'flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-        (on ? 'bg-brand-500/12 ring-1 ring-brand-300/60' : 'ring-1 ring-ink-300/20 hover:bg-brand-500/8')
-      }
-    >
-      <span className="min-w-0 flex-1">
-        <span className={'block text-[13px] font-medium ' + (on ? 'text-brand-600' : 'text-ink-700')}>{label}</span>
-        <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">{hint}</span>
-      </span>
-      <Switch on={on} />
-    </button>
   )
 }
 
@@ -572,38 +282,6 @@ function General({ settings, onChange }: Props): React.JSX.Element {
             </button>
           )
         })}
-      </div>
-    </>
-  )
-}
-
-function Arranging({ settings, onChange }: Props): React.JSX.Element {
-  return (
-    <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Order</h3>
-      <p className="mt-0.5 text-[12px] text-ink-500">How the sidebar lays out each level.</p>
-      <div className="mt-3">
-        <ToggleRow
-          on={settings.freeArrange}
-          onClick={() => onChange({ freeArrange: !settings.freeArrange })}
-          label="Mix notes and folders freely"
-          hint="Off, folders sit at the top of each level with notes underneath. On, they share one order — drag a note above a folder, or a folder between two notes, and it stays there."
-        />
-      </div>
-      <p className="mt-4 px-1 text-[11.5px] leading-relaxed text-ink-400">
-        Your arrangement is stored the same way either way, so switching this on and back off never scrambles
-        anything.
-      </p>
-
-      <h3 className="mt-6 font-display text-[15px] font-semibold text-ink-900">Nav buttons</h3>
-      <p className="mt-0.5 text-[12px] text-ink-500">Note / Folder, above the sidebar's note list.</p>
-      <div className="mt-3">
-        <ToggleRow
-          on={settings.compactNav}
-          onClick={() => onChange({ compactNav: !settings.compactNav })}
-          label="Icons only"
-          hint="Drop the text labels once you know what each icon does — they centre as a small group instead. Hover still shows what each one does. The sidebar already does this on its own once you drag it narrower than ~220px; this makes it permanent at any width."
-        />
       </div>
     </>
   )
@@ -784,5 +462,81 @@ function UpdatesSection(): React.JSX.Element {
 
       {line && <p className="hint">{line}</p>}
     </section>
+  )
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** Sends via the OS default mail app (mailto:) opened by main — no account or
+ *  API key needed here. The fixed destination lives in src/main/support.ts. */
+function ReportBug(): React.JSX.Element {
+  const [fromEmail, setFromEmail] = useState('')
+  const [message, setMessage] = useState('')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+  const canSend = EMAIL_RE.test(fromEmail.trim()) && message.trim().length > 0
+
+  const send = useCallback(async () => {
+    setStatus('sending')
+    const ok = await window.api.sendBugReport(fromEmail.trim(), message.trim())
+    if (ok) {
+      setMessage('')
+      setStatus('sent')
+    } else {
+      setStatus('error')
+    }
+  }, [fromEmail, message])
+
+  return (
+    <>
+      <h3 className="font-display text-[15px] font-semibold text-ink-900">Report a bug</h3>
+      <p className="mt-0.5 text-[12px] text-ink-500">
+        Opens your email app with this pre-filled, addressed to our support inbox.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-1">
+        <label htmlFor="bug-email" className="text-[12.5px] font-medium text-ink-700">
+          Your email
+        </label>
+        <input
+          id="bug-email"
+          type="email"
+          value={fromEmail}
+          onChange={(e) => setFromEmail(e.target.value)}
+          placeholder="you@example.com"
+          className="w-full rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-[12px] text-ink-900 outline-none placeholder:text-ink-400"
+        />
+      </div>
+
+      <div className="mt-3 flex flex-col gap-1">
+        <label htmlFor="bug-message" className="text-[12.5px] font-medium text-ink-700">
+          Message
+        </label>
+        <textarea
+          id="bug-message"
+          rows={6}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="What happened, and what did you expect instead?"
+          className="w-full resize-y rounded-lg bg-brand-500/8 px-2.5 py-2 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400"
+        />
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <button className="mini" disabled={!canSend || status === 'sending'} onClick={() => void send()}>
+          {status === 'sending' ? 'Opening…' : 'Send'}
+        </button>
+        {status === 'sent' && (
+          <span className="text-[11.5px] text-ink-400">
+            Your default mail app should now have this ready to send.
+          </span>
+        )}
+        {status === 'error' && (
+          <span className="text-[11.5px] text-ink-400">
+            Couldn&apos;t open a mail app automatically — email us directly instead.
+          </span>
+        )}
+      </div>
+    </>
   )
 }

@@ -7,7 +7,15 @@ import { CodeEditor } from './editor'
 import { FormatToolbar } from './editor/FormatToolbar'
 import { ReadingView } from './reader/ReadingView'
 import { applySettings } from './settings/model'
-import { DEFAULT_SETTINGS, type AppSettings } from '../../shared/settings'
+import {
+  activeSpace,
+  DEFAULT_SETTINGS,
+  reconcileSpaces,
+  withNewSpace,
+  withSpacePatch,
+  type AppSettings
+} from '../../shared/settings'
+import type { SpaceActions } from './settings/Spaces'
 import { Sidebar } from './Sidebar'
 import type { SearchHit } from './Search'
 import type { UpdateStatus } from '../../shared/update'
@@ -47,6 +55,10 @@ export default function App(): React.JSX.Element {
   const [readSource, setReadSource] = useState('')
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
+  // Appearance, arranging and the format bar's custom buttons belong to the
+  // active space; the rest of `settings` is global. Derived rather than stored,
+  // so the two can never disagree — a find over at most SPACE_CAP items.
+  const space = activeSpace(settings)
   // Search (spotlight pill). `deep` also matches note contents, not just titles;
   // `withArchived` lets shelved notes back into the results.
   const [query, setQuery] = useState('')
@@ -141,6 +153,110 @@ export default function App(): React.JSX.Element {
     return s
   }, [])
 
+  // --- spaces ---------------------------------------------------------------
+  // The vault's top-level folders ARE the spaces. The tree already comes back
+  // vault-relative, so scoping is a slice of it rather than a different query:
+  // main keeps returning the whole vault and the sidebar renders one branch.
+  // Memoised, not derived inline: an unmemoised `?? []` hands back a fresh array
+  // every render, which would defeat the search index's own memo downstream.
+  const spaceTree = useMemo<TreeNode[]>(() => {
+    if (!space.folder) return tree // no spaces yet — the whole vault is the view
+    return tree.find((n) => n.type === 'dir' && n.path === space.folder)?.children ?? []
+  }, [tree, space.folder])
+  // Notes sitting loose at the vault root, outside every space. Shown in their
+  // own group rather than moved — nothing on disk shifts without being asked.
+  const looseNotes = useMemo(
+    () => (settings.spaces.length ? tree.filter((n) => n.type === 'file') : []),
+    [tree, settings.spaces.length]
+  )
+
+  // Folders on disk are the source of truth, so every tree load re-syncs the
+  // saved spaces against them: a folder made in Explorer becomes a space, and
+  // one deleted there stops being one. `reconcileSpaces` returns null when
+  // nothing changed, which keeps this from writing settings.json on every load.
+  //
+  // A vault must never settle on zero REAL (folder-backed) spaces — otherwise
+  // the switcher hides and new notes/folders silently land at the vault root
+  // ("Not in a space"). If reconciling leaves only the unbound whole-vault
+  // placeholder, make a folder and register it. `withNewSpace` already rebinds
+  // a lone unbound placeholder rather than appending beside it, so this carries
+  // the placeholder's theme/density forward instead of resetting to defaults.
+  // Termination: the folder created here is already a bound space in the
+  // settings this call writes, so the watcher-triggered call this create
+  // provokes sees a bound space and takes the normal no-op path.
+  const syncSpaces = useCallback(
+    async (t: TreeNode[], current: AppSettings): Promise<void> => {
+      const folders = t.filter((n) => n.type === 'dir').map((n) => n.path)
+      const reconciled = reconcileSpaces(current, folders)
+      const merged = reconciled ? { ...current, ...reconciled } : current
+      if (merged.spaces.some((sp) => sp.folder)) {
+        if (reconciled) await changeSettings(reconciled)
+        return
+      }
+      try {
+        const folder = await window.api.createFolder('')
+        await loadTree()
+        await changeSettings(withNewSpace(merged, folder))
+      } catch (e) {
+        flash(`Couldn't create your first space: ${(e as Error).message}`)
+        if (reconciled) await changeSettings(reconciled)
+      }
+    },
+    [changeSettings, loadTree, flash]
+  )
+
+  const spaceActions: SpaceActions = useMemo(
+    () => ({
+      onCreateSpace: async () => {
+        try {
+          const path = await window.api.createFolder('') // '' = vault root
+          await loadTree()
+          return path
+        } catch (e) {
+          flash(`Couldn't create the space: ${(e as Error).message}`)
+          return null
+        }
+      },
+      onRenameSpace: async (from, to) => {
+        try {
+          const actual = await window.api.renameEntry(from, to)
+          await loadTree()
+          await loadWorkspace() // main re-keys the entry and its descendants
+          // Anything open inside this space moved with it. Without this the
+          // open note keeps its old path and the next autosave writes into a
+          // folder that no longer exists. Same call the tree's own rename makes.
+          remapOpen(from, actual)
+          // Main sanitises for cross-platform safety, so say so rather than
+          // letting the name quietly come back different — same as tree rename.
+          if (actual !== to) flash(`Renamed to "${actual}" (adjusted for cross-platform safety)`)
+          return actual
+        } catch (e) {
+          flash(`Couldn't rename the space: ${(e as Error).message}`)
+          return null
+        }
+      },
+      onDeleteSpace: async (folder) => {
+        try {
+          // Straight to the OS trash — deliberately NOT window.api.trashEntries,
+          // which is the app's own recoverable bin. A deleted space sitting in
+          // that bin next to individually-trashed notes conflates two different
+          // levels of the hierarchy; the two-step "click again" button is the
+          // confirmation, so it doesn't need a second, in-app safety net too.
+          setWorkspace(await window.api.deleteSpace(folder))
+          await loadTree()
+          // If the open note was inside it, close it and drop any pending save —
+          // otherwise autosave would try to write it back into a gone folder.
+          forgetIfInside([folder])
+          return true
+        } catch (e) {
+          flash(`Couldn't delete the space: ${(e as Error).message}`)
+          return false
+        }
+      }
+    }),
+    [loadTree, loadWorkspace, flash]
+  )
+
   const openNote = useCallback(
     async (p: string): Promise<void> => {
       await flush() // save the note we're leaving before we load the next
@@ -175,11 +291,12 @@ export default function App(): React.JSX.Element {
         await loadWorkspace()
       }
       const s = await loadSettings()
+      if (v) await syncSpaces(loadedTree, s)
       if (v && s.startup === 'last' && s.lastNotePath && findNode(loadedTree, s.lastNotePath)) {
         await openNote(s.lastNotePath)
       }
     })()
-  }, [loadTree, loadWorkspace, loadSettings, openNote])
+  }, [loadTree, loadWorkspace, loadSettings, openNote, syncSpaces])
 
   // Remember whichever note is open, regardless of the current startup
   // preference — so turning "Reopen last note" on later picks up naturally
@@ -190,11 +307,17 @@ export default function App(): React.JSX.Element {
     void window.api.setSettings({ lastNotePath: openPath })
   }, [openPath])
 
+  // A space's folder can be made, renamed or deleted outside the app, so the
+  // saved spaces re-sync whenever the tree does — not only at startup.
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+
   // external changes → refresh the tree (and the open note if it changed)
   useEffect(() => {
     return window.api.onVaultChanged(async ({ paths }) => {
       contentCache.current.clear() // note contents may have changed on disk
-      await loadTree()
+      const t = await loadTree()
+      await syncSpaces(t, settingsRef.current)
       const p = openPathRef.current
       if (p && paths.includes(p)) {
         if (dirtyRef.current && dirtyRef.current.path === p) return // don't clobber unsaved edits
@@ -207,7 +330,7 @@ export default function App(): React.JSX.Element {
         }
       }
     })
-  }, [loadTree])
+  }, [loadTree, syncSpaces])
 
   const pick = async (): Promise<void> => {
     const v = await window.api.pickVault()
@@ -215,9 +338,13 @@ export default function App(): React.JSX.Element {
       setVault(v)
       setOpenPath(null)
       setContent('')
-      await loadTree()
+      const t = await loadTree()
       await loadWorkspace()
-      await loadSettings() // a vault may carry its own saved appearance
+      const s = await loadSettings() // a vault may carry its own saved appearance
+      // The watcher only reports CHANGES from here on (ignoreInitial: true), so
+      // a vault's pre-existing top-level folders never self-announce as spaces
+      // otherwise — nothing would reconcile them until some later fs event.
+      await syncSpaces(t, s)
     }
   }
 
@@ -331,16 +458,21 @@ export default function App(): React.JSX.Element {
   // No naming prompt — a click should just create the thing. A collision
   // (another "Untitled") is resolved by main with a " (2)", " (3)"... suffix,
   // same convention restoreEntry already uses. Rename afterwards if wanted.
+  // "" means "the top of what I'm looking at", which is the active space's
+  // folder — not the vault root. Making a note in the Revision space must not
+  // drop it beside the spaces; that's the whole point of the hierarchy.
+  const inSpace = (dir: string): string => (dir === '' ? space.folder : dir)
+
   const newNote = (dir: string): Promise<void> =>
     run(async () => {
-      const rel = await window.api.createNote(dir)
+      const rel = await window.api.createNote(inSpace(dir))
       await loadTree()
       await openNote(rel)
     })
 
   const newFolder = (dir: string): Promise<void> =>
     run(async () => {
-      await window.api.createFolder(dir)
+      await window.api.createFolder(inSpace(dir))
       await loadTree()
     })
 
@@ -414,6 +546,10 @@ export default function App(): React.JSX.Element {
 
   // --- search ---------------------------------------------------------------
   // Every note in the vault, flattened and tagged with whether it's archived.
+  // Search covers what the sidebar covers: the active space, plus the loose
+  // notes shown alongside it. Searching the whole vault would hand back results
+  // the sidebar can't show and can't highlight — you'd open a note that appears
+  // to be in no folder at all.
   const allNotes = useMemo<SearchHit[]>(() => {
     const out: SearchHit[] = []
     const walk = (nodes: TreeNode[]): void => {
@@ -427,9 +563,10 @@ export default function App(): React.JSX.Element {
         } else if (n.children) walk(n.children)
       }
     }
-    walk(tree)
+    walk(spaceTree)
+    walk(looseNotes)
     return out
-  }, [tree, workspace])
+  }, [spaceTree, looseNotes, workspace])
 
   // Deep search reads every note's contents once (lazily, cached), then bumps a
   // version so the hit list recomputes. Titles are always searched instantly.
@@ -532,7 +669,12 @@ export default function App(): React.JSX.Element {
     <div className="flex h-full w-full">
       <Sidebar
         vaultName={baseName(vault)}
-        tree={tree}
+        tree={spaceTree}
+        looseNotes={looseNotes}
+        spaces={settings.spaces}
+        activeSpaceFolder={space.folder}
+        onSwitchSpace={(folder) => void changeSettings({ activeSpaceFolder: folder })}
+        spaceActions={spaceActions}
         workspace={workspace}
         openPath={openPath}
         settings={settings}
@@ -598,7 +740,17 @@ export default function App(): React.JSX.Element {
                 <span>{reading ? 'Edit' : 'Read'}</span>
               </button>
             </div>
-            {!reading && <FormatToolbar viewRef={editorViewRef} />}
+            {!reading && (
+              <FormatToolbar
+                viewRef={editorViewRef}
+                slots={space.toolbarSlots}
+                onSetSlot={(i, id) => {
+                  const next = [...space.toolbarSlots]
+                  next[i] = id
+                  void changeSettings(withSpacePatch(settings, space.folder, { toolbarSlots: next }))
+                }}
+              />
+            )}
             <div className="pane-body">
               <div className="edit-layer" style={{ display: reading ? 'none' : 'flex' }}>
                 <CodeEditor

@@ -3,17 +3,25 @@
 // place that touches the DOM (applying settings as data-* attributes and inline
 // accent variables on <html>); persistence goes through IPC (window.api).
 
-import type { AppSettings } from '../../../shared/settings'
+import { activeSpace, type AppSettings, type Space } from '../../../shared/settings'
 
-export type { AppSettings }
+export type { AppSettings, Space }
 
-export const THEMES: { id: AppSettings['theme']; label: string }[] = [
-  { id: 'dark', label: 'Dark' },
-  { id: 'light', label: 'Light' }
+export const THEMES: { id: Space['theme']; label: string; hint: string }[] = [
+  { id: 'dark', label: 'Dark', hint: 'Soft charcoal panels' },
+  { id: 'black', label: 'Extra dark', hint: 'Pitch black, for OLED' },
+  // NOT "paper" — page looks are their own feature later, and this is a plain
+  // white page, not a warm one
+  { id: 'light', label: 'Light', hint: 'Plain white' }
+]
+
+export const TEXT_TONES: { id: Space['textTone']; label: string; hint: string; swatch: string }[] = [
+  { id: 'grey', label: 'Light grey', hint: 'Softer on the eyes over a long session.', swatch: '#d6d6d6' },
+  { id: 'white', label: 'White', hint: 'Maximum contrast — pairs with Extra dark.', swatch: '#ffffff' }
 ]
 
 export const DENSITIES: {
-  id: AppSettings['density']
+  id: Space['density']
   label: string
   hint: string
   bar: { h: number; gap: number }
@@ -24,7 +32,7 @@ export const DENSITIES: {
   { id: 'ultra', label: 'Ultra compact', hint: 'Minimal spacing', bar: { h: 3, gap: 1 } }
 ]
 
-export const ACCENT_MODES: { id: AppSettings['accentMode']; label: string; hint: string }[] = [
+export const ACCENT_MODES: { id: Space['accentMode']; label: string; hint: string }[] = [
   { id: 'text', label: 'Text only', hint: 'Just the writing takes the colour.' },
   { id: 'tint', label: 'Tinted', hint: 'Surfaces and controls take it too.' }
 ]
@@ -51,39 +59,68 @@ export const ACCENTS: { id: string; label: string; hue: number | null }[] = [
 // [saturation, lightness] per token. The brand ramp carries the accent at full
 // strength (selection, active states); the ink ramp is only lightly tinted, so
 // body text stays comfortable. (Ported verbatim from legacy settings.js.)
-const RAMP: Record<'dark' | 'light', Record<string, [number, number]>> = {
-  dark: {
-    '--paper': [26, 3.5], '--surface': [20, 9], '--code-bg': [22, 6],
-    '--brand-50': [30, 8], '--brand-100': [28, 12], '--brand-200': [26, 17],
-    '--brand-300': [24, 30], '--brand-400': [30, 39], '--brand-500': [46, 56],
-    '--brand-600': [72, 73], '--brand-700': [80, 81],
-    '--ink-900': [13, 86], '--ink-800': [12, 80], '--ink-700': [11, 73],
-    '--ink-600': [10, 65], '--ink-500': [9, 56], '--ink-400': [9, 47], '--ink-300': [8, 39]
-  },
-  light: {
-    '--paper': [34, 97.5], '--surface': [30, 99.6], '--code-bg': [28, 95],
-    '--brand-50': [42, 95], '--brand-100': [40, 91], '--brand-200': [36, 85],
-    '--brand-300': [30, 70], '--brand-400': [38, 54], '--brand-500': [46, 42],
-    '--brand-600': [60, 25], '--brand-700': [66, 17],
-    '--ink-900': [16, 12], '--ink-800': [15, 18], '--ink-700': [13, 28],
-    '--ink-600': [12, 38], '--ink-500': [11, 47], '--ink-400': [10, 57], '--ink-300': [10, 66]
-  }
+type Ramp = Record<string, [number, number]>
+
+const DARK_RAMP: Ramp = {
+  '--paper': [26, 3.5], '--surface': [20, 9], '--code-bg': [22, 6],
+  '--brand-50': [30, 8], '--brand-100': [28, 12], '--brand-200': [26, 17],
+  '--brand-300': [24, 30], '--brand-400': [30, 39], '--brand-500': [46, 56],
+  '--brand-600': [72, 73], '--brand-700': [80, 81],
+  '--ink-900': [13, 86], '--ink-800': [12, 80], '--ink-700': [11, 73],
+  '--ink-600': [10, 65], '--ink-500': [9, 56], '--ink-400': [9, 47], '--ink-300': [8, 39]
 }
+
+const LIGHT_RAMP: Ramp = {
+  '--paper': [34, 97.5], '--surface': [30, 99.6], '--code-bg': [28, 95],
+  '--brand-50': [42, 95], '--brand-100': [40, 91], '--brand-200': [36, 85],
+  '--brand-300': [30, 70], '--brand-400': [38, 54], '--brand-500': [46, 42],
+  '--brand-600': [60, 25], '--brand-700': [66, 17],
+  '--ink-900': [16, 12], '--ink-800': [15, 18], '--ink-700': [13, 28],
+  '--ink-600': [12, 38], '--ink-500': [11, 47], '--ink-400': [10, 57], '--ink-300': [10, 66]
+}
+
+// Extra dark is dark with the surfaces taken to black — the same relationship
+// theme.css has, spelled as an override so the two can't drift. Without it a
+// tinted accent would lift the page back off black, which is the whole point of
+// the theme; the text end of the ramp is untouched.
+const BLACK_RAMP: Ramp = {
+  ...DARK_RAMP,
+  '--paper': [26, 0], '--surface': [20, 4], '--code-bg': [22, 5],
+  '--brand-50': [30, 5], '--brand-100': [28, 8], '--brand-200': [26, 12],
+  '--brand-300': [24, 23], '--brand-400': [30, 31]
+}
+
+const RAMP: Record<Space['theme'], Ramp> = { dark: DARK_RAMP, light: LIGHT_RAMP, black: BLACK_RAMP }
 
 // Text mode recolours only the ink ramp, and properly — this *is* the text
 // colour, so it carries real saturation. Surfaces/controls are left alone.
-const TEXT_RAMP: Record<'dark' | 'light', Record<string, [number, number]>> = {
-  dark: {
-    '--ink-900': [56, 82], '--ink-800': [52, 76], '--ink-700': [48, 70],
-    '--ink-600': [44, 62], '--ink-500': [40, 54], '--ink-400': [36, 46], '--ink-300': [32, 39]
-  },
+const DARK_TEXT_RAMP: Ramp = {
+  '--ink-900': [56, 82], '--ink-800': [52, 76], '--ink-700': [48, 70],
+  '--ink-600': [44, 62], '--ink-500': [40, 54], '--ink-400': [36, 46], '--ink-300': [32, 39]
+}
+
+const TEXT_RAMP: Record<Space['theme'], Ramp> = {
+  dark: DARK_TEXT_RAMP,
+  // the accent is a text colour, and text sits at the same brightness on both
+  // dark themes — only the surfaces under it changed
+  black: DARK_TEXT_RAMP,
   light: {
     '--ink-900': [62, 26], '--ink-800': [58, 31], '--ink-700': [52, 38],
     '--ink-600': [46, 45], '--ink-500': [40, 52], '--ink-400': [34, 60], '--ink-300': [30, 68]
   }
 }
 
-const ALL_KEYS = [...new Set([...Object.keys(RAMP.dark), ...Object.keys(TEXT_RAMP.dark)])]
+/** What the 'white' text tone adds to the accent's ink lightness. An accent
+ *  writes --ink-* inline, which beats theme.css's tone block outright, so the
+ *  tone has to be folded in here or picking an accent would silently cancel it.
+ *  Tapered down the ramp, matching the two ramps' gap in theme.css, so the
+ *  steps between heading / body / meta survive the lift. */
+const WHITE_LIFT: Record<string, number> = {
+  '--ink-900': 16, '--ink-800': 15, '--ink-700': 14, '--ink-600': 12,
+  '--ink-500': 10, '--ink-400': 8, '--ink-300': 6
+}
+
+const ALL_KEYS = [...new Set([...Object.keys(DARK_RAMP), ...Object.keys(DARK_TEXT_RAMP)])]
 
 /** HSL -> the bare "R G B" channels the CSS variables expect. */
 function channels(h: number, s: number, l: number): string {
@@ -99,25 +136,41 @@ function channels(h: number, s: number, l: number): string {
  *  switching mode can't leave stale variables behind. */
 function applyAccent(
   el: HTMLElement,
-  opts: { accent: string; mode: AppSettings['accentMode']; theme: AppSettings['theme']; active: boolean }
+  opts: {
+    accent: string
+    mode: Space['accentMode']
+    theme: Space['theme']
+    tone: Space['textTone']
+    active: boolean
+  }
 ): void {
   ALL_KEYS.forEach((k) => el.style.removeProperty(k))
   const hue = ACCENTS.find((a) => a.id === opts.accent)?.hue
   if (!opts.active || hue == null) return
   const ramp = opts.mode === 'text' ? TEXT_RAMP[opts.theme] : RAMP[opts.theme]
-  Object.entries(ramp).forEach(([k, [s, l]]) => el.style.setProperty(k, channels(hue, s, l)))
+  // the light theme has no white to give — see the tone block in theme.css
+  const lift = opts.tone === 'white' && opts.theme !== 'light'
+  Object.entries(ramp).forEach(([k, [s, l]]) =>
+    el.style.setProperty(k, channels(hue, s, Math.min(100, l + (lift ? (WHITE_LIFT[k] ?? 0) : 0))))
+  )
 }
 
-/** Apply the whole settings object to the document: theme + density as data-*
- *  attributes, accent as inline variables on <html>. */
+/** Apply the settings to the document: theme + density as data-* attributes,
+ *  accent as inline variables on <html>. Appearance lives on the ACTIVE space,
+ *  resolved here rather than by the caller — this is the only DOM writer and it
+ *  has two call sites, so resolving once keeps them from ever disagreeing. */
 export function applySettings(s: AppSettings): void {
   const root = document.documentElement
-  root.dataset.theme = s.theme
-  root.dataset.density = s.density
+  const a = activeSpace(s)
+  root.dataset.theme = a.theme
+  root.dataset.density = a.density
+  root.dataset.textTone = a.textTone
+  root.dataset.buttonDef = a.buttonDefinition ? 'on' : 'off'
   applyAccent(root, {
-    accent: s.accent,
-    mode: s.accentMode,
-    theme: s.theme,
-    active: s.accent !== 'default'
+    accent: a.accent,
+    mode: a.accentMode,
+    theme: a.theme,
+    tone: a.textTone,
+    active: a.accent !== 'default'
   })
 }

@@ -22,6 +22,7 @@ export const CH = {
   trashEntries: 'workspace:trash',
   restoreEntries: 'workspace:restore',
   purgeEntries: 'workspace:purge',
+  deleteSpace: 'workspace:deleteSpace',
   /** renderer -> main: in-app updates (electron-updater over the GitHub feed) */
   getUpdateState: 'update:get',
   checkForUpdate: 'update:check',
@@ -31,6 +32,8 @@ export const CH = {
   setBetaChannel: 'update:setBeta',
   openReleases: 'update:openReleases',
   getAppVersion: 'app:version',
+  /** renderer -> main: open the default mail app with a pre-filled bug report */
+  sendBugReport: 'app:sendBugReport',
   /** main -> renderer: update progress/state changed */
   updateStatus: 'update:status',
   /** main -> renderer: debounced external-change notification */

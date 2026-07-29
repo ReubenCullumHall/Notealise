@@ -4,6 +4,7 @@ import { saveVault } from './config'
 import { ensureMdnotes } from './mdnotes'
 import { getSettings, readThemeCacheSync, setSettings } from './settings'
 import {
+  deleteSpace,
   getWorkspace,
   migrateKey,
   purgeEntries,
@@ -24,6 +25,7 @@ import {
 } from './updater'
 import { getUpdatePrefs } from './config'
 import { startWatching } from './watcher'
+import { sendBugReport } from './support'
 import type { AppSettings } from '../shared/settings'
 import type { EntryMeta } from '../shared/workspace'
 import {
@@ -94,6 +96,7 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.trashEntries, (_e, paths: string[]) => trashEntries(paths))
   ipcMain.handle(CH.restoreEntries, (_e, ids: string[]) => restoreEntries(ids))
   ipcMain.handle(CH.purgeEntries, (_e, ids?: string[]) => purgeEntries(ids))
+  ipcMain.handle(CH.deleteSpace, (_e, folder: string) => deleteSpace(folder))
   ipcMain.handle(CH.getUpdateState, async () => ({
     version: app.getVersion(),
     status: currentStatus(),
@@ -105,6 +108,9 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.setBetaChannel, (_e, on: boolean) => setBetaChannel(on))
   ipcMain.on(CH.installUpdate, () => installNow())
   ipcMain.on(CH.openReleases, () => void openReleasesPage())
+  ipcMain.handle(CH.sendBugReport, (_e, fromEmail: string, message: string) =>
+    sendBugReport(fromEmail, message)
+  )
 
   // Synchronous: the preload bridge reads this before first paint. Re-register
   // cleanly so a re-created window never stacks duplicate listeners.

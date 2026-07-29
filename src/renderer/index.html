@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark" data-density="cozy">
+<html lang="en" data-theme="dark" data-density="cozy" data-text-tone="grey" data-button-def="off">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -13,8 +13,12 @@
         try {
           var c = window.mdnotesTheme || {}
           var root = document.documentElement
-          root.dataset.theme = c.theme === 'light' ? 'light' : 'dark'
+          // allow-list, not a pass-through: an unknown id would leave <html>
+          // with no matching ramp at all, painting an unstyled white flash.
+          root.dataset.theme = c.theme === 'light' || c.theme === 'black' ? c.theme : 'dark'
           root.dataset.density = c.density || 'cozy'
+          root.dataset.textTone = c.textTone === 'white' ? 'white' : 'grey'
+          root.dataset.buttonDef = c.buttonDefinition === true ? 'on' : 'off'
         } catch (e) {
           /* keep the static dark/cozy fallback */
         }

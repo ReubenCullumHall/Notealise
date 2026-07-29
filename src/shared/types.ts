@@ -71,6 +71,11 @@ export interface VaultApi {
   /** Permanently remove binned items — the only path that reaches the OS trash.
    *  Pass no ids to empty the bin entirely. */
   purgeEntries(ids?: string[]): Promise<Workspace>
+  /** Delete a space's folder straight to the OS trash — deliberately bypasses
+   *  the app's own bin (a space is a different level of the hierarchy from the
+   *  notes/folders trashed individually). Still recoverable, just from the
+   *  OS's own Recycle Bin/Trash rather than in-app. */
+  deleteSpace(folder: string): Promise<Workspace>
 
   // --- in-app updates -------------------------------------------------------
   /** This build's version, and the current update state + preference. */
@@ -89,6 +94,9 @@ export interface VaultApi {
   setBetaChannel(on: boolean): Promise<UpdateStatus>
   /** Open the GitHub releases page in the default browser. */
   openReleases(): void
+  /** Opens the user's default mail app with a bug report pre-addressed to the
+   *  support inbox. Returns false if no mail client could be opened. */
+  sendBugReport(fromEmail: string, message: string): Promise<boolean>
   /** Subscribe to update state changes; returns an unsubscribe function. */
   onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
 

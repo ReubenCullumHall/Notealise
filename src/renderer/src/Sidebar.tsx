@@ -1,11 +1,12 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
-import type { AppSettings } from '../../shared/settings'
+import { activeSpace, type AppSettings, type Space } from '../../shared/settings'
 import type { UpdateStatus } from '../../shared/update'
 import { UpdateBanner } from './update/UpdateBanner'
 import { ArchiveIcon, BinIcon, Icon } from './icons'
 import { SettingsButton } from './settings/Settings'
+import type { SpaceActions } from './settings/Spaces'
 import { SearchBar, SearchResults, type SearchHit } from './Search'
 import { TreeView, type Selection, type TreeActions } from './TreeView'
 import {
@@ -33,6 +34,13 @@ interface Props {
   openPath: string | null
   settings: AppSettings
   onChangeSettings: (partial: Partial<AppSettings>) => void
+  spaceActions: SpaceActions
+  /** every space, for the footer switcher */
+  spaces: Space[]
+  activeSpaceFolder: string
+  onSwitchSpace: (folder: string) => void
+  /** notes sitting at the vault root, outside every space */
+  looseNotes: TreeNode[]
 
   query: string
   onQuery: (q: string) => void
@@ -148,6 +156,11 @@ export function Sidebar({
   openPath,
   settings,
   onChangeSettings,
+  spaceActions,
+  spaces,
+  activeSpaceFolder,
+  onSwitchSpace,
+  looseNotes,
   query,
   onQuery,
   deep,
@@ -179,9 +192,13 @@ export function Sidebar({
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
   const [resizing, setResizing] = useState(false)
   const narrow = !collapsed && sidebarWidth <= SIDEBAR_NARROW
+  // Arranging belongs to the active space. Derived here rather than taken as a
+  // second prop: this component has to keep the whole `settings` object anyway
+  // to forward it to SettingsButton, and two props could disagree.
+  const space = activeSpace(settings)
   // Icon-only nav buttons: automatic once the sidebar's dragged narrow, or
-  // permanent if the user opted in under Settings -> Arranging.
-  const compactNav = narrow || settings.compactNav
+  // permanent if the user opted in under the space's Arranging settings.
+  const compactNav = narrow || space.compactNav
   const startResize = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault()
@@ -243,7 +260,7 @@ export function Sidebar({
   const commonTreeProps = {
     workspace,
     openPath,
-    freeArrange: settings.freeArrange,
+    freeArrange: space.freeArrange,
     selection,
     onSelectionChange: setSelection,
     dragging,
@@ -448,10 +465,24 @@ export function Sidebar({
               {mainTree.length > 0 && pinned.length > 0 && <p className={SECTION_HEAD}>Notes</p>}
               <TreeView {...commonTreeProps} nodes={mainTree} mode="tree" />
 
-              {mainTree.length === 0 && pinned.length === 0 && (
+              {mainTree.length === 0 && pinned.length === 0 && looseNotes.length === 0 && (
                 <p className="px-3 py-6 text-center text-sm text-ink-300">
                   {archivedNodes.length ? 'Everything is archived.' : 'No notes yet.'}
                 </p>
+              )}
+
+              {/* Notes sitting at the vault root once spaces exist. They are
+                  NOT moved into a space on the user's behalf (rule 1: the
+                  files are theirs) — they're shown here, in every space, so
+                  they can't get lost, and dragging one into a folder is the
+                  way out. */}
+              {looseNotes.length > 0 && (
+                <>
+                  <p className={SECTION_HEAD} title="Notes in your vault that aren't inside a space">
+                    Not in a space
+                  </p>
+                  <TreeView {...commonTreeProps} nodes={looseNotes} mode="tree" />
+                </>
               )}
             </>
           )}
@@ -465,14 +496,16 @@ export function Sidebar({
         {inBin && workspace.trash.length > 0 && (
           <button
             onClick={() => {
-              if (
-                window.confirm(
-                  `Permanently delete ${workspace.trash.length} item${workspace.trash.length === 1 ? '' : 's'}? They go to your computer's trash.`
-                )
-              ) {
-                actions.onPurge()
-                flipLid()
-              }
+              // No confirmation — the button itself only appears once you've
+              // deliberately switched to the bin view, and every item in it
+              // already went through its own delete confirmation on the way
+              // in. Still fully recoverable: this hands each item to the OS
+              // trash (shell.trashItem), never a hard unlink.
+              actions.onPurge()
+              flipLid()
+              // The bin is now empty — stay on it and there's nothing to
+              // look at. Go back to whichever space's notes you were in.
+              setView('notes')
             }}
             className="fade-in absolute inset-x-2 bottom-full z-30 mb-2 flex items-center justify-center gap-2 rounded-xl border border-brand-400/70 bg-surface px-3 py-3 text-[12px] font-semibold text-brand-600 outline-none ring-2 ring-brand-500/15 transition duration-200 hover:bg-brand-500/10 hover:ring-4 hover:ring-brand-500/25"
           >
@@ -504,9 +537,44 @@ export function Sidebar({
 
         <UpdateBanner status={update} canSelfUpdate={update.state !== 'unsupported'} />
 
+        {/* The space switcher, directly above "Switch folder": one row of
+            emoji, one per top-level folder. Deliberately a horizontal strip
+            *inside* the sidebar footer and not a vertical rail beside the tree
+            — the rail is the shape that was removed in 2026-07-25 (CLAUDE.md).
+            Hidden entirely when the vault has no spaces, so a flat vault shows
+            no dead control. */}
+        {/* A single unbound space means "the whole vault" — there is nothing to
+            switch between, so the strip would be one dead button. */}
+        {!(spaces.length === 1 && !spaces[0].folder) && (
+          <div className="mb-2 flex flex-wrap items-center justify-center gap-1">
+            {spaces.map((s, i) => {
+              const on = s.folder === activeSpaceFolder
+              return (
+                <button
+                  key={s.folder}
+                  onClick={() => onSwitchSpace(s.folder)}
+                  aria-pressed={on}
+                  title={s.folder}
+                  className={
+                    'flex h-8 w-8 items-center justify-center rounded-lg border text-[15px] leading-none outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+                    // btn-edge only on the inactive ones: the selected space
+                    // keeps its accent border, which is how you can see which
+                    // space you're in
+                    (on
+                      ? 'border-brand-400/60 bg-brand-500/15 text-brand-600'
+                      : 'btn-edge border-ink-300/25 bg-transparent text-ink-500 hover:bg-brand-500/10 hover:text-brand-600')
+                  }
+                >
+                  {s.emoji || <span className="text-[12px] font-semibold">{i + 1}</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         <button
           onClick={actions.onPickVault}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-ink-300/35 bg-surface/70 px-3 py-1.5 text-[13px] font-medium text-ink-700 outline-none transition duration-200 hover:border-brand-300 hover:bg-surface/70 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
+          className="btn-edge flex w-full items-center justify-center gap-2 rounded-lg border border-ink-300/35 bg-surface/70 px-3 py-1.5 text-[13px] font-medium text-ink-700 outline-none transition duration-200 hover:border-brand-300 hover:bg-surface/70 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
           title="Open a different folder as your vault"
         >
           <Icon name="folder" className="h-4 w-4" />
@@ -525,7 +593,7 @@ export function Sidebar({
           inset-x-3 (rather than a fixed width) is what lets them track the
           sidebar's width as it's resized. */}
       <div className="pointer-events-none absolute inset-x-3 bottom-3 z-40 flex items-end gap-2">
-        <SettingsButton settings={settings} onChange={onChangeSettings} />
+        <SettingsButton settings={settings} onChange={onChangeSettings} spaceActions={spaceActions} />
         <button
           onClick={() => {
             setView((v) => (v === 'bin' ? 'notes' : 'bin'))
@@ -551,7 +619,7 @@ export function Sidebar({
           title={inBin ? 'Back to your notes' : 'Bin — deleted notes wait here'}
           aria-pressed={inBin}
           className={
-            'pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
+            'btn-edge pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
             (inBin || dropZone === 'trash'
               ? 'bg-brand-500/15 text-brand-600'
               : 'bg-surface/90 text-ink-500')
@@ -587,7 +655,7 @@ export function Sidebar({
           title={inArchive ? 'Back to your notes' : 'Archived notes'}
           aria-pressed={inArchive}
           className={
-            'pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
+            'btn-edge pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
             (inArchive || dropZone === 'archive'
               ? 'bg-brand-500/15 text-brand-600'
               : 'bg-surface/90 text-ink-500')
@@ -607,7 +675,7 @@ export function Sidebar({
       <button
         onClick={() => setCollapsed(false)}
         title="Show sidebar"
-        className="fixed left-2 top-3 z-40 flex items-center justify-center rounded-lg border border-ink-300/30 bg-surface/90 p-1.5 text-ink-500 shadow-card backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
+        className="btn-edge fixed left-2 top-3 z-40 flex items-center justify-center rounded-lg border border-ink-300/30 bg-surface/90 p-1.5 text-ink-500 shadow-card backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
       >
         <Icon name="panelLeft" className="h-4 w-4" />
       </button>

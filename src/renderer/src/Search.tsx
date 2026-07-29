@@ -62,7 +62,7 @@ export function SearchBar({
 }: Props): React.JSX.Element {
   return (
     <div className="px-3 pb-2">
-      <div className="flex items-center gap-1.5 rounded-full border border-ink-300/30 bg-surface/70 py-1.5 pl-3 pr-1.5 focus-within:border-brand-300 focus-within:ring-4 focus-within:ring-brand-100">
+      <div className="btn-edge flex items-center gap-1.5 rounded-full border border-ink-300/30 bg-surface/70 py-1.5 pl-3 pr-1.5 focus-within:border-brand-300 focus-within:ring-4 focus-within:ring-brand-100">
         <span className="shrink-0 text-ink-300">
           <Icon name="search" className="h-4 w-4" />
         </span>

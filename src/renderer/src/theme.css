@@ -54,6 +54,10 @@
   --ink-300: 97 97 97;
   --wash: 255 255 255;
   --code-bg: 11 11 11;
+  /* Button definition (app.css) — the border colour buttons take when the
+     option is on. Read ONLY by that rule, so it never affects the default
+     look. Dark is already close: this is the same hairline a step lighter. */
+  --btn-edge: 122 122 122;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.6), 0 8px 24px -8px rgba(0, 0, 0, 0.8);
   --shadow-float: 0 2px 4px rgba(0, 0, 0, 0.6), 0 18px 40px -12px rgba(0, 0, 0, 0.9);
   color-scheme: dark;
@@ -73,6 +77,32 @@
   --hl-teal: hsl(178 44% 27%);   --tc-teal: hsl(178 60% 62%);
   --hl-sage: hsl(140 38% 27%);   --tc-sage: hsl(140 52% 64%);
   --hl-slate: hsl(218 20% 36%);  --tc-slate: hsl(218 26% 74%);
+}
+
+/* ---- extra dark ----------------------------------------------------------
+   A VARIANT of dark, not a third palette: `:root` in the rule above still
+   matches a [data-theme='black'] root, so anything not listed here — the ink
+   ramp, --wash, the hl/tc palette, the editor syntax tokens — inherits the dark
+   values, and adding a token to dark reaches this theme for free. Only the
+   surfaces move, all the way down to black for OLED panels and dark rooms.
+   --surface stays a hair above --paper deliberately: menus, popovers and the
+   settings window are drawn on it, and their shadows are black-on-black here,
+   so that 4% and the border are the only things separating them from the page. */
+:root[data-theme='black'] {
+  --paper: 0 0 0;
+  --surface: 10 10 10;
+  --brand-50: 12 12 12;
+  --brand-100: 19 19 19;
+  --brand-200: 28 28 28;
+  --brand-300: 58 58 58;
+  --brand-400: 78 78 78;
+  /* ink-300 carries every divider and border; a touch brighter than dark's,
+     because there is no surface contrast left to help them read. */
+  --ink-300: 108 108 108;
+  --code-bg: 13 13 13;
+  /* light grey, deliberately short of white: on a black page a white edge
+     draws the eye harder than the button it is outlining. */
+  --btn-edge: 152 152 152;
 }
 
 :root[data-theme='light'] {
@@ -95,6 +125,8 @@
   --ink-300: 163 163 160;
   --wash: 0 0 0;
   --code-bg: 241 241 239;
+  /* the one theme where MORE definition means DARKER, not lighter */
+  --btn-edge: 118 118 115;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 24px -10px rgba(0, 0, 0, 0.16);
   --shadow-float: 0 2px 4px rgba(0, 0, 0, 0.06), 0 18px 40px -14px rgba(0, 0, 0, 0.22);
   color-scheme: light;
@@ -112,6 +144,31 @@
   --hl-teal: hsl(178 62% 80%);   --tc-teal: hsl(178 66% 32%);
   --hl-sage: hsl(140 55% 83%);   --tc-sage: hsl(140 46% 36%);
   --hl-slate: hsl(218 30% 87%);  --tc-slate: hsl(218 18% 44%);
+}
+
+/* ---- text tone ------------------------------------------------------------
+   How bright text sits on a dark background. The default ('grey') is the ramp
+   above — #d6d6d6 at the top, which is easier to read for long stretches than
+   full white. 'white' takes it to 255 and lifts the rest of the ramp with it,
+   keeping the same steps between the levels so headings, body, meta and
+   placeholders stay distinguishable.
+
+   Scoped to the dark themes on purpose: white ink on light paper is unreadable,
+   so the light theme ignores the setting rather than offering a broken option
+   (the Settings control says so, instead of silently doing nothing).
+
+   NOTE: a Text-mode accent writes --ink-* INLINE on <html>, and inline styles
+   beat any selector here. settings/model.ts therefore folds the tone into the
+   accent ramp itself, so the two compose instead of one cancelling the other. */
+:root[data-theme='dark'][data-text-tone='white'],
+:root[data-theme='black'][data-text-tone='white'] {
+  --ink-900: 255 255 255;
+  --ink-800: 242 242 242;
+  --ink-700: 224 224 224;
+  --ink-600: 199 199 199;
+  --ink-500: 170 170 170;
+  --ink-400: 142 142 142;
+  --ink-300: 116 116 116;
 }
 
 /* ---- density ------------------------------------------------------------- */

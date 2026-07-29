@@ -24,6 +24,7 @@ const api: VaultApi = {
   trashEntries: (paths) => ipcRenderer.invoke(CH.trashEntries, paths),
   restoreEntries: (ids) => ipcRenderer.invoke(CH.restoreEntries, ids),
   purgeEntries: (ids) => ipcRenderer.invoke(CH.purgeEntries, ids),
+  deleteSpace: (folder) => ipcRenderer.invoke(CH.deleteSpace, folder),
   getUpdateState: () => ipcRenderer.invoke(CH.getUpdateState),
   checkForUpdate: () => ipcRenderer.invoke(CH.checkForUpdate),
   downloadUpdate: () => ipcRenderer.invoke(CH.downloadUpdate),
@@ -31,6 +32,7 @@ const api: VaultApi = {
   setAutoUpdate: (on) => ipcRenderer.invoke(CH.setAutoUpdate, on),
   setBetaChannel: (on) => ipcRenderer.invoke(CH.setBetaChannel, on),
   openReleases: () => ipcRenderer.send(CH.openReleases),
+  sendBugReport: (fromEmail, message) => ipcRenderer.invoke(CH.sendBugReport, fromEmail, message),
   onUpdateStatus: (cb) => {
     const listener = (_e: unknown, status: UpdateStatus): void => cb(status)
     ipcRenderer.on(CH.updateStatus, listener)
@@ -66,9 +68,10 @@ contextBridge.exposeInMainWorld('api', api)
 
 // Fetched synchronously (before the renderer's first paint) so index.html can set
 // [data-theme]/[data-density] on <html> immediately — no flash of the wrong theme.
-let themeCache: { theme: string; density: string } = { theme: 'dark', density: 'cozy' }
+type PaintCache = { theme: string; density: string; textTone: string; buttonDefinition: boolean }
+let themeCache: PaintCache = { theme: 'dark', density: 'cozy', textTone: 'grey', buttonDefinition: false }
 try {
-  const c = ipcRenderer.sendSync(CH.settingsCache) as { theme: string; density: string } | undefined
+  const c = ipcRenderer.sendSync(CH.settingsCache) as PaintCache | undefined
   if (c && typeof c === 'object') themeCache = c
 } catch {
   /* main handler not ready — dark default is already applied statically */

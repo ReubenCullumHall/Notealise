@@ -61,8 +61,8 @@ rule to match the code.
    What deliberately stays in `app.css` is what `legacy/src/index.css` also keeps out of Tailwind:
    the sidebar row metrics (`.tree-row` / `.tree-title` / `.tree-sub` own the density variables
    outright so they can't lose to a utility), `.prose-note`, the CodeMirror `.cm-*` DOM, and the
-   keyframes. Component-internal CSS for things legacy has no counterpart for (Spaces, the
-   settings modal) also stays as CSS — there is nothing to match it against.
+   keyframes. Component-internal CSS for things legacy has no counterpart for (the settings modal,
+   the Spaces tab strip) also stays as CSS — there is nothing to match it against.
 
 6. **The renderer never touches `fs` directly.** All disk access goes through Electron IPC to
    the main process (`src/main/vault.ts` is the only fs-touching code). The vault root is the
@@ -140,9 +140,10 @@ notes-app/
       updater.ts            the ONLY importer of electron-updater; dev + macOS guards, status push
       vault.ts              path boundary + all fs ops (list/read/atomic-write/create/rename/bin)
       workspace.ts          .mdnotes/workspace.json: order/pins/archive/bin (debounced, atomic)
-      settings.ts           .mdnotes/settings.json (appearance) + userData pre-paint mirror
+      settings.ts           .mdnotes/settings.json (spaces + globals) + userData pre-paint mirror
       watcher.ts            chokidar → debounced (100ms) change events, echo-guarded
       ipc.ts                ipcMain handlers + vault activation (starts the watcher)
+      support.ts            bug-report mailto: link (fixed destination is still a placeholder)
     preload/
       index.ts              contextBridge → window.api (typed VaultApi)
       index.d.ts            augments Window with `api`
@@ -157,6 +158,10 @@ notes-app/
         Sidebar.tsx         header/archive toggle, nav bar, pinned, archive & bin views, bottom strip
         TreeView.tsx        the row renderers: 2-line rows, multi-select, drag-reorder
         organise/model.ts   pure derivation: sorting, archive inheritance, pinned hoisting
+        settings/           Settings.tsx (genie window, nav, General/Formatting/Updates/ReportBug)
+                            Spaces.tsx (the 5 presets + everything per-space), Collection.tsx,
+                            primitives.tsx (SettingRow/Select/Switch/ToggleRow), model.ts (applySettings)
+        editor/             CM6 setup, format bar + its assignable slots (toolbarActions.tsx)
         update/             UpdateBanner: the quiet "update ready" strip in the sidebar footer
         theme.css           tokens (R G B ramps + density) + bundled @font-face; Tailwind reads them
         app.css             @tailwind directives + only what legacy keeps out of Tailwind (see rule 8)
@@ -186,9 +191,35 @@ npm --prefix ".\notes-app" run package:dir  # REAL packaged app, no installer ->
 `dev` opens a native **Electron window**, not a browser tab — there is no localhost URL.
 
 **Tests are `vitest`, and cover pure logic only** (`*.test.ts` beside the module): `colorModel`,
-`organise/model`, `shared/workspace`, `shared/settings`, `shared/update`, `main/filenames`. No React
-and no Electron — those need a different kind of harness and are not worth the weight yet. Adding
-any *other* dependency still needs asking.
+`editor/formatModel`, `editor/formatCommands`, `organise/model`, `shared/workspace`,
+`shared/settings`, `shared/update`, `main/filenames`. No React and no Electron — those need a
+different kind of harness and are not worth the weight yet. Adding any *other* dependency still
+needs asking.
+
+**A green suite is not evidence the feature works — a test can canonise the bug.** Worked example,
+2026-07-29: `formatModel.test.ts` carried `it('does nothing to an all-blank selection')`, asserting
+that `toggleMarker` left a blank line untouched. It passed. It had always passed. And it was the
+bug: with the cursor on an empty line — a new note, or straight after Enter, which is *precisely*
+when you reach for a list — every block command (lists, headings, quote) silently did nothing. The
+model was tested, the coverage was real, and the expectation was simply wrong. So: **when a test
+asserts that something does nothing, make it say why "nothing" is what the user wants.** If the
+answer is "because that's what the code does", it is not a test, it's a transcript. The same test
+file now spells the reasoning out in both directions — a blank line *beside text* is a paragraph
+gap and stays untouched; a selection that is *entirely* blank is the target.
+
+The corollary for the pure-logic suite generally: it proves the model, and the model is often not
+where the user's problem is. Nothing in it can see that an accent's inline `--ink-*` cancels a CSS
+theme rule, that a dev-server HMR left the main process on old code, or that a button's click
+handler never reaches the command. Those need the live app (see **Gotchas**).
+
+`formatCommands.test.ts` is the one that looks like an exception and isn't: **CodeMirror's
+`EditorState` is pure — only `EditorView` needs a DOM** — so the commands run against a real state
+via a stub view exposing just `state` / `dispatch` / `focus`. That covers the selection arithmetic
+(where an off-by-one leaves the cursor inside a marker) with no jsdom. It relies on
+`formatCommands.ts` importing `EditorView` as a **type only**; make it a value import and the test
+file pulls in the DOM build and dies. Run these with `npm test` from `notes-app/` — a bare
+`npx --prefix … vitest` resolves a different copy and fails on import with a bogus
+`Cannot read properties of undefined (reading 'config')`.
 
 ## Shipping a release ("push that update to Vercel")
 
@@ -265,11 +296,93 @@ a strip appears above "Switch folder", and it applies on quit. Settings → Upda
 an auto-update toggle, and a manual check; there's also File → Check for Updates…. See
 **Shipping a release** above for the tag ritual and the macOS caveat.
 
-**Spaces — removed (2026-07-25), do not reintroduce.** Top-level folders were briefly hoisted out
-of the tree into an Arc-style rail. That is *precisely* what stopped the app matching the legacy
-reference: the folders localhost shows as tree rows were the ones Spaces took out of the tree. The
-rail, `spaces.json` and `renderer/src/spaces/` are gone; folders are ordinary tree rows again. A
-stale `spaces.json` in an old vault is inert and can be ignored.
+**Spaces (rebuilt 2026-07-29) — read this before "removing Spaces" again.** Spaces are **the layer
+of the hierarchy between the vault and the sidebar**:
+
+```
+<vault>/          the folder picked at onboarding
+  Revision/       a SPACE — a top-level folder
+    Physics/      an ordinary folder, a row in the sidebar
+      waves.md
+  Journal/        another space
+```
+
+**The folders on disk ARE the spaces** (rule 1). `settings.json` only decorates them — emoji, theme,
+accent, density, arranging, the four format-bar buttons — so a maths-revision space can carry the
+formula shortcut while a journal space doesn't. Make a folder in Explorer and it becomes a space;
+delete one there and it stops being one (`reconcileSpaces`, run on every tree load). Switching space
+re-scopes the sidebar to that folder's subtree, and **new notes and folders land inside the active
+space, not at the vault root** (`inSpace()` in `App.tsx`). Cap is **7**, so the switcher stays a
+glanceable row. The switcher itself is a horizontal strip in the sidebar footer, above "Switch
+folder".
+
+**History, and what is actually banned.** An earlier version (removed 2026-07-25) hoisted top-level
+folders into an **Arc-style vertical rail beside the tree**. That was pulled because the surrounding
+pieces — organise, pins, the bin, the theme system — didn't exist yet, so it read as chrome that
+broke the sidebar's match with `legacy/` for no gain. It was rebuilt on 2026-07-29 once those
+landed, by the user's explicit decision. **The banned thing is the rail, not the hierarchy**: legacy
+governs how *rows look*, not how many levels the vault has — `legacy/` is a browser app with no
+vault and no spaces, so it has nothing to say about this layer. Don't "restore" top-level folders to
+the tree; they're spaces, and showing them as rows too would double them up.
+
+The old `renderer/src/spaces/` and its `spaces.json` are gone and are *not* read — a stale
+`spaces.json` in an old vault stays inert, and this feature deliberately does not reuse that
+filename (its shape was a map keyed by folder name, which a lax loader would misread).
+
+*The model* (`shared/settings.ts`): `AppSettings = { spaces: Space[], activeSpaceFolder, …globals }`.
+Per-space: `folder` (the identity **and** the display name), emoji, theme, textTone,
+buttonDefinition, density, accent, accentMode, freeArrange, compactNav, toolbarSlots, and the inert
+`pageLook`/`font`/`tint`.
+**Global on purpose:** startup, `lastNotePath`, dateFormat, numberFormat, timezone — `lastNotePath`
+especially, because it's written on *every* note open, and nesting it would make each one rewrite
+the whole spaces array. Things to know before editing it:
+
+- **A vault always settles on at least one REAL, folder-backed space** (2026-07-29, reversing
+  earlier guidance here that said the opposite — read this before "fixing" it back). `spaces` can be
+  momentarily empty inside `reconcileSpaces`'s own arithmetic, and `AppSettings.spaces` can hold a
+  lone *unbound* placeholder (`folder: ''`, standing for "the whole vault") for one reconcile pass —
+  but `App.tsx`'s `syncSpaces` auto-creates a folder (the same "New folder" convention as everywhere
+  else) and binds it the moment reconcile would otherwise leave zero bound spaces. This runs on every
+  tree load, so it covers a brand-new/flat vault, switching to one, and deleting your last space back
+  down to none — one mechanism, not three. `withNewSpace` already special-cases "the only space is
+  the unbound placeholder" by *rebinding* it rather than appending, so the created folder inherits
+  whatever theme/density the placeholder was carrying rather than resetting to defaults. The reason
+  this matters: a hidden switcher with no real space meant every new note/folder silently landed at
+  the vault root ("Not in a space") — this is a bug fix, not a preference.
+- **`pick()` ("Switch folder") must call `syncSpaces` too**, not just the boot `useEffect` — the file
+  watcher is started with `ignoreInitial: true` (`main/watcher.ts`), so an existing vault's
+  pre-existing top-level folders never self-announce as spaces; nothing reconciles them otherwise
+  until some later fs event happens to fire.
+- **Notes loose at the vault root are never moved.** They render in a "Not in a space" group, in
+  every space. Moving a user's files to tidy the hierarchy is exactly what rule 1 forbids.
+- **Migration is inside `normalizeSettings`, not a separate pass.** A flat pre-Spaces file *is* a
+  valid raw space (the keys have the same names at top level), so `[wholeRawFile]` goes through the
+  same `normalizeSpace` the new shape does. One code path, so the two can't drift. It is idempotent,
+  and that's tested — the test that catches a migration which re-migrates its own output.
+- **A space with `folder: ''` is "unbound", and that's load-bearing.** `reconcileSpaces` binds
+  unbound spaces to unclaimed folders in order, which is what (a) carries a migrated pre-Spaces
+  user's theme and density onto their first real folder instead of resetting it, and (b) keeps a
+  space's look when its folder is renamed *outside* the app.
+- **Create / rename are real fs operations** going through the existing `createFolder` /
+  `renameEntry` IPC. Settings is only updated with the path **main actually used**, because names
+  get sanitised and de-duplicated.
+- **Deleting a space goes straight to the OS trash** (`main/vault.ts:trashEntryToOS`, IPC
+  `deleteSpace`) — deliberately **not** `trashEntries`, the app's own recoverable bin. A space is a
+  different level of the hierarchy from the notes and folders trashed individually inside one;
+  putting a deleted space in the same bin list as an individually-trashed note conflated the two.
+  Still recoverable, just from the OS's own Recycle Bin/Trash rather than in-app — the two-step
+  "click again to delete" button is the confirmation, and is trusted as sufficient on its own.
+- **The pre-paint cache mirrors the ACTIVE space**, flat, and holds exactly **the values
+  `renderer/index.html` writes onto `<html>` before React exists** — now `{theme, density, textTone,
+  buttonDefinition}`. That rule is the whole reason it's a separate shape from `AppSettings`: adding
+  a *paint* value means adding a key here (plus the mapping in `index.html` and the type in
+  `preload/index.ts`); adding any other setting must not. Old cache files still work — every key is
+  independently defaulted. It has its own validator (`normalizeThemeCache`) — running it through
+  `normalizeSettings` reads keys that don't exist there and silently paints the default theme on
+  every launch.
+- **Edits go through the pure helpers** `withSpacePatch` / `withNewSpace` / `withoutSpace`, which
+  return a `Partial<AppSettings>` for the existing `setSettings`. No `setSpace` IPC channel — main
+  stays unaware that spaces exist beyond resolving the active one for the cache.
 
 **Organise (built).** Pins, archive, a recoverable bin, custom drag-reorder, multi-select and
 Organize mode — ported from the legacy Sidebar. State lives in `<vault>/.mdnotes/workspace.json`
@@ -278,18 +391,41 @@ at schedule time, key re-mapping on rename). **Archive is a flag; the `.md` file
 a folder carries its subtree by inheritance. **The bin is real:** deleting moves the entry to
 `<vault>/.mdnotes/trash/<id>-<name>` and records it in `workspace.trash`; Restore puts it back
 (collision-suffixed if the name was retaken), and **"Empty recycle bin" is the only path that
-reaches the OS trash**. `.mdnotes/` is already skipped by the tree walk and the watcher, so binned
-entries leave the tree for free. Still pending:
+reaches the OS trash**. This one flat folder holds everything regardless of which space (if any) an
+item came from — the random `id` prefix is what lets same-named notes from different spaces sit in
+the bin at once — and `TrashItem.from` remembers the item's original space-qualified path, so
+Restore recreates that folder if it's gone (which then reappears as an ordinary new space on the
+next reconcile, per the Spaces section above — self-healing, not orphaned). Emptying the bin has no
+confirmation prompt: the bin view itself is one click away, and every item in it already passed its
+own delete confirmation on the way in. `.mdnotes/` is already skipped by the tree walk and the
+watcher, so binned entries leave the tree for free. Still pending:
 
 - **`.mdnotes/` config (partial).** Holds `settings.json` (appearance) and `workspace.json`
   (organisation). Window state and per-note placement still move in later.
-- **Theme/token system — done.** `theme.css` holds the `R G B` ramps (dark default + light via
-  `[data-theme]`), density vars (`[data-density]`, legacy's values verbatim, including
+- **Theme/token system — done.** `theme.css` holds the `R G B` ramps (dark default + light and
+  **black ("Extra dark")** via `[data-theme]`), density vars (`[data-density]`, legacy's values verbatim, including
   `--row-sub` / `--row-sub-display`), and bundled `@font-face`; Tailwind and the editor read only
   tokens. Appearance is set in the Settings panel (gear in the sidebar header), persisted to
-  `<vault>/.mdnotes/settings.json` (source of truth) with a theme/density mirror in userData for
+  `<vault>/.mdnotes/settings.json` (source of truth) with a paint-value mirror in userData for
   pre-paint. Accent generator ported from `legacy/src/settings.js` into
   `src/renderer/src/settings/model.ts`.
+  Three appearance knobs past legacy's theme+density, all per-space, all `data-*` on `<html>`:
+  - **`black` — "Extra dark"** is a *variant* of dark, not a third palette. `:root` in the dark rule
+    still matches a `[data-theme='black']` root, so its block overrides only the surfaces
+    (`--surface`, the low `--brand-*`, `--code-bg`) and everything else — the ink ramp, `--wash`,
+    the `hl`/`tc` palette, `--ed-*` — inherits. Add a token to dark and black gets it for free.
+    `--surface` stays a hair above `--paper` on purpose: shadows are invisible black-on-black, so
+    that 4% and the border are all that separate a popover from the page.
+  - **`textTone` (`data-text-tone`)** — grey (the long-standing ramp) or white, on the dark themes
+    only; the light theme has no white to give, and its buttons say so rather than no-op silently.
+    A **Text-mode accent writes `--ink-*` inline, which beats any selector**, so `model.ts` folds
+    the tone into the accent ramp (`WHITE_LIFT`) rather than letting one silently cancel the other.
+  - **`buttonDefinition` (`data-button-def`)** — opt-in stronger button edges, every theme, painted
+    from `--btn-edge` (per theme: lighter on dark, light grey on black, darker on light). Buttons
+    **opt in** — `.btn-edge`, or by class name for the settings window's own controls — because a
+    blanket `button` rule outranks `hover:border-*` and would kill every hover state, and would
+    repaint the accent borders that mark active states. It only strengthens edges that already
+    exist: `border-none` buttons (the Note / Folder nav) are deliberately left alone.
 - **Visual match to legacy — chrome and structure done.** Sidebar chrome, search pill, two-line
   tree rows (`TreeNode.preview` is filled from the head of each file in `vault.ts`), nav bar,
   Pinned/Notes headers, archive and bin views, editor header, format bar, reading column and empty
@@ -300,11 +436,45 @@ entries leave the tree for free. Still pending:
   says "Local notes" / "Saved in this browser", which are its storage-mode strings, not a mismatch.
 - **Settings (partial).** The **shell is now legacy's genie window** — centred 720×600, faded
   `bg-paper/50 backdrop-blur-[5px]` backdrop, left section nav, scrollable content pane, and the
-  scale-from-the-gear animation (`.genie` in `app.css`, ported verbatim). Two of legacy's four
-  sections exist: **Appearance** (theme, accent, accent mode, density) and **Updates**.
-  **General** (startup) and **Formatting** (date/number/timezone, `legacy/src/intl.js`) are absent
-  rather than empty — they arrive with the settings behind them. Accent *scope*, and persisting
-  `freeArrange` / `archiveSort` (both exist in code, neither is saved), are also still to come.
+  scale-from-the-gear animation (`.genie` in `app.css`, ported verbatim). The nav is **General**
+  (startup) · **Spaces** · **Formatting** (date/number/timezone, `legacy/src/intl.js`) · **Your
+  collection** · **Updates** · **Report a bug** (a `mailto:` link opened by main,
+  `src/main/support.ts` — no account or API key needed, but the destination address is a
+  placeholder pending branding/support-inbox decisions).
+  **Legacy's Appearance and Arranging sections no longer exist at the top level** — they belong to
+  a space and live inside collapsible sections on the Spaces page, along with Shortcuts. Don't
+  "restore" them to the nav; per-space is the point.
+  **Your collection** is a shell: three empty states for page looks / fonts / tints, the future
+  features whose `pageLook` / `font` / `tint` fields a `Space` already persists (so they land
+  without a second migration). It invents **no** storage format — no `collection.json` — on purpose.
+  **"Paper", "page look", "font" and "tint" are reserved words in this UI** — they name those
+  planned features, so no other control may borrow them. The Light theme's card was briefly
+  subtitled "Warm paper"; it is neither (`--paper` is `247 247 246`, a neutral white) and it stole a
+  term the collection needs. Describe what the tokens actually are — "Plain white" — and don't coin
+  product vocabulary that collides with the roadmap.
+  Accent *scope*, and persisting `archiveSort` (Sidebar-local state, lost on relaunch), are still
+  to come.
+- **Custom format-bar buttons (built).** Two programmable slots sit each side of the built-in
+  B/I/U/S + colour group. A slot has **two modes and no overlap**: empty, it shows a "?" and opens
+  the picker; programmed, it is an ordinary format button and clicking runs the command. Changing an
+  assigned one is **Settings → Spaces → Shortcuts** only (all four against a preview of the bar,
+  with "Clear this button" per slot). The old right-click-to-reprogram gesture was **removed
+  2026-07-29** — it made a live command button double as its own settings control, on a gesture
+  nothing else in the app uses; don't reinstate it.
+  **They belong to the active space**, so the bar's own picker writes to whichever space you're in.
+  Persisted as `toolbarSlots` on a Space — four ids from `editor/toolbarActions.tsx`, with
+  `''` for empty. **Those ids are a file format:** rename one and every vault using it silently
+  empties that slot. Unknown ids read as empty rather than throwing, the same loose validation
+  `accent` gets, because the catalogue is renderer-side and `shared/settings.ts` can't see it.
+  The **LaTeX/formula button was removed from the permanent group** (2026-07-29) — not every user
+  writes maths — and is now one of the assignable actions. `Ctrl/Cmd+Shift+L` still inserts one
+  regardless of whether any slot holds it.
+  **Block commands must act on an empty line** (`toggleMarker`, `formatModel.ts`). Blank lines are
+  skipped only when there is other text in the selection, where they are paragraph gaps; a selection
+  that is entirely blank IS the target. Skipping it unconditionally — the original behaviour, fixed
+  2026-07-29 — meant every list, heading and quote button did nothing at all on a new note or right
+  after Enter, which is the single most common moment to press one. The bug was invisible from the
+  bar: the button was wired correctly and the command ran, it just declined to change anything.
 - **Remaining editor live-preview** (lists beyond the bullet, tables, images) — new decoration
   passes in `livePreview.ts` (see `docs/decorations.md`). Fenced code blocks and multi-line `$$`
   math are done as of 2026-07-28.
@@ -315,6 +485,22 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
 ## Gotchas (append as you learn)
 
 - Node is not on a fresh shell's PATH — prepend `C:\Program Files\nodejs`.
+- **`npm run dev` hot-reloads the RENDERER ONLY. A change under `shared/` or `main/` or `preload/`
+  needs the app restarted, and the failure is silent, not loud.** Observed 2026-07-29: after editing
+  `shared/settings.ts` + `main/settings.ts` + `preload/index.ts`, the dev server logged fourteen
+  renderer HMR updates and **never re-logged "electron main process built successfully"** — so main
+  was still running the *previous* bundle. That matters because `shared/settings.ts` is compiled into
+  all three: main's stale `normalizeSettings` would have rejected the new `theme: 'black'` as
+  out-of-range and written `'dark'` back, so picking the new theme would flick on and snap straight
+  back, with nothing in any log to say why. The renderer looking correct is not evidence main agrees.
+  **After touching `shared/`, restart the dev app before believing anything you see** (kill it, relaunch
+  — the fresh boot re-logs both "main process built" and "preload scripts built"; check for both).
+- **The working directory persists across Bash *and* PowerShell tool calls, including a `cd` from a
+  different tool.** A `cd .../notes-app/legacy` in one call left `npm --prefix ".\notes-app" run dev`
+  resolving to `notes-app/legacy/notes-app/package.json` (ENOENT, exit 38). The relative `--prefix`
+  in the Commands section above assumes cwd is the projects root. **In an agent session, pass an
+  absolute `--prefix`.**
+
 - **`position: fixed` does not escape the sidebar.** The `<aside>` carries `backdrop-blur`, and
   **`backdrop-filter` makes an element a containing block for fixed-position descendants** — so a
   `fixed inset-0` overlay rendered anywhere inside it is pinned to the 288px sidebar, not the
@@ -351,3 +537,61 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
   (double-click; uses `cmd`+`npm.cmd`, so no PowerShell exec-policy error, no admin) or
   `npm run dev:legacy` / `build:legacy` + `serve:legacy` (Vite on localhost:5173). See
   `legacy/README.md`.
+
+### The theme layer's precedence chain (read before adding an appearance setting)
+
+Colour is written in three places that override each other in a fixed order, and getting this wrong
+produces a control that silently does nothing — the worst kind of bug here, because it typechecks,
+it tests green, and it looks implemented:
+
+**`[data-theme]` block  <  `[data-text-tone]` block  <  inline `--ink-*` from the accent.**
+
+- Inline always wins. `settings/model.ts` writes the accent ramp with `el.style.setProperty`, so any
+  token the accent touches CANNOT be overridden by a stylesheet rule, however specific. This is why
+  `textTone` is folded into the accent ramp (`WHITE_LIFT`) instead of living only in `theme.css`:
+  without that, "white text" worked until you picked an accent, then quietly stopped.
+- Anything you add that the accent also writes has the same problem. Check `ALL_KEYS` first.
+- `--btn-edge` is deliberately *outside* the accent — a tinted accent leaves button edges neutral.
+  Accepted, not overlooked: `RAMP`'s ink tint is 8% saturation, invisible on a hairline border.
+- The aliases (`--ed-muted: rgb(var(--ink-500))`) track the tone only because **every one of these
+  blocks targets `:root`**. A custom property's `var()` is substituted at computed-value time *on the
+  element that declares it*, so `--ed-muted` computes on `:root` from whichever `--ink-500` won the
+  cascade there, and inherits down already resolved. The consequence to remember: override an ink
+  token on a **descendant** and the `--ed-*` aliases will NOT follow it. Keep ramp overrides on
+  `:root`.
+
+### Tailwind utilities vs. a global attribute-scoped rule
+
+An `:root[data-x] …` rule in `app.css` outranks a Tailwind utility (0,2,1 vs 0,1,0) — **including
+the `hover:` / `focus:` variants**, which are only 0,2,0. A blanket `:root[data-button-def='on']
+button { border-color: … }` therefore repaints every button's hover and focus state too, killing the
+feedback. Two rules follow, both learned the hard way on that feature:
+
+1. **Guard state variants explicitly**: `:not(:hover):not(:focus-visible):not(:focus-within)`. The
+   `:focus-within` one is not optional — the search pill's `focus-within:border-brand-300` is how it
+   shows focus, and it was already broken before that `:not()` went in.
+2. **`.on` is an app.css convention, not an app-wide one.** Components styled in `app.css`
+   (`.theme-card`, `.mode-btn`, `.space-tab`) mark "active" with a literal `on` class, so a
+   `:not(.on)` guard covers them. Components styled with Tailwind express active as a *different
+   set of utilities* — the sidebar's space switcher uses `border-brand-400/60` with no `on` class at
+   all, so `:not(.on)` sails straight past it and the accent border marking which space you are in
+   gets repainted. **Tailwind components must opt out in JS**, by only adding the marker class on the
+   inactive branch. Prefer opt-in markers (`.btn-edge`) over matching elements globally.
+
+Also note Tailwind's ring utilities are box-shadow, not border: firm up a `ring-1` control by setting
+**`--tw-ring-color`**, which is why the button-definition rule sets both properties.
+
+### Where the last few bugs actually lived (pattern, not history)
+
+Four features shipped on 2026-07-29; the defects in them clustered in three places, none of which a
+typecheck or the pure-logic suite can see. Check these before declaring an appearance or editor
+feature done:
+
+1. **A control that writes state nothing reads** — or that something later overrides. Trace the value
+   from the click to the pixel: settings → IPC → `normalizeSettings` (does main's copy know the new
+   value?) → `applySettings` → the CSS that consumes it → what else writes that same token.
+2. **A command that runs and declines to act.** `toggleMarker` on a blank line was wired perfectly and
+   did nothing. "The handler fired" is not "the feature works" — exercise it in the state a user is
+   actually in (empty note, empty line, no selection), not the state that makes the code path obvious.
+3. **A stale process.** See the dev-server gotcha above. If behaviour contradicts the source you just
+   read, suspect the running bundle before you suspect the logic.

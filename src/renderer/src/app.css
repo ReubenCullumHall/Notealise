@@ -104,6 +104,28 @@ button.icon:hover {
   color: rgb(var(--ink-800));
 }
 
+/* --- button definition (Settings -> Spaces -> Appearance) ------------------
+   An opt-in stronger edge on the buttons and controls that carry a hairline
+   border. OFF is the default and this rule simply doesn't match, so the app
+   looks exactly as it always did. ON, they take --btn-edge, which each theme
+   sets to a value that stands off ITS OWN background (theme.css): a step
+   lighter on dark, light grey on Extra dark, a darker grey on light.
+
+   Buttons opt IN — via `.btn-edge` on the chrome, or by name for the settings
+   window's own controls — rather than this matching `button` globally. A
+   blanket rule would repaint the accent-coloured active states too, and,
+   because it outranks a `hover:border-*` utility, would kill the hover colour
+   on every button in the app. The :not()s are that same guard for the named
+   controls: an `.on` card keeps its accent border, and a hovered, focused or
+   disabled control keeps whatever it already shows. */
+:root[data-button-def='on']
+  :is(.btn-edge, .mini, .theme-card, .mode-btn, .density-row, .space-tab, .space-add):not(.on):not(:hover):not(:focus-visible):not(:focus-within):not(:disabled) {
+  border-color: rgb(var(--btn-edge) / 0.7);
+  /* the Tailwind v3 ring utilities read this, so `ring-1 ring-ink-300/20`
+     controls (ToggleRow, the Spaces disclosures) firm up with the rest */
+  --tw-ring-color: rgb(var(--btn-edge) / 0.55);
+}
+
 /* --- animation (legacy/src/index.css) --- */
 .spring {
   transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -724,6 +746,24 @@ button.icon:hover {
 }
 .theme-card .preview .main {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 7px;
+}
+/* faux text on the page half — the only thing that tells Dark and Extra dark
+   apart at this size, since both pages are pure black */
+.theme-card .preview .line {
+  height: 3px;
+  border-radius: 2px;
+  opacity: 0.5;
+}
+.theme-card .sub-row {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: rgb(var(--ink-400));
 }
 .theme-card .label-row {
   display: flex;
@@ -870,4 +910,70 @@ button.icon:hover {
   width: 13px;
   height: 13px;
   vertical-align: -2px;
+}
+
+/* Settings -> Spaces: the preset strip. A segmented control with an active pill
+   is fiddly in pure utilities, and legacy has no counterpart to copy a class
+   string from (rule 8's "component-internal CSS" case), so it lives here — in
+   the same colour vocabulary as .mode-btn and .density-row directly above. */
+.space-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.space-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 38px;
+  max-width: 170px;
+  padding: 7px 11px;
+  border-radius: 11px;
+  border: 1px solid rgb(var(--wash) / 0.12);
+  background: transparent;
+  cursor: pointer;
+  color: rgb(var(--ink-500));
+}
+.space-tab:hover {
+  background: rgb(var(--brand-500) / 0.08);
+  color: rgb(var(--brand-600));
+}
+.space-tab.on {
+  background: rgb(var(--brand-500) / 0.12);
+  border-color: rgb(var(--brand-400) / 0.6);
+  color: rgb(var(--brand-600));
+}
+.space-tab .em {
+  font-size: 15px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.space-tab .nm {
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.space-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  border: 1px dashed rgb(var(--wash) / 0.2);
+  background: transparent;
+  cursor: pointer;
+  color: rgb(var(--ink-400));
+}
+.space-add:hover:not(:disabled) {
+  background: rgb(var(--brand-500) / 0.08);
+  color: rgb(var(--brand-600));
+  border-style: solid;
+}
+.space-add:disabled {
+  opacity: 0.35;
+  cursor: default;
 }

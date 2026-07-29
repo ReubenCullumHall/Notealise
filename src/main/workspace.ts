@@ -1,7 +1,14 @@
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { getVaultRoot, purgeTrashItem, renameWithRetry, restoreEntry, trashEntry } from './vault'
+import {
+  getVaultRoot,
+  purgeTrashItem,
+  renameWithRetry,
+  restoreEntry,
+  trashEntry,
+  trashEntryToOS
+} from './vault'
 import {
   EMPTY_WORKSPACE,
   isSelfOrDescendant,
@@ -233,6 +240,25 @@ export async function purgeEntries(ids?: string[]): Promise<Workspace> {
     await purgeTrashItem(item.id, item.name)
   }
   const next = { entries: ws.entries, trash: kept }
+  latest = next
+  await flushNow()
+  return next
+}
+
+/** Delete a space's folder straight to the OS trash — deliberately NEVER
+ *  through the app's own bin (see `trashEntryToOS`). Still clears any pin /
+ *  archive / collapse flags recorded for the subtree, the same cleanup
+ *  `trashEntries` does, since those entries would otherwise be dead weight
+ *  in workspace.json referencing a path that no longer exists. */
+export async function deleteSpace(folder: string): Promise<Workspace> {
+  await flushNow()
+  const ws = await ensureLoaded()
+  await trashEntryToOS(folder) // throws on failure — caller surfaces it
+  const entries = { ...ws.entries }
+  for (const key of Object.keys(entries)) {
+    if (isSelfOrDescendant(key, folder)) delete entries[key]
+  }
+  const next = { entries, trash: ws.trash }
   latest = next
   await flushNow()
   return next

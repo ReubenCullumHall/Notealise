@@ -8,6 +8,39 @@ enough for a solo project). History before this file existed lives in the `v*` g
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-29
+- Add an Extra dark theme: pitch black everywhere, for OLED screens and dark rooms. Sits beside Dark
+  and Light in Settings -> Spaces -> Theme, and like the rest of a space's look it can differ per
+  space
+- Add a text colour setting beneath the theme cards — light grey (the default, easier over a long
+  session) or white (maximum contrast, pairs with Extra dark). Applies to the dark themes; the light
+  theme always uses dark ink
+- Add Settings -> Spaces -> Appearance -> Button definition: outlines every button, toggle and picker
+  a step further off the background — lighter on Dark, light grey on Extra dark, a darker grey on
+  Light. Off by default, and buttons drawn without an edge in the first place are left as they are
+- Fix list, heading and quote buttons doing nothing when the cursor sat on an empty line — a new
+  note, or straight after pressing Enter, which is exactly when you reach for one
+- Add four customisable buttons to the format bar, two each side of B/I/U/S — empty ones show a "?"
+  that opens a picker on click; once a button has a command, clicking runs it and you change it in
+  Settings -> Spaces -> Shortcuts. 13 commands to choose from: Heading 1/2/3,
+  bulleted/numbered/checklist, quote, inline code, code block, LaTeX formula, link, table and divider
+- Add Settings -> Shortcuts: set all four buttons against a preview of the bar, or clear them all
+- Remove the LaTeX formula (ƒx) button from the format bar's permanent group — not everyone writes
+  maths, and it's now one of the commands you can put on a custom button. Ctrl/Cmd+Shift+L still
+  inserts a formula either way
+- Add Spaces: up to 7 named, emoji-tagged presets, each a real top-level vault folder with its own
+  theme, accent, density, sidebar arranging and format-bar buttons (e.g. a maths-revision space can
+  carry the formula shortcut while a journal space doesn't). Switch between them from a row above
+  "Switch folder" in the sidebar, or from Settings -> Spaces, which also creates, renames (renames
+  the folder on disk) and deletes them (straight to your computer's Recycle Bin, not this app's own
+  bin — a space is a different thing from a single trashed note). A vault always keeps at least one
+  space: a brand-new or emptied-out vault gets one made for it automatically, so notes never end up
+  stuck outside every space
+- Add Settings -> Your collection: a shell for the page-look, font and tint library the Spaces page's
+  "Explore library" buttons will open into, once those features land
+- Emptying the bin no longer asks for confirmation — one click and it's gone, since the bin view
+  itself is a deliberate stop and everything in it already passed its own delete confirmation
+
 ## [0.4.0] - 2026-07-28
 - Add collapsible + resizable sidebar (panel-left toggle to hide/show; drag the right edge to
   resize between 200-480px; nav button labels drop to icon-only below ~220px)

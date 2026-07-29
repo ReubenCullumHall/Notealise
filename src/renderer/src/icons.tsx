@@ -27,6 +27,19 @@ export type IconName =
   | 'sort'
   | 'sun'
   | 'panelLeft'
+  | 'flag'
+  | 'spaces'
+  | 'library'
+  // format-bar actions (assignable to the custom slots)
+  | 'listBullet'
+  | 'listNumber'
+  | 'listCheck'
+  | 'quote'
+  | 'code'
+  | 'codeBlock'
+  | 'link'
+  | 'rule'
+  | 'table'
 
 // Each entry is the inner SVG for a 24×24 viewBox. Stroke icons inherit the
 // wrapper's stroke; filled marks set their own fill and clear the stroke.
@@ -144,6 +157,82 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     <>
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <path d="M9 3v18" />
+    </>
+  ),
+  flag: (
+    <>
+      <path d="M5 21V4" />
+      <path d="M5 4h13l-3 4 3 4H5" />
+    </>
+  ),
+  listBullet: (
+    <>
+      <path d="M9 6h11M9 12h11M9 18h11" />
+      <g fill="currentColor" stroke="none">
+        <circle cx="4.5" cy="6" r="1.4" />
+        <circle cx="4.5" cy="12" r="1.4" />
+        <circle cx="4.5" cy="18" r="1.4" />
+      </g>
+    </>
+  ),
+  // The numerals are drawn as strokes rather than <text>, so they scale with the
+  // icon and never pick up the app font's metrics.
+  listNumber: (
+    <>
+      <path d="M10 6h10M10 12h10M10 18h10" />
+      <path d="M3.6 4.6l1.3-.6V8" />
+      <path d="M3.3 10.6a1.4 1.4 0 1 1 2.2 1.7L3.3 14.6h2.4" />
+      <path d="M3.4 16.4h2.3l-1.4 1.6a1.3 1.3 0 1 1-1 2" />
+    </>
+  ),
+  listCheck: (
+    <>
+      <path d="M10 6h10M10 12h10M10 18h10" />
+      <path d="M3 6.2l1.4 1.4L7 5" />
+      <path d="M3 12.2l1.4 1.4L7 11" />
+      <path d="M3 18.2l1.4 1.4L7 17" />
+    </>
+  ),
+  quote: (
+    <>
+      <path d="M4 5v14" strokeWidth={2.4} />
+      <path d="M9 8h11M9 12h11M9 16h7" />
+    </>
+  ),
+  code: <path d="M9 7l-5 5 5 5M15 7l5 5-5 5" />,
+  codeBlock: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9.5 9.5L7 12l2.5 2.5M14.5 9.5L17 12l-2.5 2.5" />
+    </>
+  ),
+  link: (
+    <>
+      <path d="M10.5 13.5a4 4 0 0 0 5.7 0l2.6-2.6a4 4 0 1 0-5.7-5.7l-1.3 1.3" />
+      <path d="M13.5 10.5a4 4 0 0 0-5.7 0l-2.6 2.6a4 4 0 1 0 5.7 5.7l1.3-1.3" />
+    </>
+  ),
+  // A set of equal presets — deliberately NOT a vertical rail, which is the
+  // shape of the removed spaces feature (see CLAUDE.md).
+  spaces: (
+    <>
+      <rect x="3" y="3" width="8" height="8" rx="2" />
+      <rect x="13" y="3" width="8" height="8" rx="2" />
+      <rect x="3" y="13" width="8" height="8" rx="2" />
+      <rect x="13" y="13" width="8" height="8" rx="2" />
+    </>
+  ),
+  library: (
+    <>
+      <path d="M4 4h4v16H4zM10 4h4v16h-4z" />
+      <path d="M16.5 5.2l3.3.9-3.6 13.4-3.3-.9" />
+    </>
+  ),
+  rule: <path d="M3 12h18" />,
+  table: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 10h18M12 10v9" />
     </>
   )
 }

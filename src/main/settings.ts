@@ -2,7 +2,14 @@ import { app } from 'electron'
 import { promises as fs, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { getVaultRoot } from './vault'
-import { type AppSettings, DEFAULT_SETTINGS, normalizeSettings } from '../shared/settings'
+import {
+  activeSpace,
+  type AppSettings,
+  normalizeSettings,
+  normalizeThemeCache,
+  settingsFromThemeCache,
+  type ThemeCache
+} from '../shared/settings'
 
 // Settings persistence. The source of truth is <vault>/.mdnotes/settings.json
 // (rule 2: app config lives in the vault; rule 6: only main touches fs). A tiny
@@ -30,7 +37,7 @@ export async function getSettings(): Promise<AppSettings> {
       /* no settings file yet — fall through to cache/defaults */
     }
   }
-  return { ...DEFAULT_SETTINGS, ...readThemeCacheSync() }
+  return settingsFromThemeCache(readThemeCacheSync())
 }
 
 // Serialise writes: each setSettings does read-modify-write, so overlapping
@@ -56,13 +63,19 @@ async function applyWrite(partial: Partial<AppSettings>): Promise<AppSettings> {
     await fs.mkdir(path.dirname(p), { recursive: true })
     await fs.writeFile(p, JSON.stringify(next, null, 2), 'utf8')
   }
-  await writeThemeCache({ theme: next.theme, density: next.density })
+  // The cache mirrors the ACTIVE space — that's what the user will see next
+  // launch. Note this also means switching space refreshes the cache for free,
+  // because a switch is a setSettings({activeSpaceFolder}) that lands here: don't
+  // "optimise" this to fire only when the theme changed, or relaunching after a
+  // switch paints the previous space's colours.
+  const a = activeSpace(next)
+  await writeThemeCache({
+    theme: a.theme,
+    density: a.density,
+    textTone: a.textTone,
+    buttonDefinition: a.buttonDefinition
+  })
   return next
-}
-
-interface ThemeCache {
-  theme: AppSettings['theme']
-  density: AppSettings['density']
 }
 
 /** Synchronous read of the pre-paint cache — called from the preload bridge
@@ -71,10 +84,13 @@ export function readThemeCacheSync(): ThemeCache {
   try {
     let raw = readFileSync(themeCachePath(), 'utf8')
     if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1)
-    const n = normalizeSettings(JSON.parse(raw))
-    return { theme: n.theme, density: n.density }
+    // Its own validator, NOT normalizeSettings — the cache is a flat
+    // {theme, density}, not an AppSettings, and running it through the settings
+    // normaliser would read two keys that no longer exist there and silently
+    // paint the default theme on every launch.
+    return normalizeThemeCache(JSON.parse(raw))
   } catch {
-    return { theme: DEFAULT_SETTINGS.theme, density: DEFAULT_SETTINGS.density }
+    return normalizeThemeCache(null)
   }
 }
 

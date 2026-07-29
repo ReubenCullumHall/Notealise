@@ -403,3 +403,17 @@ export async function purgeTrashItem(id: string, name: string): Promise<void> {
     // the caller still drops the record, so the bin doesn't keep a dead row.
   }
 }
+
+/** Send a LIVE entry straight to the OS trash, bypassing `.mdnotes/trash`
+ *  entirely. Used only for deleting a space: a space is a different level of
+ *  the hierarchy from the notes and folders inside it, and putting a deleted
+ *  space in the same bin as an individual trashed note conflates the two. The
+ *  two-step "click again to delete" button is the confirmation; this is still
+ *  recoverable, just from the OS's own Recycle Bin/Trash rather than in-app. */
+export async function trashEntryToOS(relPath: string): Promise<void> {
+  const abs = resolveInVault(relPath)
+  if (path.relative(requireVault(), abs) === '') throw new Error('Cannot delete the vault root')
+  markWrite(abs)
+  const { shell } = await import('electron')
+  await shell.trashItem(abs)
+}

@@ -1,6 +1,8 @@
 import { EditorSelection } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
-import { mathInsert, wrapRange } from './formatModel'
+// Type-only: nothing here calls an EditorView static, and keeping it a type
+// import means the commands can be exercised against a plain EditorState.
+import type { EditorView } from '@codemirror/view'
+import { mathInsert, toggleMarker, wrapRange, type MarkerKind } from './formatModel'
 
 // Toolbar/keymap formatting. Bold/italic/strikethrough are plain Markdown;
 // underline has no Markdown syntax so it uses inline HTML (<u>), the same as
@@ -35,4 +37,108 @@ export function insertMath(view: EditorView): void {
     selection: inner ? { anchor: from + 2, head: from + 2 + inner.length } : { anchor: from + 2 }
   })
   view.focus()
+}
+
+export const inlineCode = (view: EditorView): void => toggleWrap(view, '`')
+
+// --- block-level commands ------------------------------------------------------
+// Headings, lists and quotes rewrite whole lines rather than wrapping a range, so
+// they work off the primary selection's line span (a toolbar click has one
+// selection; multi-cursor line edits would overlap each other's changes).
+
+/** Toggle a heading / list / quote marker across the selected lines. */
+export function toggleBlock(view: EditorView, kind: MarkerKind): void {
+  const { state } = view
+  const { from, to } = state.selection.main
+  const first = state.doc.lineAt(from)
+  const last = state.doc.lineAt(to)
+  const lines: string[] = []
+  for (let n = first.number; n <= last.number; n++) lines.push(state.doc.line(n).text)
+
+  const next = toggleMarker(lines, kind)
+  const insert = next.join(state.lineBreak)
+  // The cursor should stay put relative to the text it was in, so it moves by
+  // however much its own line's marker grew or shrank.
+  const delta = next[0].length - lines[0].length
+  view.dispatch({
+    changes: { from: first.from, to: last.to, insert },
+    selection:
+      from === to
+        ? { anchor: Math.max(first.from, Math.min(from + delta, first.from + next[0].length)) }
+        : { anchor: first.from, head: first.from + insert.length }
+  })
+  view.focus()
+}
+
+const HEADING_KIND: Record<1 | 2 | 3, MarkerKind> = { 1: 'h1', 2: 'h2', 3: 'h3' }
+export const heading =
+  (level: 1 | 2 | 3) =>
+  (view: EditorView): void =>
+    toggleBlock(view, HEADING_KIND[level])
+export const bulletList = (view: EditorView): void => toggleBlock(view, 'bullet')
+export const numberedList = (view: EditorView): void => toggleBlock(view, 'numbered')
+export const checklist = (view: EditorView): void => toggleBlock(view, 'checklist')
+export const quote = (view: EditorView): void => toggleBlock(view, 'quote')
+
+/** Replace the selection with `text`, guaranteeing it starts on its own line and
+ *  is followed by one. `select` is a substring of `text` to leave selected (so
+ *  typing replaces the placeholder); otherwise the cursor lands at its end. */
+function insertBlock(view: EditorView, text: string, select?: string): void {
+  const { state } = view
+  const { from, to } = state.selection.main
+  const line = state.doc.lineAt(from)
+  const lead = from > line.from ? state.lineBreak : '' // mid-line: break out of it first
+  const trail = to < state.doc.lineAt(to).to ? state.lineBreak : ''
+  const insert = lead + text + trail
+  const base = from + lead.length
+  const at = select ? text.indexOf(select) : -1
+  const selection =
+    select && at !== -1
+      ? { anchor: base + at, head: base + at + select.length }
+      : { anchor: base + text.length }
+  view.dispatch({ changes: { from, to, insert }, selection })
+  view.focus()
+}
+
+/** A fenced code block. A selection becomes its contents; otherwise the cursor
+ *  lands on the empty line between the fences. */
+export function codeBlock(view: EditorView): void {
+  const { from, to } = view.state.selection.main
+  const inner = view.state.doc.sliceString(from, to)
+  const br = view.state.lineBreak
+  if (inner) insertBlock(view, '```' + br + inner + br + '```', inner)
+  else {
+    const line = view.state.doc.lineAt(from)
+    const lead = from > line.from ? br : ''
+    view.dispatch({
+      changes: { from, to, insert: lead + '```' + br + br + '```' },
+      selection: { anchor: from + lead.length + 4 }
+    })
+    view.focus()
+  }
+}
+
+/** `[text](url)` — a selection becomes the label and the cursor lands on the
+ *  URL, which is the half you still have to fill in. */
+export function link(view: EditorView): void {
+  const { from, to } = view.state.selection.main
+  const inner = view.state.doc.sliceString(from, to)
+  const label = inner || 'text'
+  const insert = `[${label}](url)`
+  const urlAt = from + label.length + 3
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: inner
+      ? { anchor: urlAt, head: urlAt + 3 }
+      : { anchor: from + 1, head: from + 1 + label.length }
+  })
+  view.focus()
+}
+
+export const horizontalRule = (view: EditorView): void => insertBlock(view, '---')
+
+/** A 2-column GFM starter table, with the first header cell selected. */
+export function table(view: EditorView): void {
+  const br = view.state.lineBreak
+  insertBlock(view, ['| Column | Column |', '| --- | --- |', '|  |  |'].join(br), 'Column')
 }
