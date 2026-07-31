@@ -1,4 +1,3 @@
-export const supportsFS = "showDirectoryPicker" in window;
 export const LS_KEY = "vault.notes.v1";
 
 export const uid = () =>
@@ -39,56 +38,32 @@ export function saveLocalNotes(notes) {
   localStorage.setItem(LS_KEY, JSON.stringify(notes));
 }
 
-/* ---- IndexedDB: remember the opened folder handle across reloads ---- */
-export const idb = {
-  db: null,
-  open() {
-    if (this.db) return Promise.resolve(this.db);
-    return new Promise((res, rej) => {
-      const r = indexedDB.open("vault-meta", 1);
-      r.onupgradeneeded = () => r.result.createObjectStore("kv");
-      r.onsuccess = () => { this.db = r.result; res(this.db); };
-      r.onerror = () => rej(r.error);
-    });
-  },
-  async set(k, v) {
-    const db = await this.open();
-    return new Promise((res, rej) => {
-      const tx = db.transaction("kv", "readwrite");
-      tx.objectStore("kv").put(v, k);
-      tx.oncomplete = res;
-      tx.onerror = () => rej(tx.error);
-    });
-  },
-  async get(k) {
-    const db = await this.open();
-    return new Promise((res, rej) => {
-      const tx = db.transaction("kv", "readonly");
-      const rq = tx.objectStore("kv").get(k);
-      rq.onsuccess = () => res(rq.result);
-      rq.onerror = () => rej(rq.error);
-    });
-  },
-};
+/* ---- real .md files, served by the vite.config.js dev-server middleware ----
+   Node fs on the server side, plain fetch on the client — no browser file
+   API involved, so behaviour doesn't depend on OS or browser. Falls back to
+   the localStorage vault above when VAULT_DIR isn't configured (404). */
+const VAULT_API = "/api/vault";
 
-/* ---- read every .md file in a directory handle ---- */
-export async function readFolder(dirHandle) {
-  const notes = [];
-  for await (const [name, handle] of dirHandle.entries()) {
-    if (handle.kind === "file" && name.toLowerCase().endsWith(".md")) {
-      const file = await handle.getFile();
-      notes.push({ id: name, name, content: await file.text(), handle, modified: file.lastModified });
-    }
-  }
+export async function fetchVault() {
+  const res = await fetch(VAULT_API);
+  if (!res.ok) throw new Error("no vault configured");
+  const { name, notes } = await res.json();
   notes.sort((a, b) => b.modified - a.modified);
-  return notes;
+  return { name, notes: notes.map((n) => ({ id: n.name, ...n })) };
 }
 
-export async function verifyPermission(handle) {
-  const opts = { mode: "readwrite" };
-  if ((await handle.queryPermission(opts)) === "granted") return true;
-  if ((await handle.requestPermission(opts)) === "granted") return true;
-  return false;
+export async function writeVaultNote(name, content) {
+  const res = await fetch(`${VAULT_API}/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "text/plain" },
+    body: content,
+  });
+  if (!res.ok) throw new Error("save failed");
+}
+
+export async function deleteVaultNote(name) {
+  const res = await fetch(`${VAULT_API}/${encodeURIComponent(name)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("delete failed");
 }
 
 /* ---- organization sidecar: folders + per-note placement ----

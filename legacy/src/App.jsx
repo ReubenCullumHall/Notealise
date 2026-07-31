@@ -3,8 +3,8 @@ import LiveEditor from "./LiveEditor.jsx";
 import { renderMarkdown } from "./markdown.js";
 import { makeTree, MAX_FOLDER_DEPTH } from "./tree.js";
 import {
-  supportsFS, uid, noteTitle, loadLocalNotes, saveLocalNotes,
-  idb, readFolder, verifyPermission, loadOrg, saveOrg, applyOrg, loadBinMeta, saveBinMeta,
+  uid, noteTitle, loadLocalNotes, saveLocalNotes,
+  fetchVault, writeVaultNote, deleteVaultNote, loadOrg, saveOrg, applyOrg, loadBinMeta, saveBinMeta,
 } from "./storage.js";
 import {
   THEMES, DENSITIES, ACCENTS, ACCENT_MODES, ACCENT_SCOPES, SECTIONS, ARCHIVE_SORTS, STARTUPS,
@@ -160,7 +160,7 @@ function Sidebar({
   onSelect, onNewNote, onNewFolder, onNewNoteIn, onNewFolderIn,
   onBin, onRestoreFromBin, onPurge, onEmptyBin, binNudge, onDismissNudge,
   onTogglePin, onTogglePinFolder, onArchive, onArchiveFolders,
-  onToggleFolder, onRenameFolder, onMoveItems, onOpenFolder,
+  onToggleFolder, onRenameFolder, onMoveItems,
   archiveSort, onArchiveSort, freeArrange, compactNav, accent, accentMode, accentScope, theme,
 }) {
   const asideRef = useRef(null);
@@ -1000,15 +1000,10 @@ function Sidebar({
             <span>{drag ? "Drop here to bin" : `Move ${selCount} to bin`}</span>
           </div>
         )}
-        <button onClick={onOpenFolder} disabled={!supportsFS}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-ink-300/35 bg-surface/70 px-3 py-1.5 text-[13px] font-medium text-ink-700 outline-none transition duration-200 hover:border-brand-300 hover:text-brand-600 disabled:opacity-40 focus-visible:ring-4 focus-visible:ring-brand-100">
-          {I.folder}
-          {backend === "folder" ? "Switch folder" : "Open a folder"}
-        </button>
         <p className="mt-1.5 text-center text-[11px] leading-tight text-ink-300">
           {backend === "folder"
             ? "Editing real .md files on disk"
-            : supportsFS ? "Saved in this browser · open a folder for real files" : "This browser can’t open folders — try Chrome or Edge"}
+            : "Saved in this browser · set VAULT_DIR in legacy/.env for real files"}
         </p>
       </div>
 
@@ -1791,7 +1786,6 @@ const FIXTURE = new URLSearchParams(location.search).has("fixture");
 
 export default function App() {
   const [backend, setBackend] = useState("local");
-  const [dirHandle, setDirHandle] = useState(null);
   const [vaultName, setVaultName] = useState("Local notes");
   const [notes, setNotes] = useState(() => applyOrg(loadLocalNotes(), loadOrg().meta));
   const [folders, setFolders] = useState(() => loadOrg().folders.map((f) => ({ parentId: null, pinned: false, archived: false, deleted: false, ...f })));
@@ -1836,12 +1830,10 @@ export default function App() {
   const getWikiTargets = useCallback(() => targetsRef.current, []);
 
   useEffect(() => {
-    if (!supportsFS) return;
     (async () => {
       try {
-        const saved = await idb.get("dirHandle");
-        if (saved && (await verifyPermission(saved))) await loadFolder(saved);
-      } catch { /* stay on local vault */ }
+        await loadVault();
+      } catch { /* VAULT_DIR not configured — stay on the local browser vault */ }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1866,23 +1858,14 @@ export default function App() {
   }, [settings.theme, settings.accent]);
   const changeSetting = (key, value) => setSettings((p) => ({ ...p, [key]: value }));
 
-  const loadFolder = async (handle) => {
-    const loaded = await readFolder(handle);
+  const loadVault = async () => {
+    const { name, notes: loaded } = await fetchVault();
     const org = loadOrg();
-    setDirHandle(handle);
-    setVaultName(handle.name);
+    setVaultName(name);
     setBackend("folder");
     setFolders(org.folders.map((f) => ({ parentId: null, pinned: false, archived: false, ...f })));
     setNotes(applyOrg(loaded, org.meta));
     setActiveId(loaded[0] ? loaded[0].id : null);
-    await idb.set("dirHandle", handle);
-  };
-
-  const openFolder = async () => {
-    try {
-      const handle = await window.showDirectoryPicker({ mode: "readwrite" });
-      if (await verifyPermission(handle)) await loadFolder(handle);
-    } catch { /* cancelled */ }
   };
 
   const persistToDisk = useCallback((note) => {
@@ -1890,16 +1873,11 @@ export default function App() {
     setStatus("Saving…");
     saveTimers.current[note.id] = setTimeout(async () => {
       try {
-        let handle = note.handle;
-        if (!handle) handle = await dirHandle.getFileHandle(note.name, { create: true });
-        const w = await handle.createWritable();
-        await w.write(note.content);
-        await w.close();
-        if (!note.handle) setNotes((p) => p.map((n) => (n.id === note.id ? { ...n, handle } : n)));
+        await writeVaultNote(note.name, note.content);
         setStatus("Saved");
       } catch { setStatus("Save failed"); }
     }, 500);
-  }, [dirHandle]);
+  }, []);
 
   const updateContent = (content) => {
     if (!active) return;
@@ -1928,10 +1906,9 @@ export default function App() {
     if (name === active.name) return;
     if (backend === "folder") {
       try {
-        const nh = await dirHandle.getFileHandle(name, { create: true });
-        const w = await nh.createWritable(); await w.write(active.content); await w.close();
-        if (active.handle) await dirHandle.removeEntry(active.name).catch(() => {});
-        setNotes((p) => p.map((n) => (n.id === active.id ? { ...n, name, id: name, handle: nh } : n)));
+        await writeVaultNote(name, active.content);
+        await deleteVaultNote(active.name).catch(() => {});
+        setNotes((p) => p.map((n) => (n.id === active.id ? { ...n, name, id: name } : n)));
         setActiveId(name);
       } catch { setStatus("Rename failed"); }
     } else {
@@ -2017,7 +1994,7 @@ export default function App() {
 
     if (backend === "folder") {
       for (const n of doomedNotes) {
-        if (n.handle) { try { await dirHandle.removeEntry(n.name); } catch { /* already gone */ } }
+        await deleteVaultNote(n.name).catch(() => { /* already gone */ });
       }
     }
     const doomedNoteIds = new Set(doomedNotes.map((n) => n.id));
@@ -2150,7 +2127,7 @@ export default function App() {
         binNudge={binNudge} onDismissNudge={() => setBinNudge(false)}
         onTogglePin={togglePin} onTogglePinFolder={togglePinFolder} onArchive={archiveNotes} onArchiveFolders={archiveFolders}
         onToggleFolder={toggleFolder} onRenameFolder={renameFolder}
-        onMoveItems={moveItems} onOpenFolder={openFolder}
+        onMoveItems={moveItems}
         archiveSort={settings.archiveSort} onArchiveSort={(v) => changeSetting("archiveSort", v)}
         freeArrange={settings.freeArrange} compactNav={settings.compactNav}
         accent={settings.accent} accentMode={settings.accentMode}
