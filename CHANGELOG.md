@@ -7,6 +7,34 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Add tabs: open several notes at once as a strip across the top of the editor. Ctrl/Cmd+click a
+  note in the sidebar (or a search result) to open it in a tab of its own; a plain click still
+  replaces what's open, as before. Ctrl+Tab / Ctrl+Shift+Tab cycle through them, Ctrl/Cmd+1-9 jump
+  straight to one, Ctrl/Cmd+W closes one, and tabs can be dragged along the strip to reorder
+- Add split screen: up to three columns side by side, each with its own title, format bar, word
+  count and cursor. Open one with the split icon at the end of a column's row, with Ctrl/Cmd+\, or
+  by dragging a tab onto a column's left or right edge — dropping a tab on the middle of a column
+  instead replaces what that column is showing
+- Rearrange a split by dragging a column by its own row: onto another column's edge to move it
+  there, onto the middle to swap the two. Nothing opens or closes, and the tab strip is unaffected
+- Add a "+" button at the end of the tab strip, and an empty column from the split icon: both say
+  "Select a note" until you pick one — from the sidebar, from the tabs, or by making a new note.
+  An empty column you never fill closes itself as soon as you go elsewhere
+- Add "Reopen your tabs" (Settings -> General -> Startup, now on by default, replacing "Reopen last
+  note"): the notes you had open and the way they were split come back the next time you launch,
+  and each vault remembers its own. Notes renamed or deleted while the app was closed are quietly
+  dropped rather than reopened as dead tabs
+- Selecting notes for dragging, archiving or binning is now the six-dot handle on the row — click
+  it, and Ctrl/Cmd+click more handles for a set. Ctrl/Cmd+click on the row itself opens the note in
+  a new tab instead, so the modifier means one thing everywhere
+- Remove the Edit/Read toggle: the editor already renders as you type and shows the raw Markdown
+  only on the line you're editing, so a separate reading mode was a second way to look at the same
+  thing
+- The note's name, the format bar, the word count and the split icon now share one row per column,
+  and the tab strip is always on screen — nothing appears or disappears as you open notes and split
+  the screen, so the text never shifts under you
+- Close Window is now Shift+Ctrl/Cmd+W, because Ctrl/Cmd+W closes the current tab, as it does in
+  every other tabbed editor
 
 ## [0.5.0] - 2026-07-29
 - Add an Extra dark theme: pitch black everywhere, for OLED screens and dark rooms. Sits beside Dark

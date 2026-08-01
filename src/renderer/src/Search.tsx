@@ -106,7 +106,8 @@ export function SearchBar({
 interface ResultsProps {
   hits: SearchHit[]
   activePath: string | null
-  onOpen: (hit: SearchHit) => void
+  /** `newTab` — Cmd/Ctrl+click, same gesture as the tree rows */
+  onOpen: (hit: SearchHit, newTab?: boolean) => void
   deep: boolean
   archivedCount: number
 }
@@ -146,9 +147,9 @@ export function SearchResults({
               : 'hover:bg-surface/70')
           }
           style={{ paddingLeft: 'var(--row-pad0)' }}
-          onClick={() => onOpen(h)}
+          onClick={(e) => onOpen(h, e.metaKey || e.ctrlKey)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') onOpen(h)
+            if (e.key === 'Enter') onOpen(h, e.metaKey || e.ctrlKey)
           }}
           title={h.path}
         >

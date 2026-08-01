@@ -308,6 +308,19 @@ button.icon:hover {
   -webkit-box-decoration-break: clone;
 }
 
+/* --- tab strip ---
+   Only the scrollbar: everything else about a tab is Tailwind on the component
+   (rule 8). Many open notes must stay one scrollable row rather than wrapping
+   into a second one, which would push the editor down every few notes. */
+.tab-strip,
+.toolbar-scroll {
+  scrollbar-width: none;
+}
+.tab-strip::-webkit-scrollbar,
+.toolbar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* --- reading view (Edit/Read) --- */
 .pane-body {
   flex: 1;

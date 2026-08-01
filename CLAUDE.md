@@ -154,9 +154,13 @@ notes-app/
       channels.ts           IPC channel names
     renderer/
       index.html            renderer entry
-      src/                  React UI: App (editor pane) + Sidebar (the whole aside)
+      src/                  React UI: App (tabs + panes) + Sidebar (the whole aside)
         Sidebar.tsx         header/archive toggle, nav bar, pinned, archive & bin views, bottom strip
         TreeView.tsx        the row renderers: 2-line rows, multi-select, drag-reorder
+        tabs/               open notes as tabs + the 1–3 side-by-side panes
+                            model.ts (pure layout arithmetic), TabStrip.tsx, NotePane.tsx
+        dev/browserApi.ts   DEV ONLY: a localStorage stand-in for window.api so the real
+                            renderer also runs at localhost:5173 in a browser (see rule 8)
         organise/model.ts   pure derivation: sorting, archive inheritance, pinned hoisting
         settings/           Settings.tsx (genie window, nav, General/Formatting/Updates/ReportBug)
                             Spaces.tsx (the 5 presets + everything per-space), Collection.tsx,
@@ -188,10 +192,15 @@ npm --prefix ".\notes-app" run test       # vitest, pure modules only
 npm --prefix ".\notes-app" run package:dir  # REAL packaged app, no installer -> release/win-unpacked/
 ```
 
-`dev` opens a native **Electron window**, not a browser tab — there is no localhost URL.
+`dev` opens a native **Electron window**. It *also* serves the renderer at **localhost:5173**, and
+since 2026-07-31 that URL boots: `renderer/src/dev/browserApi.ts` fakes `window.api` against
+localStorage when there's no preload bridge, so the same UI can be looked at in a browser. It is a
+**preview, not a target** — a production build drops it, it edits a fake vault, and no feature may
+be built against it (rule 8's whole point). Anything touching real files, IPC or updates still has
+to be judged in the Electron window.
 
 **Tests are `vitest`, and cover pure logic only** (`*.test.ts` beside the module): `colorModel`,
-`editor/formatModel`, `editor/formatCommands`, `organise/model`, `shared/workspace`,
+`editor/formatModel`, `editor/formatCommands`, `organise/model`, `tabs/model`, `shared/workspace`,
 `shared/settings`, `shared/update`, `main/filenames`. No React and no Electron — those need a
 different kind of harness and are not worth the weight yet. Adding any *other* dependency still
 needs asking.
@@ -290,6 +299,104 @@ The Electron foundation, vault layer, CM6 editor (live preview, colour/highlight
 autosave), the theme/token system, the sidebar (icons + drag-to-move into folders,
 `TreeView.tsx`/`icons.tsx`), the note-title header (editable + word count), and the Edit/Read
 **reading view** (`reader/ReadingView.tsx`, marked+dompurify+katex) are **built**.
+
+**Tabs and split panes (built 2026-07-31).** Several notes are open at once: a strip of tabs
+across the top of the editor area, and **1–3 panes side by side** below it. Drag a tab onto a
+pane's left/right edge to split, onto its middle to replace what that pane shows.
+
+**The gestures, and why they are what they are** (revised 2026-07-31 after first use):
+- **A plain sidebar click replaces what's open** (`replaceActive`), exactly as it did before tabs
+  existed. Tabs do not accumulate behind your back, and **the strip only appears at the second
+  tab** — one open note is not a set of tabs, and a permanent one-tab strip would just repeat the
+  title already in the pane header.
+- **Cmd/Ctrl+click opens a note in another tab.** That gesture used to add a row to the sidebar
+  *selection*.
+- **Selecting (for drag, archive, bin) is the six-dot grip's job** — click it, Cmd/Ctrl-click a
+  second one for a set. It was always a select control; it is now the *only* one, because a
+  modifier can't mean both "select this" and "open this beside that". Folder rows lost their
+  modifier branch for the same reason: nothing may select via a modifier while notes select via
+  the dots.
+`tabs/model.ts` holds all of it as pure functions over `{ tabs, panes, focus }` and enforces two
+invariants the UI leans on: every pane shows an open tab, and **no note is in two panes at once**
+— one file must never have two CodeMirrors and two autosave buffers. Everything else follows from
+that (cycling skips notes already on screen; dropping a visible tab onto another pane *moves* it
+and collapses the pane it left; `MAX_PANES = 3`).
+**The chrome is two fixed rows, and they never appear or disappear** (2026-07-31, by the user's
+call): the tab strip — shown even with one tab, or none, held open by an invisible tab so an empty
+strip is exactly as tall as a full one — and below it ONE row per pane carrying the note's name,
+the format commands and, at the right, the word count and the **split button**. Splitting is a
+control now, not only `Cmd/Ctrl+\` and the drag (**all three work** — dragging a tab to an edge
+puts *that* note in a new column; the button and the shortcut open an empty one and ask). With nothing open, App renders the same
+row shell inert (`ROW_CLASS`, shared with `NotePane` precisely so the two can't drift in height).
+The rule to keep: **nothing in the editor chrome may be conditional on state in a way that changes
+its height** — reserve the space, fill it later. That is why the focused-pane accent line is a
+transparent `border-t-2` in every state, and why the row's layout flips which element is elastic
+instead of dropping one: wide, the title grows and the commands centre; narrow, the title is fixed
+at 5.5rem and the commands take the rest and scroll (`compact`). What a narrow column *does* drop
+is anything that can't act: empty "?" slots, the word count, and a split button with no second
+note to split to.
+
+**Two ways to rearrange, and they are different things.** Dragging a **tab** out of the strip
+opens/moves a note (edge = split, middle = replace). Dragging a **column by its own row** only
+rearranges what is already on screen: onto an edge it moves there (`movePane`), onto the middle of
+another column the two swap (`swapPanes`) — nothing opens, nothing closes, the strip doesn't
+change. `Drag` (kind `'tab' | 'pane'`) is what tells the drop handler which of the two it is; the
+row guards its `dragStart` against the title input and the buttons so a drag that starts there
+stays theirs.
+
+**The blank column, and why "+" and split are the same thing.** `BLANK` is the empty path, and a
+blank tab is genuinely just a tab whose path is `''` — it closes, drags, takes the focused pane and
+is *replaced in place* by the next note you click, all through the same functions as any other tab,
+with no parallel "pending" state to keep in step. **"+" opens one in the focused column**
+(`openTab`, so the note that was there stays as a tab); **the split button and `Cmd/Ctrl+\` open
+one in a NEW column** (`splitBlank`). Either way it says "Select a note", and any sidebar row, any
+tab, a new note, `Ctrl+Tab` — every route that opens a note — fills it, because they all end in
+`openTab`/`replaceActive` and the blank is what those replace.
+
+Three rules make it behave, and each was a bug first:
+- **Invariant 3** (`tidy`): a blank exists only while a pane shows it. Cycling or jumping away from
+  an unfilled blank leaves no orphan placeholder in the strip.
+- **A blank's column collapses when the blank goes** — it does NOT take the next open tab the way a
+  real note's pane does (`closeTab`). Backfilling would drop a note you didn't ask for into a space
+  you opened for one you did. The exception is the last pane, where collapsing would leave the
+  strip pointing at an empty screen.
+- **`replaceActive`**: pick a note that is *already on screen* and focus moves to that column while
+  the blank closes — it was a standing request, and the request has been answered.
+
+It never survives a quit (`normalizeSession` drops empty strings), only one can exist at a time
+(invariant 2 gives that free), and `loadDoc`/`dropDoc` skip it; nothing else in App knows it exists.
+
+**There is no Edit/Read toggle** — removed 2026-07-31. Live preview already renders as you type and
+reveals the source on the line the cursor is on, so a reading *mode* was a second way to look at
+the same thing. `reader/ReadingView.tsx` (marked + dompurify) is therefore **unimported**: left in
+place, not deleted, because it is the app's only sanitised-HTML path and deleting it would also
+strand `marked`/`dompurify` — say so before removing either. Nothing imports it, so it is not in
+the bundle.
+
+**The layout survives a quit.** `AppSettings.session` (`{ tabs, panes, focus }`, in
+`.mdnotes/settings.json`) is written 400ms after any layout change and put back at boot — and on
+"Switch folder" too, so each vault reopens its own tabs. **`session` replaced `lastNotePath`**,
+which a pre-tabs settings.json is migrated from *inside `normalizeSettings`* (a remembered note is
+a one-tab session), the same one-code-path rule the Spaces migration follows. Validation is split
+deliberately: `shared/settings.ts` checks the **shape** (strings, an integer), and
+`restoreLayout` checks the **meaning** against the tree — dropping notes renamed or binned since,
+de-duplicating, capping panes — because only the renderer can see whether a path still exists.
+Two things follow from that: an empty session must boot to the blank screen, and the persist
+effect must not run until the restore has (`sessionReady`), or the first render would overwrite
+the session it is restoring.
+`startup` still governs it, and its default is now **`'last'`** ("Reopen your tabs"): with tabs,
+"start empty" throws away an arrangement rather than one note.
+Each pane owns its own title, format bar and CodeMirror (`NotePane.tsx`);
+App owns the documents (`docsRef` keyed by path) and one autosave map keyed by path. **Every
+layout change goes through `applyLayout`** — that is where a note that just left the strip gets
+its unsaved buffer written and its loaded copy dropped, so "which notes are loaded" can't drift
+from "which notes are open"; it also keeps `layoutRef` correct for the handler that runs next,
+before React has re-rendered. **The
+keyboard is the renderer's**, not the menu's — `Ctrl+Tab` cycles (Cmd+Tab is the macOS app
+switcher), `Cmd/Ctrl+1…9` jumps, `Cmd/Ctrl+\` opens an empty column, `Cmd/Ctrl+W` closes a tab. That last one
+cost a change in `main/menu.ts`: a menu accelerator is consumed before the renderer sees the key,
+so macOS's stock Cmd+W ("Close Window", in both File and the Window menu) had to move to
+Shift+Cmd+W. If a tab shortcut ever stops firing, suspect a menu item took the key.
 
 **In-app updates (built).** Windows installs update themselves: a new version downloads quietly,
 a strip appears above "Switch folder", and it applies on quit. Settings → Updates has the version,

@@ -18,6 +18,17 @@ export function installMenu(): void {
     label: 'Check for Updates…',
     click: () => void checkNow()
   }
+  // Cmd/Ctrl+W closes a TAB, not the window — the arrangement every tabbed
+  // editor uses, and the renderer owns it (App.tsx's tab keyboard). On macOS
+  // both File → Close and the stock Window menu bind Cmd+W by default, and a
+  // menu accelerator is consumed before the renderer ever sees the key, so the
+  // window would shut instead. Hence Shift+Cmd+W here, and a hand-built Window
+  // menu below rather than `role: 'windowMenu'`.
+  const closeWindow: MenuItemConstructorOptions = {
+    role: 'close',
+    label: 'Close Window',
+    accelerator: 'Shift+CommandOrControl+W'
+  }
   const template: MenuItemConstructorOptions[] = [
     // macOS convention puts "Check for Updates" in the app menu, right under
     // "About"; on Windows there is no app menu, so it goes in File.
@@ -51,7 +62,7 @@ export function installMenu(): void {
         },
         { type: 'separator' },
         ...(isMac ? [] : [checkForUpdates, { type: 'separator' } as MenuItemConstructorOptions]),
-        isMac ? { role: 'close' } : { role: 'quit' }
+        isMac ? closeWindow : { role: 'quit' }
       ]
     },
     { role: 'editMenu' },
@@ -81,7 +92,20 @@ export function installMenu(): void {
         { role: 'togglefullscreen' }
       ]
     },
-    { role: 'windowMenu' }
+    isMac
+      ? {
+          label: 'Window',
+          submenu: [
+            { role: 'minimize' },
+            { role: 'zoom' },
+            { type: 'separator' },
+            closeWindow,
+            { type: 'separator' },
+            { role: 'front' }
+          ]
+        }
+      : // Windows' stock window menu binds Alt+F4, not Ctrl+W, so it can stay.
+        { role: 'windowMenu' }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }

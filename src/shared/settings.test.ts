@@ -153,10 +153,28 @@ describe('normalizeSettings — migration from the flat pre-Spaces shape', () =>
   it('leaves the global fields at the top level', () => {
     const s = normalizeSettings(OLD)
     expect(s.startup).toBe('last')
-    expect(s.lastNotePath).toBe('notes/a.md')
     expect(s.dateFormat).toBe('ymd')
     expect(s.numberFormat).toBe('comma')
     expect(s.timezone).toBe('Europe/London')
+  })
+
+  it('reads a pre-tabs `lastNotePath` as a one-tab session', () => {
+    // The note someone had open before tabs existed IS their session, so it
+    // comes back on the next launch instead of being dropped as an unknown key.
+    const s = normalizeSettings(OLD)
+    expect(s.session).toEqual({ tabs: ['notes/a.md'], panes: ['notes/a.md'], focus: 0 })
+    // ...and once `session` exists it wins: the stale key is never read again,
+    // which is what keeps the migration idempotent.
+    const next = normalizeSettings({
+      ...OLD,
+      session: { tabs: ['b.md', 'c.md'], panes: ['c.md'], focus: 0 }
+    })
+    expect(next.session.tabs).toEqual(['b.md', 'c.md'])
+  })
+
+  it('keeps a junk session from reaching the layout', () => {
+    const s = normalizeSettings({ session: { tabs: ['a.md', 7, null], panes: 'nope', focus: -3 } })
+    expect(s.session).toEqual({ tabs: ['a.md'], panes: [], focus: 0 })
   })
 
   it('lets spaces win over leftover top-level keys', () => {

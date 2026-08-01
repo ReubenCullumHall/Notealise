@@ -1,11 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { EditorView } from '@codemirror/view'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
+import type { EditorView } from '@codemirror/view'
 import { ContextMenu, type MenuItem } from './ContextMenu'
-import { CodeEditor } from './editor'
 import { FormatToolbar } from './editor/FormatToolbar'
-import { ReadingView } from './reader/ReadingView'
+import { NotePane, ROW_CLASS, type Drag } from './tabs/NotePane'
+import { TabStrip } from './tabs/TabStrip'
+import {
+  activePath,
+  closePane,
+  closeTab,
+  closeUnder,
+  cycle,
+  EMPTY_LAYOUT,
+  MAX_PANES,
+  moveTab,
+  BLANK,
+  movePane,
+  openTab,
+  renamePath,
+  replaceActive,
+  restoreLayout,
+  selectTab,
+  showInPane,
+  splitAt,
+  splitBlank,
+  swapPanes,
+  type TabLayout
+} from './tabs/model'
 import { applySettings } from './settings/model'
 import {
   activeSpace,
@@ -20,7 +42,6 @@ import { Sidebar } from './Sidebar'
 import type { SearchHit } from './Search'
 import type { UpdateStatus } from '../../shared/update'
 import { Icon } from './icons'
-import { formatNumber } from './intl'
 import { findNode, isArchived, sortSiblings } from './organise/model'
 
 // --- small path helpers (renderer works in vault-relative POSIX paths) ---
@@ -39,20 +60,47 @@ const countWords = (t: string): number => (t.trim().match(/\S+/g) ?? []).length
 
 const EMPTY_WS: Workspace = { entries: {}, trash: [] }
 
+/** The placeholder command row has no editor behind it; its buttons are inert
+ *  and it is only there to hold the space open. */
+const NO_VIEW: React.RefObject<EditorView | null> = { current: null }
+
+/** Re-key a path map after a rename/move (a moved folder takes its notes with
+ *  it, so descendants are re-keyed too). */
+const remapKeys = <T,>(m: Map<string, T>, map: (p: string) => string): void => {
+  for (const [p, v] of [...m]) {
+    const next = map(p)
+    if (next === p) continue
+    m.delete(p)
+    m.set(next, v)
+  }
+}
+const remapRecord = <T,>(r: Record<string, T>, map: (p: string) => string): Record<string, T> =>
+  Object.fromEntries(Object.entries(r).map(([p, v]) => [map(p), v]))
+
 export default function App(): React.JSX.Element {
   const [ready, setReady] = useState(false)
   const [vault, setVault] = useState<string | null>(null)
   const [tree, setTree] = useState<TreeNode[]>([])
   const [workspace, setWorkspace] = useState<Workspace>(EMPTY_WS)
-  const [openPath, setOpenPath] = useState<string | null>(null)
-  const [content, setContent] = useState('')
-  const [wordCount, setWordCount] = useState(0)
-  const [titleDraft, setTitleDraft] = useState('')
-  // Reading view (Edit/Read toggle). `readSource` snapshots the live buffer when
-  // entering Read, so unsaved edits show; the editor stays mounted (hidden) so
-  // toggling back never loses the cursor or unsaved text.
-  const [reading, setReading] = useState(false)
-  const [readSource, setReadSource] = useState('')
+  // Which notes are open as tabs, and which of them each pane shows. All the
+  // arithmetic (what a pane falls back to, where a dropped tab lands) is in
+  // tabs/model.ts; App only holds the result and the documents behind it.
+  const [layout, setLayout] = useState<TabLayout>(EMPTY_LAYOUT)
+  const openPath = activePath(layout) // the focused pane's note
+  const layoutRef = useRef(layout)
+  layoutRef.current = layout
+  // What is being dragged, if anything — a tab out of the strip or a whole
+  // column by its row. The panes show their drop zones for either.
+  const [drag, setDrag] = useState<Drag | null>(null)
+  // Loaded text for every open note. A ref, not state: a keystroke must not
+  // re-render the other panes' editors. `versions` IS state, because pushing a
+  // freshly loaded document into an editor is exactly what a render is for — it
+  // bumps only on an intentional load (open, external change), never on typing,
+  // so no editor is ever re-seeded out from under the cursor.
+  const docsRef = useRef<Map<string, string>>(new Map())
+  const loadingRef = useRef<Set<string>>(new Set())
+  const [versions, setVersions] = useState<Record<string, number>>({})
+  const [wordCounts, setWordCounts] = useState<Record<string, number>>({})
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   // Appearance, arranging and the format bar's custom buttons belong to the
@@ -93,42 +141,63 @@ export default function App(): React.JSX.Element {
   }
 
   // --- autosave: 400ms after typing stops, on window blur, and before quit ---
-  // `docVersion` bumps only on intentional loads (open / external reload); typing
-  // never bumps it, so the editor is never re-seeded out from under the cursor.
-  const [docVersion, setDocVersion] = useState(0)
-  const openPathRef = useRef<string | null>(null)
-  openPathRef.current = openPath
-  const dirtyRef = useRef<{ path: string; text: string } | null>(null)
+  // Keyed by path now that several notes can be open at once: one timer, but a
+  // buffer per dirty note, so a pane you last typed in ten seconds ago still
+  // gets written when a pane you are typing in now triggers the flush.
+  const dirtyRef = useRef<Map<string, string>>(new Map())
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const editorViewRef = useRef<EditorView | null>(null)
 
   const flush = useCallback(async (): Promise<void> => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
     }
-    const d = dirtyRef.current
-    if (!d) return
-    dirtyRef.current = null
-    try {
-      await window.api.writeNote(d.path, d.text)
-    } catch (e) {
-      dirtyRef.current = d // keep the buffer for a later retry
-      flash(`Save failed: ${(e as Error).message}`)
+    const pending = [...dirtyRef.current]
+    if (!pending.length) return
+    dirtyRef.current.clear()
+    for (const [path, text] of pending) {
+      try {
+        await window.api.writeNote(path, text)
+      } catch (e) {
+        // Keep the buffer for a later retry — unless typing has already put a
+        // newer one in its place, which must not be overwritten by this one.
+        if (!dirtyRef.current.has(path)) dirtyRef.current.set(path, text)
+        flash(`Save failed: ${(e as Error).message}`)
+      }
     }
   }, [flash])
 
   const onDocChange = useCallback(
-    (text: string): void => {
-      const p = openPathRef.current
-      if (!p) return
-      dirtyRef.current = { path: p, text }
-      setWordCount(countWords(text))
+    (path: string, text: string): void => {
+      dirtyRef.current.set(path, text)
+      // Keep the loaded copy current too: a pane that shows this note again
+      // later re-seeds from here, and stale text would look like lost edits.
+      docsRef.current.set(path, text)
+      const words = countWords(text)
+      setWordCounts((c) => (c[path] === words ? c : { ...c, [path]: words }))
       if (saveTimer.current) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => void flush(), 400)
     },
     [flush]
   )
+
+  /** Read a note from disk into the open-documents map. The version bump is what
+   *  the pane showing it reacts to. */
+  const loadDoc = useCallback(async (path: string): Promise<void> => {
+    if (path === BLANK || loadingRef.current.has(path)) return
+    loadingRef.current.add(path)
+    let text = ''
+    try {
+      text = await window.api.readNote(path)
+    } catch {
+      text = '' // unreadable (gone, or not yet written) — show it empty
+    } finally {
+      loadingRef.current.delete(path)
+    }
+    docsRef.current.set(path, text)
+    setWordCounts((c) => ({ ...c, [path]: countWords(text) }))
+    setVersions((v) => ({ ...v, [path]: (v[path] ?? 0) + 1 }))
+  }, [])
 
   const loadTree = useCallback(async (): Promise<TreeNode[]> => {
     const t = await window.api.listTree()
@@ -152,6 +221,70 @@ export default function App(): React.JSX.Element {
     applySettings(s)
     return s
   }, [])
+
+  /** Let go of a note that has just left the strip: write anything unsaved (a
+   *  tab closing is not a way to discard edits, and the 400ms autosave may not
+   *  have fired), then drop its loaded copy. */
+  const dropDoc = useCallback(
+    (path: string): void => {
+      if (path === BLANK) return // the "+" tab never had a file
+      const pending = dirtyRef.current.get(path)
+      if (pending !== undefined) {
+        dirtyRef.current.delete(path)
+        void window.api
+          .writeNote(path, pending)
+          .catch((e: Error) => flash(`Save failed: ${e.message}`))
+      }
+      docsRef.current.delete(path)
+    },
+    [flash]
+  )
+
+  /** The single way the layout changes. Everything that opens, closes, splits,
+   *  cycles or reorders goes through here, so "which notes are loaded" is
+   *  reconciled with "which notes are open" in one place instead of at every
+   *  call site — and `layoutRef` stays correct for the handler that runs next,
+   *  before React has re-rendered. */
+  const applyLayout = useCallback(
+    (next: TabLayout): void => {
+      const prev = layoutRef.current
+      if (next === prev) return
+      layoutRef.current = next
+      setLayout(next)
+      for (const gone of prev.tabs) if (!next.tabs.includes(gone)) dropDoc(gone)
+    },
+    [dropDoc]
+  )
+
+  // After a rename/move, keep every open tab — and any pending unsaved buffer —
+  // pointed at the entry's new path (covers a moved folder's descendants too).
+  const remapOpen = useCallback(
+    (oldPath: string, newRel: string): void => {
+      const map = (p: string): string =>
+        p === oldPath
+          ? newRel
+          : p.startsWith(oldPath + '/')
+            ? newRel + p.slice(oldPath.length)
+            : p
+      remapKeys(dirtyRef.current, map)
+      remapKeys(docsRef.current, map)
+      setWordCounts((c) => remapRecord(c, map))
+      setVersions((v) => remapRecord(v, map))
+      applyLayout(renamePath(layoutRef.current, oldPath, newRel))
+    },
+    [applyLayout]
+  )
+
+  /** Forget open notes / pending writes that have just left the vault. */
+  const forgetIfInside = useCallback(
+    (roots: string[]): void => {
+      const inside = (p: string): boolean => roots.some((r) => p === r || p.startsWith(r + '/'))
+      for (const p of [...dirtyRef.current.keys()]) if (inside(p)) dirtyRef.current.delete(p)
+      for (const p of [...docsRef.current.keys()]) if (inside(p)) docsRef.current.delete(p)
+      applyLayout(closeUnder(layoutRef.current, roots))
+    },
+    [applyLayout]
+  )
 
   // --- spaces ---------------------------------------------------------------
   // The vault's top-level folders ARE the spaces. The tree already comes back
@@ -254,32 +387,51 @@ export default function App(): React.JSX.Element {
         }
       }
     }),
-    [loadTree, loadWorkspace, flash]
+    [loadTree, loadWorkspace, flash, remapOpen, forgetIfInside]
   )
 
+  /** Open a note. A plain sidebar click REPLACES the focused note — the strip
+   *  doesn't grow, which is how clicking a note behaved before tabs existed;
+   *  Cmd/Ctrl+click (`newTab`) is what adds one. Notes stay open until closed,
+   *  so this only reads from disk the first time. */
   const openNote = useCallback(
-    async (p: string): Promise<void> => {
-      await flush() // save the note we're leaving before we load the next
-      setOpenPath(p)
-      try {
-        const text = await window.api.readNote(p)
-        setContent(text)
-        setWordCount(countWords(text))
-        setReadSource(text) // keep the reading view current when switching notes
-      } catch {
-        setContent('')
-        setWordCount(0)
-        setReadSource('')
-      }
-      setDocVersion((v) => v + 1)
+    async (p: string, newTab = false): Promise<void> => {
+      applyLayout(newTab ? openTab(layoutRef.current, p) : replaceActive(layoutRef.current, p))
+      if (!docsRef.current.has(p)) await loadDoc(p)
     },
-    [flush]
+    [applyLayout, loadDoc]
   )
 
-  // initial load: open the saved vault, or fall through to the picker. Startup
-  // "Reopen last note" is a one-time check here, against the freshly loaded
-  // tree — the note may since have been renamed or binned, in which case this
-  // just leaves the blank screen rather than erroring.
+  const closeNote = useCallback(
+    (path: string): void => applyLayout(closeTab(layoutRef.current, path)),
+    [applyLayout]
+  )
+
+  // Anything that puts a note in a pane — a drop, a keyboard cycle, a restored
+  // layout — goes through here for its content, so no path has to remember to
+  // load it. Panes whose note is already loaded cost nothing.
+  useEffect(() => {
+    for (const p of layout.panes) if (!docsRef.current.has(p)) void loadDoc(p)
+  }, [layout.panes, loadDoc])
+
+  // Put back the tabs and the split the app was closed on. Checked against the
+  // freshly loaded tree, so notes renamed or binned in the meantime are simply
+  // dropped rather than reopened as dead paths (`restoreLayout`).
+  const sessionReady = useRef(false)
+  const restoreSession = useCallback(
+    (t: TreeNode[], s: AppSettings): void => {
+      if (s.startup === 'last') {
+        applyLayout(restoreLayout(s.session, (p) => !!findNode(t, p)))
+      }
+      // From here the layout is the user's, and worth saving. Until it is, an
+      // empty layout must NOT be written back — that would wipe the session
+      // that this very boot is in the middle of restoring.
+      sessionReady.current = true
+    },
+    [applyLayout]
+  )
+
+  // initial load: open the saved vault, or fall through to the picker.
   useEffect(() => {
     void (async () => {
       const v = await window.api.getVault()
@@ -292,52 +444,64 @@ export default function App(): React.JSX.Element {
       }
       const s = await loadSettings()
       if (v) await syncSpaces(loadedTree, s)
-      if (v && s.startup === 'last' && s.lastNotePath && findNode(loadedTree, s.lastNotePath)) {
-        await openNote(s.lastNotePath)
-      }
+      if (v) restoreSession(loadedTree, s)
     })()
-  }, [loadTree, loadWorkspace, loadSettings, openNote, syncSpaces])
+  }, [loadTree, loadWorkspace, loadSettings, restoreSession, syncSpaces])
 
-  // Remember whichever note is open, regardless of the current startup
-  // preference — so turning "Reopen last note" on later picks up naturally
-  // instead of being stuck on whatever was open when the toggle was flipped.
+  // Remember the whole layout — which notes are open, how they're split, which
+  // pane you were in — regardless of the current startup preference, so turning
+  // "Reopen your tabs" on later picks up naturally instead of being stuck on
+  // whatever was open when the toggle was flipped. Debounced, because clicking
+  // between panes changes `focus` and that shouldn't be a file write each time.
   // Bypasses changeSettings: this shouldn't re-run applySettings on every click.
   useEffect(() => {
-    if (!openPath) return
-    void window.api.setSettings({ lastNotePath: openPath })
-  }, [openPath])
+    if (!vault || !sessionReady.current) return
+    const t = setTimeout(() => {
+      void window.api.setSettings({
+        session: { tabs: layout.tabs, panes: layout.panes, focus: layout.focus }
+      })
+    }, 400)
+    return () => clearTimeout(t)
+  }, [layout, vault])
 
   // A space's folder can be made, renamed or deleted outside the app, so the
   // saved spaces re-sync whenever the tree does — not only at startup.
   const settingsRef = useRef(settings)
   settingsRef.current = settings
 
-  // external changes → refresh the tree (and the open note if it changed)
+  // external changes → refresh the tree, and every open tab that changed (not
+  // just the focused one: a note edited on disk while it sits in the other half
+  // of a split has to update there too)
   useEffect(() => {
     return window.api.onVaultChanged(async ({ paths }) => {
       contentCache.current.clear() // note contents may have changed on disk
       const t = await loadTree()
       await syncSpaces(t, settingsRef.current)
-      const p = openPathRef.current
-      if (p && paths.includes(p)) {
-        if (dirtyRef.current && dirtyRef.current.path === p) return // don't clobber unsaved edits
+      for (const p of layoutRef.current.tabs) {
+        if (!paths.includes(p)) continue
+        if (dirtyRef.current.has(p)) continue // don't clobber unsaved edits
         try {
-          setContent(await window.api.readNote(p))
-          setDocVersion((v) => v + 1)
+          const text = await window.api.readNote(p)
+          docsRef.current.set(p, text)
+          setWordCounts((c) => ({ ...c, [p]: countWords(text) }))
+          setVersions((v) => ({ ...v, [p]: (v[p] ?? 0) + 1 }))
         } catch {
-          setOpenPath(null)
-          setContent('')
+          docsRef.current.delete(p) // gone from disk — close its tab
+          applyLayout(closeTab(layoutRef.current, p))
         }
       }
     })
-  }, [loadTree, syncSpaces])
+  }, [loadTree, syncSpaces, applyLayout])
 
   const pick = async (): Promise<void> => {
     const v = await window.api.pickVault()
     if (v) {
       setVault(v)
-      setOpenPath(null)
-      setContent('')
+      // A different vault means different files: drop every tab and its buffer.
+      sessionReady.current = false
+      applyLayout(EMPTY_LAYOUT)
+      docsRef.current.clear()
+      dirtyRef.current.clear()
       const t = await loadTree()
       await loadWorkspace()
       const s = await loadSettings() // a vault may carry its own saved appearance
@@ -345,6 +509,9 @@ export default function App(): React.JSX.Element {
       // a vault's pre-existing top-level folders never self-announce as spaces
       // otherwise — nothing would reconcile them until some later fs event.
       await syncSpaces(t, s)
+      // Each vault remembers its own tabs, so switching to one reopens what you
+      // were doing there — the same restore as a cold start.
+      restoreSession(t, s)
     }
   }
 
@@ -354,36 +521,6 @@ export default function App(): React.JSX.Element {
     } catch (e) {
       window.alert((e as Error).message ?? String(e))
     }
-  }
-
-  // After a rename/move, keep the open note and any pending unsaved buffer
-  // pointed at the entry's new path (covers a moved folder's descendants too).
-  const remapOpen = (oldPath: string, newRel: string): void => {
-    const d = dirtyRef.current
-    if (d) {
-      if (d.path === oldPath) d.path = newRel
-      else if (d.path.startsWith(oldPath + '/')) d.path = newRel + d.path.slice(oldPath.length)
-    }
-    setOpenPath((cur) => {
-      if (cur === oldPath) return newRel
-      if (cur && cur.startsWith(oldPath + '/')) return newRel + cur.slice(oldPath.length)
-      return cur
-    })
-  }
-
-  /** Forget an open note / pending write that has just left the vault. */
-  const forgetIfInside = (roots: string[]): void => {
-    const inside = (p: string | null): boolean =>
-      !!p && roots.some((r) => p === r || p.startsWith(r + '/'))
-    if (inside(dirtyRef.current?.path ?? null)) {
-      dirtyRef.current = null
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-    }
-    setOpenPath((cur) => {
-      if (!inside(cur)) return cur
-      setContent('')
-      return null
-    })
   }
 
   // --- organise actions ------------------------------------------------------
@@ -490,17 +627,6 @@ export default function App(): React.JSX.Element {
         flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
     })
 
-  // Toggle Edit/Read. Entering Read snapshots the live editor buffer (so unsaved
-  // edits render); leaving just hides the reading layer over the still-mounted editor.
-  const toggleRead = (): void => {
-    if (reading) {
-      setReading(false)
-      return
-    }
-    setReadSource(editorViewRef.current?.state.doc.toString() ?? content)
-    setReading(true)
-  }
-
   const openMenu = (e: React.MouseEvent, node: TreeNode | null): void => {
     e.preventDefault()
     e.stopPropagation()
@@ -525,6 +651,41 @@ export default function App(): React.JSX.Element {
     else if (cmd === 'new-folder') void newFolder('')
   }
   useEffect(() => window.api.onMenuCommand((cmd) => menuHandler.current(cmd)), [])
+
+  // --- tab keyboard ----------------------------------------------------------
+  // Ctrl+Tab cycles on BOTH platforms — Cmd+Tab is the macOS app switcher and
+  // never reaches us. Cmd/Ctrl+W closes a tab, which is only free because
+  // main/menu.ts moves "Close Window" to Shift+Cmd+W (VS Code's arrangement);
+  // without that the macOS Window menu would eat the key and shut the window.
+  // Capture phase, so a keystroke is decided here before CodeMirror sees it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const mod = e.metaKey || e.ctrlKey
+      if (e.key === 'Tab' && e.ctrlKey) {
+        e.preventDefault()
+        applyLayout(cycle(layoutRef.current, e.shiftKey ? -1 : 1))
+        return
+      }
+      if (!mod || e.repeat) return
+      if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        e.preventDefault()
+        applyLayout(cycle(layoutRef.current, e.key === 'ArrowRight' ? 1 : -1))
+      } else if (e.key === 'w' || e.key === 'W') {
+        const p = activePath(layoutRef.current)
+        if (p == null) return // '' is a blank tab, and closing that is the point
+        e.preventDefault()
+        closeNote(p)
+      } else if (e.key === '\\') {
+        e.preventDefault()
+        applyLayout(splitBlank(layoutRef.current))
+      } else if (!e.altKey && /^[1-9]$/.test(e.key)) {
+        e.preventDefault()
+        applyLayout(selectTab(layoutRef.current, Number(e.key) - 1))
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [closeNote, applyLayout])
 
   // Update state: seed once, then follow the pushes from main.
   useEffect(() => {
@@ -621,35 +782,34 @@ export default function App(): React.JSX.Element {
     return hits
   }, [query, deep, withArchived, allNotes, cacheVersion])
 
-  const openSearchResult = (h: SearchHit): void => {
-    void openNote(h.path)
+  // The new column arrives empty and asks what goes in it, so the only thing
+  // that can stop it is the cap — no second note required.
+  const canSplit = layout.panes.length < MAX_PANES
+
+  const openSearchResult = (h: SearchHit, newTab = false): void => {
+    void openNote(h.path, newTab)
     setQuery('')
   }
 
-  // The editable note-title header mirrors the open note's filename (minus .md);
-  // committing it renames the file, reusing the same sanitise/flash path.
-  useEffect(() => {
-    setTitleDraft(openPath ? stripMd(nameOf(openPath)) : '')
-  }, [openPath])
-  const commitTitle = (): Promise<void> =>
-    run(async () => {
-      const p = openPathRef.current
-      if (!p) return
-      const cur = stripMd(nameOf(p))
-      const next = titleDraft.trim()
-      if (!next || next === cur) {
-        setTitleDraft(cur)
-        return
-      }
-      const fname = next.toLowerCase().endsWith('.md') ? next : `${next}.md`
-      const actualRel = await window.api.renameEntry(p, joinPath(parentOf(p), fname))
+  // A pane's editable title header renames the file, reusing the same
+  // sanitise/flash path as every other rename. Resolves to the name the file
+  // actually got, so the pane can show that rather than what was typed.
+  const renameOpen = async (path: string, title: string): Promise<string | null> => {
+    try {
+      const fname = title.toLowerCase().endsWith('.md') ? title : `${title}.md`
+      const actualRel = await window.api.renameEntry(path, joinPath(parentOf(path), fname))
       await loadTree()
       await loadWorkspace()
-      remapOpen(p, actualRel)
+      remapOpen(path, actualRel)
       const actualName = stripMd(nameOf(actualRel))
-      setTitleDraft(actualName)
-      if (actualName !== next) flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
-    })
+      if (actualName !== title)
+        flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
+      return actualName
+    } catch (e) {
+      flash((e as Error).message)
+      return null
+    }
+  }
 
   if (!ready) return <div className="center muted">Loading…</div>
 
@@ -689,7 +849,7 @@ export default function App(): React.JSX.Element {
         onOpenSearchHit={openSearchResult}
         update={update}
         actions={{
-          onOpen: (p) => void openNote(p),
+          onOpen: (p, newTab) => void openNote(p, newTab),
           onContext: openMenu,
           onMove: move,
           onTogglePin: togglePin,
@@ -708,76 +868,107 @@ export default function App(): React.JSX.Element {
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {openPath ? (
+        {/* The strip and the command row are ALWAYS on screen, empty or not.
+            They're the app's fixed chrome: rows that appear when you open a
+            second note would shove the text down mid-work, and the whole reason
+            to reserve the space is that filling it moves nothing. */}
+        <TabStrip
+          tabs={layout.tabs}
+          panes={layout.panes}
+          active={openPath}
+          onSelect={(p) => void openNote(p)}
+          onClose={closeNote}
+          onReorder={(p, before) => applyLayout(moveTab(layoutRef.current, p, before))}
+          onDragTab={(path) => setDrag(path === null ? null : { kind: 'tab', path })}
+          onNewTab={() => applyLayout(openTab(layoutRef.current, BLANK))}
+          dragging={drag}
+        />
+        {layout.panes.length > 0 ? (
           <>
-            <div className="flex items-center gap-3 border-b border-ink-300/25 bg-surface/40 px-5 py-3 backdrop-blur">
-              <input
-                className="min-w-0 flex-1 truncate bg-transparent font-display text-lg font-semibold text-ink-900 outline-none placeholder:text-ink-300"
-                value={titleDraft}
-                placeholder="Untitled"
-                title={openPath}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                onBlur={() => void commitTitle()}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    ;(e.target as HTMLInputElement).blur()
-                  } else if (e.key === 'Escape') {
-                    setTitleDraft(stripMd(nameOf(openPath ?? '')))
-                    ;(e.target as HTMLInputElement).blur()
+            <div className="flex min-h-0 flex-1">
+              {layout.panes.map((p, i) => (
+                <NotePane
+                  // Keyed by position, not path: switching the note in a pane
+                  // must NOT remount CodeMirror (it swaps the document in place,
+                  // which is what keeps the cursor and undo history).
+                  key={i}
+                  path={p}
+                  doc={docsRef.current.get(p) ?? ''}
+                  version={versions[p] ?? 0}
+                  wordCount={wordCounts[p] ?? 0}
+                  numberFormat={settings.numberFormat}
+                  focused={i === layout.focus}
+                  split={layout.panes.length > 1}
+                  slots={space.toolbarSlots}
+                  onSetSlot={(slot, id) => {
+                    const next = [...space.toolbarSlots]
+                    next[slot] = id
+                    void changeSettings(withSpacePatch(settings, space.folder, { toolbarSlots: next }))
+                  }}
+                  onFocus={() => applyLayout(layout.focus === i ? layout : { ...layout, focus: i })}
+                  onDocChange={(text) => onDocChange(p, text)}
+                  onRename={(title) => renameOpen(p, title)}
+                  // Beside THIS column, not "the focused one": the button is in
+                  // the row it belongs to, so it must not depend on the click
+                  // having moved focus there first.
+                  onSplit={() => applyLayout(splitBlank({ ...layoutRef.current, focus: i }))}
+                  canSplit={canSplit}
+                  onClosePane={() => applyLayout(closePane(layoutRef.current, i))}
+                  dragging={drag}
+                  onDragPane={() => setDrag({ kind: 'pane', path: p, from: i })}
+                  onDragEnd={() => setDrag(null)}
+                  edgeDrops={
+                    // A column being dragged is only ever rearranged, so the cap
+                    // doesn't apply to it; a tab may need a new column, which is
+                    // where it does.
+                    drag?.kind === 'pane' || canSplit || layout.panes.includes(drag?.path ?? '')
                   }
-                }}
-              />
-              <span className="hidden shrink-0 text-xs text-ink-300 sm:block">
-                {formatNumber(wordCount, settings.numberFormat)} {wordCount === 1 ? 'word' : 'words'}
-              </span>
-              <button
-                className="flex shrink-0 items-center gap-1.5 rounded-full border-none bg-surface/70 px-3.5 py-1.5 text-sm font-medium text-ink-700 shadow-card outline-none transition duration-200 spring hover:-translate-y-0.5 hover:bg-surface/70 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
-                title={reading ? 'Back to editing' : 'Reading view'}
-                onClick={toggleRead}
-              >
-                <Icon name={reading ? 'edit' : 'eye'} className="h-4 w-4" />
-                <span>{reading ? 'Edit' : 'Read'}</span>
-              </button>
-            </div>
-            {!reading && (
-              <FormatToolbar
-                viewRef={editorViewRef}
-                slots={space.toolbarSlots}
-                onSetSlot={(i, id) => {
-                  const next = [...space.toolbarSlots]
-                  next[i] = id
-                  void changeSettings(withSpacePatch(settings, space.folder, { toolbarSlots: next }))
-                }}
-              />
-            )}
-            <div className="pane-body">
-              <div className="edit-layer" style={{ display: reading ? 'none' : 'flex' }}>
-                <CodeEditor
-                  path={openPath}
-                  doc={content}
-                  version={docVersion}
-                  onDocChange={onDocChange}
-                  editorRef={editorViewRef}
+                  onDropTab={(zone) => {
+                    const d = drag
+                    setDrag(null)
+                    if (!d) return
+                    const l = layoutRef.current
+                    if (d.kind === 'pane') {
+                      // Rearranging the split: nothing opens or closes. Onto the
+                      // middle of another column the two swap; onto an edge the
+                      // dragged column moves there.
+                      const from = d.from ?? l.panes.indexOf(d.path)
+                      applyLayout(
+                        zone === 'center'
+                          ? swapPanes(l, from, i)
+                          : movePane(l, from, zone === 'left' ? i : i + 1)
+                      )
+                      return
+                    }
+                    applyLayout(
+                      zone === 'center'
+                        ? showInPane(l, d.path, i)
+                        : splitAt(l, d.path, zone === 'left' ? i : i + 1)
+                    )
+                  }}
                 />
-              </div>
-              {reading && (
-                <div className="read-layer">
-                  <ReadingView source={readSource} />
-                </div>
-              )}
+              ))}
             </div>
           </>
         ) : (
-          <div className="flex flex-1 items-center justify-center">
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface/70 text-brand-300 shadow-card">
-                <Icon name="doc" className="h-8 w-8" />
-              </div>
-              <p className="font-display text-xl text-ink-700">Pick a note, or start a new one</p>
-              <p className="mt-1 text-sm text-ink-500">Your Markdown formats as you type.</p>
+          <>
+            {/* The command row with nothing to command: same shell, same height,
+                so opening a note fills it instead of pushing the page down. */}
+            <div className={ROW_CLASS + ' pointer-events-none opacity-40'} aria-hidden="true">
+              <span className="min-w-0 flex-1" />
+              <FormatToolbar viewRef={NO_VIEW} slots={space.toolbarSlots} onSetSlot={() => {}} />
+              <span className="min-w-0 flex-1" />
             </div>
-          </div>
+            <div className="flex flex-1 items-center justify-center">
+              <div className="text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface/70 text-brand-300 shadow-card">
+                  <Icon name="doc" className="h-8 w-8" />
+                </div>
+                <p className="font-display text-xl text-ink-700">Pick a note, or start a new one</p>
+                <p className="mt-1 text-sm text-ink-500">Your Markdown formats as you type.</p>
+              </div>
+            </div>
+          </>
         )}
       </main>
 

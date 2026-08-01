@@ -27,6 +27,7 @@ export type IconName =
   | 'sort'
   | 'sun'
   | 'panelLeft'
+  | 'splitView'
   | 'flag'
   | 'spaces'
   | 'library'
@@ -157,6 +158,15 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     <>
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <path d="M9 3v18" />
+    </>
+  ),
+  // Deliberately panelLeft's twin, with the divider down the middle: the two
+  // controls do the same kind of thing to the two halves of the window, so they
+  // should read as a pair rather than as unrelated icons.
+  splitView: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M12 3v18" />
     </>
   ),
   flag: (

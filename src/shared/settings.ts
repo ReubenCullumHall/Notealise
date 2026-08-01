@@ -93,6 +93,22 @@ export interface Space {
   tint: string
 }
 
+/** The open tabs and the split, as last seen. Shape only — this file validates
+ *  that it IS a layout (strings, a number), never that the paths still exist or
+ *  that the panes make sense together. That second job is the renderer's
+ *  (`tabs/model.ts`'s `restoreLayout`), because it needs the file tree to answer
+ *  it, and main has no business knowing what a pane is. */
+export interface SessionLayout {
+  /** open notes, in tab-strip order */
+  tabs: string[]
+  /** the note each pane showed, left to right */
+  panes: string[]
+  /** index into `panes` */
+  focus: number
+}
+
+export const EMPTY_SESSION: SessionLayout = { tabs: [], panes: [], focus: 0 }
+
 export interface AppSettings {
   /** 1..SPACE_CAP, folders unique. **Never empty**: a vault with no top-level
    *  folders still has one space, unbound (`folder: ''`), standing for the whole
@@ -105,11 +121,13 @@ export interface AppSettings {
   // --- global: one app launch, one locale. Deliberately NOT per-space. ---
   /** what to show when a vault opens */
   startup: StartupId
-  /** vault-relative path of the last note that was open; drives "Reopen last note".
-   *  Global on purpose: it's written on EVERY note open, so nesting it would make
-   *  each one rewrite the whole spaces array — and switching space shouldn't
-   *  change which note you're looking at. */
-  lastNotePath: string | null
+  /** what was open when the app last closed — the tab strip and how it was
+   *  split. Drives "Reopen your tabs".
+   *  Global on purpose: it's written on EVERY note open, so nesting it would
+   *  make each one rewrite the whole spaces array — and switching space
+   *  shouldn't change which notes you're looking at. Replaced the single
+   *  `lastNotePath`, which an old settings.json is migrated from below. */
+  session: SessionLayout
   /** used for edit times and for the archive and bin */
   dateFormat: DateFormatId
   numberFormat: NumberFormatId
@@ -137,8 +155,11 @@ export const DEFAULT_SPACE: Space = {
 export const DEFAULT_SETTINGS: AppSettings = {
   spaces: [DEFAULT_SPACE],
   activeSpaceFolder: '',
-  startup: 'empty',
-  lastNotePath: null,
+  // Reopening what you had open is the default, as in every comparable editor:
+  // with tabs, "start empty" throws away a whole arrangement rather than one
+  // note. Still a preference — Settings → General turns it off.
+  startup: 'last',
+  session: EMPTY_SESSION,
   dateFormat: 'relative',
   numberFormat: 'default',
   timezone: 'system'
@@ -245,7 +266,11 @@ export function normalizeSettings(raw: unknown): AppSettings {
     spaces,
     activeSpaceFolder: spaces.some((x) => x.folder === wanted) ? wanted : (spaces[0]?.folder ?? ''),
     startup: STARTUPS.includes(s.startup as StartupId) ? (s.startup as StartupId) : DEFAULT_SETTINGS.startup,
-    lastNotePath: typeof s.lastNotePath === 'string' ? s.lastNotePath : null,
+    // MIGRATION, same rule as the spaces one above: a pre-tabs file's single
+    // `lastNotePath` IS a one-tab session, so it goes through the same
+    // normaliser rather than a separate pass. Idempotent — once `session` is
+    // written, `lastNotePath` is never read again.
+    session: normalizeSession(s.session ?? lastNoteAsSession(s.lastNotePath)),
     dateFormat: DATE_FORMATS.includes(s.dateFormat as DateFormatId)
       ? (s.dateFormat as DateFormatId)
       : DEFAULT_SETTINGS.dateFormat,
@@ -255,6 +280,23 @@ export function normalizeSettings(raw: unknown): AppSettings {
     // any IANA string is legal; the picker only ever offers real ones
     timezone: typeof s.timezone === 'string' && s.timezone ? s.timezone : DEFAULT_SETTINGS.timezone
   }
+}
+
+/** A pre-tabs settings.json remembered one note. That is a session with one tab. */
+function lastNoteAsSession(raw: unknown): SessionLayout | undefined {
+  if (typeof raw !== 'string' || !raw) return undefined
+  return { tabs: [raw], panes: [raw], focus: 0 }
+}
+
+/** Shape only: strings in, junk out. Whether those notes still exist, and
+ *  whether the panes are a sane arrangement, is `restoreLayout`'s job — it can
+ *  see the file tree and this can't. */
+function normalizeSession(raw: unknown): SessionLayout {
+  if (!isPlainObject(raw)) return EMPTY_SESSION
+  const paths = (v: unknown): string[] =>
+    (Array.isArray(v) ? v : []).filter((p): p is string => typeof p === 'string' && !!p)
+  const focus = typeof raw.focus === 'number' && Number.isInteger(raw.focus) ? raw.focus : 0
+  return { tabs: paths(raw.tabs), panes: paths(raw.panes), focus: Math.max(0, focus) }
 }
 
 /** Always exactly TOOLBAR_SLOTS strings — a short, long, or junk-filled array

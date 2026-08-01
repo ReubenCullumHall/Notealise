@@ -10,6 +10,8 @@ interface Props {
   /** the four custom buttons, in bar order — see AppSettings.toolbarSlots */
   slots: string[]
   onSetSlot: (index: number, id: string) => void
+  /** a bar in one column of a split: same buttons, less air around them */
+  compact?: boolean
 }
 
 // Shared button shell, ported from legacy's FmtBtn (legacy/src/App.jsx:1538).
@@ -18,8 +20,11 @@ interface Props {
 // Split into base + state because the colour menu's trigger stays lit while its
 // dropdown is open; the plain buttons are base + idle, which is the same string
 // they had before.
+// `shrink-0` is load-bearing in a split column: the bar's container scrolls, and
+// without it flex would squeeze the buttons themselves instead, so B/I/U/S run
+// into each other at a third of the window's width.
 const BTN_BASE =
-  'flex h-7 w-7 items-center justify-center rounded-md border-none bg-transparent p-0 text-[14px] leading-none outline-none transition duration-150 '
+  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-none bg-transparent p-0 text-[14px] leading-none outline-none transition duration-150 '
 const BTN_IDLE = 'text-ink-500 hover:bg-brand-500/10 hover:text-brand-600 '
 const BTN_ACTIVE = 'bg-brand-500/15 text-brand-600 '
 // An empty slot is quieter than a real button — it's an invitation, not a
@@ -29,27 +34,51 @@ const FMT_BTN = BTN_BASE + BTN_IDLE
 
 // The top format bar. The controls sit centred over the text column, with two
 // user-programmable slots on each side of the built-in group.
-export function FormatToolbar({ viewRef, slots, onSetSlot }: Props): React.JSX.Element {
+export function FormatToolbar({ viewRef, slots, onSetSlot, compact }: Props): React.JSX.Element {
   const run = (fn: (v: EditorView) => void) => () => {
     if (viewRef.current) fn(viewRef.current)
   }
-  const slot = (i: number, align: 'left' | 'right'): React.JSX.Element => (
-    <SlotButton
-      key={i}
-      id={slots[i] ?? ''}
-      align={align}
-      onPick={(id) => onSetSlot(i, id)}
-      onRun={(fn) => run(fn)()}
-    />
+  // In a split column the row is ~180px wide: an EMPTY slot is an invitation to
+  // program a button, and an invitation is not worth pushing Bold and Italic off
+  // the edge for. Assigned slots keep their place — they're real commands — and
+  // an empty one is still fillable from Settings → Spaces → Shortcuts, which is
+  // where changing them lives anyway.
+  const slot = (i: number, align: 'left' | 'right'): React.JSX.Element | null => {
+    const id = slots[i] ?? ''
+    if (compact && !findAction(id)) return null
+    return (
+      <SlotButton
+        key={i}
+        id={id}
+        align={align}
+        onPick={(next) => onSetSlot(i, next)}
+        onRun={(fn) => run(fn)()}
+      />
+    )
+  }
+  // The bar trades its internal air before it trades a button.
+  const divider = (
+    <span className={(compact ? 'mx-0.5' : 'mx-1.5') + ' h-4 w-px shrink-0 bg-ink-300/25'} />
   )
   return (
     <div
-      className="relative flex shrink-0 items-center justify-center gap-0.5 border-b border-ink-300/20 px-4 py-1.5"
+      className={
+        // No border, no padding of its own: the bar is a group of buttons INSIDE
+        // the pane's command row, which owns the row's chrome. A third of the
+        // window is narrower than the group's natural width, so a split column
+        // scrolls it rather than shrinking the buttons.
+        'relative flex items-center gap-0.5 ' +
+        // `justify-center` is unusable once the bar scrolls: flexbox centres the
+        // overflow on BOTH sides and the part that spills off the left can never
+        // be scrolled back into view. A narrow column starts at the first button
+        // instead and scrolls right.
+        (compact ? 'toolbar-scroll min-w-0 flex-1 justify-start overflow-x-auto' : 'shrink-0 justify-center')
+      }
       onMouseDown={(e) => e.preventDefault()}
     >
       {slot(0, 'left')}
       {slot(1, 'left')}
-      <span className="mx-1.5 h-4 w-px bg-ink-300/25" />
+      {divider}
       <button className={FMT_BTN + 'font-bold'} title="Bold  (Ctrl/Cmd+B)" onClick={run(bold)}>
         B
       </button>
@@ -70,9 +99,9 @@ export function FormatToolbar({ viewRef, slots, onSetSlot }: Props): React.JSX.E
       >
         S
       </button>
-      <span className="mx-1.5 h-4 w-px bg-ink-300/25" />
+      {divider}
       <ColourMenu viewRef={viewRef} btnBase={BTN_BASE} btnIdle={BTN_IDLE} btnActive={BTN_ACTIVE} />
-      <span className="mx-1.5 h-4 w-px bg-ink-300/25" />
+      {divider}
       {slot(2, 'right')}
       {slot(3, 'right')}
     </div>

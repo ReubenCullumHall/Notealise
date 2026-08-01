@@ -39,7 +39,11 @@ export const ACCENT_MODES: { id: Space['accentMode']; label: string; hint: strin
 
 export const STARTUPS: { id: AppSettings['startup']; label: string; hint: string }[] = [
   { id: 'empty', label: 'Start empty', hint: 'Open on the blank screen and pick a note.' },
-  { id: 'last', label: 'Reopen last note', hint: 'Go straight back to whatever you were writing.' }
+  {
+    id: 'last',
+    label: 'Reopen your tabs',
+    hint: 'Come back to the notes you left open, split the way you left them.'
+  }
 ]
 
 export const ACCENTS: { id: string; label: string; hue: number | null }[] = [

@@ -49,7 +49,7 @@ interface Props {
   withArchived: boolean
   onToggleWithArchived: () => void
   searchHits: SearchHit[] | null
-  onOpenSearchHit: (hit: SearchHit) => void
+  onOpenSearchHit: (hit: SearchHit, newTab?: boolean) => void
   update: UpdateStatus
 
   actions: TreeActions & {

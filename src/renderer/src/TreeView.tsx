@@ -25,7 +25,9 @@ export interface Selection {
 }
 
 export interface TreeActions {
-  onOpen: (path: string) => void
+  /** `newTab` — Cmd/Ctrl+click: open beside what's already open instead of
+   *  replacing it. A plain click behaves as it always has. */
+  onOpen: (path: string, newTab?: boolean) => void
   onContext: (e: React.MouseEvent, node: TreeNode | null) => void
   /** Move entries into `toDir`, optionally positioned around `anchor`. */
   onMove: (paths: string[], toDir: string, anchor: string | null, after: boolean) => void
@@ -275,9 +277,14 @@ export function TreeView({
         onDrop={drop}
         onContextMenu={(e) => onContext(e, node)}
         onClick={(e) => {
+          // Cmd/Ctrl+click opens the note in ANOTHER tab beside the current one.
+          // It used to add the row to the selection; selecting is now the grip's
+          // job (the six dots), which is a target you can hit on purpose rather
+          // than a modifier that competes with opening.
           if (e.metaKey || e.ctrlKey) {
             e.preventDefault()
-            toggleSel(node.path)
+            clearSel()
+            onOpen(node.path, true)
             return
           }
           // Clicking a row you've already selected lets go of it — no hunting
@@ -375,12 +382,10 @@ export function TreeView({
           onDragOver={(e) => overRow(e, node)}
           onDrop={drop}
           onContextMenu={(e) => onContext(e, node)}
-          onClick={(e) => {
-            if (e.metaKey || e.ctrlKey) {
-              e.preventDefault()
-              toggleSel(node.path)
-              return
-            }
+          onClick={() => {
+            // No modifier branch: a folder has nothing to open in a tab, and if
+            // Cmd/Ctrl still meant "select" here, the six dots would be the way
+            // to select a note while a modifier selected a folder.
             toggle(node.path)
           }}
         >
