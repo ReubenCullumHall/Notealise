@@ -44,7 +44,11 @@ const CODE_NODES = new Set([
   'Comment',
   'HTMLBlock'
 ])
-function inCode(node: SyntaxNode | null): boolean {
+/** Is `node` (or any ancestor) code or raw HTML? Every scanner-based pass needs
+ *  this: a hand scan over the text can't tell a real `$` or `[[` from one inside
+ *  a fence, and the syntax tree can. Exported for `wikiPass` rather than copied —
+ *  two subtly different code-node lists would be a bug waiting to happen. */
+export function inCode(node: SyntaxNode | null): boolean {
   for (let n = node; n; n = n.parent) if (CODE_NODES.has(n.name)) return true
   return false
 }

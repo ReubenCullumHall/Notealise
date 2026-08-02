@@ -7,6 +7,7 @@ import { UpdateBanner } from './update/UpdateBanner'
 import { ArchiveIcon, BinIcon, Icon } from './icons'
 import { SettingsButton } from './settings/Settings'
 import type { SpaceActions } from './settings/Spaces'
+import { ancestorsOf } from './links/model'
 import { SearchBar, SearchResults, type SearchHit } from './Search'
 import { TreeView, type Selection, type TreeActions } from './TreeView'
 import {
@@ -29,6 +30,8 @@ import {
 
 interface Props {
   vaultName: string
+  /** the vault's absolute path, for Settings → Source folder */
+  vaultPath: string | null
   tree: TreeNode[]
   workspace: Workspace
   openPath: string | null
@@ -51,6 +54,11 @@ interface Props {
   searchHits: SearchHit[] | null
   onOpenSearchHit: (hit: SearchHit, newTab?: boolean) => void
   update: UpdateStatus
+  /** Handed a function that opens one folder and closes the rest. An imperative
+   *  handle, the same idiom as the editor's `editorRef`: the path bar lives in
+   *  App and the tree state lives here, and passing the state up instead would
+   *  make every expand/collapse a re-render of the whole window. */
+  revealRef?: React.MutableRefObject<((folder: string) => void) | null>
 
   actions: TreeActions & {
     onNewNote: () => void
@@ -79,7 +87,7 @@ function TB({
   return (
     <button
       onClick={onClick}
-      title={title}
+      data-tip={title}
       aria-pressed={active}
       className={
         'flex items-center gap-1.5 rounded-lg border-none px-2 py-1 text-[12px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
@@ -107,7 +115,7 @@ function SortMenu({
     <span className="relative inline-flex">
       <button
         onClick={() => setOpen((o) => !o)}
-        title="Sort the archive"
+        data-tip="Sort the archive"
         className="flex items-center gap-1 rounded border-none bg-transparent px-1 py-0.5 text-[11px] font-medium normal-case tracking-normal text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
       >
         <Icon name="sort" className="h-3.5 w-3.5" />
@@ -151,6 +159,7 @@ const SECTION_HEAD = 'px-3 pb-1 pt-1 ' + SECTION_TEXT
 
 export function Sidebar({
   vaultName,
+  vaultPath,
   tree,
   workspace,
   openPath,
@@ -170,11 +179,45 @@ export function Sidebar({
   searchHits,
   onOpenSearchHit,
   update,
+  revealRef,
   actions
 }: Props): React.JSX.Element {
   const [view, setView] = useState<View>('notes')
   const [selection, setSelection] = useState<Selection>({ paths: new Set() })
   const [dragging, setDragging] = useState<string[] | null>(null)
+  // Which folders are open. ONE set for all four TreeViews (archive, pinned,
+  // main, loose): "open this folder and close every other one" has to have a
+  // single answer, and before this each tree kept its own — so the same folder
+  // could be open in one and shut in another.
+  //
+  // Starts empty, which is what the sidebar has always done: every folder shut
+  // until you open it. Not persisted, also as before — this is a change of
+  // representation, not of behaviour.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [revealTarget, setRevealTarget] = useState<string | null>(null)
+  const toggleExpand = useCallback((path: string): void => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(path)) next.delete(path)
+      else next.add(path)
+      return next
+    })
+    setRevealTarget(null) // a manual toggle ends whatever the last reveal set up
+  }, [])
+
+  /** Open `folder` and its ancestors, and close EVERY other folder in the
+   *  sidebar. Driven by the path bar: the point of clicking a crumb is to see
+   *  what else is in that folder, and leaving eight other folders open is the
+   *  thing that made you look at the crumb in the first place.
+   *
+   *  `ancestorsOf` gives exactly the chain and nothing else, so "collapse
+   *  everything else" is not a separate step — it is what a fresh set means. */
+  const revealFolder = useCallback((folder: string): void => {
+    setView('notes') // revealing into the archive or the bin would show nothing
+    setExpanded(ancestorsOf(folder))
+    setRevealTarget(folder)
+  }, [])
+  if (revealRef) revealRef.current = revealFolder
   const [archiveSort, setArchiveSort] = useState<ArchiveSort>('recent')
   const [dropZone, setDropZone] = useState<'archive' | 'trash' | null>(null)
   const [lidClick, setLidClick] = useState(false)
@@ -258,6 +301,9 @@ export function Sidebar({
   const treeActions: TreeActions = actions
 
   const commonTreeProps = {
+    expanded,
+    onToggleExpand: toggleExpand,
+    revealTarget,
     workspace,
     openPath,
     freeArrange: space.freeArrange,
@@ -288,7 +334,7 @@ export function Sidebar({
       {!collapsed && (
         <div
           onMouseDown={startResize}
-          title="Drag to resize"
+          data-tip="Drag to resize"
           className={
             'absolute right-0 top-0 z-40 h-full w-1.5 cursor-col-resize select-none ' +
             (resizing ? 'bg-brand-400/60' : 'hover:bg-brand-400/40')
@@ -299,12 +345,12 @@ export function Sidebar({
           the bottom strip, beside the bin, since both are shelf views and they
           read as a pair there. */}
       <div className="flex items-center gap-2 px-4 pt-4 pb-2.5">
-        <p className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-ink-900" title={vaultName}>
+        <p className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-ink-900" data-tip={vaultName}>
           {vaultName}
         </p>
         <button
           onClick={() => setCollapsed(true)}
-          title="Collapse sidebar"
+          data-tip="Collapse sidebar"
           className="flex shrink-0 items-center justify-center rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"
         >
           <Icon name="panelLeft" className="h-4 w-4" />
@@ -398,14 +444,14 @@ export function Sidebar({
                     </span>
                     <button
                       onClick={() => actions.onRestoreFromBin([item.id])}
-                      title="Put back"
+                      data-tip="Put back"
                       className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-300 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
                     >
                       <Icon name="restore" />
                     </button>
                     <button
                       onClick={() => actions.onPurge([item.id])}
-                      title="Delete permanently"
+                      data-tip="Delete permanently"
                       className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-300 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
                     >
                       <Icon name="trash" />
@@ -478,7 +524,7 @@ export function Sidebar({
                   way out. */}
               {looseNotes.length > 0 && (
                 <>
-                  <p className={SECTION_HEAD} title="Notes in your vault that aren't inside a space">
+                  <p className={SECTION_HEAD} data-tip="Notes in your vault that aren't inside a space">
                     Not in a space
                   </p>
                   <TreeView {...commonTreeProps} nodes={looseNotes} mode="tree" />
@@ -554,7 +600,7 @@ export function Sidebar({
                   key={s.folder}
                   onClick={() => onSwitchSpace(s.folder)}
                   aria-pressed={on}
-                  title={s.folder}
+                  data-tip={s.folder}
                   className={
                     'flex h-8 w-8 items-center justify-center rounded-lg border text-[15px] leading-none outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
                     // btn-edge only on the inactive ones: the selected space
@@ -572,17 +618,12 @@ export function Sidebar({
           </div>
         )}
 
-        <button
-          onClick={actions.onPickVault}
-          className="btn-edge flex w-full items-center justify-center gap-2 rounded-lg border border-ink-300/35 bg-surface/70 px-3 py-1.5 text-[13px] font-medium text-ink-700 outline-none transition duration-200 hover:border-brand-300 hover:bg-surface/70 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
-          title="Open a different folder as your vault"
-        >
-          <Icon name="folder" className="h-4 w-4" />
-          Switch folder
-        </button>
-        <p className="mt-1.5 text-center text-[11px] leading-tight text-ink-300">
-          Editing real .md files on disk
-        </p>
+        {/* "Switch folder" and the "Editing real .md files on disk" line used to
+            sit here. Both were permanent furniture for something you do once:
+            the reassurance is true but you only need reading once, and changing
+            vault is a rare, considered act. They live in
+            Settings → Source folder now, which is also where the path itself is
+            — the sidebar keeps the space switcher, which you use constantly. */}
       </div>
 
       {/* The bottom strip: settings (untouched, still h-10 w-10), then bin +
@@ -593,7 +634,13 @@ export function Sidebar({
           inset-x-3 (rather than a fixed width) is what lets them track the
           sidebar's width as it's resized. */}
       <div className="pointer-events-none absolute inset-x-3 bottom-3 z-40 flex items-end gap-2">
-        <SettingsButton settings={settings} onChange={onChangeSettings} spaceActions={spaceActions} />
+        <SettingsButton
+            settings={settings}
+            onChange={onChangeSettings}
+            spaceActions={spaceActions}
+            vault={vaultPath}
+            onPickVault={actions.onPickVault}
+          />
         <button
           onClick={() => {
             setView((v) => (v === 'bin' ? 'notes' : 'bin'))
@@ -616,7 +663,7 @@ export function Sidebar({
             setDragging(null)
             setDropZone(null)
           }}
-          title={inBin ? 'Back to your notes' : 'Bin — deleted notes wait here'}
+          data-tip={inBin ? 'Back to your notes' : 'Bin — deleted notes wait here'}
           aria-pressed={inBin}
           className={
             'btn-edge pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
@@ -652,7 +699,7 @@ export function Sidebar({
             setDragging(null)
             setDropZone(null)
           }}
-          title={inArchive ? 'Back to your notes' : 'Archived notes'}
+          data-tip={inArchive ? 'Back to your notes' : 'Archived notes'}
           aria-pressed={inArchive}
           className={
             'btn-edge pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
@@ -674,7 +721,7 @@ export function Sidebar({
     {collapsed && (
       <button
         onClick={() => setCollapsed(false)}
-        title="Show sidebar"
+        data-tip="Show sidebar"
         className="btn-edge fixed left-2 top-3 z-40 flex items-center justify-center rounded-lg border border-ink-300/30 bg-surface/90 p-1.5 text-ink-500 shadow-card backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
       >
         <Icon name="panelLeft" className="h-4 w-4" />

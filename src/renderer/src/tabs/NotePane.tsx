@@ -1,9 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { CodeEditor } from '../editor'
 import { FormatToolbar } from '../editor/FormatToolbar'
 import { Icon } from '../icons'
-import { formatNumber } from '../intl'
+import { formatDateTime, formatNumber, formatWhenShort } from '../intl'
+import { HoverCard } from '../HoverCard'
+import { LinksBlock, LINKS_BLOCK_HEIGHT } from '../links/LinksBlock'
+import type { Inspect } from '../links/LinkInspector'
+import { incomingLinks, outgoingLinks } from '../links/model'
+import type { LinkEnv, LinkHandlers, OpenHow } from '../editor/linkEnv'
+import { dirName, titleOf, type LinkRow } from '../../../shared/links'
 import type { AppSettings } from '../../../shared/settings'
 
 /** Where a dragged tab or column would land in this pane. */
@@ -26,6 +32,32 @@ interface Props {
   version: number
   wordCount: number
   numberFormat: AppSettings['numberFormat']
+  /** when the file was made and last written, epoch ms — absent when the
+   *  filesystem doesn't record it (see TreeNode) */
+  createdAt?: number
+  updatedAt?: number
+  /** show those two beside the word count (Settings → Linking content) */
+  showNoteInfo: boolean
+  dateFormat: AppSettings['dateFormat']
+  timezone: string
+  /** the vault as this column's editor sees it, for resolving `[[links]]` */
+  env: Omit<LinkEnv, 'path'> & { path: string }
+  /** what a link clicked or dragged INSIDE the editor does */
+  linkHandlers: LinkHandlers
+  /** every note's outgoing links, for the backlink half of the block */
+  linkIndex: LinkRow[]
+  /** what is being hovered, for the one shared inspector card App renders */
+  onInspect: (at: Inspect | null) => void
+  /** the same three things, for the links block's own chips */
+  onFollowLink: (path: string, how: OpenHow, heading?: string | null) => void
+  onCreateLink: (dir: string, title: string, how: OpenHow) => void
+  onDragLink: (path: string | null) => void
+  /** scroll to this heading once the note has loaded (`[[Note#Heading]]`) */
+  revealHeading: string | null
+  /** show the strip of this note's links at all (Settings → Linking content) */
+  showLinks: boolean
+  /** and keep it on screen while the note scrolls, instead of letting it go */
+  pinLinks: boolean
   /** the pane the keyboard acts on */
   focused: boolean
   /** true while more than one pane is on screen */
@@ -84,6 +116,21 @@ export function NotePane({
   version,
   wordCount,
   numberFormat,
+  createdAt,
+  updatedAt,
+  showNoteInfo,
+  dateFormat,
+  timezone,
+  env,
+  linkHandlers,
+  linkIndex,
+  onFollowLink,
+  onCreateLink,
+  onDragLink,
+  onInspect,
+  revealHeading,
+  showLinks,
+  pinLinks,
   focused,
   split,
   slots,
@@ -113,6 +160,44 @@ export function NotePane({
   useEffect(() => {
     setTitleDraft(stripMd(nameOf(path)))
   }, [path])
+
+  const outgoing = useMemo(
+    () => (blank ? [] : outgoingLinks(path, doc, env.notes, env.spaces)),
+    [blank, path, doc, env.notes, env.spaces]
+  )
+  const incoming = useMemo(
+    () => (blank ? [] : incomingLinks(path, linkIndex, env.notes, env.spaces)),
+    [blank, path, linkIndex, env.notes, env.spaces]
+  )
+
+  // Scroll-away: the block is absolutely positioned over the top of the editor
+  // and slides up as you read, revealing the text underneath. CodeMirror keeps
+  // its own scroller (touching that would change scrolling for every note), so
+  // the block is translated by the scroll offset instead and the editor carries
+  // matching top padding — the text starts below the block and stays clear of it.
+  //
+  // Pinned, none of that happens: it is an ordinary row above the editor.
+  const [scrolled, setScrolled] = useState(0)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (blank || !showLinks || pinLinks) return
+    const scroller = bodyRef.current?.querySelector<HTMLElement>('.cm-scroller')
+    if (!scroller) return
+    const onScroll = (): void => setScrolled(Math.min(scroller.scrollTop, LINKS_BLOCK_HEIGHT))
+    onScroll()
+    scroller.addEventListener('scroll', onScroll, { passive: true })
+    return () => scroller.removeEventListener('scroll', onScroll)
+    // `version` re-runs this after a note switch, when CodeMirror has a new
+    // scroll position but the same scroller element.
+  }, [blank, showLinks, pinLinks, path, version])
+
+  // Only "last edited" is on the row — it is the one that changes, and the one
+  // you look for. When it was CREATED is a thing you want occasionally, so it
+  // lives on the hover card rather than taking permanent width.
+  // These return null for a missing timestamp rather than "1970", so a
+  // filesystem that doesn't record a creation time simply omits that line.
+  const edited = showNoteInfo ? formatWhenShort(updatedAt, dateFormat, timezone) : null
+  const [timesAt, setTimesAt] = useState<{ left: number; top: number; bottom: number } | null>(null)
 
   const commitTitle = (): void => {
     const next = titleDraft.trim()
@@ -199,7 +284,7 @@ export function NotePane({
           }
           value={titleDraft}
           placeholder="Untitled"
-          title={path}
+          data-tip={path}
           onChange={(e) => setTitleDraft(e.target.value)}
           onBlur={commitTitle}
           onKeyDown={(e) => {
@@ -230,9 +315,30 @@ export function NotePane({
           {/* The word count is the first thing to go when the column narrows —
               Tailwind's `sm:` is viewport-width, which says nothing about a
               third of the window, so the split decides it instead. */}
+          {/* The word count and, optionally, when the note was written. Both go
+              when the column narrows: Tailwind's `sm:` is viewport width, which
+              says nothing about a third of the window, so the split decides.
+              Dates are only ever ADDED beside the count, never in place of it —
+              the row's height is fixed either way. */}
           {!split && !blank && (
-            <span className="hidden shrink-0 whitespace-nowrap pr-1 text-xs text-ink-300 sm:block">
-              {formatNumber(wordCount, numberFormat)} {wordCount === 1 ? 'word' : 'words'}
+            <span className="hidden shrink-0 items-center gap-2 whitespace-nowrap pl-6 pr-1 text-xs text-ink-300 sm:flex">
+              {edited && (
+                <span
+                  // The same "hover for detail" gesture the links use, and the
+                  // same card — not a native tooltip, which the OS parks at the
+                  // cursor after a delay of its choosing.
+                  onMouseEnter={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    setTimesAt({ left: r.left, top: r.top, bottom: r.bottom })
+                  }}
+                  onMouseLeave={() => setTimesAt(null)}
+                >
+                  Edited {edited}
+                </span>
+              )}
+              <span>
+                {formatNumber(wordCount, numberFormat)} {wordCount === 1 ? 'word' : 'words'}
+              </span>
             </span>
           )}
           {/* Hidden rather than disabled at the cap: in a split the row is
@@ -242,7 +348,7 @@ export function NotePane({
           {!blank && canSplit && (
           <button
             className={ROW_BTN}
-            title={'Open another column  (Cmd/Ctrl+\\)  ·  or drag a tab to the edge'}
+            data-tip={'Open another column  (Cmd/Ctrl+\\)  ·  or drag a tab to the edge'}
             aria-label="Split the screen"
             onClick={onSplit}
           >
@@ -252,7 +358,7 @@ export function NotePane({
           {split && (
             <button
               className={ROW_BTN}
-              title="Close this column (the note stays open as a tab)"
+              data-tip="Close this column (the note stays open as a tab)"
               aria-label="Close this column"
               onClick={onClosePane}
             >
@@ -262,7 +368,19 @@ export function NotePane({
         </div>
       </div>
 
-      <div className="pane-body">
+      {!blank && showLinks && pinLinks && (
+        <LinksBlock
+          outgoing={outgoing}
+          incoming={incoming}
+          pinned
+          onOpen={onFollowLink}
+          onCreate={(suggested, how) => onCreateLink(dirName(suggested), titleOf(suggested), how)}
+          onDrag={onDragLink}
+          onInspect={onInspect}
+        />
+      )}
+
+      <div className="pane-body" ref={bodyRef}>
         {blank ? (
           <div className="edit-layer items-center justify-center">
             <div className="text-center">
@@ -276,15 +394,75 @@ export function NotePane({
             </div>
           </div>
         ) : (
-          <div className="edit-layer">
+          <div
+            className="edit-layer"
+            // The editor's own top padding, so the first line starts below the
+            // block rather than underneath it. A CSS variable rather than a
+            // style on .cm-scroller: the scroller is CodeMirror's DOM, and
+            // reaching into it from React is how these two stop agreeing.
+            style={
+              { '--links-inset': !showLinks || pinLinks ? '0px' : `${LINKS_BLOCK_HEIGHT}px` } as React.CSSProperties
+            }
+          >
             <CodeEditor
               path={path}
               doc={doc}
               version={version}
               onDocChange={onDocChange}
               editorRef={viewRef}
+              env={env}
+              linkHandlers={linkHandlers}
+              revealHeading={revealHeading}
             />
           </div>
+        )}
+
+        {!blank && showLinks && !pinLinks && (
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 z-10"
+            // Slides out of the way as the note scrolls, so the connections are
+            // there when you arrive and out of the way once you're reading.
+            style={{ transform: `translateY(${-scrolled}px)` }}
+          >
+            <div className="pointer-events-auto">
+              <LinksBlock
+                outgoing={outgoing}
+                incoming={incoming}
+                pinned={false}
+                onOpen={onFollowLink}
+                onCreate={(suggested, how) => onCreateLink(dirName(suggested), titleOf(suggested), how)}
+                onDrag={onDragLink}
+                onInspect={onInspect}
+              />
+            </div>
+          </div>
+        )}
+
+        {timesAt && (
+          <HoverCard at={timesAt} width={228}>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-600">
+              This note
+            </p>
+            {/* Full dates here, never "Today": the row already gives you the
+                quick answer, so the card is where you come for the precise one. */}
+            <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-1 text-[11.5px]">
+              {formatDateTime(createdAt, 'full', timezone) && (
+                <>
+                  <dt className="text-ink-400">Created</dt>
+                  <dd className="text-ink-700">{formatDateTime(createdAt, 'full', timezone)}</dd>
+                </>
+              )}
+              <dt className="text-ink-400">Last edited</dt>
+              <dd className="text-ink-700">{formatDateTime(updatedAt, 'full', timezone)}</dd>
+            </dl>
+            {!createdAt && (
+              // Not every filesystem records a creation time. Saying so beats
+              // showing 1970, and beats silently listing only one date.
+              <p className="mt-1.5 text-[11px] leading-snug text-ink-400">
+                This drive doesn’t record when a file was created.
+              </p>
+            )}
+          </HoverCard>
         )}
 
         {dragging && (

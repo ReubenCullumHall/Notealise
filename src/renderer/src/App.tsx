@@ -29,6 +29,12 @@ import {
   type TabLayout
 } from './tabs/model'
 import { applySettings } from './settings/model'
+import { liveIndex, noteRefs } from './links/model'
+import { PathBar } from './PathBar'
+import { Tooltip } from './Tooltip'
+import { LinkInspector, type Inspect } from './links/LinkInspector'
+import { indexLinks, rewriteLinks, titleOf, type LinkRow } from '../../shared/links'
+import type { LinkEnv, LinkHandlers, OpenHow } from './editor/linkEnv'
 import {
   activeSpace,
   DEFAULT_SETTINGS,
@@ -81,6 +87,8 @@ export default function App(): React.JSX.Element {
   const [ready, setReady] = useState(false)
   const [vault, setVault] = useState<string | null>(null)
   const [tree, setTree] = useState<TreeNode[]>([])
+  const treeRef = useRef(tree)
+  treeRef.current = tree
   const [workspace, setWorkspace] = useState<Workspace>(EMPTY_WS)
   // Which notes are open as tabs, and which of them each pane shows. All the
   // arithmetic (what a pane falls back to, where a dropped tab lands) is in
@@ -114,6 +122,37 @@ export default function App(): React.JSX.Element {
   const [withArchived, setWithArchived] = useState(false)
   const [cacheVersion, setCacheVersion] = useState(0)
   const contentCache = useRef<Map<string, string>>(new Map())
+  // Every note's outgoing [[links]], as main last read them off disk. The
+  // backlink half of the links block is derived from this; the notes that are
+  // OPEN are laid over the top from `docsRef`, so what you have just typed shows
+  // up before the autosave rather than after it.
+  const [linkRows, setLinkRows] = useState<LinkRow[]>([])
+  const linkRowsRef = useRef(linkRows)
+  linkRowsRef.current = linkRows
+  // Bumped when an open note's links change, which is the only thing about
+  // typing that the links block cares about — not every keystroke.
+  const [openLinkVersion, setOpenLinkVersion] = useState(0)
+  const openTargetsRef = useRef<Map<string, string>>(new Map())
+  // `[[Note#Heading]]`: the note opens, and the heading is looked for once its
+  // text has landed in the pane.
+  const [pendingHeading, setPendingHeading] = useState<{ path: string; heading: string } | null>(null)
+  // The sidebar's "open this folder, close the rest", handed up so the path bar
+  // can drive it. Imperative on purpose — see Sidebar's `revealRef` prop.
+  const revealRef = useRef<((folder: string) => void) | null>(null)
+  // Each space's own tabs. A note opened in one space stays open when you go
+  // elsewhere — it just isn't on screen, because a strip showing notes you
+  // can't see in the sidebar is the confusing part. Swapped explicitly by
+  // `switchSpace` rather than in an effect, so following a cross-space link
+  // can't race the swap and open into the space it just left.
+  // In memory only: `settings.session` remembers the space you were IN, which is
+  // the one you come back to.
+  const spaceTabs = useRef<Map<string, TabLayout>>(new Map())
+  // The one hover card, for every link anywhere: a chip in a note's links strip
+  // or a [[link]] in the text. Held here rather than by whatever raised it so
+  // there is only ever one on screen, and so it can be portalled clear of the
+  // strip — which carries a transform and a backdrop blur, either of which would
+  // capture a `position: fixed` child (CLAUDE.md).
+  const [inspect, setInspect] = useState<Inspect | null>(null)
   // In-app updates. `unsupported` covers a dev build and unsigned macOS; the
   // banner and Settings both read it, so it lives here and flows down.
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' })
@@ -175,6 +214,16 @@ export default function App(): React.JSX.Element {
       docsRef.current.set(path, text)
       const words = countWords(text)
       setWordCounts((c) => (c[path] === words ? c : { ...c, [path]: words }))
+      // Re-derive the links block only when the LINKS changed, not on every
+      // keystroke: typing inside a paragraph must not cost a backlink rebuild
+      // across every open note.
+      const targets = indexLinks(text)
+        .map((l) => l.target + '#' + (l.heading ?? ''))
+        .join(' ')
+      if (openTargetsRef.current.get(path) !== targets) {
+        openTargetsRef.current.set(path, targets)
+        setOpenLinkVersion((v) => v + 1)
+      }
       if (saveTimer.current) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => void flush(), 400)
     },
@@ -407,6 +456,223 @@ export default function App(): React.JSX.Element {
     [applyLayout]
   )
 
+  /** The top-level folder a path belongs to — "" for a note loose at the vault
+   *  root, which belongs to no space and so shows in all of them. */
+  const spaceOf = (p: string): string => (p.includes('/') ? p.slice(0, p.indexOf('/')) : '')
+
+  /** Move to another space, taking this one's tabs with you. */
+  const switchSpace = useCallback(
+    async (folder: string): Promise<void> => {
+      const from = settingsRef.current.activeSpaceFolder
+      if (from === folder) return
+      spaceTabs.current.set(from, layoutRef.current)
+      await changeSettings({ activeSpaceFolder: folder })
+      applyLayout(spaceTabs.current.get(folder) ?? EMPTY_LAYOUT)
+    },
+    [changeSettings, applyLayout]
+  )
+
+  // --- links ------------------------------------------------------------------
+  /** Show a folder from the path bar. The sidebar does the opening and closing;
+   *  what App has to add is the space, because the sidebar only ever renders one
+   *  space's branch — so revealing a folder in a space you aren't in has to
+   *  switch to it first, or the reveal would silently do nothing. */
+  const reveal = useCallback(
+    async (folder: string): Promise<void> => {
+      const wanted = folder.split('/')[0]
+      const isSpace = settingsRef.current.spaces.some((sp) => sp.folder === wanted)
+      if (isSpace && wanted !== settingsRef.current.activeSpaceFolder) await switchSpace(wanted)
+      // The space's own crumb has no row of its own — the sidebar is already
+      // showing its contents — so revealing it means closing everything else,
+      // which an empty ancestor chain does anyway.
+      revealRef.current?.(folder)
+    },
+    [switchSpace]
+  )
+
+
+
+  /** Open a note beside the one you're in, rather than over it — what Alt+click
+   *  on a link does, and what dropping a link on a column's edge does. */
+  const openBeside = useCallback(
+    async (p: string): Promise<void> => {
+      const l = layoutRef.current
+      applyLayout(l.panes.length >= MAX_PANES ? showInPane(l, p, l.focus) : splitAt(l, p, l.focus + 1))
+      if (!docsRef.current.has(p)) await loadDoc(p)
+    },
+    [applyLayout, loadDoc]
+  )
+
+  const openLink = useCallback(
+    async (p: string, how: OpenHow, heading?: string | null): Promise<void> => {
+      // A note belongs to its space. Following a link into another one takes you
+      // there rather than dragging the note across — otherwise the tab strip
+      // would show a note the sidebar beside it can't.
+      const owner = spaceOf(p)
+      if (owner && owner !== settingsRef.current.activeSpaceFolder) {
+        if (settingsRef.current.spaces.some((sp) => sp.folder === owner)) await switchSpace(owner)
+      }
+      if (heading) setPendingHeading({ path: p, heading })
+      if (how === 'split') await openBeside(p)
+      else await openNote(p, how === 'tab')
+    },
+    [openBeside, openNote, switchSpace]
+  )
+
+  /** Clicking a `[[link]]` to a note nobody has written yet: make it, beside the
+   *  note that mentioned it, and open it. The name is sanitised in main, so the
+   *  path that comes back is the one to use — never the title we asked for. */
+  const createFromLink = useCallback(
+    async (dir: string, title: string, how: OpenHow): Promise<void> => {
+      try {
+        const actual = await window.api.createNote(dir, title)
+        await loadTree()
+        await openLink(actual, how)
+        if (titleOf(actual) !== title) {
+          flash(`Made "${titleOf(actual)}" — "${title}" isn't a usable filename`)
+        }
+      } catch (e) {
+        flash(`Couldn't make that note: ${(e as Error).message}`)
+      }
+    },
+    [loadTree, openLink, flash]
+  )
+
+  /** Every note in the whole vault, for resolving links. Deliberately not the
+   *  space-scoped `allNotes` the search uses: a link may point outside the space
+   *  you're in, and showing which space it lands in is the point. */
+  const vaultNotes = useMemo(() => noteRefs(tree), [tree])
+
+  /** When each note was made and last written, straight off the tree main sends.
+   *  Rebuilt with the tree, which is also what the watcher refreshes — so an edit
+   *  made in another app updates the "last edited" here without anything extra. */
+  const fileTimes = useMemo(() => {
+    const out: Record<string, { createdAt?: number; updatedAt?: number }> = {}
+    const walk = (nodes: TreeNode[]): void => {
+      for (const n of nodes) {
+        if (n.type === 'file') out[n.path] = { createdAt: n.createdAt, updatedAt: n.updatedAt }
+        else if (n.children) walk(n.children)
+      }
+    }
+    walk(tree)
+    return out
+  }, [tree])
+
+  /** What the editors need to know about the vault. Per-pane `path` is added by
+   *  the pane itself — a link resolves relative to the note it is written in. */
+  const linkEnvBase = useMemo(
+    (): Omit<LinkEnv, 'path'> => ({
+      notes: vaultNotes,
+      spaces: settings.spaces.map((sp) => ({ folder: sp.folder, emoji: sp.emoji }))
+    }),
+    [vaultNotes, settings.spaces]
+  )
+
+  const linkHandlers = useMemo(
+    (): LinkHandlers => ({
+      open: (p, how, heading) => void openLink(p, how, heading),
+      create: (dir, title, how) => void createFromLink(dir, title, how),
+      jump: (heading) => setPendingHeading({ path: activePath(layoutRef.current) ?? '', heading }),
+      reveal: (folder) => void reveal(folder),
+      inspect: (at) => setInspect(at as Inspect | null),
+      dragStart: (p) => setDrag({ kind: 'tab', path: p }),
+      dragEnd: () => setDrag(null)
+    }),
+    [openLink, createFromLink, reveal]
+  )
+
+  /** The index as it stands now: what main read from disk, with the open buffers
+   *  laid over it. `openLinkVersion` is what re-runs this — deliberately not
+   *  every keystroke, only the ones that changed a link. */
+  const linkIndex = useMemo(
+    () => liveIndex(linkRows, new Map(docsRef.current)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [linkRows, openLinkVersion, layout.tabs]
+  )
+
+  const rescanLinks = useCallback(async (paths?: string[]): Promise<void> => {
+    try {
+      const rows = await window.api.scanLinks(paths)
+      setLinkRows((prev) => {
+        if (!paths) return rows
+        // A partial rescan replaces only what it looked at. A path that came back
+        // with nothing is a note whose links are gone — or a note that is gone —
+        // and either way its old row must not survive.
+        const touched = new Set(paths)
+        return [...prev.filter((r) => !touched.has(r.path)), ...rows]
+      })
+    } catch {
+      // No vault open yet, or it went away mid-scan. The block shows nothing,
+      // which is honest — the alternative is showing a stale set of backlinks.
+    }
+  }, [])
+
+  /**
+   * A note was renamed — point every `[[link]]` that meant it at its new name.
+   *
+   * Links resolve by TITLE, so renaming a note breaks every link to it while a
+   * move between folders leaves them all working. That is why this only fires on
+   * a real rename: rewriting on a move would edit the user's prose for no reason.
+   *
+   * The order matters and is the whole safety story:
+   *   1. `flush()` first, so no note has unsaved text this could clobber.
+   *   2. Only notes the index says actually link here — never a vault-wide
+   *      text replace, and never a link that resolved somewhere else.
+   *   3. An OPEN note is rewritten through `onDocChange`, so the normal autosave
+   *      owns the write and the editor sees the change; a closed one is read and
+   *      written directly. Writing disk under an open editor would be undone by
+   *      that editor's next autosave.
+   *   4. `rewriteLinks` returns null when nothing changed, so untouched notes
+   *      are never rewritten.
+   */
+  const followRename = useCallback(
+    async (from: string, to: string): Promise<void> => {
+      if (titleOf(from) === titleOf(to)) return // a move: title-based links still resolve
+      await flush()
+      // The note list as it was BEFORE the rename. The tree has already been
+      // reloaded by the time we get here, so the note is in it under its NEW
+      // name — and `[[Waves]]` resolved against that list finds nothing, which
+      // is exactly the link we are trying to follow. Putting the old name back
+      // is what makes the resolution answer "this one".
+      const notes = noteRefs(treeRef.current).map((n) =>
+        n.path === to ? { path: from, title: titleOf(from), kind: 'note' as const } : n
+      )
+      const rows = linkRowsRef.current.filter((r) => r.path !== from)
+      let changed = 0
+      for (const row of rows) {
+        if (!row.links.some((l) => l.target)) continue
+        const openText = docsRef.current.get(row.path)
+        let text: string
+        try {
+          text = openText ?? (await window.api.readNote(row.path))
+        } catch {
+          continue // gone since the scan — nothing to rewrite
+        }
+        const next = rewriteLinks(text, row.path, from, to, notes)
+        if (next === null) continue
+        changed++
+        if (openText !== undefined) {
+          // Through the normal typing path, so the editor re-seeds and the
+          // autosave — not this function — does the writing.
+          docsRef.current.set(row.path, next)
+          setVersions((v) => ({ ...v, [row.path]: (v[row.path] ?? 0) + 1 }))
+          onDocChange(row.path, next)
+        } else {
+          try {
+            await window.api.writeNote(row.path, next)
+          } catch (e) {
+            flash(`Couldn't update links in ${titleOf(row.path)}: ${(e as Error).message}`)
+          }
+        }
+      }
+      if (changed) {
+        flash(`Updated links in ${changed} ${changed === 1 ? 'note' : 'notes'}`)
+        void rescanLinks()
+      }
+    },
+    [flush, onDocChange, flash, rescanLinks]
+  )
+
   // Anything that puts a note in a pane — a drop, a keyboard cycle, a restored
   // layout — goes through here for its content, so no path has to remember to
   // load it. Panes whose note is already loaded cost nothing.
@@ -421,7 +687,17 @@ export default function App(): React.JSX.Element {
   const restoreSession = useCallback(
     (t: TreeNode[], s: AppSettings): void => {
       if (s.startup === 'last') {
-        applyLayout(restoreLayout(s.session, (p) => !!findNode(t, p)))
+        // Only the notes that belong to the space being restored INTO. A saved
+        // session can carry tabs from a space you left, and reopening them here
+        // would put a note in the strip that the sidebar beside it doesn't show
+        // — the same confusion switching spaces now avoids. A note loose at the
+        // vault root belongs to no space and comes back in any of them.
+        const home = s.activeSpaceFolder
+        const mine = (p: string): boolean => {
+          const owner = p.includes('/') ? p.slice(0, p.indexOf('/')) : ''
+          return !owner || owner === home || !s.spaces.some((sp) => sp.folder === owner)
+        }
+        applyLayout(restoreLayout(s.session, (p) => mine(p) && !!findNode(t, p)))
       }
       // From here the layout is the user's, and worth saving. Until it is, an
       // empty layout must NOT be written back — that would wipe the session
@@ -445,8 +721,9 @@ export default function App(): React.JSX.Element {
       const s = await loadSettings()
       if (v) await syncSpaces(loadedTree, s)
       if (v) restoreSession(loadedTree, s)
+      if (v) await rescanLinks() // one walk of the vault; incremental after this
     })()
-  }, [loadTree, loadWorkspace, loadSettings, restoreSession, syncSpaces])
+  }, [loadTree, loadWorkspace, loadSettings, restoreSession, syncSpaces, rescanLinks])
 
   // Remember the whole layout — which notes are open, how they're split, which
   // pane you were in — regardless of the current startup preference, so turning
@@ -475,6 +752,9 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     return window.api.onVaultChanged(async ({ paths }) => {
       contentCache.current.clear() // note contents may have changed on disk
+      // Only what changed gets re-read for links — the watcher already tells us
+      // exactly which notes those are, and it already debounces by 100ms.
+      void rescanLinks(paths.filter((p) => p.toLowerCase().endsWith('.md')))
       const t = await loadTree()
       await syncSpaces(t, settingsRef.current)
       for (const p of layoutRef.current.tabs) {
@@ -491,7 +771,7 @@ export default function App(): React.JSX.Element {
         }
       }
     })
-  }, [loadTree, syncSpaces, applyLayout])
+  }, [loadTree, syncSpaces, applyLayout, rescanLinks])
 
   const pick = async (): Promise<void> => {
     const v = await window.api.pickVault()
@@ -502,6 +782,11 @@ export default function App(): React.JSX.Element {
       applyLayout(EMPTY_LAYOUT)
       docsRef.current.clear()
       dirtyRef.current.clear()
+      // A different vault's links are a different graph — keeping the old rows
+      // would show backlinks from notes that aren't here.
+      setLinkRows([])
+      openTargetsRef.current.clear()
+      spaceTabs.current.clear() // a different vault's spaces are different spaces
       const t = await loadTree()
       await loadWorkspace()
       const s = await loadSettings() // a vault may carry its own saved appearance
@@ -622,6 +907,9 @@ export default function App(): React.JSX.Element {
       await loadTree()
       await loadWorkspace()
       remapOpen(node.path, actualRel)
+      // Folders are skipped: a folder has no title for a link to name, and its
+      // notes keep theirs, so every link through it still resolves.
+      if (node.type === 'file') await followRename(node.path, actualRel)
       const actualName = nameOf(actualRel)
       if (stripMd(actualName) !== stripMd(next.trim()))
         flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
@@ -801,6 +1089,7 @@ export default function App(): React.JSX.Element {
       await loadTree()
       await loadWorkspace()
       remapOpen(path, actualRel)
+      await followRename(path, actualRel)
       const actualName = stripMd(nameOf(actualRel))
       if (actualName !== title)
         flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
@@ -829,11 +1118,12 @@ export default function App(): React.JSX.Element {
     <div className="flex h-full w-full">
       <Sidebar
         vaultName={baseName(vault)}
+        vaultPath={vault}
         tree={spaceTree}
         looseNotes={looseNotes}
         spaces={settings.spaces}
         activeSpaceFolder={space.folder}
-        onSwitchSpace={(folder) => void changeSettings({ activeSpaceFolder: folder })}
+        onSwitchSpace={(folder) => void switchSpace(folder)}
         spaceActions={spaceActions}
         workspace={workspace}
         openPath={openPath}
@@ -847,6 +1137,7 @@ export default function App(): React.JSX.Element {
         onToggleWithArchived={() => setWithArchived((a) => !a)}
         searchHits={searchHits}
         onOpenSearchHit={openSearchResult}
+        revealRef={revealRef}
         update={update}
         actions={{
           onOpen: (p, newTab) => void openNote(p, newTab),
@@ -883,6 +1174,20 @@ export default function App(): React.JSX.Element {
           onNewTab={() => applyLayout(openTab(layoutRef.current, BLANK))}
           dragging={drag}
         />
+        {/* Between the tabs and the format bar, on a line of its own. The tabs
+            are which notes are open; this is where THE one you're in lives;
+            the format bar below is what you can do to it — three different
+            questions, and running them together (the path reading as part of
+            the note's own links) is what made this confusing before.
+            It appears and disappears with the SETTING, never with what's open:
+            a bar that came and went per note would move the text under you. */}
+        {space.showPath && (
+          <PathBar
+            path={openPath ?? ''}
+            spaces={linkEnvBase.spaces}
+            onReveal={(folder) => void reveal(folder)}
+          />
+        )}
         {layout.panes.length > 0 ? (
           <>
             <div className="flex min-h-0 flex-1">
@@ -897,6 +1202,23 @@ export default function App(): React.JSX.Element {
                   version={versions[p] ?? 0}
                   wordCount={wordCounts[p] ?? 0}
                   numberFormat={settings.numberFormat}
+                  createdAt={fileTimes[p]?.createdAt}
+                  updatedAt={fileTimes[p]?.updatedAt}
+                  showNoteInfo={space.showNoteInfo}
+                  dateFormat={settings.dateFormat}
+                  timezone={settings.timezone}
+                  // A link resolves relative to the note it is written in, so
+                  // each column gets the same vault with its own `path`.
+                  env={{ ...linkEnvBase, path: p }}
+                  linkHandlers={linkHandlers}
+                  linkIndex={linkIndex}
+                  showLinks={space.showLinks}
+                  pinLinks={space.pinLinks}
+                  onFollowLink={(target, how, heading) => void openLink(target, how, heading)}
+                  onCreateLink={(dir, title, how) => void createFromLink(dir, title, how)}
+                  onDragLink={(target) => setDrag(target ? { kind: 'tab', path: target } : null)}
+                  onInspect={setInspect}
+                  revealHeading={pendingHeading?.path === p ? pendingHeading.heading : null}
                   focused={i === layout.focus}
                   split={layout.panes.length > 1}
                   slots={space.toolbarSlots}
@@ -971,6 +1293,18 @@ export default function App(): React.JSX.Element {
           </>
         )}
       </main>
+
+      {/* Every `data-tip` in the app, in one place. Replaces the HTML `title`
+          attribute, which went stale when a control was toggled while hovered,
+          didn't always appear at all, and can't be styled. */}
+      <Tooltip />
+
+      {/* One card for every link in the window. It portals itself to
+          document.body — the links strip has a transform and a backdrop blur,
+          and either would make it the containing block for a fixed-position
+          child, which is what put this card hundreds of pixels from the link it
+          described. */}
+      {inspect && <LinkInspector at={inspect} />}
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
 

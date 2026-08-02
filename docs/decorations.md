@@ -107,6 +107,62 @@ against the `EditorView`, inspect the resulting DOM): renders correctly, reveals
 cursor movement, and — importantly — an *unclosed* fence or `$$` (the normal state while actively
 typing) never throws; it's simply left raw until closed.
 
+### `[[wiki links]]` (`wikiPass.ts`, implemented)
+
+A hand scanner like `mathPass`, because `@lezer/markdown` does not model this: `[[Waves]]` has no
+`(destination)`, so the parser sees an ordinary bracketed span and produces no node to walk. Links
+inside code are skipped via `inCode()`, which is **exported from `mathPass.ts`** rather than copied —
+two subtly different code-node lists would be a bug waiting to happen.
+
+**Marks, not a widget**, which is the one place this pass differs in kind from the three widget
+passes above. Every other replaced construct swaps text for something that isn't text (a bullet, a
+KaTeX box); a link's label *is* text — it's the note's name — and replacing it would take selection,
+copy, in-note search and undo with it. So the brackets are hidden exactly like a `**`, and what's
+left is marked. Reveal is per-construct (`overlapsSelection`), so the cursor entering a link shows
+the raw `[[…]]` for editing.
+
+What ends up visible, by form:
+
+| source | rendered |
+|---|---|
+| `[[Waves]]` | Waves |
+| `[[Physics/Waves]]` | Waves (the folder is hidden) |
+| `[[Waves\|the waves chapter]]` | the waves chapter (the target is hidden) |
+| `[[Waves#Interference]]` | Waves#Interference (the `#` dimmed, not hidden) |
+
+Two things it needs that a pass normally doesn't:
+
+1. **The vault.** Whether a link resolves depends on what notes exist, which is not in this
+   document. That arrives through the `linkEnv` **StateField** (`editor/linkEnv.ts`), pushed by a
+   `setLinkEnv` StateEffect from `CodeEditor`. It is a StateField and not a ref precisely because
+   the ViewPlugin only recomputes on `docChanged || selectionSet || viewportChanged` — a ref would
+   change the answer with no transaction to repaint it, so creating the note a link points at would
+   leave that link dashed until you happened to type. `livePreview.ts`'s update condition has a
+   fourth clause for that effect; keep it narrow, or every cursor blink recomputes the viewport.
+2. **The cross-space emoji**, which is a CSS `::before` off a `data-space` attribute rather than a
+   decoration. `push()` drops zero-length ranges, so a point widget would be **silently thrown
+   away** — and a pseudo-element is not in the file, not selectable, and not a range the builder has
+   to order. The *class* `cm-wikilink-cross` carries the fact that the link crosses spaces; the
+   emoji only says which one, because a space is not obliged to have one.
+
+Clicking and dragging live in `editor/linkGestures.ts` — the first and only
+`EditorView.domEventHandlers` in the app. It hooks **mousedown**, not click, because CodeMirror
+places the cursor on mousedown and a cursor landing inside the link would reveal its raw source at
+the same moment the note changed underneath it.
+
+Three more things the pass draws, all of them CSS rather than decorations:
+
+- **The kind of thing a link points at** — a page for a note, a folder for a folder — as a
+  `mask-image` on `::before`, so the glyph takes `currentColor` and follows the theme and the hover
+  state for free. The two masks are `--icon-doc` / `--icon-folder` in `theme.css`, traced from
+  `icons.tsx`; keep them in step.
+- **One pill, not several boxes.** A link can be two or three marks (target, the `#`, the heading),
+  so only the first gets `cm-wikilink-lead` (left radius, icon, cross-space edge) and only the last
+  gets `cm-wikilink-tail` (right radius). Without this a heading link rendered as two separate grey
+  boxes with a stray `#` between them.
+- **The `›` before a heading.** The `#` is *replaced*, not dimmed, and `.cm-wikilink-heading::before`
+  supplies the separator — so `[[Waves#Interference]]` reads "Waves › Interference".
+
 ## Not handled yet
 
 Lists (beyond the bullet swap), tables, and images are deliberately left for later — each is a new

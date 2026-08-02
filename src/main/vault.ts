@@ -3,6 +3,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { randomBytes } from 'node:crypto'
 import type { TreeNode } from '../shared/types'
+import { indexLinks, stripMd, type LinkRow } from '../shared/links'
 import { sanitizeFilename } from './filenames'
 
 // ---------------------------------------------------------------------------
@@ -213,7 +214,21 @@ async function readDir(absDir: string): Promise<TreeNode[]> {
     if (e.isDirectory()) {
       nodes.push({ name: e.name, path: toRel(abs), type: 'dir', children: await readDir(abs) })
     } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
-      nodes.push({ name: e.name, path: toRel(abs), type: 'file', preview: await readPreview(abs) })
+      // One stat per note, for "made / last edited". The walk already opens and
+      // reads the head of every file for its preview, so this is the cheaper
+      // half of what this loop was already doing.
+      // `birthtime` is not recorded by every filesystem — where it isn't, it
+      // comes back as 0 or as the mtime; either way it is left off rather than
+      // shown as 1970 (`|| undefined` below).
+      const st = await fs.stat(abs).catch(() => null)
+      nodes.push({
+        name: e.name,
+        path: toRel(abs),
+        type: 'file',
+        preview: await readPreview(abs),
+        createdAt: st ? st.birthtimeMs || undefined : undefined,
+        updatedAt: st ? st.mtimeMs || undefined : undefined
+      })
     }
   }
   nodes.sort(compareNodes)
@@ -221,6 +236,62 @@ async function readDir(absDir: string): Promise<TreeNode[]> {
 }
 export async function listTree(): Promise<TreeNode[]> {
   return readDir(requireVault())
+}
+
+// ---------------------------------------------------------------------------
+// The wiki-link scan
+// ---------------------------------------------------------------------------
+// The renderer needs to know which notes link to which, and it can't read files
+// (rule 6). So main reads them and hands back only the LINKS — never the
+// documents. A vault of a thousand notes is a thousand small arrays over the
+// bridge, not a thousand documents.
+//
+// Main parses but deliberately does NOT resolve: which note `[[Waves]]` means
+// depends on where the *linking* note sits, which space it's in and what the
+// sidebar is showing — none of which are main's business. `shared/links.ts` is
+// the parser both sides use, so the two can't disagree about what a link is.
+//
+// Nothing is written to disk. There is no index file, no cache, no database
+// (rules 1 and 2): the vault's own text is the index, and this is just a read.
+
+/** Every `.md` under `absDir`, depth first, honouring the same `ignored()` rule
+ *  the tree walk uses so `.mdnotes/` and the bin never appear. */
+async function listMarkdown(absDir: string, out: string[]): Promise<void> {
+  const entries = await fs.readdir(absDir, { withFileTypes: true }).catch(() => [])
+  for (const e of entries) {
+    if (ignored(e.name)) continue
+    const abs = path.join(absDir, e.name)
+    if (e.isDirectory()) await listMarkdown(abs, out)
+    else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) out.push(abs)
+  }
+}
+
+/**
+ * The outgoing links of every note in the vault, or of just `paths` when given.
+ *
+ * `paths` is the whole freshness story: the watcher reports what changed, and
+ * only those notes are re-read. A note the user is *typing* in isn't re-read at
+ * all — the renderer already holds that text and parses it in process.
+ *
+ * An unreadable file is skipped rather than failing the scan: one bad file in a
+ * synced vault must not cost the user every backlink they have.
+ */
+export async function scanLinks(paths?: string[]): Promise<LinkRow[]> {
+  const root = requireVault()
+  let files: string[]
+  if (paths) {
+    files = paths.filter((p) => p.toLowerCase().endsWith('.md')).map((p) => resolveInVault(p))
+  } else {
+    files = []
+    await listMarkdown(root, files)
+  }
+  const rows: LinkRow[] = []
+  for (const abs of files) {
+    const text = await fs.readFile(abs, 'utf8').catch(() => null)
+    if (text === null) continue // deleted between the watcher event and here, or unreadable
+    rows.push({ path: toRel(abs), links: indexLinks(text) })
+  }
+  return rows
 }
 
 // ---------------------------------------------------------------------------
@@ -275,12 +346,18 @@ async function uniqueName(dirAbs: string, stem: string, ext: string): Promise<st
   return candidate
 }
 
-/** Create `<dirPath>/Untitled.md` (dirPath "" = vault root), or "Untitled
- *  (2).md" etc. if that name's taken. Renaming, if wanted, happens afterwards
- *  via renameEntry. Returns the actual rel path it landed at. */
-export async function createNote(dirPath: string): Promise<string> {
+/** Create `<dirPath>/<name>.md` (dirPath "" = vault root), defaulting to
+ *  "Untitled" and suffixing " (2)" etc. if that name's taken. Returns the actual
+ *  rel path it landed at — the name is sanitised, so it may not be the one asked
+ *  for, and the caller must use what comes back.
+ *
+ *  `name` exists for clicking an unwritten `[[link]]`: creating and then renaming
+ *  would be two fs operations, two watcher events, and a window in which the
+ *  wrong filename is on disk. */
+export async function createNote(dirPath: string, name?: string): Promise<string> {
   const dirAbs = resolveInVault(dirPath)
-  const fname = await uniqueName(dirAbs, 'Untitled', '.md')
+  const stem = name ? sanitizeFilename(stripMd(name)).name : 'Untitled'
+  const fname = await uniqueName(dirAbs, stem, '.md')
   const abs = path.join(dirAbs, fname)
   assertPathLength(abs)
   markWrite(abs)

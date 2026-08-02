@@ -3,7 +3,7 @@ import type { EditorView } from '@codemirror/view'
 import { bold, italic, strike, underline } from './formatCommands'
 import { ColourMenu } from './ColourMenu'
 import { ActionGrid, SlotFace } from './SlotPicker'
-import { findAction } from './toolbarActions'
+import { findAction } from './commands'
 
 interface Props {
   viewRef: React.RefObject<EditorView | null>
@@ -79,22 +79,22 @@ export function FormatToolbar({ viewRef, slots, onSetSlot, compact }: Props): Re
       {slot(0, 'left')}
       {slot(1, 'left')}
       {divider}
-      <button className={FMT_BTN + 'font-bold'} title="Bold  (Ctrl/Cmd+B)" onClick={run(bold)}>
+      <button className={FMT_BTN + 'font-bold'} data-tip="Bold  (Ctrl/Cmd+B)" onClick={run(bold)}>
         B
       </button>
-      <button className={FMT_BTN + 'font-display italic'} title="Italic  (Ctrl/Cmd+I)" onClick={run(italic)}>
+      <button className={FMT_BTN + 'font-display italic'} data-tip="Italic  (Ctrl/Cmd+I)" onClick={run(italic)}>
         I
       </button>
       <button
         className={FMT_BTN + 'underline underline-offset-2'}
-        title="Underline  (Ctrl/Cmd+U)"
+        data-tip="Underline  (Ctrl/Cmd+U)"
         onClick={run(underline)}
       >
         U
       </button>
       <button
         className={FMT_BTN + 'line-through'}
-        title="Strikethrough  (Ctrl/Cmd+Shift+X)"
+        data-tip="Strikethrough  (Ctrl/Cmd+Shift+X)"
         onClick={run(strike)}
       >
         S
@@ -160,7 +160,7 @@ function SlotButton({
   return (
     <span ref={box} className="relative inline-flex">
       <button
-        title={title}
+        data-tip={title}
         aria-label={action ? action.label : 'Choose a command for this button'}
         aria-expanded={action ? undefined : open}
         onClick={() => {

@@ -25,6 +25,14 @@
   src: url('./assets/fonts/jetbrainsmono-500.woff2') format('woff2'); }
 
 :root {
+  /* Icon glyphs as CSS masks, for the two places a real <Icon> component cannot
+     reach: the `[[link]]` marks CodeMirror draws, and the completion popup's own
+     rows. Traced from `icons.tsx`'s `doc` and `folder` — keep them in step; a
+     mask takes `currentColor`, so these follow the theme with no colour of their
+     own (rule 5). */
+  --icon-doc: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%203h7l5%205v12a1%201%200%200%201-1%201H6a1%201%200%200%201-1-1V4a1%201%200%200%201%201-1z%22%2F%3E%3Cpath%20d%3D%22M13%203v5h5%22%2F%3E%3C%2Fsvg%3E");
+  --icon-folder: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%207a2%202%200%200%201%202-2h4l2%202h8a2%202%200%200%201%202%202v8a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2V7z%22%2F%3E%3C%2Fsvg%3E");
+
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

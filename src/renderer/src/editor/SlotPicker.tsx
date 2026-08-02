@@ -1,5 +1,5 @@
 import { Icon } from '../icons'
-import { ACTION_GROUPS, findAction } from './toolbarActions'
+import { ACTION_GROUPS, findAction } from './commands'
 
 // The list of commands a custom format-bar slot can be programmed with. Shared
 // by the popover that opens off a "?" button in the bar and by Settings →
@@ -27,7 +27,7 @@ export function ActionGrid({
             return (
               <button
                 key={a.id}
-                title={a.hint}
+                data-tip={a.hint}
                 aria-pressed={on}
                 onClick={() => onPick(a.id)}
                 className={

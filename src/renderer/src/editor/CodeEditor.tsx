@@ -4,6 +4,7 @@ import { EditorView } from '@codemirror/view'
 import { baseExtensions } from './extensions'
 import { applyColor, clearColor } from './colorCommands'
 import { SelectionToolbar } from './SelectionToolbar'
+import { setLinkEnv, type LinkEnv, type LinkHandlers } from './linkEnv'
 import type { Layer } from './palette'
 
 interface Props {
@@ -16,6 +17,13 @@ interface Props {
   onDocChange: (text: string) => void
   /** set to the live EditorView so the top toolbar can act on it */
   editorRef?: React.MutableRefObject<EditorView | null>
+  /** what the editor knows about the vault, for resolving `[[links]]` */
+  env: LinkEnv
+  /** what a clicked or dragged link does. Captured once; kept fresh through a ref. */
+  linkHandlers: LinkHandlers
+  /** scroll to this heading once the document has landed, then forget it —
+   *  what `[[Note#Heading]]` does after the note opens */
+  revealHeading?: string | null
 }
 
 interface Saved {
@@ -40,7 +48,16 @@ interface TbState {
 // The single most common CM6-in-React bug is recreating the EditorView when the
 // content changes, which jumps the cursor. So: create the view ONCE (empty deps),
 // and switch notes by dispatching a full-document replace — never a remount.
-export function CodeEditor({ path, doc, version, onDocChange, editorRef }: Props): React.JSX.Element {
+export function CodeEditor({
+  path,
+  doc,
+  version,
+  onDocChange,
+  editorRef,
+  env,
+  linkHandlers,
+  revealHeading
+}: Props): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null)
   const host = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -48,6 +65,13 @@ export function CodeEditor({ path, doc, version, onDocChange, editorRef }: Props
   onChangeRef.current = onDocChange
   const docRef = useRef(doc)
   docRef.current = doc
+  // Same reason as onChangeRef above: the view is built once, so the handlers it
+  // captures must be a stable box whose contents we keep current, not the
+  // functions themselves (which are new on every App render).
+  const linksRef = useRef<LinkHandlers | null>(linkHandlers)
+  linksRef.current = linkHandlers
+  const envRef = useRef(env)
+  envRef.current = env
   const prevPath = useRef<string | null>(null)
   const programmatic = useRef(false) // true while we replace the doc ourselves
 
@@ -83,7 +107,7 @@ export function CodeEditor({ path, doc, version, onDocChange, editorRef }: Props
       state: EditorState.create({
         doc: docRef.current,
         extensions: [
-          ...baseExtensions(),
+          ...baseExtensions(linksRef),
           EditorView.updateListener.of((u) => {
             if (u.docChanged && !programmatic.current) onChangeRef.current(u.state.doc.toString())
             if (u.selectionSet || u.docChanged || u.geometryChanged) refreshToolbar(u.view)
@@ -93,6 +117,7 @@ export function CodeEditor({ path, doc, version, onDocChange, editorRef }: Props
     })
     viewRef.current = view
     if (editorRef) editorRef.current = view
+    view.dispatch({ effects: setLinkEnv.of(envRef.current) })
     prevPath.current = path
     const saved = perPath.get(path)
     if (saved) {
@@ -133,6 +158,37 @@ export function CodeEditor({ path, doc, version, onDocChange, editorRef }: Props
     setTb(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, version])
+
+  // Push the vault's shape into the editor whenever it changes. This is what
+  // makes a `[[link]]` stop looking unwritten the moment its note exists — the
+  // decorations only recompute on a transaction, so without this the link would
+  // stay dashed until the user happened to type (CLAUDE.md's bug-class 1).
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: setLinkEnv.of(env) })
+  }, [env])
+
+  // `[[Note#Heading]]`: the note opens first and the heading is found second.
+  // Keyed on `version` as well as the heading, because the document arrives in a
+  // separate effect and searching it before it lands finds nothing.
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view || !revealHeading) return
+    const want = revealHeading.trim().toLowerCase()
+    for (let n = 1; n <= view.state.doc.lines; n++) {
+      const line = view.state.doc.line(n)
+      const m = /^#{1,6}\s+(.*)$/.exec(line.text)
+      if (!m || m[1].trim().toLowerCase() !== want) continue
+      view.dispatch({
+        selection: { anchor: line.from },
+        effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 24 })
+      })
+      view.focus()
+      return
+    }
+    // No such heading: the note is open and the cursor is at the top, which is
+    // where it would have been anyway. Silently landing at the start beats an
+    // error about a heading the user can simply see isn't there.
+  }, [revealHeading, path, version])
 
   // Escape dismisses the toolbar (selection stays; reselecting shows it again).
   useEffect(() => {

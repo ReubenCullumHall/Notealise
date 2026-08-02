@@ -3,6 +3,7 @@
 
 import type { AppSettings } from './settings'
 import type { EntryMeta, Workspace } from './workspace'
+import type { LinkRow } from './links'
 import type { UpdatePrefs, UpdateStatus } from './update'
 
 /** A node in the vault file tree. `path` is always vault-relative, POSIX-style
@@ -17,6 +18,10 @@ export interface TreeNode {
   /** files only: a short plain-text snippet of the note's opening, for the
    *  second line of a sidebar row. Absent when the file couldn't be read. */
   preview?: string
+  /** files only, epoch ms. Absent when the file couldn't be stat'd — which is
+   *  why the UI must treat them as optional rather than as "1970". */
+  createdAt?: number
+  updatedAt?: number
 }
 
 /** Pushed to the renderer (debounced) when the watcher sees external changes.
@@ -38,15 +43,21 @@ export interface VaultApi {
   listTree(): Promise<TreeNode[]>
   readNote(path: string): Promise<string>
   writeNote(path: string, content: string): Promise<void>
-  /** Create `<dirPath>/Untitled.md` ("" = vault root), or "Untitled (2).md"
-   *  etc. if that name's taken. Returns the vault-relative path it landed at. */
-  createNote(dirPath: string): Promise<string>
+  /** Create `<dirPath>/<name>.md` ("" = vault root, name defaults to "Untitled"),
+   *  or "<name> (2).md" etc. if that name's taken. The name is sanitised, so
+   *  ALWAYS use the vault-relative path this returns rather than the one asked
+   *  for. */
+  createNote(dirPath: string, name?: string): Promise<string>
   /** Create a "New folder" (or "New folder (2)" etc.) inside `dirPath`.
    *  Returns the vault-relative path it landed at. */
   createFolder(dirPath: string): Promise<string>
   /** Rename/move; target segment sanitised. Migrates the entry's workspace.json
    *  key (and its descendants'). Returns the actual new rel path. */
   renameEntry(from: string, to: string): Promise<string>
+  /** Every note's outgoing [[wiki links]], for the backlink half of the links
+   *  block. Pass `paths` to rescan only those notes (what the watcher reports);
+   *  omit it for the whole vault. Returns links only — never note contents. */
+  scanLinks(paths?: string[]): Promise<LinkRow[]>
   /** Appearance settings for the active vault (or cached defaults if none). */
   getSettings(): Promise<AppSettings>
   /** Merge a partial settings change; persists and returns the full result. */

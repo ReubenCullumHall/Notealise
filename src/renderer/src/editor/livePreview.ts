@@ -3,6 +3,8 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 import { syntaxTree } from '@codemirror/language'
 import { COLOR_NAMES } from './palette'
 import { mathPass } from './mathPass'
+import { setLinkEnv } from './linkEnv'
+import { wikiPass } from './wikiPass'
 
 // ---------------------------------------------------------------------------
 // Live preview: hide markdown syntax marks on every line EXCEPT the one(s) the
@@ -33,7 +35,9 @@ class BulletWidget extends WidgetType {
   }
 }
 
-const hideDeco = Decoration.replace({})
+/** Exported for `wikiPass`, which hides `[[` / `]]` exactly as this file hides a
+ *  `**` — one definition, so "hidden" can't come to mean two different things. */
+export const hideDeco = Decoration.replace({})
 const bulletDeco = Decoration.replace({ widget: new BulletWidget() })
 
 /** A collected decoration. `atomic` marks a hidden/replaced range so the cursor
@@ -120,6 +124,17 @@ const markdownPass: Pass = (view, active, push) => {
           return
         }
         if (name === 'LinkMark') {
+          // `[[wiki link]]` is wikiPass's, not ours. @lezer/markdown sees the
+          // inner `[Optics]` of `[[Optics]]` as a bracketed link and emits
+          // LinkMarks for those brackets — so without this, BOTH passes hide the
+          // same characters and the "ranges from the passes are disjoint"
+          // contract in build() quietly stops holding. A wiki link's brackets
+          // are always doubled, which is enough to tell them apart.
+          const ch = doc.sliceString(node.from, node.to)
+          if (ch === '[' && doc.sliceString(node.from - 1, node.from) === '[') return
+          if (ch === '[' && doc.sliceString(node.to, node.to + 1) === '[') return
+          if (ch === ']' && doc.sliceString(node.to, node.to + 1) === ']') return
+          if (ch === ']' && doc.sliceString(node.from - 1, node.from) === ']') return
           const parent = node.node.parent
           if (parent && overlapsSelection(view, parent.from, parent.to)) return
           push(node.from, node.to, hideDeco, true) // [ ] ( )
@@ -265,7 +280,7 @@ const fencedCodePass: Pass = (view, active, push) => {
 }
 
 /** The ordered list of decoration passes. Append to extend the engine. */
-export const PASSES: Pass[] = [markdownPass, colorPass, mathPass, fencedCodePass]
+export const PASSES: Pass[] = [markdownPass, colorPass, mathPass, fencedCodePass, wikiPass]
 
 function build(view: EditorView): { decorations: DecorationSet; hidden: DecorationSet } {
   const active = activeLineSet(view)
@@ -296,7 +311,16 @@ const livePreviewPlugin = ViewPlugin.fromClass(
       this.hidden = r.hidden
     }
     update(u: ViewUpdate): void {
-      if (u.docChanged || u.selectionSet || u.viewportChanged) {
+      // The last clause is `wikiPass`'s: whether a `[[link]]` resolves depends on
+      // what is in the vault, not on this document, so creating the note a link
+      // points at has to repaint it. Kept narrow on purpose — rebuilding on ANY
+      // transaction would recompute the whole viewport on every cursor blink.
+      if (
+        u.docChanged ||
+        u.selectionSet ||
+        u.viewportChanged ||
+        u.transactions.some((tr) => tr.effects.some((e) => e.is(setLinkEnv)))
+      ) {
         const r = build(u.view)
         this.decorations = r.decorations
         this.hidden = r.hidden

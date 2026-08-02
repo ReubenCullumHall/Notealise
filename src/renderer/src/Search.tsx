@@ -34,7 +34,7 @@ function SearchToggle({
   return (
     <button
       onClick={onClick}
-      title={title}
+      data-tip={title}
       aria-pressed={on}
       aria-label={title}
       className={
@@ -76,7 +76,7 @@ export function SearchBar({
         {query && (
           <button
             className="shrink-0 rounded-full border-none bg-transparent p-1 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
-            title="Clear"
+            data-tip="Clear"
             aria-label="Clear search"
             onClick={() => onQuery('')}
           >
@@ -151,7 +151,7 @@ export function SearchResults({
           onKeyDown={(e) => {
             if (e.key === 'Enter') onOpen(h, e.metaKey || e.ctrlKey)
           }}
-          title={h.path}
+          data-tip={h.path}
         >
           <span className={'shrink-0 ' + (activePath === h.path ? 'text-brand-600' : 'text-ink-300')}>
             <Icon name="doc" />
@@ -161,7 +161,7 @@ export function SearchResults({
             <span className="tree-sub truncate text-ink-500">{h.snippet ?? h.path}</span>
           </span>
           {h.archived && (
-            <span className="shrink-0 text-ink-400" title="In the archive">
+            <span className="shrink-0 text-ink-400" data-tip="In the archive">
               <Icon name="archive" />
             </span>
           )}

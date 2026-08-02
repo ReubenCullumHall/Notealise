@@ -115,7 +115,7 @@ export function TabStrip({
               role="tab"
               tabIndex={0}
               aria-selected={on}
-              title={path || 'Waiting for a note'}
+              data-tip={path || 'Waiting for a note'}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.effectAllowed = 'move'
@@ -150,7 +150,7 @@ export function TabStrip({
               <button
                 type="button"
                 aria-label={`Close ${title}`}
-                title="Close tab"
+                data-tip="Close tab"
                 onClick={(e) => {
                   e.stopPropagation()
                   onClose(path)
@@ -169,7 +169,7 @@ export function TabStrip({
       {marker(null)}
       <button
         type="button"
-        title="New tab"
+        data-tip="New tab"
         aria-label="New tab"
         onClick={onNewTab}
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-none bg-transparent p-0 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"

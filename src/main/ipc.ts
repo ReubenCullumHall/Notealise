@@ -35,6 +35,7 @@ import {
   listTree,
   readNote,
   renameEntry,
+  scanLinks,
   setVaultRoot,
   writeNote
 } from './vault'
@@ -74,7 +75,7 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.listTree, () => listTree())
   ipcMain.handle(CH.readNote, (_e, p: string) => readNote(p))
   ipcMain.handle(CH.writeNote, (_e, p: string, content: string) => writeNote(p, content))
-  ipcMain.handle(CH.createNote, (_e, dir: string) => createNote(dir))
+  ipcMain.handle(CH.createNote, (_e, dir: string, name?: string) => createNote(dir, name))
   ipcMain.handle(CH.createFolder, (_e, dir: string) => createFolder(dir))
   // Rename and re-key together: the filesystem move happens first (it's the part
   // that can fail), then the sidecar follows it so pins and order survive a move.
@@ -83,6 +84,8 @@ export function registerIpc(window: BrowserWindow): void {
     await migrateKey(from, actual)
     return actual
   })
+
+  ipcMain.handle(CH.scanLinks, (_e, paths?: string[]) => scanLinks(paths))
 
   ipcMain.handle(CH.getSettings, () => getSettings())
   ipcMain.handle(CH.setSettings, (_e, partial: Partial<AppSettings>) => setSettings(partial))

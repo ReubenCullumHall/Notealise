@@ -13,7 +13,8 @@ import { ACCENT_MODES, ACCENTS, DENSITIES, TEXT_TONES, THEMES } from './model'
 import { Icon } from '../icons'
 import { SettingRow, ToggleRow } from './primitives'
 import { ActionGrid, SlotFace } from '../editor/SlotPicker'
-import { findAction, SLOT_LABELS } from '../editor/toolbarActions'
+import { SpaceForm } from './SpaceForm'
+import { findAction, SLOT_LABELS } from '../editor/commands'
 
 // Settings -> Spaces. Up to five presets; each carries its own look, its own
 // sidebar arranging and its own format-bar buttons, so a maths-revision space
@@ -45,7 +46,7 @@ interface Props {
 
 /** The per-space sections take the space directly; the binding to a settings
  *  write happens once, in `Spaces` below. */
-interface SpaceProps {
+export interface SpaceProps {
   space: Space
   onChange: (patch: Partial<Space>) => void
 }
@@ -156,7 +157,7 @@ export function Spaces({ settings, onChange, actions }: Props): React.JSX.Elemen
                 key={s.folder}
                 role="tab"
                 aria-selected={on}
-                title={spaceLabel(s)}
+                data-tip={spaceLabel(s)}
                 className={'space-tab' + (on ? ' on' : '')}
                 onClick={() => onChange({ activeSpaceFolder: s.folder })}
               >
@@ -168,7 +169,7 @@ export function Spaces({ settings, onChange, actions }: Props): React.JSX.Elemen
           <button
             className="space-add"
             disabled={busy || spaces.length >= SPACE_CAP}
-            title={
+            data-tip={
               spaces.length >= SPACE_CAP
                 ? `You can have up to ${SPACE_CAP} spaces`
                 : 'Add a space — creates a new folder in your vault'
@@ -216,16 +217,16 @@ export function Spaces({ settings, onChange, actions }: Props): React.JSX.Elemen
 
       <ThemeCards space={space} onChange={patch} />
 
+      {/* The SAME form Master settings shows — one component, so "this space
+          only" and "every space" can never offer different options or lay them
+          out differently. Only where the change lands differs. */}
       <div className="flex flex-col gap-2">
-        <Disclosure label="Appearance" hint="Accent colour, button edges and sidebar density">
-          <SpaceAppearance space={space} onChange={patch} />
-        </Disclosure>
-        <Disclosure label="Arranging" hint="How the sidebar orders and labels things">
-          <SpaceArranging space={space} onChange={patch} />
-        </Disclosure>
-        <Disclosure label="Shortcuts" hint="The four custom format-bar buttons">
-          <SpaceShortcuts space={space} onChange={patch} />
-        </Disclosure>
+        <p className="px-1 text-[11.5px] leading-relaxed text-ink-400">
+          Space-specific settings. The same list is in{' '}
+          <span className="font-medium text-ink-500">Master settings</span>, where changing one
+          answers it for every space at once.
+        </p>
+        <SpaceForm space={space} onChange={patch} />
       </div>
 
       <ComingSoon />
@@ -332,7 +333,7 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
                 {items.map((e) => (
                   <button
                     key={e}
-                    title={e}
+                    data-tip={e}
                     onClick={() => {
                       onPick(e)
                       setOpen(false)
@@ -396,7 +397,7 @@ function DeleteSpace({
  *  measured max-height, and the Shortcuts body is tall and variable — a wrong
  *  one clips the action grid. Container classes copied from ToggleRow so an
  *  open section lines up with the rows inside it (rule 8). */
-function Disclosure({
+export function Disclosure({
   label,
   hint,
   children
@@ -456,7 +457,7 @@ function ThemeCards({ space, onChange }: SpaceProps): React.JSX.Element {
               key={t.id}
               className={'theme-card' + (on ? ' on' : '')}
               aria-pressed={on}
-              title={t.hint}
+              data-tip={t.hint}
               onClick={() => onChange({ theme: t.id })}
             >
               <span className="preview" aria-hidden="true">
@@ -513,7 +514,7 @@ function ThemeCards({ space, onChange }: SpaceProps): React.JSX.Element {
   )
 }
 
-function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Element {
+export function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Element {
   return (
     <>
       <section className="settings-group">
@@ -528,7 +529,7 @@ function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Element {
               <button
                 key={a.id}
                 className={'accent-dot' + (on ? ' on' : '')}
-                title={a.label}
+                data-tip={a.label}
                 aria-label={a.label}
                 aria-pressed={on}
                 style={{ background: bg }}
@@ -598,7 +599,7 @@ function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Element {
   )
 }
 
-function SpaceArranging({ space, onChange }: SpaceProps): React.JSX.Element {
+export function SpaceArranging({ space, onChange }: SpaceProps): React.JSX.Element {
   return (
     <>
       <section className="settings-group">
@@ -633,7 +634,7 @@ function SpaceArranging({ space, onChange }: SpaceProps): React.JSX.Element {
 /** The four programmable format-bar buttons. Laid out as the bar itself so it's
  *  obvious *where* each slot lands: pick a slot in the preview, then pick what
  *  it does from the same catalogue the bar's own "?" popover offers. */
-function SpaceShortcuts({ space, onChange }: SpaceProps): React.JSX.Element {
+export function SpaceShortcuts({ space, onChange }: SpaceProps): React.JSX.Element {
   const slots = space.toolbarSlots
   const [active, setActive] = useState(0)
   const assign = (id: string): void => {
@@ -649,7 +650,7 @@ function SpaceShortcuts({ space, onChange }: SpaceProps): React.JSX.Element {
         key={i}
         onClick={() => setActive(i)}
         aria-pressed={on}
-        title={`${SLOT_LABELS[i]} button`}
+        data-tip={`${SLOT_LABELS[i]} button`}
         className={
           'flex h-7 w-7 items-center justify-center rounded-md border-none p-0 outline-none transition duration-150 ' +
           (on
@@ -752,10 +753,10 @@ function ComingSoon(): React.JSX.Element {
               <span className="rounded-full bg-brand-500/12 px-1.5 py-0.5 text-[10px] font-medium text-brand-600">
                 Soon
               </span>
-              <button className="mini" disabled title="Coming soon">
+              <button className="mini" disabled data-tip="Coming soon">
                 Choose
               </button>
-              <button className="mini" disabled title="Coming soon">
+              <button className="mini" disabled data-tip="Coming soon">
                 Explore library
               </button>
             </span>

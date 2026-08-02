@@ -57,6 +57,72 @@ describe('normalizeSettings', () => {
     }
   })
 
+  it('starts a space with the chrome a new user should see', () => {
+    // The links strip and the path bar are the features, not decorations on
+    // them: a space that started without either read as the feature missing
+    // rather than switched off. Pinning the strip is the opinionated one, so it
+    // stays off until asked for.
+    expect(activeSpace(normalizeSettings({}))).toMatchObject({
+      showLinks: true,
+      showPath: true,
+      pinLinks: false,
+      showNoteInfo: false
+    })
+  })
+
+  it('never turns a chrome option on or off on a coercion', () => {
+    // 'false' and 0 are the ones that matter: coercing either would flip a
+    // setting for someone who never asked, and all four of these MOVE the note
+    // text on screen. Junk falls back to the default, whatever that default is.
+    for (const bad of ['true', 'false', 1, 0, null, undefined, {}]) {
+      expect(
+        activeSpace(
+          normalizeSettings({
+            spaces: [{ folder: 'a', pinLinks: bad, showPath: bad, showLinks: bad, showNoteInfo: bad }]
+          })
+        )
+      ).toMatchObject({ showLinks: true, showPath: true, pinLinks: false, showNoteInfo: false })
+    }
+    // and a real boolean is always obeyed, in both directions
+    expect(
+      activeSpace(normalizeSettings({ spaces: [{ folder: 'a', showPath: false, pinLinks: true }] }))
+    ).toMatchObject({ showPath: false, pinLinks: true })
+  })
+
+  it('does not carry a top-level value into a field that was never global', () => {
+    // showNoteInfo has only ever lived on a space. A stray top-level key of the
+    // same name is someone's hand-edit, not a setting this app wrote, and must
+    // not turn the option on everywhere.
+    const s = normalizeSettings({ showNoteInfo: true, spaces: [{ folder: 'Physics' }] })
+    expect(s.spaces[0].showNoteInfo).toBe(false)
+    expect(activeSpace(normalizeSettings({ spaces: [{ folder: 'a', showNoteInfo: true }] })).showNoteInfo).toBe(true)
+  })
+
+  it('carries an old app-wide chrome setting down into every space', () => {
+    // showPath / pinLinks were global before 2026-08-02. Someone who had turned
+    // the path bar on must not find it silently off after an update, and each
+    // space is where the answer lives now.
+    const s = normalizeSettings({
+      showPath: true,
+      pinLinks: true,
+      spaces: [{ folder: 'Physics' }, { folder: 'Maths' }]
+    })
+    expect(s.spaces.map((x) => x.showPath)).toEqual([true, true])
+    expect(s.spaces.map((x) => x.pinLinks)).toEqual([true, true])
+    // and it is idempotent: re-normalising keeps the values, and the top level
+    // is not written back out
+    expect(normalizeSettings(s)).toEqual(s)
+    expect('showPath' in s).toBe(false)
+  })
+
+  it('lets a space that has its own answer beat the old global one', () => {
+    const s = normalizeSettings({
+      showPath: true,
+      spaces: [{ folder: 'Physics', showPath: false }, { folder: 'Maths' }]
+    })
+    expect(s.spaces.map((x) => x.showPath)).toEqual([false, true])
+  })
+
   it('keeps button definition off unless it is really a true', () => {
     expect(activeSpace(normalizeSettings({})).buttonDefinition).toBe(false)
     expect(activeSpace(normalizeSettings({ buttonDefinition: true })).buttonDefinition).toBe(true)
@@ -152,6 +218,9 @@ describe('normalizeSettings — migration from the flat pre-Spaces shape', () =>
 
   it('leaves the global fields at the top level', () => {
     const s = normalizeSettings(OLD)
+    // If one of these ever gets demoted into a Space by a refactor, this is what
+    // notices: a per-space `startup` would mean the app opened differently
+    // depending on which space was last active, which is nonsense.
     expect(s.startup).toBe('last')
     expect(s.dateFormat).toBe('ymd')
     expect(s.numberFormat).toBe('comma')

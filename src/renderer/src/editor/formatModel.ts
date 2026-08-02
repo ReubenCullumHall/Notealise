@@ -92,11 +92,19 @@ function isKind(marker: string, kind: MarkerKind): boolean {
   }
 }
 
+/** Whether a command should be free to turn its marker back off.
+ *
+ *  `'toggle'` is what a button does: press H1 twice and the heading goes away.
+ *  `'set'` is what a "/" command does: you typed `/h1` and asked for a heading,
+ *  so you get one — even on a line that already had one. Pressing a button again
+ *  is a retraction; typing a command's name is not. */
+export type MarkerMode = 'toggle' | 'set'
+
 /**
- * Toggle `kind` across `lines`. Every line already carrying it means the user is
- * asking to turn it off, so the marker is stripped; otherwise it is applied to
- * all of them, replacing whatever marker was there. Numbered lists renumber from
- * 1 down the block.
+ * Apply `kind` across `lines`. In `'toggle'` mode, every line already carrying it
+ * means the user is asking to turn it off, so the marker is stripped; otherwise
+ * it is applied to all of them, replacing whatever marker was there. Numbered
+ * lists renumber from 1 down the block.
  *
  * A blank line BESIDE text is left alone — marking it would turn a paragraph gap
  * into an empty list item. But when there is no text at all (the cursor sitting
@@ -104,10 +112,11 @@ function isKind(marker: string, kind: MarkerKind): boolean {
  * it there made the list buttons do nothing whatsoever, which is exactly when
  * you reach for one — you press Enter and ask for a list before typing it.
  */
-export function toggleMarker(lines: string[], kind: MarkerKind): string[] {
+export function toggleMarker(lines: string[], kind: MarkerKind, mode: MarkerMode = 'toggle'): string[] {
   const touched = lines.filter((l) => l.trim() !== '')
   const blankOnly = touched.length === 0
-  const off = touched.length > 0 && touched.every((l) => isKind(splitMarker(l).marker, kind))
+  const off =
+    mode === 'toggle' && touched.length > 0 && touched.every((l) => isKind(splitMarker(l).marker, kind))
   let n = 0
   return lines.map((line) => {
     if (line.trim() === '' && !blankOnly) return line

@@ -66,7 +66,7 @@ export function ColourMenu({ viewRef, btnBase, btnIdle, btnActive }: Props): Rea
   const swatch = (layer: Layer, name: string, label: string): React.JSX.Element => (
     <button
       key={layer + name}
-      title={label}
+      data-tip={label}
       aria-label={label}
       onClick={run((v) => applyColor(v, layer, name))}
       className="h-6 w-6 rounded-md border-none ring-1 ring-ink-300/25 outline-none transition duration-150 hover:scale-110 hover:ring-brand-300"
@@ -77,7 +77,7 @@ export function ColourMenu({ viewRef, btnBase, btnIdle, btnActive }: Props): Rea
   return (
     <span ref={box} className="relative inline-flex">
       <button
-        title="Text colour & highlight"
+        data-tip="Text colour & highlight"
         aria-label="Text colour & highlight"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}

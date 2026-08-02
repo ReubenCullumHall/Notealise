@@ -4,84 +4,119 @@ import {
   type CompletionContext,
   type CompletionResult
 } from '@codemirror/autocomplete'
-import type { EditorView } from '@codemirror/view'
 import type { Extension } from '@codemirror/state'
+import { matchesQuery, SLASH_COMMANDS } from './commands'
+import { linkEnv } from './linkEnv'
+import { linkChoices } from '../links/model'
 
-// "/" slash commands — ported from legacy/src/completions.js (SLASH_COMMANDS),
-// the same set the old textarea editor offered. Legacy also has a "[[note"
-// wiki-link source here; that's left out until this editor has a vault-title
-// list to offer completions from.
+// The editor's two completion menus. Both are thin: neither owns a list.
+//
+//   "/"   → the command registry in commands.tsx
+//   "[["  → the notes in the vault, via the linkEnv StateField
+//
+// This file used to carry a SLASH_COMMANDS array of its own — a second, slightly
+// different implementation of nine commands the format bar already had. See the
+// header of commands.tsx for why that is gone and must not come back.
 
-interface SlashCommand {
-  label: string
-  hint: string
-  terms: string[]
-  apply: (view: EditorView, from: number, to: number) => void
-}
-
-const STRIP_PREFIX = /^(#{1,6}\s+|>\s+|-\s\[[ xX]\]\s+|[-*]\s+|\d+\.\s+)/
-
-function blockApply(prefix: string): SlashCommand['apply'] {
-  return (view, from, to) => {
-    const line = view.state.doc.lineAt(from)
-    const before = view.state.doc.sliceString(line.from, from).replace(STRIP_PREFIX, '')
-    const insert = prefix + before
-    view.dispatch({
-      changes: { from: line.from, to, insert },
-      selection: { anchor: line.from + insert.length }
-    })
-  }
-}
-
-function snippetApply(snippet: string, caretOffset: number): SlashCommand['apply'] {
-  return (view, from, to) => {
-    view.dispatch({
-      changes: { from, to, insert: snippet },
-      selection: { anchor: from + caretOffset }
-    })
-  }
-}
-
-const SLASH_COMMANDS: SlashCommand[] = [
-  { label: 'Heading 1', hint: 'Big section title', terms: ['h1', 'heading', 'title'], apply: blockApply('# ') },
-  { label: 'Heading 2', hint: 'Medium heading', terms: ['h2', 'heading', 'subtitle'], apply: blockApply('## ') },
-  { label: 'Heading 3', hint: 'Small heading', terms: ['h3', 'heading'], apply: blockApply('### ') },
-  { label: 'Bulleted list', hint: 'A simple bullet', terms: ['bullet', 'list', 'ul'], apply: blockApply('- ') },
-  { label: 'Numbered list', hint: 'Ordered 1. 2. 3.', terms: ['number', 'ordered', 'ol'], apply: blockApply('1. ') },
-  { label: 'To-do', hint: 'Checkbox item', terms: ['todo', 'task', 'checkbox'], apply: blockApply('- [ ] ') },
-  { label: 'Quote', hint: 'Set off a quote', terms: ['quote', 'blockquote'], apply: blockApply('> ') },
-  {
-    label: 'Code block',
-    hint: 'Fenced code',
-    terms: ['code', 'fence'],
-    apply: snippetApply('```\n\n```\n', 4)
-  },
-  { label: 'Divider', hint: 'Horizontal line', terms: ['divider', 'rule', 'hr'], apply: snippetApply('\n---\n', 5) }
-]
-
-function slashApply(cmd: SlashCommand): Exclude<Completion['apply'], string | undefined> {
-  return (view, _completion, from, to) => cmd.apply(view, from, to)
-}
-
-// "/command" at the start of a line or after whitespace
+/** "/command" at the start of a line or after whitespace. */
 function slashSource(context: CompletionContext): CompletionResult | null {
   const m = context.matchBefore(/(?:^|\s)\/[\w-]*/)
   if (!m) return null
   const slashIdx = m.text.indexOf('/')
   const from = m.from + slashIdx
   const typed = m.text.slice(slashIdx + 1).toLowerCase()
-  if (!context.explicit && from === m.from && slashIdx > 0) return null
-  const options: Completion[] = SLASH_COMMANDS.filter(
-    (c) => !typed || c.label.toLowerCase().includes(typed) || c.terms.some((x) => x.includes(typed))
-  ).map((c) => ({ label: c.label, detail: c.hint, type: 'keyword', apply: slashApply(c) }))
+  const options: Completion[] = SLASH_COMMANDS.filter((c) => matchesQuery(c, typed)).map((c) => ({
+    label: c.label,
+    detail: c.hint,
+    type: 'keyword',
+    // The command deletes the "/query" itself — it has to, because every command
+    // acts on the current selection and would otherwise format the text the user
+    // typed to summon it.
+    apply: (view, _completion, cFrom, cTo) => c.run(view, { from: cFrom, to: cTo })
+  }))
+  // `filter: false`: the matching above is ours (labels AND the extra terms, so
+  // "ul" finds Bulleted list), and CodeMirror's own filter would then discard
+  // everything whose label doesn't literally contain the query.
   return options.length ? { from, options, filter: false } : null
+}
+
+/**
+ * "[[" — the notes and folders you can link to. This is what makes `/link` a
+ * picker without anything having to build one: the wikiLink command inserts
+ * `[[]]` and puts the cursor between the brackets, which is precisely the state
+ * this source fires on. Typing `[[` by hand gets the same menu, which is the
+ * point.
+ *
+ * **Scoped to the space you're writing in**, with the space's own name as the
+ * way out — see `linkChoices`. A picker that listed every note in every space
+ * would undo the division the moment you went to link something.
+ */
+function wikiSource(context: CompletionContext): CompletionResult | null {
+  // Up to the cursor, no closing brackets and no line break: a link never spans
+  // a line, and matching past a `]]` would keep the menu open after the link is
+  // finished.
+  const m = context.matchBefore(/\[\[[^\]\n]*/)
+  if (!m) return null
+  const env = context.state.field(linkEnv, false)
+  if (!env || env.notes.length === 0) return null
+  const typed = m.text.slice(2)
+  // An alias or a heading has been started — the target is already chosen, and
+  // offering to replace it would fight the user mid-sentence.
+  if (typed.includes('|') || typed.includes('#')) return null
+
+  const options: Completion[] = linkChoices(env.notes, env.spaces, env.path, typed)
+    .slice(0, MAX_HITS)
+    .map((c) => ({
+      label: c.ref.title,
+      // The row's quiet second column is the SPACE, pushed to the right-hand
+      // edge under a "Space" heading — see `spaceColumn` below. It used to be
+      // the raw parent folder, which on a vault whose space is called "New
+      // folder" read as an offer to create one; and the space is the thing
+      // worth knowing here, because it is what decides whether a bare title
+      // will find this at all.
+      space: (c.spaceEmoji ? c.spaceEmoji + ' ' : '') + c.space,
+      // CodeMirror's own icon classes: `type` becomes `cm-completionIcon-<type>`,
+      // which app.css draws as a folder or a page.
+      type: c.ref.kind === 'dir' ? 'folder' : 'note',
+      apply: c.insert
+    }))
+  return options.length ? { from: m.from + 2, options, filter: false } : null
+}
+
+/** Enough to choose from without the popup becoming a file browser. */
+const MAX_HITS = 14
+
+/** The right-hand column of a `[[` row. A rendered element rather than
+ *  CodeMirror's own `detail`, because `detail` sits immediately after the label
+ *  and this has to sit against the far edge, under its heading. */
+const spaceColumn = {
+  render(completion: Completion): HTMLElement | null {
+    const space = (completion as Completion & { space?: string }).space
+    if (!space) return null // the "/" menu's rows have no space
+    const el = document.createElement('span')
+    el.className = 'cm-wiki-space'
+    el.textContent = space
+    return el
+  },
+  // After the label; the CSS pushes it the rest of the way with margin-left:auto.
+  position: 90
 }
 
 export function completionExtension(): Extension {
   return autocompletion({
-    override: [slashSource],
+    override: [slashSource, wikiSource],
+    addToOptions: [spaceColumn],
+    // Marks the popup as the note picker so it can wear the Content / Space
+    // headings. The "/" menu is one column and needs neither.
+    tooltipClass: (state) => {
+      const m = state.selection.main
+      const line = state.doc.lineAt(m.head)
+      return /\[\[[^\]\n]*$/.test(line.text.slice(0, m.head - line.from)) ? 'cm-wiki-menu' : ''
+    },
     activateOnTyping: true,
-    icons: false,
+    // The [[ menu shows a folder/page icon per row, so icons stay ON; the "/"
+    // menu's rows are all commands and its glyph column would be empty.
+    icons: true,
     closeOnBlur: true,
     defaultKeymap: true
   })

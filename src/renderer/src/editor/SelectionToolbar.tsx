@@ -20,14 +20,14 @@ export function SelectionToolbar({ left, top, onPick, onClear }: Props): React.J
       <div className="sel-mode">
         <button
           className={layer === 'hl' ? 'on' : ''}
-          title="Highlight"
+          data-tip="Highlight"
           onClick={() => setLayer('hl')}
         >
           ▉
         </button>
         <button
           className={layer === 'tc' ? 'on' : ''}
-          title="Text colour"
+          data-tip="Text colour"
           onClick={() => setLayer('tc')}
         >
           A
@@ -39,12 +39,12 @@ export function SelectionToolbar({ left, top, onPick, onClear }: Props): React.J
             key={c.name}
             className="swatch"
             style={{ background: `var(--${swatchPrefix}${c.name})` }}
-            title={c.label}
+            data-tip={c.label}
             onClick={() => onPick(layer, c.name)}
           />
         ))}
       </div>
-      <button className="sel-clear" title="Remove colour" onClick={onClear}>
+      <button className="sel-clear" data-tip="Remove colour" onClick={onClear}>
         ✕
       </button>
     </div>

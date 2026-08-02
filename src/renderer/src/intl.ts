@@ -109,6 +109,26 @@ export function formatDate(ms: number | null | undefined, fmt: DateFormatId = 'r
 export const formatTime = (ms: number, tz = 'system'): string =>
   new Intl.DateTimeFormat(undefined, { ...zoneOpt(tz), hour: '2-digit', minute: '2-digit' }).format(new Date(ms))
 
+/**
+ * The shortest honest answer to "when?", for the strip beside a note's word
+ * count where every character competes with the format bar for width.
+ *
+ * Edited today, the date is the noise — you get the clock time. Edited before
+ * today, the time is the noise — you get the date. The full answer, both dates
+ * spelled out, is one hover away, which is what earns the brevity here.
+ */
+export function formatWhenShort(
+  ms: number | null | undefined,
+  fmt: DateFormatId = 'relative',
+  tz = 'system'
+): string | null {
+  if (!ms) return null
+  const today = new Intl.DateTimeFormat('en-CA', { ...zoneOpt(tz), dateStyle: 'short' })
+  return today.format(new Date(ms)) === today.format(new Date())
+    ? formatTime(ms, tz)
+    : formatDate(ms, fmt === 'relative' ? 'short' : fmt, tz)
+}
+
 /** Always a real date here, never "Today" — a tooltip is where you go for the
  *  precise answer. */
 export const formatDateTime = (ms: number | null | undefined, fmt: DateFormatId = 'full', tz = 'system'): string | null =>

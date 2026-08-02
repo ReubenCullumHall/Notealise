@@ -78,10 +78,23 @@ export interface Space {
    *  on: they're icon-only, centred as a group — same look the sidebar
    *  already falls back to on its own once dragged narrower than ~220px. */
   compactNav: boolean
+  // --- the note's own chrome ---
+  // These three belong to a space rather than the app because how a set of
+  // notes READS is a property of that set: a revision space wants its links in
+  // front of it and its folder trail visible, a journal wants neither. Settings
+  // → Linking content can push any of them to every space at once.
+  /** show the strip of this note's links — what it points at, what points back */
+  showLinks: boolean
+  /** keep that strip on screen while the note scrolls, instead of letting it go */
+  pinLinks: boolean
+  /** show the `Space › Folder › Note` bar between the tabs and the format bar */
+  showPath: boolean
+  /** show when the note was made and last edited, beside its word count */
+  showNoteInfo: boolean
   // --- shortcuts ---
   /** The four custom format-bar buttons, in bar order: [farLeft, left, right,
    *  farRight]. Each is an action id from the renderer's catalogue
-   *  (`editor/toolbarActions.tsx`); '' is an unassigned slot. Validated loosely
+   *  (`editor/commands.tsx`); '' is an unassigned slot. Validated loosely
    *  for the same reason `accent` is — the catalogue is renderer-side, and an id
    *  this build doesn't know resolves to unassigned rather than being rewritten. */
   toolbarSlots: string[]
@@ -146,6 +159,13 @@ export const DEFAULT_SPACE: Space = {
   accentMode: 'text',
   freeArrange: false,
   compactNav: false,
+  showLinks: true,
+  pinLinks: false,
+  // On by default: knowing where the note you're reading actually lives is the
+  // kind of thing you want in every space, and a new space starting without it
+  // read as the feature being missing rather than switched off.
+  showPath: true,
+  showNoteInfo: false,
   toolbarSlots: ['', '', '', ''],
   pageLook: '',
   font: '',
@@ -198,10 +218,30 @@ function normalizeFolder(v: unknown): string {
   return f.slice(0, NAME_MAX)
 }
 
+/**
+ * What the TOP LEVEL of an older settings.json said about the note's chrome.
+ *
+ * `showPath` and `pinLinks` shipped as app-wide settings and then moved onto a
+ * space, because how a set of notes reads is a property of that set — a revision
+ * space wants its links in front of it, a journal doesn't. An existing file has
+ * them at the top level; they are handed down here so nobody's choice is
+ * silently reset to the default by an update.
+ */
+interface LegacyChrome {
+  showLinks?: unknown
+  pinLinks?: unknown
+  showPath?: unknown
+}
+
 /** Coerce arbitrary parsed JSON into a valid Space, field by field — one bad
  *  field must never discard the good ones beside it. */
-function normalizeSpace(raw: unknown): Space {
+function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
   const s = isPlainObject(raw) ? raw : {}
+  /** A boolean that may have come from the old app-wide setting. `legacy` holds
+   *  what the top level of settings.json said before these moved onto a space;
+   *  a space that has its own answer always wins. */
+  const chrome = (own: unknown, was: unknown, fallback: boolean): boolean =>
+    typeof own === 'boolean' ? own : typeof was === 'boolean' ? was : fallback
   return {
     folder: normalizeFolder(s.folder),
     emoji: typeof s.emoji === 'string' ? s.emoji.slice(0, EMOJI_MAX) : DEFAULT_SPACE.emoji,
@@ -218,6 +258,11 @@ function normalizeSpace(raw: unknown): Space {
       : DEFAULT_SPACE.accentMode,
     freeArrange: typeof s.freeArrange === 'boolean' ? s.freeArrange : DEFAULT_SPACE.freeArrange,
     compactNav: typeof s.compactNav === 'boolean' ? s.compactNav : DEFAULT_SPACE.compactNav,
+    showLinks: chrome(s.showLinks, legacy.showLinks, DEFAULT_SPACE.showLinks),
+    pinLinks: chrome(s.pinLinks, legacy.pinLinks, DEFAULT_SPACE.pinLinks),
+    showPath: chrome(s.showPath, legacy.showPath, DEFAULT_SPACE.showPath),
+    showNoteInfo:
+      typeof s.showNoteInfo === 'boolean' ? s.showNoteInfo : DEFAULT_SPACE.showNoteInfo,
     toolbarSlots: normalizeSlots(s.toolbarSlots),
     pageLook: shortString(s.pageLook),
     font: shortString(s.font),
@@ -260,7 +305,13 @@ export function normalizeSettings(raw: unknown): AppSettings {
   // top-level folder, which is what carries an existing user's theme and
   // density forward instead of resetting them.
   const src: unknown[] = list.length ? list.slice(0, SPACE_CAP) : [s]
-  const spaces = dedupeFolders(src.map(normalizeSpace))
+  // MIGRATION. `showPath` / `pinLinks` were app-wide before 2026-08-02 and now
+  // belong to a space. Handed to every space as a fall-back, so a file written
+  // by the older build carries the user's choice into each of them instead of
+  // resetting to the default. Idempotent: once a space has its own value that
+  // value wins, and the top-level keys are not written back out.
+  const legacy: LegacyChrome = { showLinks: s.showLinks, pinLinks: s.pinLinks, showPath: s.showPath }
+  const spaces = dedupeFolders(src.map((raw) => normalizeSpace(raw, legacy)))
   const wanted = normalizeFolder(s.activeSpaceFolder)
   return {
     spaces,

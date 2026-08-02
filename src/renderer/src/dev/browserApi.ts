@@ -15,6 +15,7 @@
  *  stunt double.
  */
 import type { TreeNode, VaultApi, VaultChange } from '../../../shared/types'
+import { indexLinks, stripMd } from '../../../shared/links'
 import { normalizeSettings, type AppSettings } from '../../../shared/settings'
 import {
   EMPTY_WORKSPACE,
@@ -104,6 +105,8 @@ function buildTree(): TreeNode[] {
   }
   for (const dir of [...store.dirs].sort()) attach(nodes.get(dir)!)
   for (const path of Object.keys(store.files).sort()) {
+    // No filesystem, so no real timestamps — the fields are optional precisely
+    // so a source that hasn't got them can leave them off.
     attach({ name: nameOf(path), path, type: 'file', preview: preview(store.files[path]) })
   }
   const order = (list: TreeNode[]): TreeNode[] => {
@@ -133,11 +136,15 @@ const api: VaultApi = {
     store.files[path] = content
     save()
   },
-  createNote: async (dirPath) => {
-    const path = unique(dirPath, 'Untitled.md')
+  createNote: async (dirPath, name) => {
+    const path = unique(dirPath, (name ? stripMd(name) : 'Untitled') + '.md')
     store.files[path] = ''
     save()
     return path
+  },
+  scanLinks: async (paths) => {
+    const list = paths ? paths.filter((p) => p in store.files) : Object.keys(store.files)
+    return list.map((path) => ({ path, links: indexLinks(store.files[path]) }))
   },
   createFolder: async (dirPath) => {
     const path = unique(dirPath, 'New folder')

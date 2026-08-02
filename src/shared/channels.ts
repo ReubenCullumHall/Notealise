@@ -9,6 +9,8 @@ export const CH = {
   createNote: 'vault:createNote',
   createFolder: 'vault:createFolder',
   renameEntry: 'vault:renameEntry',
+  /** renderer -> main: the [[wiki links]] of every note (or just the given ones) */
+  scanLinks: 'vault:scanLinks',
   /** renderer -> main: read/write appearance settings (.mdnotes/settings.json) */
   getSettings: 'settings:get',
   setSettings: 'settings:set',

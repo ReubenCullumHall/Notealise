@@ -132,6 +132,8 @@ notes-app/
   package.json              scripts + deps ("main": out/main/index.js)
   dev-app-update.yml        ONLY read by NOTES_TEST_UPDATER=1 npm run dev; never packaged
   docs/release-checklist.md the four gates, the release ritual, and how to recover a bad release
+  docs/commands.md          the ONE editor-command registry — read before adding any command
+  docs/decorations.md       the live-preview pass engine and its extension point
   .github/workflows/        verify.yml (every push) + release.yml (v* tags; verify gates packaging)
   src/
     main/                   MAIN PROCESS — the only code allowed to touch fs
@@ -149,6 +151,7 @@ notes-app/
       index.d.ts            augments Window with `api`
     shared/                 contract imported by main, preload, renderer
       types.ts              TreeNode, VaultChange, VaultApi
+      links.ts              [[wiki links]]: parse, resolve, index, rewrite (main AND renderer)
       workspace.ts          EntryMeta / TrashItem / Workspace + normalise + path re-keying
       update.ts             UpdateStatus / UpdatePrefs contract + normalise
       channels.ts           IPC channel names
@@ -162,10 +165,18 @@ notes-app/
         dev/browserApi.ts   DEV ONLY: a localStorage stand-in for window.api so the real
                             renderer also runs at localhost:5173 in a browser (see rule 8)
         organise/model.ts   pure derivation: sorting, archive inheritance, pinned hoisting
-        settings/           Settings.tsx (genie window, nav, General/Formatting/Updates/ReportBug)
-                            Spaces.tsx (the 5 presets + everything per-space), Collection.tsx,
+        links/              the note graph: model.ts (outgoing/backlinks/crumbs) + LinksBlock.tsx
+        PathBar.tsx         Space › Folder › Note above the tabs; clicking a crumb steers the tree
+        settings/           Settings.tsx (genie window + nav), MasterSettings.tsx (app-general +
+                            every space at once), SpaceForm.tsx (THE per-space form, rendered by
+                            both master and one-space scope), Spaces.tsx (the presets + that form),
+                            SourceFolder.tsx (the vault path + switch), Collection.tsx,
+                            tutorials/ (an index one click deep: index.tsx + LinkingGuide.tsx),
                             primitives.tsx (SettingRow/Select/Switch/ToggleRow), model.ts (applySettings)
-        editor/             CM6 setup, format bar + its assignable slots (toolbarActions.tsx)
+        Tooltip.tsx         the app's own `data-tip` tooltips — NOT the HTML `title` attribute
+        HoverCard.tsx       the richer hover card (links, note timestamps), portalled to body
+        editor/             CM6 setup, format bar + THE command registry (commands.tsx — see
+                            docs/commands.md); wikiPass/linkEnv/linkGestures are the link layer
         update/             UpdateBanner: the quiet "update ready" strip in the sidebar footer
         theme.css           tokens (R G B ramps + density) + bundled @font-face; Tailwind reads them
         app.css             @tailwind directives + only what legacy keeps out of Tailwind (see rule 8)
@@ -582,6 +593,89 @@ watcher, so binned entries leave the tree for free. Still pending:
   2026-07-29 — meant every list, heading and quote button did nothing at all on a new note or right
   after Enter, which is the single most common moment to press one. The bug was invisible from the
   bar: the button was wired correctly and the command ran, it just declined to change anything.
+- **One command registry (built 2026-08-01).** `editor/commands.tsx` is the ONLY list of editor
+  commands. The programmable format-bar buttons, the picker in Settings → Spaces → Shortcuts, and
+  the `/` menu all read it, so **a command added there appears in all three with no second edit**.
+  Before this there were two catalogues that reimplemented the same nine commands with different
+  code and no shared ids; four commands existed on a button but not under `/`, and nothing said so.
+  **Read `docs/commands.md` before adding a command** — it covers the `run(view, slash?)` contract
+  (a `/` invocation must delete its own typed query, and *sets* a marker where a button *toggles*
+  one), why ids are a file format, and why `commands.test.ts` pins them.
+- **Note links (built 2026-08-01).** `[[Note name]]`, `[[Folder/Note]]`, `[[Note|alias]]`,
+  `[[Note#Heading]]` and `[[#Heading]]`. Plain Markdown that other editors render as text, never an
+  invented delimiter (rule 4). The parser/resolver is `shared/links.ts` — **shared because both
+  processes parse**: main scans the vault for the backlink index, the renderer scans the buffer you
+  are typing in, and two parsers would drift. It knows about code spans and fences itself, since
+  main has no syntax tree; the editor pass keeps `inCode()` as well.
+  A bare `[[Waves]]` matching several notes resolves by a fixed ladder — sibling, then nearest
+  common ancestor, then alphabetically — so the answer never depends on tree order, and the link is
+  marked ambiguous rather than silently guessed at.
+  **A folder is a link target too** (`[[Term 3]]`), and carries a folder icon where a note carries
+  a page one — a vault you cannot reference a folder in is a filing system you cannot talk about. A
+  folder has nothing to open, so clicking one SHOWS it: the sidebar opens it and closes the rest,
+  exactly as the path bar's crumbs do. A note beats a folder of the same name; the folder is still
+  reachable by its path.
+  **Clicking a link opens it in a NEW TAB** — the opposite of the sidebar, and deliberately: following
+  a link is reading onward from what you have, and losing the note that sent you there is exactly
+  the wrong thing. Cmd/Ctrl+click replaces instead (inverted from the browser convention for the
+  same reason), Alt+click opens a column, and a link can be dragged into any column (it carries the
+  tab strip's own `application/x-notes-tab` type). Clicking one whose note doesn't exist **creates
+  it**, beside the note that mentioned it, in one `createNote(dir, name)` call.
+  **The `[[` picker is scoped to the space you're writing in**, and typing another space's name is
+  the way out (`[[Physics/Wav`) — see `linkChoices`. A vault divided into spaces is divided for a
+  reason, and a picker listing every note in every space undoes that the moment you go to link
+  something. Scoping applies only to what is OFFERED: a link already written keeps resolving
+  wherever it points, which is what the cross-space marking is for.
+  Renaming a note rewrites the links that pointed at it — only notes the index says actually link
+  there, only links that *resolved* to it, after a `flush()`, and through `onDocChange` for notes
+  that are open so the autosave owns the write. Moving a note does NOT rewrite anything: links
+  resolve by title, so a move leaves them all working.
+- **The links block and the path bar (built 2026-08-01).** Both are chrome; **nothing either shows
+  is ever written into a note** (rule 1). The links strip sits at the top of each column — outgoing
+  first, then backlinks — and **does not put the direction on the face of a link**: which way a
+  connection runs is on the hover card, along with the line the link sits in, so the strip reads as
+  names rather than badges. It scrolls sideways at a fixed height, because the chrome may not change
+  height with what a note contains. Settings → General pins it; by default it scrolls away with the
+  text (translated against the CodeMirror scroller, whose top padding follows `--links-inset` — CM
+  keeps its own scroller, which is not worth restructuring for this).
+  The path bar is one row for the whole editor area, following the focused column, and is
+  **navigation, not a label**: clicking a folder opens it in the sidebar, closes every other folder,
+  and scrolls it into view — switching space first if the note lives in another one.
+  **Two settings pages, and they are not the same job.** `Settings → Linking content` holds the
+  switches; `Settings → Tutorials → Linking your notes` explains the five forms, what an alias is
+  for and how the space scoping works. Keep the guide in step when link behaviour changes — it is
+  the only place the rules are written for someone who isn't reading this file. The nav says
+  "Linking content" rather than "Links" on purpose: a link here is a relation between two things
+  the user wrote, and the short word kept reading as a URL.
+  **`showLinks` / `pinLinks` / `showPath` / `showNoteInfo` belong to a SPACE**, not the app: how a set of notes reads
+  is a property of that set. They were global until 2026-08-02 and `normalizeSettings` migrates an
+  older file by handing the top-level value down to every space (see `LegacyChrome`). The "use this
+  in every space" buttons are ACTIONS that write one value across all spaces — deliberately not a
+  global layer that spaces then override, because that is a precedence chain, and this app already
+  has one of those (the theme layer) to be careful about.
+  **The chrome reads top to bottom as three different questions**: the tab strip is which notes are
+  open, the path bar is where the one you're in lives, the format bar is what you can do to it, and
+  the links strip is what it connects to. Running the path and the links together is what made this
+  confusing the first time; they get separate rows.
+  **One hover card, portalled to `document.body`.** `HoverCard.tsx` owns the placement — directly
+  under whatever you are pointing at — and everything that shows detail on hover goes through it:
+  the link inspector (a chip in the links strip OR a `[[link]]` in the text) and a note's
+  timestamps. Native `title` tooltips are deliberately not used for any of it, because the OS parks
+  them at the cursor after a delay it chooses, which is neither under the thing nor consistent
+  between two places in the same window. The portal is NOT optional: the strip carries a `transform` (it slides
+  away as you scroll) and a `backdrop-filter`, and **either makes that element the containing block
+  for a `position: fixed` descendant** — which put the card hundreds of pixels from the link it
+  described. Same trap as the settings modal and the sidebar; if you add another floating thing,
+  portal it. In-text links carry no `title` attribute for the same reason a native tooltip was
+  wrong: the OS puts it at the cursor after a delay it chooses.
+  **`showNoteInfo` puts "Last edited <date> at <time>" beside the word count**, on the machine's own
+  clock (the Formatting page's timezone, "system" by default). Only the edited time is on the row —
+  it is the one that changes and the one you look for; **when the note was created is on the hover
+  card**, with both dates spelled out in full rather than as "Today". The times come from a
+  `fs.stat` per note in main's tree walk (`TreeNode.createdAt` / `updatedAt`, epoch ms, both
+  optional — not every filesystem records a creation time, and `formatDate` returns null rather
+  than 1970). They refresh with the tree, so an edit made in another app updates "last edited"
+  without anything extra. Both are hidden in a split, where the word count goes too.
 - **Remaining editor live-preview** (lists beyond the bullet, tables, images) — new decoration
   passes in `livePreview.ts` (see `docs/decorations.md`). Fenced code blocks and multi-line `$$`
   math are done as of 2026-07-28.
@@ -602,6 +696,22 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
   back, with nothing in any log to say why. The renderer looking correct is not evidence main agrees.
   **After touching `shared/`, restart the dev app before believing anything you see** (kill it, relaunch
   — the fresh boot re-logs both "main process built" and "preload scripts built"; check for both).
+- **Sidebar folder expansion is one `Set<string>` owned by `Sidebar.tsx`**, passed to all four
+  `TreeView`s through `commonTreeProps`. It used to be per-instance state XOR'd against
+  `workspace.json`'s `collapsed` flag, which meant membership in the set did NOT mean "expanded" and
+  the same folder toggled independently in the pinned tree and the main one. Neither survives the
+  path bar's "open this folder and close every other one", which needs one answer for the whole
+  sidebar. Still not persisted — that is unchanged, only the representation moved.
+  **`EntryMeta.collapsed` in `workspace.json` is now read by nothing** (it was only ever read by
+  that XOR, and has never been written by anything). Flagged, not removed — see rule 9.
+- **CDP mouse and keyboard input do not reach this Electron renderer.** `page.mouse.click` /
+  `page.keyboard.type` produce no events at all — not even at `document` in the capture phase — so a
+  gesture that "does nothing" under puppeteer may be perfectly fine. Drive the UI with synthetic
+  events from `page.evaluate` instead: `new MouseEvent('mousedown', {bubbles, cancelable, composed,
+  clientX, clientY, metaKey…})` for the editor, `element.click()` for React buttons, and
+  `document.execCommand('insertText', …)` to type into CodeMirror (it handles `beforeinput`).
+  React delegates `onMouseEnter`/`onBlur` from **`mouseover`/`focusout`**, so dispatching
+  `mouseenter`/`blur` silently does nothing.
 - **The working directory persists across Bash *and* PowerShell tool calls, including a `cd` from a
   different tool.** A `cd .../notes-app/legacy` in one call left `npm --prefix ".\notes-app" run dev`
   resolving to `notes-app/legacy/notes-app/package.json` (ENOENT, exit 38). The relative `--prefix`
@@ -644,6 +754,57 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
   (double-click; uses `cmd`+`npm.cmd`, so no PowerShell exec-policy error, no admin) or
   `npm run dev:legacy` / `build:legacy` + `serve:legacy` (Vite on localhost:5173). See
   `legacy/README.md`.
+
+### Tabs belong to a space
+
+Each space keeps its own tab strip and split. Switching space stashes the current layout under the
+space you're leaving and applies the one you're going to (`spaceTabs` in App) — the notes stay
+open, they're just not on screen, because **a strip showing notes the sidebar beside it doesn't
+have is the confusing part**. Two consequences worth knowing:
+
+- The swap is **explicit**, in `switchSpace`, not an effect keyed on the active folder. Following a
+  cross-space link both switches space and opens a note, and an effect-driven swap would race that
+  — the note would land in the layout of the space it just left.
+- **A restored session is filtered by space too** (`restoreSession`). A saved session can carry
+  tabs from a space you left, and reopening them into whichever space is active reproduces exactly
+  the confusion this avoids. Notes loose at the vault root belong to no space and come back in all
+  of them.
+
+`spaceTabs` is in memory only. `settings.session` remembers the space you were in, which is the one
+you return to; the other spaces open empty and fill as you use them.
+
+### Tooltips are `data-tip`, never `title`
+
+Every hover label in the renderer uses a `data-tip` attribute, picked up by the single `<Tooltip/>`
+mounted in App. **Do not reach for the HTML `title` attribute** — all three of its failures were
+reported as bugs by the user on 2026-08-02:
+
+1. **It goes stale.** The OS renders the text once and keeps showing it until the pointer leaves, so
+   toggling a control while hovering it left the sentence describing the state you just left. The
+   search bar's "Searching titles only" and the archive filter both read wrong for exactly this
+   reason, though the strings in the source were correct all along.
+2. **It doesn't always appear.** Split-screen and collapse-sidebar carried a `title` that never
+   showed.
+3. **It is a box the app can't style.** `Tooltip.tsx` renders plain text with a paper-coloured
+   text-shadow instead — no border, background or panel.
+
+The tooltip re-reads `data-tip` off the DOM on every hover *and* after a click, which is what fixes
+(1). A component that takes a `title` **prop** (`TB`, `RowBtn`) keeps the prop name and emits
+`data-tip` on its own button; `SettingRow`'s `title` is a heading, not a tooltip. Keep `aria-label`
+wherever it already is — `data-tip` is presentation, not accessibility.
+
+### Settings: master scope vs one space
+
+`SpaceForm.tsx` is the only place a per-space setting is laid out. It is rendered twice:
+
+- **Master settings** — `onChange` writes the patch to *every* space, and a "spaces differ" marker
+  appears next to any control they disagree about (showing one space's answer as everyone's would
+  be a lie).
+- **Spaces → that space** — `onChange` writes to that one.
+
+Deliberately **not** a global layer that spaces override. A value that wins over a space's own is a
+precedence chain, and a control that silently does nothing because something further down beat it is
+the worst bug this window can have — see the theme layer's version of that story below.
 
 ### The theme layer's precedence chain (read before adding an appearance setting)
 

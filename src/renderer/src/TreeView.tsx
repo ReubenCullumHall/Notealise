@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import { Icon } from './icons'
@@ -52,6 +52,17 @@ interface Props extends TreeActions {
   onDragging: (paths: string[] | null) => void
   /** '' = vault root — the drop target for empty background. */
   rootDir?: string
+  /** Which folders are open, owned by Sidebar and shared by all four TreeViews.
+   *
+   *  This used to be per-instance state XOR'd against `workspace`'s `collapsed`
+   *  flag — so membership in the set did not mean "expanded", and the same folder
+   *  toggled independently in the pinned tree and the main one. Neither survives
+   *  "open this folder and close every other one", which needs one answer for
+   *  the whole sidebar. */
+  expanded: Set<string>
+  onToggleExpand: (path: string) => void
+  /** scroll this row into view once, after a reveal from the path bar */
+  revealTarget?: string | null
 }
 
 const parentOf = (p: string): string => {
@@ -93,7 +104,7 @@ function RowBtn({
   return (
     <button
       onClick={onClick}
-      title={title}
+      data-tip={title}
       aria-label={title}
       className={
         'inline-flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0.5 outline-none transition-colors hover:bg-transparent ' +
@@ -117,6 +128,9 @@ export function TreeView({
   dragging,
   onDragging,
   rootDir = '',
+  expanded,
+  onToggleExpand,
+  revealTarget,
   onOpen,
   onContext,
   onMove,
@@ -131,18 +145,18 @@ export function TreeView({
   const shelved = mode === 'archive'
   const reorders = mode === 'tree'
 
-  // Folder collapse lives in workspace.json, but is read here rather than
-  // written on every toggle — a local override keeps expanding snappy and is
-  // persisted by the caller through onCollapse if it ever needs to survive.
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const isOpen = (p: string): boolean => expanded.has(p) !== (metaOf(workspace, p).collapsed === true)
-  const toggle = (p: string): void =>
-    setExpanded((s) => {
-      const next = new Set(s)
-      if (next.has(p)) next.delete(p)
-      else next.add(p)
-      return next
-    })
+  const isOpen = (p: string): boolean => expanded.has(p)
+  const toggle = onToggleExpand
+
+  // Bring a revealed folder into view. `block: 'nearest'` so a folder already on
+  // screen doesn't jump — the reveal is about what is open, not about scrolling
+  // for its own sake.
+  const revealRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (revealTarget && revealRef.current) {
+      revealRef.current.scrollIntoView({ block: 'nearest' })
+    }
+  }, [revealTarget])
 
   // ----- selection (ctrl/cmd-click adds to the set, like a file explorer) -----
   const picked = (p: string): boolean => selection.paths.has(p)
@@ -253,7 +267,7 @@ export function TreeView({
         'grip shrink-0 cursor-grab text-ink-300 outline-none active:cursor-grabbing' +
         (picked(path) ? ' is-on' : '')
       }
-      title={picked(path) ? 'Click to deselect · drag to move' : 'Click to select · drag to move'}
+      data-tip={picked(path) ? 'Click to deselect · drag to move' : 'Click to select · drag to move'}
     >
       <Icon name="grip" />
     </span>
@@ -374,6 +388,11 @@ export function TreeView({
     return (
       <div key={node.path}>
         <div
+          // Scrolled to when the path bar reveals this folder. A ref on the row
+          // rather than a querySelector from Sidebar: the row knows whether it
+          // is the target, and a selector would have to guess which of the four
+          // TreeViews rendered it.
+          ref={node.path === revealTarget ? revealRef : undefined}
           className={rowClass(node)}
           style={{ paddingLeft: padFor(depth) }}
           draggable={!shelved}
@@ -400,7 +419,7 @@ export function TreeView({
                 e.stopPropagation()
                 toggle(node.path)
               }}
-              title={expandedNow ? 'Collapse' : 'Expand'}
+              data-tip={expandedNow ? 'Collapse' : 'Expand'}
               className="inline-flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0.5 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
             >
               <span className={'chev inline-flex' + (expandedNow ? ' open' : '')}>

@@ -2,7 +2,7 @@ import { EditorSelection } from '@codemirror/state'
 // Type-only: nothing here calls an EditorView static, and keeping it a type
 // import means the commands can be exercised against a plain EditorState.
 import type { EditorView } from '@codemirror/view'
-import { mathInsert, toggleMarker, wrapRange, type MarkerKind } from './formatModel'
+import { mathInsert, toggleMarker, wrapRange, type MarkerKind, type MarkerMode } from './formatModel'
 
 // Toolbar/keymap formatting. Bold/italic/strikethrough are plain Markdown;
 // underline has no Markdown syntax so it uses inline HTML (<u>), the same as
@@ -46,8 +46,10 @@ export const inlineCode = (view: EditorView): void => toggleWrap(view, '`')
 // they work off the primary selection's line span (a toolbar click has one
 // selection; multi-cursor line edits would overlap each other's changes).
 
-/** Toggle a heading / list / quote marker across the selected lines. */
-export function toggleBlock(view: EditorView, kind: MarkerKind): void {
+/** Toggle a heading / list / quote marker across the selected lines. `mode` is
+ *  `'set'` when the command was invoked by name from the "/" menu — see
+ *  `MarkerMode`. */
+export function toggleBlock(view: EditorView, kind: MarkerKind, mode: MarkerMode = 'toggle'): void {
   const { state } = view
   const { from, to } = state.selection.main
   const first = state.doc.lineAt(from)
@@ -55,7 +57,7 @@ export function toggleBlock(view: EditorView, kind: MarkerKind): void {
   const lines: string[] = []
   for (let n = first.number; n <= last.number; n++) lines.push(state.doc.line(n).text)
 
-  const next = toggleMarker(lines, kind)
+  const next = toggleMarker(lines, kind, mode)
   const insert = next.join(state.lineBreak)
   // The cursor should stay put relative to the text it was in, so it moves by
   // however much its own line's marker grew or shrank.
@@ -70,15 +72,11 @@ export function toggleBlock(view: EditorView, kind: MarkerKind): void {
   view.focus()
 }
 
-const HEADING_KIND: Record<1 | 2 | 3, MarkerKind> = { 1: 'h1', 2: 'h2', 3: 'h3' }
-export const heading =
-  (level: 1 | 2 | 3) =>
-  (view: EditorView): void =>
-    toggleBlock(view, HEADING_KIND[level])
-export const bulletList = (view: EditorView): void => toggleBlock(view, 'bullet')
-export const numberedList = (view: EditorView): void => toggleBlock(view, 'numbered')
-export const checklist = (view: EditorView): void => toggleBlock(view, 'checklist')
-export const quote = (view: EditorView): void => toggleBlock(view, 'quote')
+// There used to be a `heading(1)` / `bulletList` / `quote` wrapper per marker
+// here. They were one-liners over `toggleBlock`, and once the command registry
+// became the single place a block command is declared they were a second way to
+// say the same thing — so the registry calls `toggleBlock(view, kind, mode)`
+// directly and the wrappers are gone (CLAUDE.md rule 9).
 
 /** Replace the selection with `text`, guaranteeing it starts on its own line and
  *  is followed by one. `select` is a substring of `text` to leave selected (so
@@ -131,6 +129,22 @@ export function link(view: EditorView): void {
     selection: inner
       ? { anchor: urlAt, head: urlAt + 3 }
       : { anchor: from + 1, head: from + 1 + label.length }
+  })
+  view.focus()
+}
+
+/** `[[Note name]]` — a link to another note in the vault. A selection becomes the
+ *  target; otherwise you get empty brackets. Either way the cursor lands inside
+ *  them, which is what the `[[` completion source watches for — so this command
+ *  *is* the note picker rather than needing one of its own. */
+export function wikiLink(view: EditorView): void {
+  const { from, to } = view.state.selection.main
+  const inner = view.state.doc.sliceString(from, to)
+  view.dispatch({
+    changes: { from, to, insert: `[[${inner}]]` },
+    // Just before the closing brackets: with a selection this leaves the typed
+    // title ready to be corrected, and with none it is simply where you type.
+    selection: { anchor: from + 2 + inner.length }
   })
   view.focus()
 }

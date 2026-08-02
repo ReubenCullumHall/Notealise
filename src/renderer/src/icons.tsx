@@ -39,6 +39,8 @@ export type IconName =
   | 'code'
   | 'codeBlock'
   | 'link'
+  | 'noteLink'
+  | 'book'
   | 'rule'
   | 'table'
 
@@ -220,6 +222,22 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     <>
       <path d="M10.5 13.5a4 4 0 0 0 5.7 0l2.6-2.6a4 4 0 1 0-5.7-5.7l-1.3 1.3" />
       <path d="M13.5 10.5a4 4 0 0 0-5.7 0l-2.6 2.6a4 4 0 1 0 5.7 5.7l1.3-1.3" />
+    </>
+  ),
+  book: (
+    <>
+      <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5z" />
+      <path d="M19 18v3H6.5A2.5 2.5 0 0 1 4 18.5" />
+    </>
+  ),
+  // A note-to-note link: the double brackets it writes, drawn as brackets rather
+  // than as another chain — the chain is `link`, which points out to the web, and
+  // the two must not read as the same command.
+  noteLink: (
+    <>
+      <path d="M9 5H6.5A1.5 1.5 0 0 0 5 6.5v11A1.5 1.5 0 0 0 6.5 19H9" />
+      <path d="M15 5h2.5A1.5 1.5 0 0 1 19 6.5v11a1.5 1.5 0 0 1-1.5 1.5H15" />
+      <path d="M10.5 15l3-6" />
     </>
   ),
   // A set of equal presets — deliberately NOT a vertical rail, which is the

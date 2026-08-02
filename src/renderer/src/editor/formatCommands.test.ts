@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { EditorState, type TransactionSpec } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 import {
-  bulletList,
   codeBlock,
-  heading,
   horizontalRule,
   inlineCode,
   link,
-  quote,
-  table
+  table,
+  toggleBlock,
+  wikiLink
 } from './formatCommands'
 
 // The commands themselves, driven against a real EditorState. CodeMirror's state
@@ -40,13 +39,13 @@ function harness(doc: string, from: number, to = from): { view: EditorView; read
 describe('block commands', () => {
   it('adds a heading and keeps the cursor on the same word', () => {
     const { view, read } = harness('hello', 2)
-    heading(1)(view)
+    toggleBlock(view, 'h1')
     expect(read()).toBe('# he|llo')
   })
 
   it('toggles the heading back off', () => {
     const { view, read } = harness('# hello', 4)
-    heading(1)(view)
+    toggleBlock(view, 'h1')
     expect(read()).toBe('he|llo')
   })
 
@@ -54,19 +53,19 @@ describe('block commands', () => {
     // cursor at the very start of "- one": removing the marker would put it at
     // -2 without the clamp
     const { view, read } = harness('- one', 0)
-    bulletList(view)
+    toggleBlock(view, 'bullet')
     expect(read()).toBe('|one')
   })
 
   it('applies across a multi-line selection and keeps it selected', () => {
     const { view, read } = harness('one\ntwo\nthree', 0, 13)
-    bulletList(view)
+    toggleBlock(view, 'bullet')
     expect(read()).toBe('«- one\n- two\n- three»')
   })
 
   it('quotes only the lines the selection touches', () => {
     const { view, read } = harness('one\ntwo\nthree', 5, 5)
-    quote(view)
+    toggleBlock(view, 'quote')
     expect(read()).toBe('one\n> t|wo\nthree')
   })
 })
@@ -114,5 +113,44 @@ describe('insert commands', () => {
     const { view, read } = harness('npm run dev', 0, 11)
     inlineCode(view)
     expect(read()).toBe('`«npm run dev»`')
+  })
+
+  it('opens empty brackets with the cursor inside, ready for the note picker', () => {
+    const { view, read } = harness('', 0)
+    wikiLink(view)
+    expect(read()).toBe('[[|]]')
+  })
+
+  it('makes a selection the link target, leaving the cursor where a title is corrected', () => {
+    const { view, read } = harness('Waves', 0, 5)
+    wikiLink(view)
+    expect(read()).toBe('[[Waves|]]')
+  })
+})
+
+describe('set vs toggle', () => {
+  // The one real semantic difference between the format bar and the "/" menu.
+  // Pressing a button a second time is a retraction; typing a command's name is
+  // not — so "/h1" on a line that is already a heading must leave a heading.
+  it('toggles off when a button asks twice, because that is what a pressed-again button means', () => {
+    const { view, read } = harness('# hello', 4)
+    toggleBlock(view, 'h1', 'toggle')
+    expect(read()).toBe('he|llo')
+  })
+
+  it('leaves the heading in place when the command was invoked by name', () => {
+    const { view, read } = harness('# hello', 4)
+    toggleBlock(view, 'h1', 'set')
+    expect(read()).toBe('# he|llo')
+  })
+
+  it('replaces a different marker in both modes', () => {
+    // Neither gesture means "remove": you asked for an h2 on something that is
+    // an h1, and both should give you an h2.
+    for (const mode of ['toggle', 'set'] as const) {
+      const { view, read } = harness('# hello', 4)
+      toggleBlock(view, 'h2', mode)
+      expect(read()).toBe('## he|llo')
+    }
   })
 })

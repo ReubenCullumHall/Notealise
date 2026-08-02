@@ -7,6 +7,8 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+
+## [0.6.0] - 2026-08-02
 - Add tabs: open several notes at once as a strip across the top of the editor. Ctrl/Cmd+click a
   note in the sidebar (or a search result) to open it in a tab of its own; a plain click still
   replaces what's open, as before. Ctrl+Tab / Ctrl+Shift+Tab cycle through them, Ctrl/Cmd+1-9 jump
@@ -20,8 +22,8 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - Add a "+" button at the end of the tab strip, and an empty column from the split icon: both say
   "Select a note" until you pick one — from the sidebar, from the tabs, or by making a new note.
   An empty column you never fill closes itself as soon as you go elsewhere
-- Add "Reopen your tabs" (Settings -> General -> Startup, now on by default, replacing "Reopen last
-  note"): the notes you had open and the way they were split come back the next time you launch,
+- Add "Reopen your tabs" (Settings -> Master settings -> Startup, now on by default, replacing
+  "Reopen last note"): the notes you had open and the way they were split come back the next time you launch,
   and each vault remembers its own. Notes renamed or deleted while the app was closed are quietly
   dropped rather than reopened as dead tabs
 - Selecting notes for dragging, archiving or binning is now the six-dot handle on the row — click
@@ -35,6 +37,46 @@ enough for a solo project). History before this file existed lives in the `v*` g
   the screen, so the text never shifts under you
 - Close Window is now Shift+Ctrl/Cmd+W, because Ctrl/Cmd+W closes the current tab, as it does in
   every other tabbed editor
+- Add note links: type `[[` anywhere to connect one note to another, and pick from the list. Five
+  forms, all plain text in your file so it still reads anywhere else: `[[Waves]]` by name,
+  `[[Term 3/Waves]]` by path, `[[Waves|the waves chapter]]` to say it in your own words,
+  `[[Waves#Interference]]` to land on a heading, and `[[Term 3]]` for a folder. Notes and folders
+  carry different icons so you can see which a link points at
+- Clicking a link opens it in a new tab, so the note that sent you there stays open — Ctrl/Cmd+click
+  opens it here instead, Alt+click opens it beside this one, and a link can be dragged into any
+  column. A link to a note you haven't written yet shows dashed; clicking it makes the note, next
+  to the one you're in
+- Every note carries a strip of its connections above the text: what it links to, then what links
+  back to it. Hover one to see which of the two it is, which space it lives in, and the line the
+  link sits in
+- The `[[` list shows the space you're writing in, under Content / Space headings. To reach another
+  space, type its name first (`[[Physics`) and the list follows you there — a link that already
+  crosses spaces keeps working wherever you are
+- Renaming a note updates the links that pointed at it. Moving one between folders needs no update:
+  links find a note by name, so they keep working wherever it ends up
+- Add a file-path bar between the tabs and the format bar, reading Space -> Folder -> Note. It isn't
+  a label: clicking a folder in it opens that folder in the sidebar and closes the others, so you
+  can see what else is in there
+- Notes can show when they were last edited beside the word count, on your machine's clock. Hover
+  it for the full dates, including when the note was created
+- Tabs now belong to a space. Switching space puts that space's notes on screen and no others —
+  what you had open elsewhere is still open, just not in front of you
+- Add Settings -> Tutorials, starting with a walkthrough of every form a link can take and what
+  each one is for. More guides, and one to download, are coming
+- Add Settings -> Source folder: where your notes actually live, what the hidden `.mdnotes` folder
+  holds, and the button to point the app at a different folder. Both used to sit permanently at the
+  bottom of the sidebar; the sidebar keeps the space switcher, which you use constantly
+- Rebuild Settings around Master settings — everything, set for the whole app at once — with each
+  space able to answer the same questions differently from Settings -> Spaces. Both show the same
+  page; only where the change lands differs, and master flags anything your spaces disagree about
+- The Settings window now sizes itself to the app window instead of sitting at a fixed 720x600
+- Add "Link to a note" to the command list, on `/link` and available as a format-bar button. Every
+  editor command now appears in both the `/` menu and the button picker automatically — four of
+  them used to exist only as buttons, and nothing said which
+- Hover labels are now the app's own: they appear directly under whatever you're pointing at, as
+  plain text rather than a system box. Fixes labels that showed the wrong thing after you clicked
+  the control (the search bar's "titles only", the archive filter), and buttons that showed nothing
+  at all (split screen, collapse sidebar)
 
 ## [0.5.0] - 2026-07-29
 - Add an Extra dark theme: pitch black everywhere, for OLED screens and dark rooms. Sits beside Dark

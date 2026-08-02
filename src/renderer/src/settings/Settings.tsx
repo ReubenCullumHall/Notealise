@@ -5,6 +5,9 @@ import { Icon, type IconName } from '../icons'
 import { Select, SettingRow } from './primitives'
 import { Spaces, type SpaceActions } from './Spaces'
 import { Collection } from './Collection'
+import { MasterSettings } from './MasterSettings'
+import { Tutorials } from './tutorials'
+import { SourceFolder } from './SourceFolder'
 import { DATE_FORMATS, NUMBER_FORMATS, formatDate, localZone, timezones } from '../intl'
 import { isPrereleaseVersion, type UpdateStatus } from '../../../shared/update'
 
@@ -15,20 +18,38 @@ interface Props {
   onChange: (partial: Partial<AppSettings>) => void
 }
 
-/** …plus the folder operations the Spaces page needs, which are owned by App. */
-type ShellProps = Props & { spaceActions: SpaceActions }
+/** …plus the folder operations the Spaces page needs, which are owned by App,
+ *  and the vault itself for the Source folder page. */
+type ShellProps = Props & {
+  spaceActions: SpaceActions
+  vault: string | null
+  onPickVault: () => void
+}
 
-type SectionId = 'general' | 'spaces' | 'formatting' | 'collection' | 'updates' | 'reportBug'
+type SectionId =
+  | 'master'
+  | 'spaces'
+  | 'collection'
+  | 'sourceFolder'
+  | 'tutorials'
+  | 'updates'
+  | 'reportBug'
 
 // Legacy's SECTIONS + SECTION_ICON (legacy/src/settings.js:35, legacy/src/App.jsx:1042).
 // Appearance / Arranging / Shortcuts are NOT here: they belong to a space now,
 // and live inside Spaces. Spaces, Your collection, Updates and Report a bug have
 // no legacy counterpart.
+// Master settings first, because it is the answer to "where do I change X" for
+// everything except which folder you're in. Startup, dates and the clock are
+// app-general; appearance, arranging, a note's chrome and the format-bar
+// buttons belong to a space and this page sets them for ALL of them. One space
+// at a time is Spaces → that space → its own settings, which is the same form.
 const SECTIONS: { id: SectionId; label: string; icon: IconName }[] = [
-  { id: 'general', label: 'General', icon: 'sliders' },
+  { id: 'master', label: 'Master settings', icon: 'sliders' },
   { id: 'spaces', label: 'Spaces', icon: 'spaces' },
-  { id: 'formatting', label: 'Formatting', icon: 'text' },
   { id: 'collection', label: 'Your collection', icon: 'library' },
+  { id: 'sourceFolder', label: 'Source folder', icon: 'folder' },
+  { id: 'tutorials', label: 'Tutorials', icon: 'book' },
   { id: 'updates', label: 'Updates', icon: 'restore' },
   { id: 'reportBug', label: 'Report a bug', icon: 'flag' }
 ]
@@ -36,7 +57,13 @@ const SECTIONS: { id: SectionId; label: string; icon: IconName }[] = [
 /** The gear. It lives in the sidebar's bottom-left strip, beside the bin, the
  *  way legacy pins it (legacy/src/App.jsx:997-1015) — hence the card styling and
  *  hover lift rather than a flat header button. */
-export function SettingsButton({ settings, onChange, spaceActions }: ShellProps): React.JSX.Element {
+export function SettingsButton({
+  settings,
+  onChange,
+  spaceActions,
+  vault,
+  onPickVault
+}: ShellProps): React.JSX.Element {
   const [mounted, setMounted] = useState(false) // in the DOM, including while closing
   const [armed, setArmed] = useState(false) // laid out, safe to animate
   const [closing, setClosing] = useState(false)
@@ -122,7 +149,7 @@ export function SettingsButton({ settings, onChange, spaceActions }: ShellProps)
           'btn-edge pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink-300/30 shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
           (open ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500')
         }
-        title="Settings"
+        data-tip="Settings"
         aria-label="Settings"
         aria-expanded={open}
         onClick={() => (open ? close() : (setClosing(false), setMounted(true)))}
@@ -152,6 +179,8 @@ export function SettingsButton({ settings, onChange, spaceActions }: ShellProps)
               settings={settings}
               onChange={onChange}
               spaceActions={spaceActions}
+              vault={vault}
+              onPickVault={onPickVault}
               onClose={close}
               armed={armed}
               closing={closing}
@@ -174,6 +203,8 @@ function SettingsWindow({
   settings,
   onChange,
   spaceActions,
+  vault,
+  onPickVault,
   onClose,
   armed,
   closing,
@@ -195,7 +226,11 @@ function SettingsWindow({
       aria-label="Settings"
       onAnimationEnd={onAnimationEnd}
       className={
-        'genie relative flex h-[min(600px,88vh)] w-[min(720px,92vw)] flex-col overflow-hidden border border-ink-300/25 bg-surface shadow-float ' +
+        // Sized off the WINDOW, with the caps only there to stop it sprawling on
+        // a very large display. 720×600 was a fixed box that looked stranded in
+        // the middle of a normal desktop window, and the settings pages have
+        // grown enough to want the room.
+        'genie relative flex h-[min(820px,84vh)] w-[min(1040px,80vw)] flex-col overflow-hidden border border-ink-300/25 bg-surface shadow-float ' +
         (armed ? 'run ' : '') +
         (closing ? 'closing' : '')
       }
@@ -207,7 +242,7 @@ function SettingsWindow({
         <p className="flex-1 font-display text-[15px] font-semibold text-ink-900">Settings</p>
         <button
           onClick={onClose}
-          title="Close (Esc)"
+          data-tip="Close (Esc)"
           aria-label="Close"
           className="rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"
         >
@@ -216,7 +251,7 @@ function SettingsWindow({
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <nav className="w-44 shrink-0 border-r border-ink-300/20 p-2">
+        <nav className="w-52 shrink-0 border-r border-ink-300/20 p-2">
           {SECTIONS.map((s) => (
             <button
               key={s.id}
@@ -238,11 +273,19 @@ function SettingsWindow({
         {/* The scroll container. `min-h-0` on the row above is what lets it
             actually scroll instead of stretching the window past its height. */}
         <div className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5">
-          {section === 'general' && <General settings={settings} onChange={onChange} />}
+          {section === 'master' && (
+            <MasterSettings
+              settings={settings}
+              onChange={onChange}
+              general={<General settings={settings} onChange={onChange} />}
+              formatting={<Formatting settings={settings} onChange={onChange} />}
+            />
+          )}
+          {section === 'sourceFolder' && <SourceFolder vault={vault} onPickVault={onPickVault} />}
+          {section === 'tutorials' && <Tutorials />}
           {section === 'spaces' && (
             <Spaces settings={settings} onChange={onChange} actions={spaceActions} />
           )}
-          {section === 'formatting' && <Formatting settings={settings} onChange={onChange} />}
           {section === 'collection' && <Collection />}
           {section === 'updates' && <UpdatesSection />}
           {section === 'reportBug' && <ReportBug />}
@@ -283,6 +326,7 @@ function General({ settings, onChange }: Props): React.JSX.Element {
           )
         })}
       </div>
+
     </>
   )
 }

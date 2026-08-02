@@ -53,7 +53,7 @@ export function Collection(): React.JSX.Element {
             </span>
             <span className="text-[12.5px] font-medium text-ink-700">Nothing here yet</span>
             <span className="max-w-[320px] text-[11.5px] leading-relaxed text-ink-400">{s.empty}</span>
-            <button className="mini mt-1" disabled title="Coming soon">
+            <button className="mini mt-1" disabled data-tip="Coming soon">
               Browse
             </button>
           </div>

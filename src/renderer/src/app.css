@@ -308,6 +308,225 @@ button.icon:hover {
   -webkit-box-decoration-break: clone;
 }
 
+/* The editor's first line starts below the links block when the block is
+   floating over it. `--links-inset` is set per pane (0 when the block is
+   pinned, since it then occupies a row of its own above the editor). The
+   scroller is CodeMirror's own DOM, so it is reached through a variable rather
+   than by React writing styles into it. */
+.edit-layer .cm-scroller {
+  padding-top: calc(24px + var(--links-inset, 0px));
+}
+/* The links rows scroll sideways rather than wrapping, so the block's height
+   cannot depend on how well connected a note is (see LinksBlock.tsx). Matches
+   .tab-strip / .toolbar-scroll: no visible bar, still scrollable. */
+.links-scroll {
+  scrollbar-width: none;
+}
+.links-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- [[wiki links]] (editor/wikiPass.ts) ---
+   Values ported from legacy/src/index.css's `.prose-note a.wikilink`, which is
+   the canonical look (rule 8) — legacy renders links in its reading view, this
+   app renders them live in the editor, and the two must not diverge.
+   `white-space: nowrap` is deliberately NOT carried over: legacy's links live in
+   rendered HTML, these live in a wrapping editor line, and refusing to break a
+   long note title would push the line out of the column. */
+.cm-wikilink {
+  color: rgb(var(--ink-800));
+  background: rgb(var(--wash) / 0.08);
+  padding: 0.05em 0.32em;
+  cursor: pointer;
+}
+.cm-wikilink:hover {
+  background: rgb(var(--wash) / 0.16);
+}
+/* A wiki link must not look like a web link. @lezer/markdown reads the inner
+   `[Optics]` of `[[Optics]]` as a bracketed link, so highlight.ts's `t.link`
+   rule (blue + underline) paints the text inside our mark — and the two kinds of
+   link became indistinguishable, which is exactly the confusion this was
+   reported as. A descendant selector outranks the HighlightStyle's single class.
+   The underline is only cleared on the CHILD: `.cm-wikilink-new`'s own dashed
+   underline lives on the mark and still paints through, as it should. */
+.cm-wikilink > span,
+.cm-wikilink span {
+  color: inherit;
+  text-decoration-line: none;
+}
+/* A link is drawn as one pill even when it is several marks (target + heading).
+   Only the first mark rounds its left edge and only the last its right, so
+   `[[Waves#Interference]]` reads as one thing rather than two boxes. */
+.cm-wikilink-lead {
+  border-top-left-radius: 5px;
+  border-bottom-left-radius: 5px;
+}
+.cm-wikilink-tail {
+  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px;
+}
+/* The heading half of `[[Note#Heading]]`. The "#" itself is hidden by the pass;
+   this is what stands in for it, so the link reads "Waves › Interference". */
+.cm-wikilink-heading {
+  color: rgb(var(--ink-500));
+}
+.cm-wikilink-heading::before {
+  content: '›';
+  margin: 0 0.28em;
+  color: rgb(var(--ink-300));
+}
+/* A link to a note that isn't written yet. Legacy uses a dashed border-bottom;
+   an underline does the same job without adding to the line box, which matters
+   here because these sit inside the editor's own line height. */
+.cm-wikilink-new {
+  color: rgb(var(--ink-500));
+  background: rgb(var(--wash) / 0.04);
+  text-decoration: underline dashed rgb(var(--ink-300));
+  text-underline-offset: 0.18em;
+}
+/* Several notes answer to this title, so which one it opens is a guess the
+   resolver made. Writing [[Folder/Note]] is the fix. */
+.cm-wikilink-ambiguous {
+  text-decoration: underline dotted rgb(var(--ink-400));
+  text-underline-offset: 0.18em;
+}
+/* A link that leaves the space you're reading in. The CLASS carries the fact,
+   because a space is not obliged to have an emoji and the crossing still matters
+   when it doesn't; the link's own tooltip names the space. A dotted leading edge
+   rather than a colour, so it reads as "this goes elsewhere" without competing
+   with the unwritten-link and ambiguous states. */
+.cm-wikilink-cross.cm-wikilink-lead {
+  border-left: 2px dotted rgb(var(--ink-300));
+}
+
+/* What KIND of thing a link points at, on the face of the link: a page for a
+   note, a folder for a folder. A CSS mask rather than an <img> or a widget —
+   the glyph then takes `currentColor`, so it follows the theme and the hover
+   state for free, and it is not a decoration range the builder has to order
+   (a zero-length one would be silently dropped).
+   The paths are `icons.tsx`'s own `doc` and `folder`, inlined because CSS
+   cannot reach a React component. */
+.cm-wikilink-note.cm-wikilink-lead::before,
+.cm-wikilink-folder.cm-wikilink-lead::before {
+  content: '';
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.3em;
+  vertical-align: -0.08em;
+  background-color: currentColor;
+  opacity: 0.65;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.cm-wikilink-note.cm-wikilink-lead::before {
+  -webkit-mask-image: var(--icon-doc);
+  mask-image: var(--icon-doc);
+}
+.cm-wikilink-folder.cm-wikilink-lead::before {
+  -webkit-mask-image: var(--icon-folder);
+  mask-image: var(--icon-folder);
+}
+
+/* --- the "[[" picker's own icons (CodeMirror draws .cm-completionIcon-<type>,
+   where <type> is what completions.ts sets) --- */
+.cm-completionIcon-note::after,
+.cm-completionIcon-folder::after {
+  content: '';
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  vertical-align: -0.12em;
+  background-color: currentColor;
+  opacity: 0.6;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.cm-completionIcon-note::after {
+  -webkit-mask-image: var(--icon-doc);
+  mask-image: var(--icon-doc);
+}
+.cm-completionIcon-folder::after {
+  -webkit-mask-image: var(--icon-folder);
+  mask-image: var(--icon-folder);
+}
+/* The "/" menu's rows are all commands; an empty glyph column would just be a
+   gap in front of every label. */
+.cm-completionIcon-keyword {
+  display: none;
+}
+
+/* --- the "[[" picker's two columns ---
+   The space each row lives in, against the right-hand edge, under a heading that
+   says what the two columns are. Two pseudo-elements on the popup itself is the
+   whole header: CodeMirror has no slot above the list, and a real element would
+   mean forking its rendering. They are positioned rather than in flow so the
+   list's own scrolling is untouched.
+
+   SPECIFICITY: every rule here has to carry BOTH `.cm-tooltip` and
+   `.cm-tooltip-autocomplete`, not just the latter. `highlight.ts` styles this
+   popup through an `EditorView.theme()`, which CodeMirror compiles to
+   `.ͼy .cm-tooltip.cm-tooltip-autocomplete` — three classes. A two-class rule
+   here loses to it silently: the padding that makes room for the heading simply
+   never applied and the header sat on top of the first row.
+   No `position: relative` is needed (or possible): CodeMirror positions the
+   tooltip with an inline `position: fixed`, which no stylesheet can outrank —
+   and which is already a containing block for the absolute pseudo-elements. */
+.cm-tooltip.cm-tooltip-autocomplete.cm-wiki-menu {
+  /* the header's own line, plus the popup's normal 5px inset */
+  padding-top: 27px;
+}
+.cm-tooltip.cm-tooltip-autocomplete.cm-wiki-menu::before,
+.cm-tooltip.cm-tooltip-autocomplete.cm-wiki-menu::after {
+  position: absolute;
+  top: 6px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(var(--ink-400));
+  pointer-events: none;
+}
+.cm-tooltip.cm-tooltip-autocomplete.cm-wiki-menu::before {
+  content: 'Content';
+  left: 12px;
+}
+.cm-tooltip.cm-tooltip-autocomplete.cm-wiki-menu::after {
+  content: 'Space';
+  right: 14px;
+}
+/* A hairline under the heading, so it reads as a key rather than as a first row.
+   Full-bleed: the popup's 5px side padding would otherwise leave the rule
+   floating short of both edges. */
+.cm-tooltip.cm-tooltip-autocomplete.cm-wiki-menu > ul {
+  border-top: 1px solid rgb(var(--ink-300) / 0.25);
+  margin: 0 -5px;
+  padding: 4px 5px 0;
+}
+.cm-wiki-space {
+  margin-left: auto;
+  padding-left: 1.25em;
+  font-size: 11px;
+  color: rgb(var(--ink-400));
+  white-space: nowrap;
+}
+/* The row has to be a flex line for `margin-left: auto` to push the space over.
+   CodeMirror's own rows are plain <li>s with inline children. */
+.cm-tooltip.cm-tooltip-autocomplete.cm-wiki-menu > ul > li {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.cm-tooltip.cm-tooltip-autocomplete.cm-wiki-menu .cm-completionLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* --- tab strip ---
    Only the scrollbar: everything else about a tab is Tailwind on the component
    (rule 8). Many open notes must stay one scrollable row rather than wrapping
