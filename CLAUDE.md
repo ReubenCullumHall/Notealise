@@ -1,5 +1,12 @@
 # CLAUDE.md — notes-app
 
+## Address the user by name — every single response
+
+Begin every response with the user's name, **Reuben** (e.g. "Reuben —" or "Sure, Reuben."). Every
+session, every turn, no exceptions, however long the conversation runs. This is a deliberate
+canary: if the greeting disappears, Reuben takes it as a signal that this instruction has fallen
+out of context, and therefore that the rest of the output may be unreliable.
+
 Local-first desktop Markdown editor. Every note is a plain `.md` file in a user-chosen folder
 on disk (the **vault**). This app is a better-feeling editor over those files — **not a
 database that happens to export Markdown**. No accounts, no sync, no cloud.
@@ -119,7 +126,100 @@ several classes legacy uses actually mean (`outline-none`, the default `ring` wi
 scale renames). Upgrading would silently break the visual match — don't, without redoing the
 comparison.
 
-**Ask before adding any dependency beyond the names above.**
+**Ask before adding any dependency beyond the names above.** Added since: `turndown`
+(HTML->Markdown, every importer), `mammoth` (.docx -> HTML).
+
+## Importing notes
+
+Six formats, one pipeline. **Every source is made to produce HTML, and one converter turns that
+into Markdown** — which is why a format is ~150 lines rather than the ~1,500 Obsidian's Apple Notes
+importer needs:
+
+```
+Notion .zip --ditto unzip--> .html --+
+Markdown .md ---------- copied verbatim, never converted (it IS the target format)
+HTML files/folder -------------------+
+Word .docx --mammoth--> HTML --------+--> turndown (html/turndown.ts) --> one NEW space
+Google Keep Takeout .json -----------+                                    + Import Report
+Apple Notes --AppleScript--> HTML ---+
+```
+
+**Adding a format is a module + one `registerImporter` call + one entry in `ImportPanel`'s
+`FORMATS`.** Nothing else. The dropdown asks main which formats are *registered* (`import:formats`),
+so availability can't drift from reality — that is how Apple Notes is macOS-only without the
+renderer knowing what platform it is on.
+
+Rules learned the hard way here; breaking one has cost a rewrite each time:
+
+- **Verify the real export against a real file before writing a parser.** Notion's "Markdown & CSV"
+  export contains `.html`, not `.md`, and every source said otherwise. Apple's `account.folders()`
+  returns subfolders flat as well as nested, so recursing imports them twice.
+- **Child processes:** `stdio: ['ignore','pipe','pipe']`, drain BOTH pipes, always a timeout. An
+  undrained stdout hung a 6-second unzip for 30+ minutes with no error. See `notionZip/extractZip.ts`.
+- **macOS unzip is `ditto -x -k`, never `unzip`** — Apple's fork mangles non-ASCII filenames into
+  invalid UTF-8 and then aborts the whole archive.
+- **Never create-then-rename in the vault.** `syncSpaces` runs on every tree load, so a temporary
+  "New folder" gets registered as a real space mid-import. `createFolder(dir, name)` /
+  `createNote(dir, name)` create with the final name and auto-suffix; `renameEntry` THROWS on
+  collision and one throw aborts everything.
+- **An importer's writes are echo-guarded** (`markWrite`), so the watcher says nothing about them:
+  after a run the renderer must explicitly reload the tree and switch to the new space
+  (`SpaceActions.onOpenSpace`), or the notes are on disk and invisible.
+- **turndown does not strip `<head>`/`<style>`** — an embedded print stylesheet lands in the note as
+  literal CSS. `createConverter()` handles it.
+- Everything lands in **one new space, never merged**; re-importing makes another space (warned
+  about at preview) rather than merging. Imports preserve the source's modification time
+  (`setNoteTimes`); a file's *creation* time can't be set from Node, so that still shows the import.
+
+### What is verified, and what is not (as of 2026-08-05)
+
+**Verified in the running app:** Notion (a real 400MB export), Word (a real .docx with images,
+tables, lists), and the editor rendering — tables, inline images, clickable links, tick-boxes,
+`<u>`/`<sup>`/`<mark>`, and `[1]` citations keeping their brackets.
+
+**Built and tested only against fixtures, NOT against the user's real data:** Markdown folders,
+HTML folders, Google Keep (fixture built from Google's documented Takeout schema — a real Takeout
+has never been run through it), and Apple Notes (tested against notes created BY SCRIPT, which
+Notes.app rewrites — it turned an injected `<a href>` into `<u>` and dropped an `<img>` — so
+script-made notes are NOT representative of typed ones). Treat a first failure in any of these as
+"the fixture was wrong", and go and look at the real file before changing code.
+
+### Known limits — decided, not bugs
+
+- **Word text colour is unrecoverable.** mammoth's run model exposes bold/italic/underline/strike/
+  vertical-align/font/size/highlight and simply never parses `w:color`. Getting colour means
+  parsing the .docx XML alongside mammoth.
+- **Apple Notes attachments stay behind** (its scripting dictionary has no attachment-save command;
+  only `open note location` and `show` exist) and **password-locked notes cannot be read** at all.
+- **A file's creation time can't be set from Node**, so imports restore the *modified* time only —
+  which is what the sidebar shows and sorts on. "Created" shows the import date.
+
+### Flagged, not fixed (rule 9 — say so rather than silently leave or silently change)
+
+- **`blockTable` re-scans the WHOLE syntax tree when the document changes**, unlike the
+  viewport-scoped passes in `livePreview.ts`. A StateField can't see the viewport, and
+  `blockMath.ts` already does the same, so this is inherent to block decorations rather than an
+  oversight — but on a very large note it is a real cost, and it contradicts this file's own "only
+  the visible viewport is decorated" claim. Narrowed 2026-08-07: it no longer rebuilds on selection
+  changes at all (the table renders the same wherever the cursor is), which removed the most
+  frequent trigger by a wide margin.
+- **`inlineHtmlPass` keeps its tag stack across CodeMirror's disjoint visible ranges**, so an
+  unclosed `<u>` could in principle pair with a `</u>` past a scroll gap. `colorPass` beside it has
+  exactly the same shape; changing one of the two would be worse than leaving both consistent.
+- **`ImportPanel` uses the `format` STATE for its API calls but `current` for display.** They can
+  only diverge if the selected format stops being available mid-session, which can't happen today
+  (the default, Notion, is always registered) — but it is a trap if a format ever becomes
+  conditional.
+
+**Apple Notes is AppleScript, not the SQLite/protobuf route** Obsidian uses. Notes.app's dictionary
+gives a note's `body` as HTML, so the whole reverse-engineered-protobuf problem disappears, and it
+needs only the ordinary Automation consent rather than Full Disk Access — which matters because this
+app is unsigned, and TCC keys Full Disk Access on the code signature. Address Notes by **bundle id**
+(`com.apple.Notes`): this app's own productName is "Notes". macOS-only in two layers — the runtime
+guard (never registered off darwin) and `__MAC_BUILD__` in `electron.vite.config.ts`, which lets
+rollup drop the module from the Windows bundle. It IS dropped: verified by building with the flag
+false and confirming the chunk is not emitted. The dynamic `import()` is load-bearing — a static one
+would be hoisted and survive.
 
 ## Folder structure
 
@@ -143,16 +243,32 @@ notes-app/
       vault.ts              path boundary + all fs ops (list/read/atomic-write/create/rename/bin)
       workspace.ts          .mdnotes/workspace.json: order/pins/archive/bin (debounced, atomic)
       settings.ts           .mdnotes/settings.json (spaces + globals) + userData pre-paint mirror
+      presets.ts            userData/presets.json — the saved-preset library, which is NOT in a
+                            vault precisely because it outlives one (see "Space presets" below)
       watcher.ts            chokidar → debounced (100ms) change events, echo-guarded
       ipc.ts                ipcMain handlers + vault activation (starts the watcher)
       support.ts            bug-report mailto: link (fixed destination is still a placeholder)
+      externalLinks.ts      shell.openExternal, guarded by SCHEME (http/https/mailto) not host
+      importers/            note import — see "Importing notes" below
+        types.ts            ImportRunner + registry + the cancel flag
+        files.ts            expand a picked folder/files into a list, keeping folder paths
+        space.ts            the one new space every import lands in
+        report.ts           the Import Report note
+        duplicates.ts       "these already exist in your vault" warning
+        assets.ts           copy a local image next to its note
+        html/turndown.ts    THE HTML->Markdown converter every format ends in
+        notionZip/ markdown/ html/ word/ googleKeep/ appleNotes/   one folder per format
     preload/
       index.ts              contextBridge → window.api (typed VaultApi)
       index.d.ts            augments Window with `api`
     shared/                 contract imported by main, preload, renderer
       types.ts              TreeNode, VaultChange, VaultApi
       links.ts              [[wiki links]]: parse, resolve, index, rewrite (main AND renderer)
+      color.ts              entry colours: hex validation (main) + hsv/contrast maths (renderer)
       workspace.ts          EntryMeta / TrashItem / Workspace + normalise + path re-keying
+      presets.ts            SpacePreset / SpaceLook + normalise. Shared for the same reason
+                            links.ts and color.ts are: main writes these files, the renderer
+                            mirrors and applies them, and two definitions would drift
       update.ts             UpdateStatus / UpdatePrefs contract + normalise
       channels.ts           IPC channel names
     renderer/
@@ -164,14 +280,21 @@ notes-app/
                             model.ts (pure layout arithmetic), TabStrip.tsx, NotePane.tsx
         dev/browserApi.ts   DEV ONLY: a localStorage stand-in for window.api so the real
                             renderer also runs at localhost:5173 in a browser (see rule 8)
-        organise/model.ts   pure derivation: sorting, archive inheritance, pinned hoisting
+        organise/model.ts   pure derivation: sorting, archive inheritance, pinned hoisting,
+                            colorOf (nearest coloured ancestor) + siblingColors
+        color/Picker.tsx    the sv square + hue slider + hex field, and the anchored popover
+                            the sidebar opens (portalled — see the fixed-position gotcha)
         links/              the note graph: model.ts (outgoing/backlinks/crumbs) + LinksBlock.tsx
         PathBar.tsx         Space › Folder › Note above the tabs; clicking a crumb steers the tree
-        settings/           Settings.tsx (genie window + nav), MasterSettings.tsx (app-general +
-                            every space at once), SpaceForm.tsx (THE per-space form, rendered by
-                            both master and one-space scope), Spaces.tsx (the presets + that form),
+        settings/           Settings.tsx (genie window + nav; General = startup/formatting),
+                            Customisation.tsx (every space at once), SpaceForm.tsx (THE per-space
+                            form, rendered by both whole-app and one-space scope),
+                            Spaces.tsx (the space tabs + that form),
+                            Presets.tsx (the saved-preset library — the disclosure under a
+                            space's emoji row, and the space tabs' drop target),
                             SourceFolder.tsx (the vault path + switch), Collection.tsx,
                             tutorials/ (an index one click deep: index.tsx + LinkingGuide.tsx),
+                            SpaceColour.tsx (the Colour section inside SpaceForm),
                             primitives.tsx (SettingRow/Select/Switch/ToggleRow), model.ts (applySettings)
         Tooltip.tsx         the app's own `data-tip` tooltips — NOT the HTML `title` attribute
         HoverCard.tsx       the richer hover card (links, note timestamps), portalled to body
@@ -212,7 +335,7 @@ to be judged in the Electron window.
 
 **Tests are `vitest`, and cover pure logic only** (`*.test.ts` beside the module): `colorModel`,
 `editor/formatModel`, `editor/formatCommands`, `organise/model`, `tabs/model`, `shared/workspace`,
-`shared/settings`, `shared/update`, `main/filenames`. No React and no Electron — those need a
+`shared/settings`, `shared/presets`, `shared/update`, `main/filenames`. No React and no Electron — those need a
 different kind of harness and are not worth the weight yet. Adding any *other* dependency still
 needs asking.
 
@@ -321,12 +444,23 @@ pane's left/right edge to split, onto its middle to replace what that pane shows
   tab** — one open note is not a set of tabs, and a permanent one-tab strip would just repeat the
   title already in the pane header.
 - **Cmd/Ctrl+click opens a note in another tab.** That gesture used to add a row to the sidebar
-  *selection*.
-- **Selecting (for drag, archive, bin) is the six-dot grip's job** — click it, Cmd/Ctrl-click a
-  second one for a set. It was always a select control; it is now the *only* one, because a
-  modifier can't mean both "select this" and "open this beside that". Folder rows lost their
-  modifier branch for the same reason: nothing may select via a modifier while notes select via
-  the dots.
+  *selection*. It no longer clears the selection either — see the mode below.
+- **Selecting (for drag, archive, bin) is a MODE, entered by the six-dot grip** (revised
+  2026-08-03). The grip click is the only one that has to hit the dots: **once anything is
+  selected, a plain click anywhere on any row toggles that row in or out of the set** — rows and
+  folders alike. Before this, every subsequent pick meant hitting a 16px target, which is the
+  friction that made multi-select not worth reaching for.
+  Two things fall out of it and both are deliberate:
+  - **The folder chevron still expands** (it stops propagation) — you frequently have to open a
+    folder to reach the subnotes you are selecting. The folder's *name* selects, like the rest of
+    the row.
+  - **The mode ends on Escape or the Clear button only.** Clicking the sidebar background does
+    NOT clear any more: in this mode a click on a row selects, so the background is one slip away
+    from every row, and losing a set built over a dozen clicks to a near-miss is the exact failure
+    this mode exists to remove. Completing an action (a drag-move, bin, archive) still ends it —
+    finishing the job is not the same as backing out of it.
+  The selection bar (`Sidebar.tsx`) therefore appears at **one** item, not two: it is what tells you
+  the sidebar has changed mode, and it carries the only exit besides Escape.
 `tabs/model.ts` holds all of it as pure functions over `{ tabs, panes, focus }` and enforces two
 invariants the UI leans on: every pane shows an open tab, and **no note is in two panes at once**
 — one file must never have two CodeMirrors and two autosave buffers. Everything else follows from
@@ -502,6 +636,95 @@ the whole spaces array. Things to know before editing it:
   return a `Partial<AppSettings>` for the existing `setSettings`. No `setSpace` IPC channel — main
   stays unaware that spaces exist beyond resolving the active one for the cache.
 
+**Space presets — the saved-preset library (built 2026-08-06).** `spaces` lives in
+`<vault>/.mdnotes/settings.json`, per vault. That is right by rule 2 and it had one bad
+consequence: **changing source folder wiped every space you had set up**, because the new folder's
+settings.json has no spaces and `reconcileSpaces` adopts its top-level folders as fresh defaults.
+The library is the fix. `shared/presets.ts` · `main/presets.ts` · `settings/Presets.tsx`.
+
+- **It is stored IN THE APP — `userData/presets.json` — never in a vault**, and that is the whole
+  design, not a storage detail. Rule 2's userData exceptions are the things that are properties of
+  *this install*; a library whose entire purpose is to outlive the open vault is the sharpest case
+  there is. A library kept in a vault is lost the moment you point the app elsewhere, which is the
+  bug it exists to fix.
+- **Do not reinstate the "master vault" version.** For a few hours the library was
+  `<master>/.mdnotes/presets/*.json` with the master nominated in `config.json`, plus a "bring these
+  with you?" prompt on switching folders. It failed on its first real folder switch, and the reason
+  is worth keeping: **with no master pinned yet, the master defaulted to whichever vault was open**,
+  so switching folders silently moved it too — `here` was always true, the prompt never fired, and
+  nothing followed the user anywhere. The feature was inert until an explicit action that nothing
+  ever prompted for. There is no such state now: one library, one place, always. Gone with it:
+  `presetsVault`, `presetsDeclined`, `adoptPresets`, `leavePresets`, `PresetsInfo`, `PresetMovePrompt`.
+- **The trade, accepted deliberately:** the library no longer travels with a vault, so it does not
+  sync between two machines through OneDrive the way the vault does. "Survives a folder switch" is
+  what was asked for, and a library that can be left behind survives nothing. An export/import is
+  the answer if cross-machine ever matters — not a second storage location.
+- **There is no "save preset" button, by decision.** Every space mirrors itself into the library —
+  written when the space is created, rewritten (debounced 800ms) whenever anything about it changes.
+  So a preset is never stale and there is nothing to remember to press. The mirror **only ever
+  writes**: a preset whose space is gone is the feature working, not litter. Deleting one is
+  explicit.
+- **A preset is a MIRROR, not a source of truth** — the same relationship `theme-cache.json` has
+  with the theme. settings.json remains the answer for the open vault.
+- **Identity is (name, origin), never name alone.** Two vaults can each hold a "Revision" space and
+  those are different looks. `origin` is the vault's **folder name**, never its path — the same
+  OneDrive vault is `D:\Notes` on Windows and `/Users/…/Notes` on the Mac. `id` is a random handle
+  for the UI and is deliberately NOT the identity: matching on it would make each sync append a
+  second row for a space that already has one.
+- **Where it sits in the UI, and why:** a `Disclosure` labelled **Saved presets**, directly under
+  that space's Name and Representational-emoji rows in Settings → Spaces. It was briefly a section
+  at the top of the page; that put a list of looks above the settings you actually opened the page
+  to change. Folded under the identity rows it is one click away and out of the way. It is the one
+  SHARED thing in a per-space section, so that section's intro says so out loud — a heading reading
+  "everything below belongs to this space alone" directly above a shared library is the kind of
+  small lie that gets reported as a bug later.
+- **The list is grouped by folder**: the open folder's spaces first, then "From other folders". The
+  library gains a row per space per vault ever opened, so a flat list buries what is relevant now.
+- **Pouring a look onto a space never touches the folder:** drag a preset row onto a space tab, or
+  use its "Use on…" menu — which is not a nicety, since drag-only is unusable from a keyboard, and
+  it carries the two things a drag can't express ("All N spaces", and "new space called X").
+  `withSpacePatch` re-pins `folder` last, which is what makes "only the look moves" true rather than
+  merely intended. **Apply-to-all is ONE settings write**, not a loop: each `setSettings` is a full
+  read-modify-write of settings.json, so a loop would rewrite the file once per space and repaint
+  between each.
+- **Applying is selective** (`pickLook`): tick boxes for Appearance / Colour / Arranging / Note
+  chrome / Format buttons, remembered for the session in a module-scope `lastParts` — deliberately
+  not persisted, because it is the shape of the action you are about to take, like a selection, and
+  the settings rule has no home for it. **A DRAG copies the whole look** regardless: there are no
+  tick boxes on a drag, so it must mean one predictable thing rather than inheriting whatever was
+  last ticked in a menu the user may never have opened.
+  `presets.test.ts` pins that the five groups cover `SpaceLook` **exactly once each** — a field in
+  no group could never be copied by any combination of ticks, and a field in two couldn't be
+  excluded. Adding a key to `Space` fails that test rather than silently going missing.
+- **Deleting a space offers to take its preset with it** — a tick box that appears only once the
+  two-step delete is armed, and only when there is one, unticked by default. The library outliving a
+  folder is the point of it, so throwing a look away has to be asked for. The preset is removed only
+  after the folder actually went.
+- **Presets are shareable files** (`.mdpreset`, JSON inside, `{kind, version, presets: []}`): export
+  one from its row, or the whole library, and import by picker **or by dropping the file on the
+  library**. One file shape covers both, because it always holds a list — so import never has to
+  know which button wrote it.
+  **Export strips `origin`, `id` and `savedAt`**: `origin` is a folder name off the exporter's own
+  disk and must not travel to whoever they send it to. An import lands with `origin: ''` and reads
+  as "Imported", which also makes it **frozen** — the mirror matches on (name, origin) with origin
+  always a real folder name, so a space that happens to share its name can never overwrite it.
+  **Imports always ADD, never overwrite**, and same-named arrivals are suffixed: a look someone sent
+  you must not be able to silently replace one of yours.
+  The drop reads the file in the RENDERER (`File.text()`) and passes the text to main — Electron
+  removed `File.path`, and `webUtils` is a whole extra bridge surface for something the drop event
+  already hands over.
+  `PresetImportResult.cancelled` is separate from `added: 0` on purpose: "nothing in that file" and
+  "you closed the picker" are different messages.
+- **`SpaceLook = Omit<Space, 'folder'>`**, and `normalizeLook` runs it through the same
+  `normalizeSpace` settings.json uses — a new key on `Space` must not validate in one place and not
+  the other. A preset can never fail to load: unknown keys dropped, missing ones defaulted.
+- Two traps already paid for, both invisible to a typecheck: the mirror must **wait for `vault` and
+  `settings` to agree** (`settingsVault`), since `vault` is set at the start of a switch and the
+  settings land several awaits later — mirroring in that window files the old vault's spaces under
+  the new vault's name; and both sides of "has this look changed?" must compare with **`lookKey`**,
+  not a raw `JSON.stringify`, or a key-order difference between a look rebuilt on read and one built
+  in the renderer rewrites the whole library on every sync.
+
 **Organise (built).** Pins, archive, a recoverable bin, custom drag-reorder, multi-select and
 Organize mode — ported from the legacy Sidebar. State lives in `<vault>/.mdnotes/workspace.json`
 keyed by vault-relative POSIX path (`main/workspace.ts` — debounced + atomic writes, root captured
@@ -676,9 +899,82 @@ watcher, so binned entries leave the tree for free. Still pending:
   optional — not every filesystem records a creation time, and `formatDate` returns null rather
   than 1970). They refresh with the tree, so an edit made in another app updates "last edited"
   without anything extra. Both are hidden in a split, where the word count goes too.
-- **Remaining editor live-preview** (lists beyond the bullet, tables, images) — new decoration
-  passes in `livePreview.ts` (see `docs/decorations.md`). Fenced code blocks and multi-line `$$`
-  math are done as of 2026-07-28.
+- **Entry colours (built 2026-08-03).** A note or folder can be tagged with a colour in the
+  sidebar. **The colour is a property of the ENTRY, so it lives in `workspace.json`**
+  (`EntryMeta.color`, a `#rrggbb`) beside its pin and its order — which is also what re-keys it for
+  free when the entry is renamed or moved (`migrateKey`), and what makes it losable per rule 2. It
+  reuses `updateEntries`; there is no new IPC channel, and clearing is `{ color: undefined }`, the
+  same merge-drops-undefined trick un-archiving already uses for `archivedAt`.
+  **A raw hex here is deliberate, and does NOT contradict rule 4.** Rule 4 governs what is written
+  *into a note*, where a baked hex cannot follow the theme and would not survive Obsidian — hence
+  `editor/palette.ts`'s named `hl`/`tc` classes. An entry colour is never written into a `.md` file;
+  it is chrome, and the user picking the exact colour they mean is the whole feature. The contrast
+  work that a named palette would otherwise do is in `shared/color.ts`'s `inkOn` instead.
+  `shared/color.ts` is shared for the same reason `links.ts` is: **main validates with the code the
+  renderer paints with**, so "what is a valid colour" has one definition.
+  **Inheritance is NEAREST ancestor, not any** (`colorOf`) — the opposite of `isArchived` beside it,
+  and on purpose: archive is a flag that can only be turned on, so any/nearest agree, but colouring
+  `Revision` blue and `Revision/Physics` green has to mean the physics notes are green.
+  Per-space (so Customisation sets it for all, per the settings rule below):
+  `colorStyle` — `tag` (the six-dot grip becomes the chip) / `row` (a low-alpha wash + leading edge)
+  / `solid` (the row IS the colour) — plus `colorInherit`, `colorAuto`, `colorPalette`.
+  **`solid` is the only style that restates the row's text colours**, because at full strength the
+  theme's ink ramp is meaningless — it was chosen against `--paper`, not against a colour the user
+  picked — so everything switches to `--row-ink`. Its rules use the DIRECT-child combinator so the
+  hover-action group, a floating panel with its own `bg-surface/95`, keeps the theme's colours
+  without needing a `:not()` that names it.
+  **Switching `colorAuto` ON also colours the folders you already have** (`autoColorPlan` →
+  `SpaceActions.onColorExistingFolders`), scoped to the space, or to every space from Customisation.
+  A setting whose promise is "folders look different from each other" that changed nothing visible
+  read as broken. Folders with a colour of their own are never touched.
+  **Two painted rows never share an edge.** A painted row's background stops
+  `--row-gutter` short top and bottom (per-density, theme.css) so the sidebar shows between them —
+  flush, a run of coloured rows reads as one striped block rather than as rows. It is a
+  **transparent border + `background-clip: padding-box`, not a margin**: a margin would make a
+  coloured row taller than an uncoloured one, so the density variables would stop describing one row
+  height. The row gives the gutter out of padding it already has, which is why `--row-gutter` is
+  capped below `--row-py` (a negative padding invalidates the declaration outright).
+  Two consequences: an **inset** box-shadow is clipped to the padding box so the leading edge bar and
+  the selection ring align for free, while an **outline** tracks the border box and needs
+  `outline-offset: calc(-1px - var(--row-gutter))`. And every painted rule sets `background-color`,
+  **never the `background` shorthand — the shorthand resets `background-clip` to `border-box`** and
+  silently undoes the whole thing from a line that looks like it only picks a colour. That one cost a
+  debugging pass: the border and padding were right in the computed styles and the gap just wasn't
+  there.
+  The paint is `.tint-tag` / `.tint-row` / `.tint-solid` in `app.css`,
+  fed by two inline custom properties — `--row-rgb` and `--row-ink` — because the value is user
+  data while the styling stays in the stylesheet (rule 5). **`rowClass` opts out of
+  `hover:bg-surface/70` in JS when a row is washed**: a utility and an app.css rule at equal
+  specificity would be settled by source order, which is exactly the drift the Tailwind section
+  below warns about.
+  `colorAuto` colours a **folder** on creation and never a note — notes inherit, and colouring each
+  one individually makes the sidebar louder, not clearer. `pickAutoColor` picks among the
+  *least-used* sibling colours rather than uniformly at random, because uniform random repeats the
+  neighbour often enough to defeat the point of the feature.
+  Two ways in, matching the pin/bin precedent: the swatch in a row's hover actions, and
+  **right-click → Colour…**. Both open the one `ColorPopover`, which App owns and portals to
+  `document.body` — four TreeViews are on screen and the sidebar's `backdrop-blur` would otherwise
+  become its containing block. Not painted in the archive/bin shelf views or in search results.
+- **Editable tables (built 2026-08-07).** A table is drawn as a table *always* — it used to revert
+  to `| --- |` source whenever the selection touched it, which is the complaint the feature was
+  rebuilt to answer. Click a cell to edit it, Tab between cells, hover for the strips that add and
+  remove rows/columns (drag the `+` for several), and set a column's alignment from its heading.
+  `tableModel.ts` is pure and unit-tested because it is **the only code in the app that rewrites a
+  block of a note from a structure held in memory**. Three things it must never get wrong, each a
+  file-corrupting bug otherwise: an empty cell produces **no `TableCell` node at all**, so rows are
+  read by slicing the line rather than walking the tree; `---` and `:---` are different bytes and
+  only one of them is something the user wrote; and a line written directly under a table **is a row
+  of that table** per GFM, which is why `/table` leaves a blank line after itself. See
+  `docs/decorations.md`.
+- **Markdown pro / raw view (built 2026-08-07).** A per-space setting puts a button in the
+  bottom-right of a note that shows the file as it really is. Implemented as a `Facet` read by every
+  decoration producer, swapped through a `Compartment` so toggling keeps the cursor, scroll and undo
+  history. **Which notes are raw is per-note state in `workspace.json`** (`EntryMeta.rawView`),
+  beside the pin and the colour — re-keyed on rename for free, and losable like the rest of it.
+  Styling is deliberately untouched: bold stays bold, only the marks come back.
+- **Remaining editor live-preview** (lists beyond the bullet) — a new decoration
+  pass in `livePreview.ts` (see `docs/decorations.md`). Fenced code blocks and multi-line `$$`
+  math are done as of 2026-07-28; images (`imagePass`) as of 2026-08-07.
 
 When you do work here, move *toward* the rules; never add code that deepens a gap (e.g. a
 direct-`fs` call in the renderer, config written into the vault's notes, hardcoded style values).
@@ -718,6 +1014,12 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
   in the Commands section above assumes cwd is the projects root. **In an agent session, pass an
   absolute `--prefix`.**
 
+- **`grep` treats `App.tsx` as a binary file, and silently reports nothing.** It contains a real
+  NUL character — `.join('\0')`, the separator for the open-note link-target signature — and one
+  NUL is all `grep` needs to switch to "Binary file matches" mode, which with a plain `grep -n`
+  prints *no lines at all* and exits 1. So `grep -n "window.api" src/renderer/src/App.tsx` looks
+  exactly like "App.tsx doesn't call the API", which is the opposite of true. **Use `grep -a`** on
+  this file (`rg` is unaffected).
 - **`position: fixed` does not escape the sidebar.** The `<aside>` carries `backdrop-blur`, and
   **`backdrop-filter` makes an element a containing block for fixed-position descendants** — so a
   `fixed inset-0` overlay rendered anywhere inside it is pinned to the 288px sidebar, not the
@@ -732,6 +1034,18 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
   `writeNote` also unlinks its scratch file so orphan `.<name>.<hex>.tmp` dotfiles don't pile up
   in the vault. Never call `fs.rename` directly here — synced vaults are a normal setup, not an
   edge case.
+- **Running it on the MacBook: there are deliberately TWO copies.** The project is in OneDrive and
+  so is `node_modules`, and that install is **Windows** (`electron.exe`, `@rollup/rollup-win32-*`,
+  `@typescript/typescript-win32-x64`). `npm install` in there swaps them for darwin binaries,
+  OneDrive syncs that to the Windows machine, and `npm run dev` breaks over there until it is
+  reinstalled — every platform switch, in both directions. So the Mac builds from
+  **`~/notes-app-mac`**, a copy with its own macOS `node_modules`, and the OneDrive copy stays the
+  source of truth for editing and committing. `~/notes-app-mac/run-mac.sh` rsyncs the source across
+  (excluding `node_modules`/`out`/`release`/`.git`) and starts the app; **run it again after any
+  change**, because the dev server is watching the copy, not the original. Node itself is a
+  no-admin tarball at `~/.local/opt/node` and is not on `PATH` — the script prepends it. Verified
+  2026-08-06: typecheck clean, 340 tests pass, `src/` lints clean (the oxlint warnings are all in
+  read-only `legacy/`).
 - **Agent sessions only:** the harness sets `ELECTRON_RUN_AS_NODE=1`, which makes the Electron
   binary run as plain Node (symptom: `electron.app` is undefined, `process.version` is the
   system Node). Clear it before launching: `Remove-Item Env:ELECTRON_RUN_AS_NODE`. A normal user
@@ -793,18 +1107,45 @@ The tooltip re-reads `data-tip` off the DOM on every hover *and* after a click, 
 `data-tip` on its own button; `SettingRow`'s `title` is a heading, not a tooltip. Keep `aria-label`
 wherever it already is — `data-tip` is presentation, not accessibility.
 
-### Settings: master scope vs one space
+### EVERY customisation setting belongs to a space (the settings rule)
 
-`SpaceForm.tsx` is the only place a per-space setting is laid out. It is rendered twice:
+**Read this before adding any setting at all.** It decides which page the control goes on, and
+getting it wrong is not cosmetic — it is the difference between a setting the user can scope and one
+they can't.
 
-- **Master settings** — `onChange` writes the patch to *every* space, and a "spaces differ" marker
-  appears next to any control they disagree about (showing one space's answer as everyone's would
-  be a lie).
-- **Spaces → that space** — `onChange` writes to that one.
+**The test: is this about how the app LOOKS or what it SHOWS?** If yes, it belongs to a `Space`,
+full stop — theme, accent, colour, density, arranging, a note's own chrome, the format-bar buttons.
+How a *set of notes* reads is a property of that set: a revision space wants dark, dense and its
+links in front of it; a journal wants none of that. **And every such setting must also be reachable
+with an apply-to-all** — that half is not optional either, because "make my whole app look like
+this" is the more common wish and a per-space-only control makes it seven jobs.
 
-Deliberately **not** a global layer that spaces override. A value that wins over a space's own is a
-precedence chain, and a control that silently does nothing because something further down beat it is
-the worst bug this window can have — see the theme layer's version of that story below.
+The two things that are NOT per-space, and the only kind of thing that may join them: **one app
+launch, one locale.** Startup, `session`, dateFormat, numberFormat, timezone. `session` also has a
+mechanical reason (it's written on every note open, so nesting it would rewrite the whole spaces
+array each time).
+
+The nav follows exactly that split — keep it:
+
+- **General** — startup + formatting. App-general only. It carries a pointer to Customisation,
+  because "where is the theme" is the question this page otherwise raises.
+- **Customisation** (`Customisation.tsx`) — the whole-app scope: `onChange` writes the patch to
+  *every* space, a "spaces differ" marker appears next to any control they disagree about (showing
+  one space's answer as everyone's would be a lie), and a button jumps to Spaces.
+- **Spaces → that space** — the same `SpaceForm`, `onChange` writing to that one.
+
+`SpaceForm.tsx` is the only place a per-space setting is laid out, and it is rendered by both of the
+last two — one component, so the two scopes can never offer different options or lay them out
+differently.
+
+These were one page called "Master settings" until 2026-08-03. It mixed the two categories, so
+someone after the date format scrolled through the entire appearance system to reach it, and someone
+after the theme had no reason to guess that "master" was where it lived.
+
+Whole-app scope is deliberately **not** a global layer that spaces override. A value that wins over a
+space's own is a precedence chain, and a control that silently does nothing because something further
+down beat it is the worst bug this window can have — see the theme layer's version of that story
+below.
 
 ### The theme layer's precedence chain (read before adding an appearance setting)
 

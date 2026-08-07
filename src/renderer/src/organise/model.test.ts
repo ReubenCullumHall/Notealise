@@ -3,8 +3,11 @@ import type { TreeNode } from '../../../shared/types'
 import type { Workspace } from '../../../shared/workspace'
 import {
   archivedRoots,
+  autoColorPlan,
+  colorOf,
   isArchived,
   pinnedRoots,
+  siblingColors,
   sortArchived,
   sortSiblings,
   withoutArchived
@@ -120,6 +123,136 @@ describe('pinnedRoots', () => {
     const tree = [dir('work', [dir('work/sub', [file('work/sub/a.md')])])]
     const w = ws({ 'work/sub/a.md': { pinned: true } })
     expect(pinnedRoots(tree, w).map((n) => n.path)).toEqual(['work/sub/a.md'])
+  })
+})
+
+describe('colorOf', () => {
+  it('prefers the row’s own colour over anything above it', () => {
+    const w = ws({ work: { color: '#111111' }, 'work/a.md': { color: '#222222' } })
+    expect(colorOf(w, 'work/a.md')).toEqual({ hex: '#222222', own: true, from: 'work/a.md' })
+  })
+
+  it('takes the NEAREST coloured ancestor, not just any', () => {
+    // This is the one place it deliberately differs from isArchived, where any
+    // flagged ancestor is enough. Archive is a flag that can only be turned on,
+    // so "any" and "nearest" agree; two colours in one branch are a real
+    // disagreement, and colouring a subfolder has to beat its parent or
+    // recolouring one subject inside a space would silently do nothing.
+    const w = ws({ work: { color: '#111111' }, 'work/sub': { color: '#333333' } })
+    expect(colorOf(w, 'work/sub/deep/a.md')).toEqual({
+      hex: '#333333',
+      own: false,
+      from: 'work/sub'
+    })
+  })
+
+  it('reports where an inherited colour came from', () => {
+    // The picker names it ("inheriting from work"), so a user can tell whether
+    // clearing this row will leave it grey or fall back to its folder.
+    const w = ws({ work: { color: '#111111' } })
+    expect(colorOf(w, 'work/a.md')).toEqual({ hex: '#111111', own: false, from: 'work' })
+  })
+
+  it('returns nothing when inheritance is off and the row has no colour', () => {
+    const w = ws({ work: { color: '#111111' } })
+    expect(colorOf(w, 'work/a.md', false)).toBeNull()
+    // …but the folder that HAS the colour still shows it. "Off" turns off
+    // inheritance, not colour.
+    expect(colorOf(w, 'work', false)).toEqual({ hex: '#111111', own: true, from: 'work' })
+  })
+
+  it('does not leak across similarly-named siblings', () => {
+    // Same trap isSelfOrDescendant exists to avoid: "workshop" is not inside
+    // "work", and a prefix comparison would say it was.
+    expect(colorOf(ws({ work: { color: '#111111' } }), 'workshop/a.md')).toBeNull()
+  })
+
+  it('returns nothing for an uncoloured vault', () => {
+    expect(colorOf(ws({ work: { pinned: true } }), 'work/a.md')).toBeNull()
+  })
+})
+
+describe('siblingColors', () => {
+  const w = ws({
+    physics: { color: '#111111' },
+    maths: { color: '#222222' },
+    'physics/waves': { color: '#333333' },
+    english: { pinned: true }
+  })
+
+  it('lists only the immediate children of the folder', () => {
+    // Grandchildren must not count: auto-colour is trying to keep a new folder
+    // distinct from the rows it will sit NEXT TO, not from everything under it.
+    expect(siblingColors(w, '').sort()).toEqual(['#111111', '#222222'])
+    expect(siblingColors(w, 'physics')).toEqual(['#333333'])
+  })
+
+  it('skips entries that have no colour', () => {
+    expect(siblingColors(w, '')).not.toContain(undefined)
+  })
+
+  it('is empty for a folder whose children are uncoloured', () => {
+    expect(siblingColors(w, 'maths')).toEqual([])
+  })
+})
+
+describe('autoColorPlan', () => {
+  const palette = ['#aa0000', '#00bb00', '#0000cc']
+
+  it('gives every uncoloured folder a colour and leaves notes alone', () => {
+    // Notes inherit their folder's colour. Colouring them individually is what
+    // turns a legible sidebar into a loud one, so the plan must never name one.
+    const tree = [dir('a', [file('a/x.md')]), dir('b'), file('loose.md')]
+    const plan = autoColorPlan(tree, ws({}), palette)
+    expect(Object.keys(plan).sort()).toEqual(['a', 'b'])
+  })
+
+  it('never overwrites a colour that was chosen by hand', () => {
+    // The whole risk of a backfill: a switch flipped on one page silently
+    // repainting decisions made on another.
+    const tree = [dir('a'), dir('b')]
+    const plan = autoColorPlan(tree, ws({ a: { color: '#123456' } }), palette)
+    expect(plan.a).toBeUndefined()
+    expect(plan.b).toBeDefined()
+  })
+
+  it('gives siblings different colours', () => {
+    // The bug this guards: reading the used-set once per level shows every
+    // sibling the same answer, and the whole level comes out one colour —
+    // exactly what auto-colour exists to prevent. Fixed rand() so a pass only
+    // succeeds if the used-set really grows as it goes.
+    const tree = [dir('a'), dir('b'), dir('c')]
+    const plan = autoColorPlan(tree, ws({}), palette, '', () => 0)
+    expect(new Set(Object.values(plan)).size).toBe(3)
+  })
+
+  it('counts a hand-coloured sibling as taken', () => {
+    const tree = [dir('a'), dir('b')]
+    const plan = autoColorPlan(tree, ws({ a: { color: '#aa0000' } }), palette, '', () => 0)
+    expect(plan.b).not.toBe('#aa0000')
+  })
+
+  it('descends into subfolders, scoping siblings to each level', () => {
+    // A child may reuse a colour its uncle has — they are never seen side by
+    // side. Only true siblings have to differ.
+    const tree = [dir('a', [dir('a/one'), dir('a/two')])]
+    const plan = autoColorPlan(tree, ws({}), palette, '', () => 0)
+    expect(Object.keys(plan).sort()).toEqual(['a', 'a/one', 'a/two'])
+    expect(plan['a/one']).not.toBe(plan['a/two'])
+  })
+
+  it('scopes the top level to rootDir, so one space does not see another', () => {
+    // Called with a space's children and that space's folder. Passing '' would
+    // make a space's folders avoid colours used by every OTHER space's folders.
+    const tree = [dir('sp/one'), dir('sp/two')]
+    const plan = autoColorPlan(tree, ws({ other: { color: '#aa0000' } }), palette, 'sp', () => 0)
+    expect(Object.values(plan)).toContain('#aa0000')
+  })
+
+  it('plans nothing when the palette is empty', () => {
+    // There is nothing to assign, and inventing a colour would be the app
+    // deciding something it was not asked to decide.
+    expect(autoColorPlan([dir('a')], ws({}), [])).toEqual({})
   })
 })
 

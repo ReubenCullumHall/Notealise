@@ -11,6 +11,15 @@
    the sidebar row metrics (they own the density variables outright, so they can
    never lose a specificity fight to a utility), the rendered-markdown styles,
    the CodeMirror DOM (which utilities can't reach), and the keyframes. */
+
+/* The sidebar header logo mark ships as two pre-rendered SVGs (light-on-dark /
+   dark-on-light background) rather than one recoloured via CSS, so it stays an
+   attribute swap keyed off the same [data-theme] the rest of the app reads —
+   'black' is a dark variant (see theme.css), so it gets the dark mark too. */
+.app-logo-mark-light { display: none; }
+:root[data-theme='light'] .app-logo-mark-light { display: block; }
+:root[data-theme='light'] .app-logo-mark-dark { display: none; }
+
 html,
 body,
 #root {
@@ -119,7 +128,7 @@ button.icon:hover {
    controls: an `.on` card keeps its accent border, and a hovered, focused or
    disabled control keeps whatever it already shows. */
 :root[data-button-def='on']
-  :is(.btn-edge, .mini, .theme-card, .mode-btn, .density-row, .space-tab, .space-add):not(.on):not(:hover):not(:focus-visible):not(:focus-within):not(:disabled) {
+  :is(.btn-edge, .mini, .theme-card, .mode-btn, .density-row, .space-tab, .space-add, .preset-row):not(.on):not(.drop):not(:hover):not(:focus-visible):not(:focus-within):not(:disabled) {
   border-color: rgb(var(--btn-edge) / 0.7);
   /* the Tailwind v3 ring utilities read this, so `ring-1 ring-ink-300/20`
      controls (ToggleRow, the Spaces disclosures) firm up with the rest */
@@ -222,6 +231,172 @@ button.icon:hover {
 }
 .tree-row.drop-before::before { top: -1px; }
 .tree-row.drop-after::after { bottom: -1px; }
+
+/* --- entry colour ----------------------------------------------------------
+   The colour a note or folder is tagged with (EntryMeta.color). The row carries
+   two inline custom properties and nothing else — `--row-rgb`, the chosen hex as
+   an "R G B" triple like every other colour in this app (rule 5), and
+   `--row-ink`, black or white picked by luminance in shared/color.ts so the grip
+   dots read on a pale yellow and a deep indigo alike. WHICH of the two looks
+   below is painted is the space's `colorStyle`, expressed as a class.
+
+   The alphas are low on purpose: this is a marker on a row, not a highlighter.
+   Because the colour is composited over --paper/--surface rather than replacing
+   them, one stored hex reads correctly on all three themes with no second
+   value — which is exactly why these are channels and not finished colours. */
+
+/* 'tag' — the six-dot grip becomes the colour chip, so the row is marked
+   without being recoloured. It overrides the grip's hover-only fade: a tag you
+   have to hover to see is not a tag. */
+.tree-row.tint-tag .grip {
+  opacity: 1;
+  background: rgb(var(--row-rgb));
+  color: rgb(var(--row-ink));
+  border-radius: 5px;
+  box-shadow: 0 0 0 1px rgb(var(--wash) / 0.12);
+}
+.tree-row.tint-tag:hover .grip:hover { color: rgb(var(--row-ink) / 0.7); }
+
+/* --- coloured rows never share an edge --------------------------------------
+   Two painted rows meeting flush read as one block with a seam through it
+   rather than as two rows, and a run of them turns the sidebar into a stack of
+   stripes. So a painted row's background stops --row-gutter short at the top
+   and bottom, letting the sidebar show between them — the definition the rows
+   were losing.
+
+   It is a TRANSPARENT BORDER plus `background-clip: padding-box`, not a margin,
+   and that choice is load-bearing: a margin would make a coloured row taller
+   than an uncoloured one, so the density variables would stop describing one
+   row height and a half-coloured tree would sit unevenly. Here the row gives
+   the gutter out of padding it already had, so every row is the same height
+   whatever colour it is — which is also why --row-gutter is capped below
+   --row-py in theme.css (a negative padding invalidates the declaration).
+
+   The two inset box-shadows below need no adjustment: an inset shadow is
+   clipped to the PADDING box, so the leading edge bar and the selection ring
+   line up with the visible background on their own. `outline` is the one that
+   doesn't — it tracks the border box — hence the offsets further down.
+
+   Every painted rule below sets `background-color`, never the `background`
+   shorthand. The shorthand resets background-clip to `border-box`, which
+   silently undoes this whole block from a rule that looks like it is only
+   choosing a colour — the gutter appeared in the computed border and padding
+   and simply never showed. */
+.tree-row.tint-row,
+.tree-row.tint-solid {
+  border-top: var(--row-gutter) solid transparent;
+  border-bottom: var(--row-gutter) solid transparent;
+  padding-top: calc(var(--row-py) - var(--row-gutter));
+  padding-bottom: calc(var(--row-py) - var(--row-gutter));
+  background-clip: padding-box;
+}
+
+/* 'row' — the whole row washes, with a solid edge at the leading side. Reads
+   from further away, and groups a folder with the notes under it. */
+.tree-row.tint-row {
+  background-color: rgb(var(--row-rgb) / 0.16);
+  box-shadow: inset 3px 0 0 0 rgb(var(--row-rgb));
+}
+.tree-row.tint-row:hover { background-color: rgb(var(--row-rgb) / 0.24); }
+/* Selection must stay visible ON a coloured row, so it keeps its wash and takes
+   the selection ring on top rather than losing the colour altogether. */
+.tree-row.tint-row.row-picked {
+  background-color: rgb(var(--row-rgb) / 0.32);
+  box-shadow: inset 3px 0 0 0 rgb(var(--row-rgb)), inset 0 0 0 1px rgb(var(--wash) / 0.22);
+}
+/* the open note, when its row is washed — outline, for the same reason
+   .row-picked.is-open uses one: box-shadow is already spoken for.
+   A brand-hued outline is fine HERE: `tint-row` is a 0.16 wash over the
+   theme's own surface, so the ink ramp still means what it was chosen to mean. */
+.tree-row.tint-row.is-open {
+  outline: 1px solid rgb(var(--brand-300) / 0.7);
+  /* An outline tracks the BORDER box, and the gutter above is a transparent
+     border — so without the extra offset this would be drawn out in the gap
+     rather than around the colour it is marking. */
+  outline-offset: calc(-1px - var(--row-gutter));
+}
+/* On a SOLID row the background is the user's colour at full strength, so a
+   fixed brand-hued outline can land on a near-identical colour and the open
+   note stops being identifiable. --row-ink is chosen by luminance against that
+   exact colour (shared/color.ts's `inkOn`), so it always separates — the same
+   reason .tint-solid.row-picked below rings in --row-ink rather than brand,
+   and the same "everything on a solid row restates its colours" rule. */
+.tree-row.tint-solid.is-open {
+  outline: 1px solid rgb(var(--row-ink) / 0.8);
+  outline-offset: calc(-1px - var(--row-gutter));
+}
+
+/* 'solid' — the row IS the colour. The only style that has to restate the row's
+   text colours: at full strength the theme's ink ramp is meaningless (it was
+   chosen against --paper, not against a colour the user picked), so everything
+   in the row switches to --row-ink, which shared/color.ts's `inkOn` set to
+   black or white by luminance.
+   Scoped to the row's DIRECT children on purpose. The hover-action group is a
+   floating panel with its own `bg-surface/95` — it sits ON the row, not IN it,
+   so it keeps the theme's colours and is left out by the child combinator
+   rather than by a :not() that would have to name it. */
+.tree-row.tint-solid { background-color: rgb(var(--row-rgb)); }
+.tree-row.tint-solid:hover { background-color: rgb(var(--row-rgb) / 0.86); }
+.tree-row.tint-solid > span,
+.tree-row.tint-solid > button,
+.tree-row.tint-solid .tree-title { color: rgb(var(--row-ink)); }
+/* the preview line, a step down so the two lines still read as title + detail */
+.tree-row.tint-solid .tree-sub { color: rgb(var(--row-ink) / 0.72); }
+/* An icon nested inside a wrapper span carries its own Tailwind colour class,
+   which beats inheritance from the span above it — so the svg is targeted
+   directly. This is what recolours the chevron and the folder glyph. */
+.tree-row.tint-solid > span svg { color: rgb(var(--row-ink)); }
+/* no chip on a solid row: the whole row is already the colour */
+.tree-row.tint-solid .grip { opacity: 1; background: none; box-shadow: none; }
+.tree-row.tint-solid.row-picked {
+  box-shadow: inset 0 0 0 2px rgb(var(--row-ink) / 0.55);
+}
+
+/* --- the colour picker (color/Picker.tsx) ---------------------------------
+   The gradients are the sRGB gamut, not theme values, which is why they are
+   here rather than inline in the component (rule 5). The square is saturation
+   left-to-right over value top-to-bottom, at the hue the slider holds. */
+.color-sv {
+  position: relative;
+  height: 108px;
+  border-radius: 8px;
+  cursor: crosshair;
+  touch-action: none;
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.15);
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, hsl(var(--picker-hue, 0) 100% 50%));
+}
+.color-hue {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  cursor: ew-resize;
+  touch-action: none;
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.15);
+  background: linear-gradient(
+    to right,
+    #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%
+  );
+}
+.color-sv:focus-visible, .color-hue:focus-visible {
+  box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.15), 0 0 0 2px rgb(var(--brand-300));
+}
+/* One handle for both tracks. The white ring plus the dark hairline is what
+   keeps it visible at both ends of the square — a plain white ring vanishes on
+   white, a plain dark one vanishes on black. */
+.color-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: rgb(var(--handle-rgb));
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(0, 0, 0, 0.35);
+}
 
 /* highlight when dropping into a folder */
 .tree-row.drop-into {
@@ -1209,3 +1384,380 @@ button.icon:hover {
   opacity: 0.35;
   cursor: default;
 }
+/* A saved look is hovering this tab and would land on it. Dashed rather than a
+   fill, so it reads as "drop here" and not as "this tab is now selected" — the
+   .on state beside it already owns the filled look. */
+.space-tab.drop {
+  border-style: dashed;
+  border-color: rgb(var(--brand-400));
+  background: rgb(var(--brand-500) / 0.14);
+  color: rgb(var(--brand-600));
+}
+
+/* --- the space-preset library (Settings → Spaces → Saved looks) ---
+   Component-internal CSS like the tab strip above it: legacy has no counterpart
+   to compare against, so there is nothing for a utility class to keep in step
+   with (rule 8). */
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 11px;
+  border: 1px solid rgb(var(--wash) / 0.12);
+  background: transparent;
+  cursor: grab;
+}
+.preset-row:hover {
+  background: rgb(var(--brand-500) / 0.06);
+}
+.preset-row:active {
+  cursor: grabbing;
+}
+.preset-row .grip {
+  flex-shrink: 0;
+  color: rgb(var(--ink-400) / 0.7);
+}
+.preset-row .em {
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* --- inline images + tables in the editor (imagePass / tablePass) ---
+   Colours are tokens, never hex (rule 5). Both widgets replace their markdown
+   off the cursor line and hand it back when you select into them. */
+.cm-image {
+  display: inline-block;
+  max-width: 100%;
+}
+.cm-image-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  /* A picture that hasn't loaded yet must not collapse to nothing, or the text
+     below it jumps as each one arrives. */
+  min-height: 1.2em;
+}
+.cm-image-missing .cm-image-img {
+  min-width: 8rem;
+  border: 1px dashed rgb(var(--ink-300) / 0.6);
+  background: rgb(var(--wash) / 0.06);
+}
+.cm-image-missing::after {
+  content: 'Image not found';
+  display: block;
+  padding: 0.35em 0.5em;
+  font-size: 11.5px;
+  color: rgb(var(--ink-400));
+}
+
+.cm-table {
+  /* A wide table scrolls inside its own box rather than widening the note.
+     NOTE: this also makes overflow-y compute to `auto` (the spec turns a
+     `visible` on one axis into `auto` when the other isn't visible), so anything
+     positioned outside this box is clipped away silently — which is exactly what
+     hid the first version of the chrome. The padding here is what gives the
+     grips and the + bars somewhere to live inside the box; the matching negative
+     margins cancel it so the table still lines up with the text around it. */
+  overflow-x: auto;
+  /* Each negative margin cancels the padding on its own side, so the table sits
+     exactly where it did before the chrome existed — the 0.4em above and below
+     is the real spacing, and the rest is only room for controls to overhang. */
+  padding: 10px 20px 20px 10px;
+  margin: calc(0.4em - 10px) -20px calc(0.4em - 20px) -10px;
+}
+.cm-table table {
+  border-collapse: collapse;
+  font-size: 0.95em;
+  /* `fixed` is what makes a cell WRAP instead of stretching its column, and it
+     is not optional: under the default `auto` layout a `max-width` on a `td` is
+     IGNORED — the spec treats width properties on cells as minimums — so one
+     long sentence widens its column until the table runs off the note.
+     `width: 100%` goes with it: a fixed-layout table with an auto width sizes
+     itself from its column widths alone, and with none specified that collapses.
+
+     The other half of `fixed` worth knowing: THE FIRST ROW SETS EVERY COLUMN'S
+     WIDTH. Nothing decorative may be added as a leading row or column — that is
+     what turned the row grips into a giant grey gutter down the left. */
+  table-layout: fixed;
+  width: 100%;
+}
+.cm-table th,
+.cm-table td {
+  position: relative; /* the grips and the alignment mark hang off these */
+  border: 1px solid rgb(var(--ink-300) / 0.35);
+  padding: 0.32em 0.6em;
+  text-align: left;
+  vertical-align: top;
+  /* Only a floor: `table-layout: fixed` shares the width out evenly, so this
+     just stops a six-column table collapsing into slivers. */
+  min-width: 4.5em;
+  /* Every cell — filled or empty — is at least one line tall, padding included.
+     Without this a freshly dragged-out empty row is a sliver next to a row that
+     wrapped to two lines, a smaller click target and a visual tell that
+     something's broken.
+
+     THIS IS `height`, NOT `min-height`, AND THAT IS NOT A TYPO. Verified with a
+     headless Electron repro against three variants (table-layout fixed/auto,
+     border-collapse collapse/separate) after `min-height` visibly failed in the
+     running app: Chromium simply does not enforce `min-height` as a floor on
+     `display: table-cell` — a `td` measured shorter than its own computed
+     `min-height` in every variant tried. `height` on a table cell is NOT an
+     exact clamp the way it is on a block element; per how table row-height is
+     computed, it behaves as a floor and the row still grows past it for
+     wrapped content or a taller neighbour (also verified: a cell with several
+     lines of wrapped text correctly stretched to ~4x this value, and the SHORT
+     cell beside it in that row stretched to match). `min-height` would have
+     been the obviously "correct" property on any normal element; it silently
+     does nothing here. */
+  height: calc(1.4em + 0.64em);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.cm-table th {
+  background: rgb(var(--wash) / 0.07);
+  font-weight: 600;
+  color: rgb(var(--ink-900));
+}
+.cm-table td {
+  color: rgb(var(--ink-700));
+}
+.cm-table th:hover,
+.cm-table td:hover {
+  background: rgb(var(--brand-500) / 0.08);
+}
+/* An empty cell would otherwise collapse with no target to aim at. */
+.cm-table td:empty::after,
+.cm-table th:empty::after {
+  content: '\200b';
+}
+
+/* --- table chrome (blockTable) ---
+   A drag handle above each column (reorder, or select-then-Backspace to
+   remove it), and a + bar down the right and along the bottom to add a column
+   or row. Removing a ROW has no control at all — Backspace on an already-empty
+   one, see blockTable.ts. All of it overlays the table rather than sitting in
+   the layout, so it can neither shift the table nor take a share of its width.
+
+   Invisible until you hover the table: a note full of tables would otherwise
+   read as a spreadsheet, and these are for the moment you want to change the
+   shape rather than every moment you are reading. */
+.cm-table-grid {
+  position: relative;
+}
+/* The column handle: a six-dot pill centred above the header cell. Replaced a
+   permanent little grab bar that only ever did one thing — remove the column —
+   for one control that also drags to reorder and only removes after an
+   explicit select-then-Backspace, the same reasoning that removed the row grip
+   below entirely (see blockTable.ts — a row is removed by clearing it and
+   backspacing again, like an empty block in Notion). */
+.cm-table-col-handle {
+  /* `top`/`left` are set in JS (blockTable.ts's `positionChrome`) — see the big
+     comment there for why this and `.cm-table-align` are overlays on
+     `.cm-table-grid` rather than children of the `<th>` they sit above: a
+     table cell with two `position: absolute` children roughly doubles its own
+     rendered height in this Chromium build, confirmed with an isolated repro,
+     and moving the chrome outside the cell sidesteps it entirely. */
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: rgb(var(--wash) / 0.14);
+  color: rgb(var(--ink-500));
+  opacity: 0;
+  cursor: grab;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.cm-table-col-handle:hover { background: rgb(var(--brand-500) / 0.22); color: rgb(var(--brand-600)); }
+.cm-table-col-handle:active { cursor: grabbing; }
+
+/* A column is selected (armed for Backspace/Delete). Outline rather than a
+   fill, so the header text and every cell's content stay legible under it. */
+.cm-table th.cm-table-col-on,
+.cm-table td.cm-table-col-on {
+  outline: 2px solid rgb(var(--brand-400));
+  outline-offset: -1px;
+  background: rgb(var(--brand-500) / 0.06);
+}
+
+/* The insertion line shown while dragging a column, moved by JS to whichever
+   boundary the pointer is nearest. Absolutely positioned against
+   `.cm-table-grid` (`position: relative`), spanning it top to bottom. */
+.cm-table-col-drop {
+  position: absolute;
+  top: 0;
+  bottom: 16px; /* stop short of the row-add bar along the bottom */
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 999px;
+  background: rgb(var(--brand-500));
+  pointer-events: none;
+}
+
+.cm-table-add {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: rgb(var(--wash) / 0.07);
+  color: rgb(var(--ink-400));
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+/* Flush with the table's own edges — `top/bottom: 0` and `left/right: 0` make
+   each bar exactly the height or width of the table, never longer. */
+.cm-table-add-col { top: 0; bottom: 0; right: -14px; width: 11px; cursor: ew-resize; }
+.cm-table-add-row { left: 0; right: 0; bottom: -14px; height: 11px; cursor: ns-resize; }
+.cm-table-add:hover {
+  background: rgb(var(--brand-500) / 0.16);
+  color: rgb(var(--brand-600));
+}
+
+/* Each control reveals only on hovering ITS OWN area, not "hover anywhere on
+   the table" — an earlier version keyed this off `.cm-table-grid:hover`, which
+   meant every handle and every + bar appeared together the moment the pointer
+   was anywhere near the table, which in practice is most of the time you're
+   working with one, so it read as "always on" rather than as a hover reveal.
+
+   `.cm-table-chrome-show`/`.cm-table-col-on` are toggled from JS
+   (blockTable.ts), not matched by a CSS descendant selector: the handle and
+   the alignment mark are overlays on `.cm-table-grid`, siblings of the
+   `<table>` rather than children of the `<th>` they sit above (see the big
+   comment on `positionChrome` in blockTable.ts for why — a table cell with two
+   `position: absolute` children inflates its own height in this Chromium
+   build), so there is no DOM relationship left for `th:hover` to reach
+   through.
+
+   Keyboard focus reveals them too. These are real `button`s with aria-labels
+   (blockTable.ts) and nothing takes them out of the tab order, so without the
+   :focus-visible arms below Tab moves onto a control at `opacity: 0` and the
+   focus ring is invisible — `.cm-table-align` already carries this arm for
+   exactly that reason. */
+.cm-table-chrome-overlay.cm-table-chrome-show,
+.cm-table-chrome-overlay.cm-table-col-on,
+.cm-table-col-handle:focus-visible,
+.cm-table-add:focus-visible,
+.cm-table-add-col:hover,
+.cm-table-add-row:hover { opacity: 1; }
+
+/* The open cell. A textarea, not an input: a cell wraps, and a single-line input
+   can only ever grow sideways — which is what made one long sentence stretch its
+   column across the whole note. This grows downwards, sized to its content on
+   every keystroke. */
+.cm-table-editor {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: -0.32em -0.6em;
+  padding: 0.32em 0.6em;
+  border: none;
+  border-radius: 3px;
+  outline: 2px solid rgb(var(--brand-400));
+  background: rgb(var(--surface));
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The alignment cycle, in the corner of each header cell. Absolutely positioned
+   so turning it on never changes the cell's width and shuffles the table. */
+.cm-table-align {
+  /* `top`/`left` set in JS — see the note on `.cm-table-col-handle` above. */
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: rgb(var(--ink-400) / 0.5);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 13px;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+/* `.cm-table-chrome-show` covers the hover case (see above); these two are
+   self-contained states that don't depend on any ancestor at all. */
+.cm-table-align.on,
+.cm-table-align:focus-visible { opacity: 1; }
+.cm-table-align.on { color: rgb(var(--brand-600)); }
+.cm-table-align:hover { background: rgb(var(--brand-500) / 0.15); color: rgb(var(--brand-600)); }
+
+/* Inline HTML that markdown has no syntax for (inlineHtmlPass). The tags are
+   hidden off the cursor; these style what's between them. */
+.cm-u { text-decoration: underline; }
+.cm-sup { vertical-align: super; font-size: 0.75em; }
+.cm-sub { vertical-align: sub; font-size: 0.75em; }
+/* A <mark> with no palette class — colorPass owns the classed ones. */
+.cm-mark {
+  background: rgb(var(--hl-amber) / 0.85);
+  border-radius: 3px;
+  padding: 0 0.15em;
+}
+
+/* A clickable web link (webLinkPass). Colour/underline already come from the
+   highlight style's t.link tag — this only says "you can click me". */
+.cm-weblink { cursor: pointer; }
+.cm-weblink:hover { text-decoration-thickness: 2px; }
+
+/* Import preview warning ("you've imported this already"). Amber from the
+   palette token, not a Tailwind colour — `--hl-amber` isn't in tailwind.config,
+   so `bg-hl-amber/15` would silently render nothing. */
+.import-warning {
+  background: rgb(var(--hl-amber) / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(var(--hl-amber) / 0.5);
+}
+
+/* GFM task list checkboxes (taskPass). Drawn rather than a real <input> so it
+   inherits the theme's ink/brand tokens like everything else (rule 5). */
+.cm-task {
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  margin-right: 0.15em;
+  vertical-align: -0.1em;
+  border-radius: 4px;
+  border: 1.5px solid rgb(var(--ink-400) / 0.7);
+  cursor: pointer;
+}
+.cm-task:hover { border-color: rgb(var(--brand-500)); }
+.cm-task-done {
+  background: rgb(var(--brand-500));
+  border-color: rgb(var(--brand-500));
+  /* the tick, drawn with a rotated rectangle so no icon font is needed */
+  position: relative;
+}
+.cm-task-done::after {
+  content: '';
+  position: absolute;
+  left: 0.28em;
+  top: 0.06em;
+  width: 0.22em;
+  height: 0.48em;
+  border: solid rgb(var(--paper));
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+

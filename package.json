@@ -2,7 +2,7 @@
   "name": "notes-app",
   "private": true,
   "version": "0.6.0",
-  "description": "A local-first Markdown editor — your notes stay as plain .md files on disk.",
+  "description": "A local-first Markdown editor \u2014 your notes stay as plain .md files on disk.",
   "author": "Notes",
   "main": "./out/main/index.js",
   "scripts": {
@@ -33,15 +33,18 @@
     "dompurify": "^3.4.12",
     "electron-updater": "^6.8.9",
     "katex": "^0.18.1",
+    "mammoth": "^1.12.0",
     "marked": "^18.0.7",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "turndown": "^7.2.4"
   },
   "devDependencies": {
     "@types/katex": "^0.16.8",
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@types/turndown": "^5.0.6",
     "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.5.4",
     "electron": "^43.2.0",

@@ -31,6 +31,32 @@ describe('normalizeWorkspace', () => {
     expect(ws.entries['b.md']).toEqual({})
   })
 
+  it('canonicalises a colour and drops one that is not a colour', () => {
+    // `color` is interpolated into a CSS custom property on the row, so a value
+    // that reaches the DOM unvalidated is the one field in this file that could
+    // do more than lose a preference.
+    const ws = normalizeWorkspace({
+      entries: {
+        'a.md': { color: '#F0A' },
+        'b.md': { color: 'red' },
+        'c.md': { color: 'rgb(1,2,3)' },
+        'd.md': { color: 42 }
+      }
+    })
+    expect(ws.entries['a.md']).toEqual({ color: '#ff00aa' })
+    for (const p of ['b.md', 'c.md', 'd.md']) expect(ws.entries[p]).toEqual({})
+  })
+
+  it('clears a colour when the field is absent, so "No colour" is expressible', () => {
+    // Main merges a partial with a spread, so clearing is `{ color: undefined }`
+    // — exactly how un-archiving clears archivedAt. If normalizeEntry kept the
+    // key as undefined instead of dropping it, the cleared colour would come
+    // back as the string "undefined" in the JSON.
+    const ws = normalizeWorkspace({ entries: { 'a.md': { pinned: true, color: undefined } } })
+    expect(ws.entries['a.md']).toEqual({ pinned: true })
+    expect('color' in ws.entries['a.md']).toBe(false)
+  })
+
   it('drops non-finite numbers rather than storing NaN/Infinity', () => {
     const ws = normalizeWorkspace({ entries: { 'a.md': { order: NaN, archivedAt: Infinity } } })
     expect(ws.entries['a.md']).toEqual({})

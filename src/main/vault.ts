@@ -123,6 +123,14 @@ async function resolveEol(abs: string): Promise<boolean> {
 // a synced vault (a very normal setup) fails and the user's edit is lost, which
 // is the worst bug this app could have. Retry with a short backoff, then give up
 // and surface the real error.
+//
+// A DIRECTORY rename gets a much longer budget than a file. OneDrive, Google
+// Drive and iCloud on Windows all implement folders as Cloud Files API reparse
+// points, and renaming one can mean the sync client's filter driver holds the
+// whole subtree — not one file — while it settles, which routinely outlasts
+// the sub-second budget tuned for a single autosave. This is not a permissions
+// problem the app can request its way out of; it's contention with the sync
+// client, and it clears on its own if given enough time.
 // ---------------------------------------------------------------------------
 const TRANSIENT = new Set(['EPERM', 'EACCES', 'EBUSY'])
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -134,11 +142,23 @@ export async function renameWithRetry(from: string, to: string, attempts = 6): P
       return
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code ?? ''
-      if (i >= attempts - 1 || !TRANSIENT.has(code)) throw e
-      await sleep(30 * 2 ** i) // 30, 60, 120, 240, 480ms — ~0.9s total
+      if (i >= attempts - 1 || !TRANSIENT.has(code)) {
+        if (TRANSIENT.has(code)) {
+          throw new Error(
+            'This folder is still syncing (OneDrive, Google Drive or iCloud) — wait a moment and try again.'
+          )
+        }
+        throw e
+      }
+      await sleep(Math.min(1000, 30 * 2 ** i)) // 30, 60, 120, 240, 480, 960ms, then capped at 1s
     }
   }
 }
+// A whole-folder rename (a space) waits far longer than a single file before
+// giving up — see the comment above. ~11s worst case, which only happens when
+// the sync client genuinely hasn't let go; a normal transient lock clears in
+// the first second or two, same as a file.
+const DIR_RENAME_ATTEMPTS = 16
 
 // ---------------------------------------------------------------------------
 // Echo guard: paths the app itself just wrote, so the watcher can ignore its
@@ -333,6 +353,62 @@ export async function writeNote(relPath: string, content: string): Promise<void>
   }
 }
 
+/** Atomic binary write: temp file + fsync + rename, same shape as writeNote but
+ *  no EOL handling (binary data). Used by importers for images/attachments. */
+export async function writeAsset(relPath: string, data: Buffer): Promise<void> {
+  const abs = resolveInVault(relPath)
+  if (path.relative(requireVault(), abs) === '') throw new Error('Cannot write the vault root')
+  assertPathLength(abs)
+  const dir = path.dirname(abs)
+  await fs.mkdir(dir, { recursive: true })
+  const tmp = path.join(dir, `.${path.basename(abs)}.${randomBytes(6).toString('hex')}.tmp`)
+  const fh = await fs.open(tmp, 'w')
+  try {
+    await fh.writeFile(data)
+    await fh.sync()
+  } finally {
+    await fh.close()
+  }
+  markWrite(abs)
+  markWrite(tmp)
+  try {
+    await renameWithRetry(tmp, abs)
+  } catch (e) {
+    await fs.unlink(tmp).catch(() => {})
+    throw e
+  }
+}
+
+/** Stamp a note with the time it was really written.
+ *
+ *  Without this an import dates everything "now", so a decade of notes all
+ *  claim to have been edited today and sorting by date says nothing. The tree
+ *  reads `updatedAt` from `mtimeMs` (see `listTree`), which is exactly what
+ *  this sets.
+ *
+ *  Only the modification time is restorable: a file's *creation* time can't be
+ *  set from Node on any platform, so `createdAt` still shows the import. That's
+ *  a real limitation, not an oversight — the edited date is the one the sidebar
+ *  shows and sorts on. */
+export async function setNoteTimes(relPath: string, modifiedMs: number): Promise<void> {
+  if (!Number.isFinite(modifiedMs) || modifiedMs <= 0) return
+  const abs = resolveInVault(relPath)
+  const when = new Date(modifiedMs)
+  markWrite(abs)
+  await fs.utimes(abs, when, when).catch(() => {}) // a failed stamp must not fail the import
+}
+
+/** Raw bytes of a file in the vault, for showing an image in the editor.
+ *  Goes through `resolveInVault` like every other read, so the vault root stays
+ *  the boundary — the renderer can't reach a file outside it by writing
+ *  `![](../../../etc/passwd)` in a note. Deliberately NOT a `file://` URL: in
+ *  dev the renderer is served over http and can't load one, so an image would
+ *  work in the packaged app and silently not in dev (or the reverse). */
+export async function readAsset(relPath: string): Promise<Uint8Array> {
+  const abs = resolveInVault(relPath)
+  return new Uint8Array(await fs.readFile(abs))
+}
+
 /** First available "<stem><ext>" in `dirAbs`; suffixes " (2)", " (3)"... on a
  *  collision rather than failing. Shared by createNote/createFolder (there's
  *  no user-typed name to collide with any more — creating one is a single
@@ -366,12 +442,22 @@ export async function createNote(dirPath: string, name?: string): Promise<string
   return toRel(abs)
 }
 
-/** Create a folder named "New folder" (or "New folder (2)" etc. if that's
- *  taken) inside `dirPath` ("" = vault root). Returns the actual rel path it
- *  landed at. */
-export async function createFolder(dirPath: string): Promise<string> {
+/** Create a folder inside `dirPath` ("" = vault root), named `name` (or
+ *  "New folder" when the caller has no name in mind), suffixing " (2)" etc. if
+ *  that's taken. Returns the actual rel path it landed at — the name is
+ *  sanitised, so the caller must use what comes back.
+ *
+ *  `name` exists for the same reason `createNote`'s does, and the importers are
+ *  what proved it: creating "New folder" and renaming it afterwards is two fs
+ *  operations with a window in between where the wrong name is on disk — and
+ *  `syncSpaces` runs on every tree load, so the watcher can bind that temporary
+ *  name as a real space mid-import. The rename could also collide and throw,
+ *  which aborted an entire 150-page import. Creating with the final name in one
+ *  `mkdir` removes both. */
+export async function createFolder(dirPath: string, name?: string): Promise<string> {
   const dirAbs = resolveInVault(dirPath)
-  const fname = await uniqueName(dirAbs, 'New folder', '')
+  const stem = name ? sanitizeFilename(name).name : 'New folder'
+  const fname = await uniqueName(dirAbs, stem, '')
   const abs = path.join(dirAbs, fname)
   assertPathLength(abs)
   markWrite(abs)
@@ -396,15 +482,18 @@ export async function renameEntry(fromPath: string, toPath: string): Promise<str
     throw new Error('A note or folder with that name already exists')
   }
 
+  const fromStat = await fs.stat(fromAbs).catch(() => null)
+  const attempts = fromStat?.isDirectory() ? DIR_RENAME_ATTEMPTS : undefined
+
   markWrite(fromAbs)
   markWrite(toAbs)
   if (caseOnly) {
     const tmp = path.join(dir, `.${safe}.${randomBytes(6).toString('hex')}.casetmp`)
     markWrite(tmp)
-    await renameWithRetry(fromAbs, tmp)
-    await renameWithRetry(tmp, toAbs)
+    await renameWithRetry(fromAbs, tmp, attempts)
+    await renameWithRetry(tmp, toAbs, attempts)
   } else {
-    await renameWithRetry(fromAbs, toAbs)
+    await renameWithRetry(fromAbs, toAbs, attempts)
   }
 
   // carry the remembered line-ending across the rename

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notealise</title>
+  <meta name="description" content="Download Notealise for Windows and macOS." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <style>
+    :root {
+      --bg: #f7f7fb; --card: #ffffff; --ink: #17171c; --muted: #6b6b78;
+      --line: rgba(20,20,30,.10); --brand: #6d5efc; --brand-ink: #ffffff;
+      --shadow: 0 12px 40px -12px rgba(20,20,40,.28);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    html, body { margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── Hero ─────────────────────────────────────────────────────── */
+    .hero {
+      height: 100dvh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 20px;
+      background: radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--brand) 16%, transparent), transparent), var(--bg);
+      position: relative;
+    }
+    .hero-inner {
+      display: flex; flex-direction: column; align-items: center; gap: 22px;
+      will-change: transform, opacity;
+    }
+    .logo {
+      width: 88px; height: 88px; border-radius: 50%;
+      box-shadow: 0 10px 30px -8px color-mix(in srgb, var(--brand) 60%, transparent);
+    }
+    .wordmark {
+      margin: 0; font-size: clamp(56px, 12vw, 132px); font-weight: 700;
+      letter-spacing: -0.03em; line-height: 1;
+    }
+    .tagline {
+      margin: 0; color: var(--muted); font-size: clamp(15px, 2vw, 19px);
+    }
+    .scroll-cue {
+      position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      color: var(--muted); font-size: 12.5px; letter-spacing: .04em; text-transform: uppercase;
+      animation: bob 2s ease-in-out infinite;
+    }
+    .scroll-cue svg { width: 18px; height: 18px; }
+    @keyframes bob {
+      0%, 100% { transform: translate(-50%, 0); }
+      50% { transform: translate(-50%, 8px); }
+    }
+
+    /* ── Download section ────────────────────────────────────────── */
+    .download {
+      min-height: 100dvh;
+      display: flex; align-items: center; justify-content: center; padding: 60px 20px;
+    }
+    .card {
+      width: min(560px, 100%); background: var(--card); border: 1px solid var(--line);
+      border-radius: 22px; box-shadow: var(--shadow); padding: 40px 36px;
+      opacity: 0; transform: translateY(28px);
+      transition: opacity .7s ease, transform .7s ease;
+    }
+    .card.visible { opacity: 1; transform: translateY(0); }
+    .card h2 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.02em; }
+    .card .sub-heading { margin: 0 0 28px; color: var(--muted); }
+    .btns { display: grid; gap: 12px; }
+    .btn {
+      display: flex; align-items: center; gap: 14px; width: 100%; text-decoration: none;
+      padding: 15px 18px; border-radius: 14px; border: 1px solid var(--line);
+      color: var(--ink); background: transparent; transition: transform .12s ease, border-color .2s, background .2s;
+    }
+    .btn:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--brand) 55%, var(--line)); }
+    .btn.primary { background: var(--brand); color: var(--brand-ink); border-color: transparent; }
+    .btn.primary .sub { color: color-mix(in srgb, var(--brand-ink) 78%, transparent); }
+    .btn svg { width: 26px; height: 26px; flex: 0 0 auto; }
+    .btn .label { display: flex; flex-direction: column; line-height: 1.25; text-align: left; }
+    .btn .label b { font-weight: 650; font-size: 15px; }
+    .btn .sub { font-size: 12.5px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <section class="hero">
+    <div class="hero-inner" id="heroInner">
+      <img class="logo" src="favicon.svg" alt="Notealise" width="88" height="88" />
+      <h1 class="wordmark">notealise</h1>
+      <p class="tagline">A local-first Markdown editor for your own files.</p>
+    </div>
+    <a href="#download" class="scroll-cue" aria-label="Scroll to download">
+      <span>Scroll to download</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+    </a>
+  </section>
+
+  <section class="download" id="download">
+    <div class="card" id="downloadCard">
+      <h2>Get Notealise</h2>
+      <p class="sub-heading">Free to download. Your notes stay as plain <code>.md</code> files on your disk.</p>
+
+      <div class="btns">
+        <a id="winBtn" class="btn" href="#" rel="nofollow">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.7 10.2 4.7v6.8H3V5.7zM10.2 12.5v6.8L3 18.3v-5.8h7.2zM11.2 4.55 21 3.2v8.3h-9.8V4.55zM21 12.5v8.3l-9.8-1.35V12.5H21z"/></svg>
+          <span class="label"><b>Download for Windows</b><span class="sub">Windows 10/11 · .exe installer</span></span>
+        </a>
+        <a id="macBtn" class="btn" href="#" rel="nofollow">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.36 12.9c.02 2.5 2.19 3.33 2.22 3.34-.02.06-.35 1.2-1.15 2.37-.69 1.02-1.41 2.03-2.55 2.05-1.11.02-1.47-.66-2.75-.66-1.27 0-1.67.64-2.72.68-1.09.04-1.93-1.1-2.63-2.11-1.42-2.07-2.51-5.85-1.05-8.4.72-1.27 2.02-2.07 3.42-2.09 1.07-.02 2.08.72 2.75.72.66 0 1.9-.9 3.2-.76.54.02 2.07.22 3.05 1.66-.08.05-1.82 1.07-1.8 3.19zM14.28 5.4c.59-.72 1-1.71.89-2.71-.86.03-1.9.57-2.51 1.29-.55.63-1.03 1.65-.9 2.62.96.07 1.94-.49 2.52-1.2z"/></svg>
+          <span class="label"><b>Download for macOS</b><span class="sub">Universal · .dmg (Apple Silicon &amp; Intel)</span></span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // ── Same GitHub-release wiring as the live download page, minus the
+    // visible "latest release name / date" line. ──────────────────────
+    const REPO = "ReubenCullumHall/Notes-app";
+    const FALLBACK = {
+      win: `https://github.com/${REPO}/releases/latest/download/Notes-Setup.exe`,
+      mac: `https://github.com/${REPO}/releases/latest/download/Notes.dmg`,
+    };
+
+    const winBtn = document.getElementById("winBtn");
+    const macBtn = document.getElementById("macBtn");
+
+    const ua = (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "").toLowerCase();
+    const isMac = /mac/.test(ua);
+    (isMac ? macBtn : winBtn).classList.add("primary");
+
+    winBtn.href = FALLBACK.win;
+    macBtn.href = FALLBACK.mac;
+
+    (async () => {
+      try {
+        const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+          headers: { Accept: "application/vnd.github+json" },
+        });
+        if (!r.ok) throw new Error(r.status);
+        const rel = await r.json();
+        const find = (ext) => rel.assets?.find((a) => a.name.toLowerCase().endsWith(ext));
+        const exe = find(".exe"), dmg = find(".dmg");
+        if (exe) winBtn.href = exe.browser_download_url;
+        if (dmg) macBtn.href = dmg.browser_download_url;
+      } catch {
+        // keep the fallback links
+      }
+    })();
+
+    // ── Scroll animation ────────────────────────────────────────────
+    // Hero fades/lifts away as you scroll into it.
+    const heroInner = document.getElementById("heroInner");
+    const heroHeight = () => window.innerHeight;
+    function onScroll() {
+      const p = Math.min(1, window.scrollY / (heroHeight() * 0.8));
+      heroInner.style.opacity = String(1 - p);
+      heroInner.style.transform = `translateY(${p * -60}px) scale(${1 - p * 0.06})`;
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+
+    // Download card reveals once it enters the viewport.
+    const card = document.getElementById("downloadCard");
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((e) => e.isIntersecting && card.classList.add("visible")),
+      { threshold: 0.3 }
+    );
+    io.observe(card);
+  </script>
+</body>
+</html>

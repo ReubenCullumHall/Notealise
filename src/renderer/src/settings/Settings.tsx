@@ -5,11 +5,14 @@ import { Icon, type IconName } from '../icons'
 import { Select, SettingRow } from './primitives'
 import { Spaces, type SpaceActions } from './Spaces'
 import { Collection } from './Collection'
-import { MasterSettings } from './MasterSettings'
+import { Customisation } from './Customisation'
 import { Tutorials } from './tutorials'
 import { SourceFolder } from './SourceFolder'
+import { ImportPanel } from '../import/ImportPanel'
 import { DATE_FORMATS, NUMBER_FORMATS, formatDate, localZone, timezones } from '../intl'
 import { isPrereleaseVersion, type UpdateStatus } from '../../../shared/update'
+import type { PresetActions } from './Presets'
+import type { SpacePreset } from '../../../shared/presets'
 
 /** What a plain settings section needs. Kept free of `spaceActions` so General
  *  and Formatting don't have to carry a dependency only Spaces uses. */
@@ -24,34 +27,52 @@ type ShellProps = Props & {
   spaceActions: SpaceActions
   vault: string | null
   onPickVault: () => void
+  /** the saved-preset library, which App owns because it outlives the open vault */
+  presets: SpacePreset[]
+  presetActions: PresetActions
 }
 
-type SectionId =
-  | 'master'
+export type SectionId =
+  | 'general'
+  | 'customisation'
   | 'spaces'
   | 'collection'
   | 'sourceFolder'
+  | 'import'
   | 'tutorials'
   | 'updates'
   | 'reportBug'
+  | 'requestFeature'
 
 // Legacy's SECTIONS + SECTION_ICON (legacy/src/settings.js:35, legacy/src/App.jsx:1042).
-// Appearance / Arranging / Shortcuts are NOT here: they belong to a space now,
-// and live inside Spaces. Spaces, Your collection, Updates and Report a bug have
-// no legacy counterpart.
-// Master settings first, because it is the answer to "where do I change X" for
-// everything except which folder you're in. Startup, dates and the clock are
-// app-general; appearance, arranging, a note's chrome and the format-bar
-// buttons belong to a space and this page sets them for ALL of them. One space
-// at a time is Spaces → that space → its own settings, which is the same form.
+// Appearance / Arranging / Shortcuts are NOT top-level entries: they belong to a
+// space, and are reached either through Customisation (all spaces) or Spaces
+// (one). Spaces, Your collection, Updates and Report a bug have no legacy
+// counterpart.
+//
+// **The split between the first two is the rule this window is built on:**
+//
+//   General        — one app launch, one locale. Startup, dates, numbers, the
+//                    clock. Nothing here is per-space and nothing ever will be.
+//   Customisation  — how the app LOOKS and what it shows. Every setting on that
+//                    page belongs to a SPACE; the page writes to all of them at
+//                    once, and links to Spaces for setting just one.
+//
+// Keep them apart. They were one page ("Master settings") and it meant a user
+// looking for the date format scrolled past the entire appearance system, while
+// a user looking for the theme had no reason to think "master" was where it
+// lived.
 const SECTIONS: { id: SectionId; label: string; icon: IconName }[] = [
-  { id: 'master', label: 'Master settings', icon: 'sliders' },
+  { id: 'general', label: 'General', icon: 'sliders' },
+  { id: 'customisation', label: 'Customisation', icon: 'sun' },
   { id: 'spaces', label: 'Spaces', icon: 'spaces' },
   { id: 'collection', label: 'Your collection', icon: 'library' },
   { id: 'sourceFolder', label: 'Source folder', icon: 'folder' },
+  { id: 'import', label: 'Import', icon: 'import' },
   { id: 'tutorials', label: 'Tutorials', icon: 'book' },
   { id: 'updates', label: 'Updates', icon: 'restore' },
-  { id: 'reportBug', label: 'Report a bug', icon: 'flag' }
+  { id: 'reportBug', label: 'Report a bug', icon: 'flag' },
+  { id: 'requestFeature', label: 'Request a feature', icon: 'star' }
 ]
 
 /** The gear. It lives in the sidebar's bottom-left strip, beside the bin, the
@@ -62,13 +83,45 @@ export function SettingsButton({
   onChange,
   spaceActions,
   vault,
-  onPickVault
-}: ShellProps): React.JSX.Element {
+  onPickVault,
+  presets,
+  presetActions,
+  jumpToSection,
+  onJumpHandled
+}: ShellProps & {
+  /** Set (e.g. from a File-menu command) to open the window straight to a
+   *  section, bypassing the gear. Consumed once via onJumpHandled. */
+  jumpToSection?: SectionId | null
+  onJumpHandled?: () => void
+}): React.JSX.Element {
   const [mounted, setMounted] = useState(false) // in the DOM, including while closing
   const [armed, setArmed] = useState(false) // laid out, safe to animate
   const [closing, setClosing] = useState(false)
+  const [initialSection, setInitialSection] = useState<SectionId>(SECTIONS[0].id)
   const btn = useRef<HTMLButtonElement>(null)
   const win = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!jumpToSection) return
+    setInitialSection(jumpToSection)
+    setClosing(false)
+    setMounted(true)
+    onJumpHandled?.()
+  }, [jumpToSection, onJumpHandled])
+
+  // A jump target is spent once the window has gone. Without this it sticks:
+  // SettingsWindow seeds `section` from it on every mount, so one File-menu jump
+  // to Report a bug meant the GEAR opened there too, for the rest of the
+  // session — and the gear is the general-purpose way in, so it has to land on
+  // General.
+  //
+  // Keyed on the window actually being unmounted, NOT done in close(): close()
+  // only starts the genie animation, and SettingsWindow re-syncs `section` from
+  // this prop, so resetting there would snap the page to General in front of
+  // the user while it shrinks away.
+  useEffect(() => {
+    if (!mounted) setInitialSection(SECTIONS[0].id)
+  }, [mounted])
 
   // Closing before the animation is armed (Escape hammered within a frame or two
   // of opening) would wait forever for an animationend that never comes, so that
@@ -181,6 +234,9 @@ export function SettingsButton({
               spaceActions={spaceActions}
               vault={vault}
               onPickVault={onPickVault}
+              presets={presets}
+              presetActions={presetActions}
+              initialSection={initialSection}
               onClose={close}
               armed={armed}
               closing={closing}
@@ -205,18 +261,27 @@ function SettingsWindow({
   spaceActions,
   vault,
   onPickVault,
+  presets,
+  presetActions,
+  initialSection,
   onClose,
   armed,
   closing,
   onAnimationEnd
 }: ShellProps & {
   winRef: React.RefObject<HTMLDivElement | null>
+  initialSection: SectionId
   onClose: () => void
   armed: boolean
   closing: boolean
   onAnimationEnd: (e: React.AnimationEvent) => void
 }): React.JSX.Element {
-  const [section, setSection] = useState<SectionId>(SECTIONS[0].id)
+  const [section, setSection] = useState<SectionId>(initialSection)
+  // Re-syncs if a File-menu jump fires again while the window is already
+  // open — a plain useState initialiser only runs once, on first mount.
+  useEffect(() => {
+    setSection(initialSection)
+  }, [initialSection])
 
   return (
     <div
@@ -273,22 +338,49 @@ function SettingsWindow({
         {/* The scroll container. `min-h-0` on the row above is what lets it
             actually scroll instead of stretching the window past its height. */}
         <div className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5">
-          {section === 'master' && (
-            <MasterSettings
+          {section === 'general' && (
+            <>
+              <General settings={settings} onChange={onChange} />
+              <Formatting settings={settings} onChange={onChange} />
+              <p className="mt-2 rounded-xl bg-brand-500/8 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-500 ring-1 ring-brand-300/40">
+                <span className="font-medium text-brand-600">Looking for the theme, colours or
+                the sidebar?</span>{' '}
+                Those belong to a space, not to the app — see{' '}
+                <span className="font-medium text-ink-600">Customisation</span> to set them
+                everywhere at once, or <span className="font-medium text-ink-600">Spaces</span> to
+                set one on its own.
+              </p>
+            </>
+          )}
+          {section === 'customisation' && (
+            <Customisation
               settings={settings}
               onChange={onChange}
-              general={<General settings={settings} onChange={onChange} />}
-              formatting={<Formatting settings={settings} onChange={onChange} />}
+              onColorExisting={() =>
+                spaceActions.onColorExistingFolders(settings.spaces.map((s) => s.folder))
+              }
+              onGoToSpaces={() => setSection('spaces')}
             />
           )}
           {section === 'sourceFolder' && <SourceFolder vault={vault} onPickVault={onPickVault} />}
+          {section === 'import' && (
+            <ImportPanel onOpenSpace={spaceActions.onOpenSpace} onClose={onClose} />
+          )}
           {section === 'tutorials' && <Tutorials />}
           {section === 'spaces' && (
-            <Spaces settings={settings} onChange={onChange} actions={spaceActions} />
+            <Spaces
+              settings={settings}
+              onChange={onChange}
+              actions={spaceActions}
+              presets={presets}
+              presetActions={presetActions}
+              vault={vault}
+            />
           )}
           {section === 'collection' && <Collection />}
           {section === 'updates' && <UpdatesSection />}
           {section === 'reportBug' && <ReportBug />}
+          {section === 'requestFeature' && <RequestFeature />}
         </div>
       </div>
     </div>
@@ -562,6 +654,80 @@ function ReportBug(): React.JSX.Element {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="What happened, and what did you expect instead?"
+          className="w-full resize-y rounded-lg bg-brand-500/8 px-2.5 py-2 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400"
+        />
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <button className="mini" disabled={!canSend || status === 'sending'} onClick={() => void send()}>
+          {status === 'sending' ? 'Opening…' : 'Send'}
+        </button>
+        {status === 'sent' && (
+          <span className="text-[11.5px] text-ink-400">
+            Your default mail app should now have this ready to send.
+          </span>
+        )}
+        {status === 'error' && (
+          <span className="text-[11.5px] text-ink-400">
+            Couldn&apos;t open a mail app automatically — email us directly instead.
+          </span>
+        )}
+      </div>
+    </>
+  )
+}
+
+/** Sends via the OS default mail app (mailto:) opened by main — no account or
+ *  API key needed here. The fixed destination lives in src/main/support.ts. */
+function RequestFeature(): React.JSX.Element {
+  const [fromEmail, setFromEmail] = useState('')
+  const [message, setMessage] = useState('')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+  const canSend = EMAIL_RE.test(fromEmail.trim()) && message.trim().length > 0
+
+  const send = useCallback(async () => {
+    setStatus('sending')
+    const ok = await window.api.sendFeatureRequest(fromEmail.trim(), message.trim())
+    if (ok) {
+      setMessage('')
+      setStatus('sent')
+    } else {
+      setStatus('error')
+    }
+  }, [fromEmail, message])
+
+  return (
+    <>
+      <h3 className="font-display text-[15px] font-semibold text-ink-900">Request a feature</h3>
+      <p className="mt-0.5 text-[12px] text-ink-500">
+        Opens your email app with this pre-filled, addressed to our features inbox.
+      </p>
+
+      <div className="mt-4 flex flex-col gap-1">
+        <label htmlFor="feature-email" className="text-[12.5px] font-medium text-ink-700">
+          Your email
+        </label>
+        <input
+          id="feature-email"
+          type="email"
+          value={fromEmail}
+          onChange={(e) => setFromEmail(e.target.value)}
+          placeholder="you@example.com"
+          className="w-full rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-[12px] text-ink-900 outline-none placeholder:text-ink-400"
+        />
+      </div>
+
+      <div className="mt-3 flex flex-col gap-1">
+        <label htmlFor="feature-message" className="text-[12.5px] font-medium text-ink-700">
+          Message
+        </label>
+        <textarea
+          id="feature-message"
+          rows={6}
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="What would you like to see?"
           className="w-full resize-y rounded-lg bg-brand-500/8 px-2.5 py-2 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400"
         />
       </div>

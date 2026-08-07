@@ -1,6 +1,7 @@
 import { StateField, type EditorState, type Extension } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view'
 import katex from 'katex'
+import { isRaw } from './rawView'
 
 // Multi-line $$ math source (opening "$$" and closing "$$" each alone on their
 // own line, with the LaTeX in between). mathPass in livePreview.ts already
@@ -43,6 +44,7 @@ function touchesSelection(state: EditorState, from: number, to: number): boolean
 }
 
 function build(state: EditorState): DecorationSet {
+  if (isRaw(state)) return Decoration.none // Markdown pro: show the $$ source
   const doc = state.doc
   const decos: { from: number; to: number; deco: Decoration }[] = []
   let openLine = -1
@@ -75,7 +77,10 @@ function build(state: EditorState): DecorationSet {
 const blockMathField = StateField.define<DecorationSet>({
   create: build,
   update(value, tr) {
-    if (!tr.docChanged && !tr.selection) return value
+    // `reconfigured` is Markdown pro being toggled — a transaction with neither
+    // a doc change nor a selection change, so without it the rendered maths
+    // would linger until the next keystroke.
+    if (!tr.docChanged && !tr.selection && !tr.reconfigured) return value
     return build(tr.state)
   },
   provide: (f) => EditorView.decorations.from(f)

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
+import type { ColorStyle } from '../../shared/settings'
+import { inkOn, rgbChannels } from '../../shared/color'
 import { Icon } from './icons'
-import { labelOf, metaOf, onDate, sortSiblings } from './organise/model'
+import { colorOf, labelOf, metaOf, onDate, sortSiblings } from './organise/model'
 
 // The sidebar tree. Ported from the legacy prototype's row renderers
 // (legacy/src/App.jsx:521-722) so the two apps render the same sidebar: two-line
@@ -37,6 +39,11 @@ export interface TreeActions {
   onNewNoteIn: (dir: string) => void
   onNewFolderIn: (dir: string) => void
   onRename: (node: TreeNode) => void
+  /** Open the colour picker for these rows, anchored to `at`. The popover
+   *  itself lives in App, not here: there are four TreeViews on screen and a
+   *  per-instance one could put two pickers up at once — the same reason
+   *  HoverCard and ContextMenu are single and portalled. */
+  onPickColor: (paths: string[], at: { left: number; top: number; bottom: number }) => void
 }
 
 interface Props extends TreeActions {
@@ -44,6 +51,10 @@ interface Props extends TreeActions {
   workspace: Workspace
   openPath: string | null
   freeArrange: boolean
+  /** where an entry's colour is painted — the grip, or the whole row */
+  colorStyle: ColorStyle
+  /** whether an uncoloured row shows its nearest coloured ancestor's colour */
+  colorInherit: boolean
   mode: RowMode
   selection: Selection
   onSelectionChange: (next: Selection) => void
@@ -122,6 +133,8 @@ export function TreeView({
   workspace,
   openPath,
   freeArrange,
+  colorStyle,
+  colorInherit,
   mode,
   selection,
   onSelectionChange,
@@ -139,7 +152,8 @@ export function TreeView({
   onRestore,
   onNewNoteIn,
   onNewFolderIn,
-  onRename
+  onRename,
+  onPickColor
 }: Props): React.JSX.Element {
   const [hint, setHint] = useState<Hint>(null)
   const shelved = mode === 'archive'
@@ -158,8 +172,21 @@ export function TreeView({
     }
   }, [revealTarget])
 
-  // ----- selection (ctrl/cmd-click adds to the set, like a file explorer) -----
+  // ----- selection -----
+  //
+  // Selecting is a MODE, entered by clicking a row's six-dot grip. The first
+  // click is the only one that has to hit the dots: from then on a plain click
+  // anywhere on any row adds it to the set or takes it out again, because once
+  // you are picking things to bin or archive, "click the thing" is what the
+  // hand wants to do — hunting for a 16px target on each subsequent row was the
+  // friction that made multi-select not worth using.
+  //
+  // The mode ends only on Escape or the Clear button in the selection bar
+  // (Sidebar.tsx), never by clicking away — an accidental click on the
+  // background used to throw away a set you had spent a dozen clicks building.
   const picked = (p: string): boolean => selection.paths.has(p)
+  /** True while a selection exists, i.e. while a plain click means "select". */
+  const selecting = selection.paths.size > 0
   const toggleSel = (p: string): void => {
     const next = new Set(selection.paths)
     if (next.has(p)) next.delete(p)
@@ -215,6 +242,10 @@ export function TreeView({
     const carry = dragging
     const h = hint
     endDrag()
+    // A completed move ends the selection: the whole point of building the set
+    // was to move it, and the items are now where you put them. Escape and
+    // Clear are the only ways OUT of the mode; finishing the job is not the
+    // same thing as backing out of it.
     clearSel()
     if (!carry || !h) return
     if (h.kind === 'into') onMove(carry, h.path, null, false)
@@ -229,22 +260,92 @@ export function TreeView({
     return ''
   }
 
+  // ----- colour -----
+  // Resolved per row: its own colour, or the nearest coloured ancestor's when
+  // the space inherits. The shelf views (archive, bin) don't paint it — they
+  // are a different list about a different thing, and colour there would read
+  // as a status rather than as which folder something came from.
+  const rowColor = (path: string): ReturnType<typeof colorOf> =>
+    shelved ? null : colorOf(workspace, path, colorInherit)
+
+  /** The two custom properties app.css's `.tint-*` rules paint from. Inline
+   *  because the value is the user's data, not a design token — the STYLING
+   *  stays in the stylesheet (rule 5). */
+  const colorVars = (c: ReturnType<typeof colorOf>): React.CSSProperties =>
+    c
+      ? ({
+          '--row-rgb': rgbChannels(c.hex),
+          '--row-ink': inkOn(c.hex) === 'dark' ? '0 0 0' : '255 255 255'
+        } as React.CSSProperties)
+      : {}
+
+  /** Colouring acts on the whole selection when the row is part of it — the
+   *  same rule dragging follows, so "select three, colour them" works. */
+  const colorTargets = (path: string): string[] =>
+    picked(path) ? [...selection.paths] : [path]
+
+  const openColor = (e: React.MouseEvent, path: string): void => {
+    e.stopPropagation()
+    const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    onPickColor(colorTargets(path), { left: box.left, top: box.top, bottom: box.bottom })
+  }
+
   // ----- row renderers -----
-  const rowClass = (node: TreeNode): string => {
+  const rowClass = (node: TreeNode, c: ReturnType<typeof colorOf>): string => {
     const isPicked = picked(node.path)
     const open = openPath === node.path
-    // Selection wins over "open" so a ctrl-click always shows visibly, including
+    // 'row' and 'solid' both own the row's background; 'tag' only paints the grip.
+    const painted = !!c && colorStyle !== 'tag'
+    // Selection wins over "open" so a picked row always shows visibly, including
     // on the note you're reading; is-open keeps an outline so it stays findable.
+    // A painted row keeps its colour under BOTH (app.css layers the selection
+    // ring over it) — losing the colour on the row you just clicked is exactly
+    // when you're trying to see which group it belongs to.
     const tone = isPicked
       ? `row-picked${open ? ' is-open' : ''}`
-      : open
+      : open && !painted
         ? 'bg-brand-500/12 ring-1 ring-brand-300/50'
-        : 'hover:bg-surface/70'
+        : ''
+    // Tailwind's hover background is emitted only when nothing else owns the
+    // row's background. A utility and an app.css rule at the same specificity
+    // would be decided by source order, which is the drift CLAUDE.md warns
+    // about — so the component opts out in JS instead.
+    const hover = !painted && !isPicked && !open ? 'hover:bg-surface/70' : ''
+    const paint = !c
+      ? ''
+      : colorStyle === 'tag'
+        ? 'tint-tag '
+        : `tint-${colorStyle}${open ? ' is-open' : ''} `
     return (
       'tree-row group flex cursor-pointer items-center pr-1.5 text-left ' +
+      paint +
       tone +
+      (tone && hover ? ' ' : '') +
+      hover +
       (dragging?.includes(node.path) ? ' dragging' : '') +
       dropHintClass(node.path)
+    )
+  }
+
+  /** The row's colour control: a swatch when it has one, an outline when it
+   *  doesn't. In the hover-action group beside pin and bin, because that is
+   *  where the app already puts "do something to this row". */
+  const colorBtn = (path: string): React.JSX.Element => {
+    const c = rowColor(path)
+    return (
+      <RowBtn
+        title={c ? (c.own ? `Colour · ${c.hex}` : `Colour · inherited from ${c.from}`) : 'Set a colour'}
+        onClick={(e) => openColor(e, path)}
+      >
+        <span
+          aria-hidden="true"
+          className={
+            'block h-3.5 w-3.5 rounded-full ' +
+            (c ? 'ring-1 ring-wash/25' : 'border border-dashed border-current')
+          }
+          style={c ? { background: `rgb(${rgbChannels(c.hex)})` } : undefined}
+        />
+      </RowBtn>
     )
   }
 
@@ -277,13 +378,14 @@ export function TreeView({
     const open = openPath === node.path
     const stamp = shelved ? onDate(metaOf(workspace, node.path).archivedAt) : null
     const isPinned = metaOf(workspace, node.path).pinned === true
+    const c = rowColor(node.path)
     return (
       <div
         key={node.path}
         role="button"
         tabIndex={0}
-        className={rowClass(node)}
-        style={{ paddingLeft: padFor(depth) }}
+        className={rowClass(node, c)}
+        style={{ paddingLeft: padFor(depth), ...colorVars(c) }}
         draggable={!shelved}
         onDragStart={shelved ? undefined : (e) => startDrag(e, node.path)}
         onDragEnd={endDrag}
@@ -292,22 +394,19 @@ export function TreeView({
         onContextMenu={(e) => onContext(e, node)}
         onClick={(e) => {
           // Cmd/Ctrl+click opens the note in ANOTHER tab beside the current one.
-          // It used to add the row to the selection; selecting is now the grip's
-          // job (the six dots), which is a target you can hit on purpose rather
-          // than a modifier that competes with opening.
+          // It does NOT clear the selection: the mode is only ended by Escape or
+          // Clear, so reaching for a note mid-selection can't cost you the set.
           if (e.metaKey || e.ctrlKey) {
             e.preventDefault()
-            clearSel()
             onOpen(node.path, true)
             return
           }
-          // Clicking a row you've already selected lets go of it — no hunting
-          // for empty sidebar space to get out of a selection.
-          if (picked(node.path)) {
+          // In selection mode a plain click is the select gesture — on this row
+          // whether it is already in the set or not.
+          if (selecting) {
             toggleSel(node.path)
             return
           }
-          clearSel()
           onOpen(node.path)
         }}
         onKeyDown={(e) => {
@@ -353,6 +452,7 @@ export function TreeView({
               </RowBtn>
             )}
             <div className={ROW_ACTIONS_CLASS}>
+              {colorBtn(node.path)}
               {!isPinned && (
                 <RowBtn
                   title="Pin to favourites"
@@ -385,6 +485,7 @@ export function TreeView({
     const count = kids.length
     const expandedNow = isOpen(node.path)
     const isPinned = metaOf(workspace, node.path).pinned === true
+    const c = rowColor(node.path)
     return (
       <div key={node.path}>
         <div
@@ -393,8 +494,8 @@ export function TreeView({
           // is the target, and a selector would have to guess which of the four
           // TreeViews rendered it.
           ref={node.path === revealTarget ? revealRef : undefined}
-          className={rowClass(node)}
-          style={{ paddingLeft: padFor(depth) }}
+          className={rowClass(node, c)}
+          style={{ paddingLeft: padFor(depth), ...colorVars(c) }}
           draggable={!shelved}
           onDragStart={shelved ? undefined : (e) => startDrag(e, node.path)}
           onDragEnd={endDrag}
@@ -402,10 +503,12 @@ export function TreeView({
           onDrop={drop}
           onContextMenu={(e) => onContext(e, node)}
           onClick={() => {
-            // No modifier branch: a folder has nothing to open in a tab, and if
-            // Cmd/Ctrl still meant "select" here, the six dots would be the way
-            // to select a note while a modifier selected a folder.
-            toggle(node.path)
+            // In selection mode the row joins the set instead of expanding. The
+            // chevron beside it still expands (it stops propagation), which is
+            // the point: you often need to open a folder to reach the subnotes
+            // you are trying to select.
+            if (selecting) toggleSel(node.path)
+            else toggle(node.path)
           }}
         >
           {!shelved && grip(node.path)}
@@ -433,7 +536,10 @@ export function TreeView({
           <button
             onClick={(e) => {
               e.stopPropagation()
-              toggle(node.path)
+              // The name is part of the row, not part of the expander — so in
+              // selection mode it selects, like the rest of the row.
+              if (selecting) toggleSel(node.path)
+              else toggle(node.path)
             }}
             onDoubleClick={(e) => {
               e.stopPropagation()
@@ -472,6 +578,7 @@ export function TreeView({
                 </RowBtn>
               )}
               <div className={ROW_ACTIONS_CLASS}>
+                {colorBtn(node.path)}
                 <RowBtn
                   title="New note in folder"
                   onClick={(e) => {
@@ -547,9 +654,6 @@ export function TreeView({
         setHint({ kind: 'into', path: rootDir })
       }}
       onDrop={drop}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) clearSel()
-      }}
       onContextMenu={(e) => {
         if (e.target === e.currentTarget) onContext(e, null)
       }}

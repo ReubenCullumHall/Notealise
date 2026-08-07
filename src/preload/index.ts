@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { CH } from '../shared/channels'
 import type { VaultApi, VaultChange } from '../shared/types'
 import type { UpdateStatus } from '../shared/update'
+import type { ImportProgress } from '../shared/notesImport'
 
 // The single, typed bridge between renderer and main. With contextIsolation the
 // renderer can only reach the filesystem through these calls — every path is
@@ -11,13 +12,20 @@ const api: VaultApi = {
   pickVault: () => ipcRenderer.invoke(CH.pickVault),
   listTree: () => ipcRenderer.invoke(CH.listTree),
   readNote: (p) => ipcRenderer.invoke(CH.readNote, p),
+  readAsset: (p) => ipcRenderer.invoke(CH.readAsset, p),
   writeNote: (p, content) => ipcRenderer.invoke(CH.writeNote, p, content),
   createNote: (dir, name) => ipcRenderer.invoke(CH.createNote, dir, name),
-  createFolder: (dir) => ipcRenderer.invoke(CH.createFolder, dir),
+  createFolder: (dir, name) => ipcRenderer.invoke(CH.createFolder, dir, name),
   renameEntry: (from, to) => ipcRenderer.invoke(CH.renameEntry, from, to),
   scanLinks: (paths) => ipcRenderer.invoke(CH.scanLinks, paths),
   getSettings: () => ipcRenderer.invoke(CH.getSettings),
   setSettings: (partial) => ipcRenderer.invoke(CH.setSettings, partial),
+  listPresets: () => ipcRenderer.invoke(CH.listPresets),
+  syncPresets: (drafts) => ipcRenderer.invoke(CH.syncPresets, drafts),
+  renamePreset: (from, to, origin) => ipcRenderer.invoke(CH.renamePreset, from, to, origin),
+  deletePreset: (id) => ipcRenderer.invoke(CH.deletePreset, id),
+  exportPresets: (ids) => ipcRenderer.invoke(CH.exportPresets, ids),
+  importPresets: (text) => ipcRenderer.invoke(CH.importPresets, text),
   getWorkspace: () => ipcRenderer.invoke(CH.getWorkspace),
   updateEntry: (p, partial) => ipcRenderer.invoke(CH.updateEntry, p, partial),
   updateEntries: (paths, partial) => ipcRenderer.invoke(CH.updateEntries, paths, partial),
@@ -34,6 +42,23 @@ const api: VaultApi = {
   setBetaChannel: (on) => ipcRenderer.invoke(CH.setBetaChannel, on),
   openReleases: () => ipcRenderer.send(CH.openReleases),
   sendBugReport: (fromEmail, message) => ipcRenderer.invoke(CH.sendBugReport, fromEmail, message),
+  sendFeatureRequest: (fromEmail, message) =>
+    ipcRenderer.invoke(CH.sendFeatureRequest, fromEmail, message),
+  openExternal: (url) => ipcRenderer.invoke(CH.openExternal, url),
+  importFormats: () => ipcRenderer.invoke(CH.importFormats),
+  importPickSource: (format) => ipcRenderer.invoke(CH.importPickSource, format),
+  importPrepare: (format, paths) => ipcRenderer.invoke(CH.importPrepare, format, paths),
+  importPreview: (format, paths) => ipcRenderer.invoke(CH.importPreview, format, paths),
+  importRun: (format, paths, spaceName) =>
+    ipcRenderer.invoke(CH.importRun, format, paths, spaceName),
+  importCancel: () => ipcRenderer.invoke(CH.importCancel),
+  onImportProgress: (cb) => {
+    const listener = (_e: unknown, p: ImportProgress): void => cb(p)
+    ipcRenderer.on(CH.importProgress, listener)
+    return () => {
+      ipcRenderer.removeListener(CH.importProgress, listener)
+    }
+  },
   onUpdateStatus: (cb) => {
     const listener = (_e: unknown, status: UpdateStatus): void => cb(status)
     ipcRenderer.on(CH.updateStatus, listener)

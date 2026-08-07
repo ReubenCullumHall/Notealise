@@ -163,7 +163,170 @@ Three more things the pass draws, all of them CSS rather than decorations:
 - **The `›` before a heading.** The `#` is *replaced*, not dimmed, and `.cm-wikilink-heading::before`
   supplies the separator — so `[[Waves#Interference]]` reads "Waves › Interference".
 
+### Tables (`blockTable.ts` + `tableModel.ts`, implemented — a StateField, and EDITABLE)
+
+A `StateField` for the same reason `blockMath.ts` is one: a table spans line breaks, replacing those
+needs `block: true`, and a ViewPlugin cannot provide block decorations.
+
+**The table is always drawn — there is no reveal.** It used to bail out whenever the selection
+touched it, which handed you raw `| --- |` the instant you tried to change anything; that was the
+complaint the feature was rebuilt to answer. Clicking a cell opens a `<textarea>` in place instead.
+Commit on Enter, Tab (next cell), Shift+Tab (previous) or clicking away; Escape discards. Each
+commit rewrites the whole block from the model in ONE transaction — writing the change and moving
+to the next cell separately would put a frame on screen with the table rewritten and no cell open.
+
+Two consequences of always drawing it:
+
+- `ignoreEvent()` returns **true** for everything. CodeMirror placing a cursor inside the widget is
+  exactly what used to put the source back on screen.
+- The field rebuilds on `docChanged` or the `setEditCell` effect — **not** on selection changes any
+  more, since the table looks the same wherever the cursor is.
+
+Which cell is open lives in its own `StateField`, not in the widget's DOM: Tab has to open the
+*next* cell after the edit it just committed has been written, and by then the widget has been
+rebuilt and the old input is gone.
+
+**Cells are read by slicing the line, never from `TableCell` nodes** — verified against the real
+parser, and this is the trap. An **empty cell produces no `TableCell` node at all**, only the
+delimiter pipes either side, so collecting `TableCell` children reads `| a |  | c |` back as two
+cells and shifts `c` into column 2. Harmless while the table was read-only; once a cell edit
+rewrites the block it deletes a column from the user's file. `splitRow` in `tableModel.ts` splits on
+unescaped pipes instead (`\|` is a literal pipe, which is why the tree was used in the first place).
+
+`tableModel.ts` is pure and unit-tested, because it is the only thing in the app that rewrites a
+block of a note from a structure held in memory: alignment is preserved exactly (`---` and `:---`
+are different bytes and only one of them was written by the user), pipes are escaped, newlines
+pasted into a cell are flattened rather than ending the table mid-row, and rows shorter than the
+header are padded rather than swallowing an edit. Columns are re-padded on write so the raw source
+stays readable — the one thing it does change about a file it was given.
+
+**Adding** is a `+` bar down the **right** edge and along the **bottom**, pinned to the table's own
+edges with `top/bottom: 0` / `left/right: 0` so neither can be longer than the table. It lives inside
+`.cm-table`'s padding, with matching negative margins, because that box clips (see above).
+
+**Removing a row has no control at all — it is Backspace on an already-empty row**, the same
+two-step "clear it, then backspace" gesture Notion uses for an empty block. `buildCell`'s Backspace
+handler checks the CURRENT model's whole row (`this.model.rows[row].every(c => !c.trim())`), not
+just the cell being edited, so an empty cell next to real data can never take that data with it.
+Removing that control entirely — no permanent grab bar sitting on every row — was the point: a
+control that exists only to be clicked once is exactly the kind of chrome a table full of them reads
+as "junky".
+
+**Removing a column is select-then-Backspace.** Click the six-dot handle above a column (the same
+grip glyph the sidebar's draggable rows use, rebuilt in raw DOM since this widget is outside React)
+to outline it; Backspace or Delete removes it, Escape or a click elsewhere deselects. The handle ALSO
+drags to **reorder columns** — `moveColumn` in `tableModel.ts` takes `(from, insertBefore)`, where
+`insertBefore` is an index into the column order as the user still sees it (the drop boundary
+nearest the pointer), not one that already accounts for the column being removed first; the function
+does that correction internally. The drag never calls `apply()` mid-gesture (unlike the row/column
+COUNT resizer above, which does and needs `liveTo`): column rects are captured once at mousedown,
+`this.model` never changes until drop, so there is nothing to re-measure and no staleness to track.
+
+Two earlier versions of the remove control were wrong in ways worth not repeating. **Flex strips
+floating beside the table** came apart the moment cells began to wrap — `flex: 1` gives every
+segment an equal share while rows are as tall as their contents, so a short row's grip sat beside a
+tall one. **Real grip cells inside the table** then wrecked the column widths: under
+`table-layout: fixed` the FIRST ROW sets every column's width, the grip row was that first row, and
+all the leftover width collected in the grip column — a long grey gutter down the left of every
+table. Nothing decorative may be added to a fixed-layout table as a leading row or column — an
+**overlay**, positioned absolutely with no footprint in the flow, is the only shape that survives
+contact with `table-layout: fixed`. The drag reports an absolute size to `resizeColumns`/`resizeRows`, never a
+delta — a pointermove fires many times a second and replaying it as increments would add a column
+per frame the pointer sat still. Dragging back past the start really does undo the drag, because
+every frame is measured from the model as it was when the drag began. The minimum is one column and
+zero body rows: a header on its own is a valid table, and that is the 1×1.
+
+**Every cell has a floor height**, filled or empty, sized to one line of text plus the padding —
+otherwise a freshly dragged-out empty row is a sliver next to a row that happened to wrap. It is
+`height`, not `min-height`, **and that is not a typo**: `min-height` looked right, compiled fine,
+and was silently a no-op. Confirmed with a headless Electron repro (`webContents.executeJavaScript`
++ `getBoundingClientRect`, no dev tools, no window ever shown) after it visibly failed in the running
+app twice — **Chromium does not enforce `min-height` as a floor on `display: table-cell`**, in any
+combination of `table-layout: fixed/auto` or `border-collapse: collapse/separate` tried; a `td`
+measured shorter than its own computed `min-height` in every one. Plain `height` on a table cell
+behaves as that floor instead (a table-specific CSS quirk, not how `height` works on a block
+element) — also confirmed: a cell with several wrapped lines still grows well past it, and the short
+cell beside it in that row stretches to match, so nothing about the "cells wrap and the row grows"
+behaviour above is lost.
+
+This rule was ALSO dropped by accident once, 2026-08-07, in the very next edit after it first
+landed — a later change fixed a clipping bug by rewriting the whole `.cm-table th, .cm-table td`
+block from scratch, and the line wasn't carried into the new version. Re-added the same day, this
+time with the property fixed too. Two lessons stack here: a full-block CSS rewrite has to diff
+against what it's replacing, not just against what it's adding — and "the CSS looks correct and
+compiles" is not evidence it does anything, for exactly the kind of property/element combination
+browsers have quietly never supported.
+
+**A `<th>` with two `position: absolute` children roughly DOUBLES its own rendered height in this
+Chromium build.** Content-independent, offset-independent, order-independent — confirmed with a
+headless Electron repro (`webContents.executeJavaScript` + `getBoundingClientRect`, no window ever
+shown): a bare cell and a cell with exactly ONE absolutely-positioned child both measure correctly;
+the moment a SECOND one joins it as a sibling, the cell's own auto height roughly doubles, and this
+still partially reproduces even nested one level through a single positioned wrapper. This is what
+made the header row visibly shorter than the body — `buildCell` was appending BOTH the alignment
+mark and the column handle straight into the `<th>` they belong to. The fix: **`alignControl` and
+`columnHandle` are not children of the `<th>` any more.** They live as siblings of `<table>`, inside
+`.cm-table-grid`, each positioned with `left`/`top` computed in JS from that header cell's measured
+`getBoundingClientRect()` (`positionChrome`, re-run via `requestAnimationFrame` on mount and via a
+`ResizeObserver` on `grid` for a pane/window resize afterward — `TableWidget.destroy()` disconnects
+it). This is the exact pattern `HoverCard`/`ColorPopover` already use elsewhere in this app for a
+different reason (escaping a scrolling/blurred container); here it's escaping an undiagnosed
+table-cell layout quirk instead, but the shape of the fix is the same: **when a browser's own
+internals won't cooperate with an element nested where it visually belongs, position it from outside
+instead of fighting the nesting.**
+
+One consequence: hover-reveal for these two controls can no longer be a CSS descendant selector
+(`th:hover .handle`), because they are no longer descendants of anything. `positionChrome`'s sibling
+loop also wires a `mouseenter`/`mouseleave` pair per header cell that toggles `.cm-table-chrome-show`
+on that column's own overlay pair — JS doing what CSS did before, for the same reason the
+positioning itself moved to JS.
+
+**Every control reveals only on hovering ITS OWN area** — `.cm-table-chrome-show` (set by
+`positionChrome`'s per-header-cell `mouseenter`/`mouseleave` pair), `.cm-table-add-col:hover`, and so
+on — never `.cm-table-grid:hover`. That broader version was tried
+first and reads, in practice, as "always visible": the pointer is near a table for most of the time
+you're working with one, so revealing every handle and every + bar together the instant it enters the
+table's bounding box is barely different from them just being there. Scoping to the specific element
+means a handle needs its own header cell hovered, and a + bar needs the pointer directly over its own
+strip along the table's edge.
+
+**Cells wrap, and the row grows.** `table-layout: fixed` is not optional here: under the default
+`auto` layout a `max-width` on a `td` is **ignored** (the spec treats width properties on cells as
+minimums), so one long sentence widened its column until the table ran off the note. Fixed shares
+the width evenly and text flows downwards; `width: 100%` goes with it, because a fixed-layout table
+with an auto width sizes itself from its column widths alone. The open cell is a **`<textarea>`**
+that regrows to `scrollHeight` on every keystroke — a single-line `<input>` can only ever grow
+sideways, which was the same bug from the other end. Enter commits rather than inserting a break: a
+GFM cell cannot contain a newline at all.
+
+`apply()` tracks its own `liveTo`. A drag rewrites the block on every step, so after the first one
+the widget's `to` is the end of a table that no longer exists — replacing `[from, this.to]` again
+would write over whatever now follows it.
+
+**A line written directly under a table is part of the table.** GFM continues a table until a blank
+line, so `after` on the very next line parses as a one-cell row (verified — GitHub renders it as a
+row too). The widget draws it as a row and writing back makes it an explicit `| after |  |`. That is
+why `/table` inserts a **blank line** after itself: with only one line break, the first word typed
+after inserting a table silently joined it.
+
+### Markdown pro / raw view (`rawView.ts`)
+
+A `Facet`, not a StateField: nothing inside the editor ever changes it. The value comes from React
+(the note's `workspace.json` flag), is pushed in by reconfiguring a `Compartment`, and is read by
+every decoration producer. Reconfiguring rather than recreating the view keeps the cursor, scroll,
+undo history and open document exactly as they were.
+
+The whole implementation is three guards: `livePreview`'s `build` skips **all** of `PASSES` (which
+is why one guard covers `markdownPass`, `colorPass`, `mathPass`, `fencedCodePass`, `imagePass`,
+`inlineHtmlPass`, `taskPass`, `webLinkPass` and `wikiPass` at once), and `blockMath` and
+`blockTable` each return `Decoration.none`. **`highlight.ts` is deliberately untouched** — bold
+still looks bold and headings stay large, only the marks stop being hidden. That was the user's call
+over a flat monospace view, and it means there is no second set of styles to keep in step.
+
+Each of the three must also rebuild on a reconfiguration, or the old rendering lingers until the
+next keystroke. `reconfigured` lives on **`Transaction`, not on `ViewUpdate`** — checked against the
+installed `.d.ts` — so the ViewPlugin tests `u.transactions.some(tr => tr.reconfigured)`.
+
 ## Not handled yet
 
-Lists (beyond the bullet swap), tables, and images are deliberately left for later — each is a new
-`Pass`.
+Lists (beyond the bullet swap) are deliberately left for later — a new `Pass`.

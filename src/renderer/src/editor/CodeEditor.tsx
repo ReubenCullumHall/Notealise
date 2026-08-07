@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { EditorState } from '@codemirror/state'
+import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { baseExtensions } from './extensions'
 import { applyColor, clearColor } from './colorCommands'
 import { SelectionToolbar } from './SelectionToolbar'
 import { setLinkEnv, type LinkEnv, type LinkHandlers } from './linkEnv'
+import { rawViewOf } from './rawView'
 import type { Layer } from './palette'
 
 interface Props {
@@ -24,6 +25,9 @@ interface Props {
   /** scroll to this heading once the document has landed, then forget it —
    *  what `[[Note#Heading]]` does after the note opens */
   revealHeading?: string | null
+  /** Markdown pro: show this note as raw Markdown — every syntax mark visible,
+   *  tables and maths as their source. Styling is untouched either way. */
+  raw?: boolean
 }
 
 interface Saved {
@@ -56,7 +60,8 @@ export function CodeEditor({
   editorRef,
   env,
   linkHandlers,
-  revealHeading
+  revealHeading,
+  raw
 }: Props): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null)
   const host = useRef<HTMLDivElement>(null)
@@ -65,6 +70,9 @@ export function CodeEditor({
   onChangeRef.current = onDocChange
   const docRef = useRef(doc)
   docRef.current = doc
+  // Read once, at construction. The effect below owns every change after that.
+  const rawRef = useRef(raw)
+  rawRef.current = raw
   // Same reason as onChangeRef above: the view is built once, so the handlers it
   // captures must be a stable box whose contents we keep current, not the
   // functions themselves (which are new on every App render).
@@ -101,6 +109,13 @@ export function CodeEditor({
     setTb({ left, top })
   }, [])
 
+  // Markdown pro lives in a Compartment because the view is created ONCE (the
+  // effect below has empty deps, so the editor is never torn down and rebuilt
+  // when a prop changes). A compartment is CodeMirror's way to swap one
+  // extension in an existing state, and reconfiguring produces a transaction the
+  // decoration builders can see — which is how they know to redraw.
+  const rawBox = useRef(new Compartment())
+
   useEffect(() => {
     const view = new EditorView({
       parent: host.current as HTMLElement,
@@ -108,6 +123,7 @@ export function CodeEditor({
         doc: docRef.current,
         extensions: [
           ...baseExtensions(linksRef),
+          rawBox.current.of(rawViewOf(!!rawRef.current)),
           EditorView.updateListener.of((u) => {
             if (u.docChanged && !programmatic.current) onChangeRef.current(u.state.doc.toString())
             if (u.selectionSet || u.docChanged || u.geometryChanged) refreshToolbar(u.view)
@@ -134,6 +150,16 @@ export function CodeEditor({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Toggling raw view. Reconfiguring rather than recreating keeps the cursor,
+  // the scroll position, the undo history and the open document exactly as they
+  // were — flipping the switch is meant to be a way of LOOKING at the note, not
+  // a way of reopening it.
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    view.dispatch({ effects: rawBox.current.reconfigure(rawViewOf(!!raw)) })
+  }, [raw])
 
   useEffect(() => {
     const view = viewRef.current

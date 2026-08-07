@@ -9,11 +9,15 @@ import {
 } from '../shared/update'
 
 // App-level config lives in userData — NEVER inside the vault itself. In-vault
-// config belongs in <vault>/.mdnotes/. Two things qualify, for the same reason:
+// config belongs in <vault>/.mdnotes/. These qualify, for the same reason:
 // the app must know them *before* any vault is open.
 //   - vaultPath:   which vault to reopen
 //   - autoUpdate:  a property of this install, not of a folder of notes
 //   - betaChannel: likewise — this machine is a test machine, or it isn't
+//
+// The space-preset library belongs in userData for the same reason, but it has a
+// file of its own (`presets.json`, main/presets.ts) rather than a key here: it
+// is a list that grows, not a setting.
 const configPath = (): string => path.join(app.getPath('userData'), 'config.json')
 
 interface AppConfig {

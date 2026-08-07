@@ -4,7 +4,11 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { drawSelection, EditorView, keymap } from '@codemirror/view'
 import { editorStyling } from './highlight'
 import { livePreview } from './livePreview'
+import { imageClick } from './imagePass'
+import { webLinkGestures } from './webLinkPass'
+import { taskClick } from './taskPass'
 import { blockMath } from './blockMath'
+import { blockTable } from './blockTable'
 import { applyColor } from './colorCommands'
 import { completionExtension } from './completions'
 import { linkEnv, type LinkHandlersRef } from './linkEnv'
@@ -37,7 +41,11 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     EditorView.lineWrapping,
     drawSelection(),
     livePreview,
+    imageClick,
+    webLinkGestures,
+    taskClick,
     blockMath,
+    blockTable,
     editorStyling,
     completionExtension()
   ]

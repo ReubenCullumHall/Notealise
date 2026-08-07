@@ -1,0 +1,21 @@
+{
+  "hook": {
+    "enabled": true,
+    "quiet": true
+  },
+  "detector": {
+    "ignoreFiles": [
+      "src/**",
+      "legacy/**",
+      "out/**",
+      "build/**",
+      "release/**",
+      "release 2/**",
+      "node_modules/**",
+      "docs/**",
+      "electron.vite.config.ts",
+      "tailwind.config.js",
+      "postcss.config.js"
+    ]
+  }
+}

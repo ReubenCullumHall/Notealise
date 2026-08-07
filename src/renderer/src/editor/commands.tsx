@@ -225,7 +225,7 @@ export const EDITOR_COMMANDS: EditorCommand[] = [
   {
     id: 'table',
     label: 'Table',
-    hint: 'A starter two-column table',
+    hint: 'A 2×2 grid you can type straight into',
     group: 'Insert',
     glyph: iconFace('table'),
     terms: ['table', 'grid', 'row', 'column'],

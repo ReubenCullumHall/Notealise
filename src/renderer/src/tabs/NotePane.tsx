@@ -58,6 +58,11 @@ interface Props {
   showLinks: boolean
   /** and keep it on screen while the note scrolls, instead of letting it go */
   pinLinks: boolean
+  /** Markdown pro is on for this space: show the corner button at all */
+  markdownPro: boolean
+  /** this note is currently showing its raw Markdown */
+  raw: boolean
+  onToggleRaw: () => void
   /** the pane the keyboard acts on */
   focused: boolean
   /** true while more than one pane is on screen */
@@ -131,6 +136,9 @@ export function NotePane({
   revealHeading,
   showLinks,
   pinLinks,
+  markdownPro,
+  raw,
+  onToggleRaw,
   focused,
   split,
   slots,
@@ -413,7 +421,30 @@ export function NotePane({
               env={env}
               linkHandlers={linkHandlers}
               revealHeading={revealHeading}
+              raw={raw}
             />
+            {/* Markdown pro's switch. Absolutely positioned inside `.edit-layer`
+                (which is already `position: absolute`), so it costs no layout at
+                all — the editor chrome is fixed-height rows and nothing may
+                appear or disappear in a way that shifts the text (CLAUDE.md).
+                Solid rather than fading in on hover, by the user's call:
+                findable beats unobtrusive for a mode switch. */}
+            {markdownPro && (
+              <button
+                onClick={onToggleRaw}
+                aria-pressed={raw}
+                data-tip={
+                  raw ? 'Showing raw Markdown — click for the formatted view' : 'Show the raw Markdown'
+                }
+                aria-label={raw ? 'Show the formatted view' : 'Show the raw Markdown'}
+                className={
+                  'btn-edge absolute bottom-3 right-3 z-20 flex h-8 w-8 items-center justify-center rounded-lg border border-ink-300/30 p-0 shadow-card outline-none backdrop-blur transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+                  (raw ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500 hover:text-brand-600')
+                }
+              >
+                <Icon name="code" className="h-4 w-4" />
+              </button>
+            )}
           </div>
         )}
 

@@ -8,6 +8,8 @@
 // Pure types + validation, no fs and no DOM, so this is safe to import from
 // main, preload and renderer alike (mirrors shared/settings.ts).
 
+import { normalizeHex } from './color'
+
 /** Per-entry organisation state, keyed by vault-relative POSIX path. Every field
  *  is optional on disk; an absent field falls back to a sensible default, so a
  *  note created in Explorer behaves correctly with no entry at all. */
@@ -21,6 +23,23 @@ export interface EntryMeta {
   archivedAt?: number
   /** folders only — whether the row is collapsed in the tree. */
   collapsed?: boolean
+  /** `#rrggbb`, the colour this row is tagged with in the sidebar. Absent means
+   *  no colour of its own — a note or subfolder then shows the nearest coloured
+   *  ancestor's (see `colorOf` in organise/model.ts).
+   *
+   *  It belongs here rather than in settings.json because it is a property of
+   *  THIS entry, the same as its pin and its position, and here it is re-keyed
+   *  for free when the entry is renamed or moved (`migrateKey`). Losable, like
+   *  the rest of this file (rule 2): delete workspace.json and you lose the
+   *  colours, never a note. */
+  color?: string
+  /** this note is being shown as raw Markdown (Markdown pro's corner button).
+   *
+   *  A property of THIS note, exactly like its pin and its colour, so it belongs
+   *  here and gets re-keyed on rename for free (`migrateKey`). Losable with the
+   *  rest of the file (rule 2): delete workspace.json and every note goes back
+   *  to the formatted view, which is the harmless direction. */
+  rawView?: boolean
 }
 
 /** One item sitting in the recoverable bin. The file really has been moved to
@@ -66,6 +85,13 @@ export function normalizeEntry(raw: unknown): EntryMeta {
   if (archivedAt !== undefined) meta.archivedAt = archivedAt
   const collapsed = bool(v.collapsed)
   if (collapsed !== undefined) meta.collapsed = collapsed
+  // Anything that isn't a colour is dropped rather than stored — this value is
+  // interpolated straight into a CSS custom property, so "whatever the file
+  // said" is not an acceptable answer.
+  const color = normalizeHex(v.color)
+  if (color !== null) meta.color = color
+  const rawView = bool(v.rawView)
+  if (rawView !== undefined) meta.rawView = rawView
   return meta
 }
 

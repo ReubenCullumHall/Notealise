@@ -1,10 +1,15 @@
 import { RangeSetBuilder } from '@codemirror/state'
+import { isRaw } from './rawView'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { COLOR_NAMES } from './palette'
 import { mathPass } from './mathPass'
 import { setLinkEnv } from './linkEnv'
 import { wikiPass } from './wikiPass'
+import { imagePass } from './imagePass'
+import { inlineHtmlPass } from './inlineHtmlPass'
+import { webLinkPass } from './webLinkPass'
+import { taskPass } from './taskPass'
 
 // ---------------------------------------------------------------------------
 // Live preview: hide markdown syntax marks on every line EXCEPT the one(s) the
@@ -136,6 +141,26 @@ const markdownPass: Pass = (view, active, push) => {
           if (ch === ']' && doc.sliceString(node.to, node.to + 1) === ']') return
           if (ch === ']' && doc.sliceString(node.from - 1, node.from) === ']') return
           const parent = node.node.parent
+          // An Image's marks belong to imagePass, which replaces the WHOLE
+          // `![alt](src)` with the picture. Hiding them here too would push a
+          // range inside one imagePass already claimed, breaking build()'s
+          // "ranges from the passes are disjoint" contract — the same trap the
+          // wiki-link guard above exists for. It also fixes what the cursor
+          // reveals: with these hidden, an image being edited showed its alt
+          // text and URL run together with no brackets.
+          if (parent && parent.name === 'Image') return
+          // A `[1]` citation parses as a Link too — a shortcut reference with
+          // no definition — and hiding ITS brackets turns "citation [1]." into
+          // "citation 1.", quietly deleting punctuation the author wrote. Only
+          // a link that actually points somewhere (has a URL child) earns
+          // hidden brackets; anything else is literal text and stays as typed.
+          if (parent && parent.name === 'Link') {
+            let hasUrl = false
+            for (let c = parent.firstChild; c; c = c.nextSibling) {
+              if (c.name === 'URL') hasUrl = true
+            }
+            if (!hasUrl) return
+          }
           if (parent && overlapsSelection(view, parent.from, parent.to)) return
           push(node.from, node.to, hideDeco, true) // [ ] ( )
           return
@@ -280,7 +305,19 @@ const fencedCodePass: Pass = (view, active, push) => {
 }
 
 /** The ordered list of decoration passes. Append to extend the engine. */
-export const PASSES: Pass[] = [markdownPass, colorPass, mathPass, fencedCodePass, wikiPass]
+export const PASSES: Pass[] = [
+  markdownPass,
+  colorPass,
+  mathPass,
+  fencedCodePass,
+  // Tables are NOT here: they span line breaks, which needs a block
+  // decoration, which a ViewPlugin may not provide — see blockTable.ts.
+  imagePass,
+  inlineHtmlPass,
+  taskPass,
+  webLinkPass,
+  wikiPass
+]
 
 function build(view: EditorView): { decorations: DecorationSet; hidden: DecorationSet } {
   const active = activeLineSet(view)
@@ -288,7 +325,12 @@ function build(view: EditorView): { decorations: DecorationSet; hidden: Decorati
   const push: Push = (from, to, deco, atomic) => {
     if (to > from) items.push({ from, to, deco, atomic })
   }
-  for (const pass of PASSES) pass(view, active, push)
+  // Markdown pro. Skipping the passes wholesale is the entire implementation of
+  // raw view: every mark this file hides simply stays visible. `highlight.ts` is
+  // untouched, so bold is still bold and a heading is still large — the user's
+  // call over a flat monospace view, and it means there is no second set of
+  // styles to keep in step with the first.
+  if (!isRaw(view.state)) for (const pass of PASSES) pass(view, active, push)
 
   // RangeSetBuilder requires ascending order; ranges from the passes are disjoint.
   items.sort((a, b) => a.from - b.from || a.to - b.to)
@@ -319,6 +361,10 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         u.docChanged ||
         u.selectionSet ||
         u.viewportChanged ||
+        // Markdown pro toggled: rebuild with nothing hidden. `reconfigured`
+        // lives on Transaction, NOT on ViewUpdate — checked against the
+        // installed .d.ts rather than assumed.
+        u.transactions.some((tr) => tr.reconfigured) ||
         u.transactions.some((tr) => tr.effects.some((e) => e.is(setLinkEnv)))
       ) {
         const r = build(u.view)

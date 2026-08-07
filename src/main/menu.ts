@@ -61,6 +61,8 @@ export function installMenu(): void {
           click: () => sendMenuCommand('new-folder')
         },
         { type: 'separator' },
+        { label: 'Import notes…', click: () => sendMenuCommand('import-notes') },
+        { type: 'separator' },
         ...(isMac ? [] : [checkForUpdates, { type: 'separator' } as MenuItemConstructorOptions]),
         isMac ? closeWindow : { role: 'quit' }
       ]

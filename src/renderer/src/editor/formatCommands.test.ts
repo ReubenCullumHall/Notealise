@@ -103,10 +103,32 @@ describe('insert commands', () => {
     expect(read()).toBe('some\n---|\n text')
   })
 
-  it('inserts a table with the first header cell selected', () => {
+  it('inserts an EMPTY 2×2 — a header row and one body row', () => {
+    // Changed 2026-08-07, when tables became something you click into rather
+    // than raw text you edit. Two things this now asserts, and both are the
+    // point rather than an implementation detail:
+    //
+    //   • The cells are empty, not "Column | Column". Placeholder words made
+    //     sense while you were typing over visible source; in a rendered grid
+    //     they are text you have to select and delete before you can start.
+    //   • Nothing is selected. There is no cursor inside a table any more — the
+    //     block renders as a widget and a cell opens on click — so leaving a
+    //     selection here would put one in a place the user cannot see it.
+    //
+    // "2×2" is a header plus one body row because Markdown has no table without
+    // a header row. Verified against the real @lezer/markdown parser: an
+    // all-empty table still parses as a Table (an empty cell produces no
+    // TableCell node at all, so it was worth checking the block survives).
     const { view, read } = harness('', 0)
     table(view)
-    expect(read()).toBe('| «Column» | Column |\n| --- | --- |\n|  |  |')
+    // The cursor (shown as `|` by the harness) ends up past a BLANK line, two
+    // breaks below the table. Both matter:
+    //   • not at the end of the last row — that position is inside the block the
+    //     widget replaces, so it is invisible;
+    //   • not on the line directly under it either, because GFM parses a
+    //     non-blank line there as another ROW of the table (verified against the
+    //     real parser), so the first word typed would have joined the table.
+    expect(read()).toBe('|     |     |\n| --- | --- |\n|     |     |\n\n|')
   })
 
   it('wraps inline code around the selection', () => {

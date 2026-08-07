@@ -1,12 +1,16 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import logoLight from './assets/logo/notealise-mark-circle-light.svg'
+import logoDark from './assets/logo/notealise-mark-circle-dark.svg'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import { activeSpace, type AppSettings, type Space } from '../../shared/settings'
 import type { UpdateStatus } from '../../shared/update'
 import { UpdateBanner } from './update/UpdateBanner'
 import { ArchiveIcon, BinIcon, Icon } from './icons'
-import { SettingsButton } from './settings/Settings'
+import { SettingsButton, type SectionId } from './settings/Settings'
 import type { SpaceActions } from './settings/Spaces'
+import type { PresetActions } from './settings/Presets'
+import type { SpacePreset } from '../../shared/presets'
 import { ancestorsOf } from './links/model'
 import { SearchBar, SearchResults, type SearchHit } from './Search'
 import { TreeView, type Selection, type TreeActions } from './TreeView'
@@ -38,6 +42,14 @@ interface Props {
   settings: AppSettings
   onChangeSettings: (partial: Partial<AppSettings>) => void
   spaceActions: SpaceActions
+  /** the saved-look library, forwarded to Settings → Spaces. Held by App
+   *  because it outlives the open vault (shared/presets.ts). */
+  presets: SpacePreset[]
+  presetActions: PresetActions
+  /** Set to open Settings straight to a section (e.g. from a File-menu
+   *  command) rather than through the gear. */
+  settingsJumpToSection?: SectionId | null
+  onSettingsJumpHandled?: () => void
   /** every space, for the footer switcher */
   spaces: Space[]
   activeSpaceFolder: string
@@ -166,6 +178,10 @@ export function Sidebar({
   settings,
   onChangeSettings,
   spaceActions,
+  presets,
+  presetActions,
+  settingsJumpToSection,
+  onSettingsJumpHandled,
   spaces,
   activeSpaceFolder,
   onSwitchSpace,
@@ -266,7 +282,22 @@ export function Sidebar({
   const inBin = view === 'bin'
   const searching = searchHits !== null
   const selCount = selection.paths.size
-  const clearSel = (): void => setSelection({ paths: new Set() })
+  const clearSel = useCallback((): void => setSelection({ paths: new Set() }), [])
+
+  // Escape leaves selection mode. It is one of exactly two ways out (the other
+  // is the Clear button below) — clicking the background deliberately does not
+  // clear any more, because in this mode a plain click on a row SELECTS, and a
+  // near-miss onto the background used to throw the whole set away.
+  // Not capture-phase: the settings modal and the popovers listen in capture and
+  // stop propagation, so an open dialog still gets Escape first.
+  useEffect(() => {
+    if (selCount === 0) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') clearSel()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selCount, clearSel])
 
   // The bin lid hinges open when something goes in — the cue that it landed.
   const flipLid = (): void => {
@@ -307,6 +338,8 @@ export function Sidebar({
     workspace,
     openPath,
     freeArrange: space.freeArrange,
+    colorStyle: space.colorStyle,
+    colorInherit: space.colorInherit,
     selection,
     onSelectionChange: setSelection,
     dragging,
@@ -345,6 +378,8 @@ export function Sidebar({
           the bottom strip, beside the bin, since both are shelf views and they
           read as a pair there. */}
       <div className="flex items-center gap-2 px-4 pt-4 pb-2.5">
+        <img src={logoLight} alt="" className="app-logo-mark app-logo-mark-light h-7 w-7 shrink-0" />
+        <img src={logoDark} alt="" className="app-logo-mark app-logo-mark-dark h-7 w-7 shrink-0" />
         <p className="min-w-0 flex-1 truncate font-display text-lg font-semibold text-ink-900" data-tip={vaultName}>
           {vaultName}
         </p>
@@ -382,11 +417,20 @@ export function Sidebar({
         </TB>
       </div>
 
-      {selCount > 1 && (
+      {/* From the FIRST item, not the second. The bar is what tells you the
+          sidebar has changed mode — that a plain click now selects rather than
+          opens — and it carries the only way out besides Escape. Showing it
+          only at two left the one-item state looking like nothing had
+          happened, with clicking around silently building a set. */}
+      {selCount > 0 && (
         <div className="fade-in mx-3 mb-1.5 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] text-brand-600">
-          <span className="flex-1">{selCount} selected · drag to move them together</span>
+          <span className="flex-1">
+            {selCount} selected · click rows to add
+            {selCount > 1 ? ' · drag to move them together' : ''}
+          </span>
           <button
             onClick={clearSel}
+            data-tip="Leave selection mode (Esc)"
             className="rounded border-none bg-transparent px-1.5 py-0.5 text-ink-500 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
           >
             Clear
@@ -403,9 +447,10 @@ export function Sidebar({
               ? 'pb-16'
               : 'pb-3')
           }
-          onClick={(e) => {
-            if (e.target === e.currentTarget) clearSel()
-          }}
+          // No clear-on-background-click. In selection mode a plain click on a
+          // row selects it, so the background is one slip away from every row —
+          // and losing a set you built over a dozen clicks to a near-miss is
+          // the failure this mode exists to avoid. Escape and Clear, only.
           onContextMenu={(e) => {
             if (e.target === e.currentTarget) actions.onContext(e, null)
           }}
@@ -640,6 +685,10 @@ export function Sidebar({
             spaceActions={spaceActions}
             vault={vaultPath}
             onPickVault={actions.onPickVault}
+            presets={presets}
+            presetActions={presetActions}
+            jumpToSection={settingsJumpToSection}
+            onJumpHandled={onSettingsJumpHandled}
           />
         <button
           onClick={() => {

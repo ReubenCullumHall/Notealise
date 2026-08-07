@@ -3,6 +3,8 @@ import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import type { EditorView } from '@codemirror/view'
 import { ContextMenu, type MenuItem } from './ContextMenu'
+import { clearImageCache } from './editor/imageAssets'
+import type { SectionId } from './settings/Settings'
 import { FormatToolbar } from './editor/FormatToolbar'
 import { NotePane, ROW_CLASS, type Drag } from './tabs/NotePane'
 import { TabStrip } from './tabs/TabStrip'
@@ -39,16 +41,35 @@ import {
   activeSpace,
   DEFAULT_SETTINGS,
   reconcileSpaces,
+  SPACE_CAP,
   withNewSpace,
   withSpacePatch,
   type AppSettings
 } from '../../shared/settings'
 import type { SpaceActions } from './settings/Spaces'
+import { ALL_SPACES, type PresetActions } from './settings/Presets'
+import {
+  lookKey,
+  pickLook,
+  PRESET_CAP,
+  presetFromSpace,
+  vaultName as vaultFolderName,
+  type SpacePreset
+} from '../../shared/presets'
 import { Sidebar } from './Sidebar'
 import type { SearchHit } from './Search'
 import type { UpdateStatus } from '../../shared/update'
 import { Icon } from './icons'
-import { findNode, isArchived, sortSiblings } from './organise/model'
+import {
+  autoColorPlan,
+  colorOf,
+  findNode,
+  isArchived,
+  siblingColors,
+  sortSiblings
+} from './organise/model'
+import { ColorPopover, type Anchor } from './color/Picker'
+import { PALETTE_MAX, pickAutoColor } from '../../shared/color'
 
 // --- small path helpers (renderer works in vault-relative POSIX paths) ---
 const parentOf = (p: string): string => {
@@ -110,11 +131,21 @@ export default function App(): React.JSX.Element {
   const [versions, setVersions] = useState<Record<string, number>>({})
   const [wordCounts, setWordCounts] = useState<Record<string, number>>({})
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
+  // Which rows the colour picker is open for, and where it points. One popover
+  // for the whole window, like the context menu and the hover card — the
+  // sidebar renders four TreeViews and a per-instance picker could put two on
+  // screen at once.
+  const [colorFor, setColorFor] = useState<{ paths: string[]; at: Anchor } | null>(null)
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS)
   // Appearance, arranging and the format bar's custom buttons belong to the
   // active space; the rest of `settings` is global. Derived rather than stored,
   // so the two can never disagree — a find over at most SPACE_CAP items.
   const space = activeSpace(settings)
+  // The saved-preset library (shared/presets.ts). App owns it rather than the
+  // settings window, because the mirror below has to keep running whether or not
+  // that window is open. There is nothing here about WHERE it lives: it lives in
+  // the app, so a vault switch neither moves it nor has anything to ask.
+  const [presets, setPresets] = useState<SpacePreset[]>([])
   // Search (spotlight pill). `deep` also matches note contents, not just titles;
   // `withArchived` lets shelved notes back into the results.
   const [query, setQuery] = useState('')
@@ -264,11 +295,36 @@ export default function App(): React.JSX.Element {
     setSettings(next)
     applySettings(next)
   }, [])
-  const loadSettings = useCallback(async (): Promise<AppSettings> => {
+  /** Which vault the `settings` in state were read from.
+   *
+   *  `vault` is set at the START of a folder switch and the settings arrive
+   *  several awaits later, so for a moment the two disagree — and the preset
+   *  mirror below, which stamps every saved look with the vault it came from,
+   *  would file the OLD vault's spaces under the NEW vault's name. Passing the
+   *  vault in rather than reading it from state is what keeps the pair honest. */
+  const settingsVault = useRef<string | null>(null)
+  const loadSettings = useCallback(async (forVault: string | null): Promise<AppSettings> => {
     const s = await window.api.getSettings()
+    settingsVault.current = forVault
     setSettings(s)
     applySettings(s)
     return s
+  }, [])
+
+  /** Read the saved-preset library (shared/presets.ts).
+   *
+   *  Declared up here with the other loaders and NOT beside the rest of the
+   *  preset code below, because the boot effect lists it as a dependency — and a
+   *  deps array is evaluated during render, at the `useEffect` call itself, so a
+   *  `const` declared further down would be read before its initialiser has run
+   *  and throw on launch. */
+  const loadPresets = useCallback(async (): Promise<void> => {
+    try {
+      setPresets(await window.api.listPresets())
+    } catch {
+      // The library is a convenience layer over settings.json, which none of
+      // this touches — a failure here must never stop a vault opening.
+    }
   }, [])
 
   /** Let go of a note that has just left the strip: write anything unsaved (a
@@ -387,8 +443,19 @@ export default function App(): React.JSX.Element {
     [changeSettings, loadTree, flash]
   )
 
+  /** Kept pointing at the live `colorExistingFolders` below — see the note on
+   *  `onColorExistingFolders` in the object this feeds. */
+  const colorExistingRef = useRef<(folders: string[]) => void>(() => {})
+
+  /** Kept pointing at the live `openImportedSpace` below — see the note on
+   *  `onOpenSpace` in the object this feeds. */
+  const openSpaceRef = useRef<(folder: string) => Promise<void>>(async () => {})
+
   const spaceActions: SpaceActions = useMemo(
     () => ({
+      // Via a ref for the same reason onColorExistingFolders is: it needs
+      // switchSpace and settingsRef, both declared further down.
+      onOpenSpace: (folder) => openSpaceRef.current(folder),
       onCreateSpace: async () => {
         try {
           const path = await window.api.createFolder('') // '' = vault root
@@ -411,6 +478,26 @@ export default function App(): React.JSX.Element {
           // Main sanitises for cross-platform safety, so say so rather than
           // letting the name quietly come back different — same as tree rename.
           if (actual !== to) flash(`Renamed to "${actual}" (adjusted for cross-platform safety)`)
+          // The library keys a preset by (space name, vault), so a rename has to
+          // move the saved look with it — otherwise the next mirror writes a
+          // second preset under the new name and the old one sits there as a
+          // twin that never updates again.
+          //
+          // Caught SEPARATELY, because by this line the rename has already
+          // happened: the folder moved, the tree reloaded, the open tabs were
+          // remapped. Letting a preset failure fall to the outer catch returns
+          // null, and `renameSpace` reads that as "the rename failed" and skips
+          // withSpaceRenamed — leaving settings pointed at a folder that is no
+          // longer there. The library is a mirror (it can be rebuilt); the
+          // filesystem rename is the real work and it succeeded, so this reports
+          // the shortfall and still returns the name main actually used.
+          if (vault) {
+            try {
+              setPresets(await window.api.renamePreset(from, actual, vaultFolderName(vault)))
+            } catch (e) {
+              flash(`Space renamed, but its saved look kept the old name: ${(e as Error).message}`)
+            }
+          }
           return actual
         } catch (e) {
           flash(`Couldn't rename the space: ${(e as Error).message}`)
@@ -434,9 +521,14 @@ export default function App(): React.JSX.Element {
           flash(`Couldn't delete the space: ${(e as Error).message}`)
           return false
         }
-      }
+      },
+      // Through a ref, because the implementation needs `run` and the tree
+      // helpers, which are declared further down this component — calling it
+      // directly here would read a `const` before its initialiser has run. Same
+      // idiom `menuHandler` uses below, and for the same reason.
+      onColorExistingFolders: (folders) => colorExistingRef.current(folders)
     }),
-    [loadTree, loadWorkspace, flash, remapOpen, forgetIfInside]
+    [loadTree, loadWorkspace, flash, remapOpen, forgetIfInside, vault]
   )
 
   /** Open a note. A plain sidebar click REPLACES the focused note — the strip
@@ -718,12 +810,13 @@ export default function App(): React.JSX.Element {
         loadedTree = await loadTree()
         await loadWorkspace()
       }
-      const s = await loadSettings()
+      const s = await loadSettings(v)
       if (v) await syncSpaces(loadedTree, s)
       if (v) restoreSession(loadedTree, s)
+      if (v) await loadPresets()
       if (v) await rescanLinks() // one walk of the vault; incremental after this
     })()
-  }, [loadTree, loadWorkspace, loadSettings, restoreSession, syncSpaces, rescanLinks])
+  }, [loadTree, loadWorkspace, loadSettings, restoreSession, syncSpaces, rescanLinks, loadPresets])
 
   // Remember the whole layout — which notes are open, how they're split, which
   // pane you were in — regardless of the current startup preference, so turning
@@ -745,6 +838,164 @@ export default function App(): React.JSX.Element {
   // saved spaces re-sync whenever the tree does — not only at startup.
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+
+  /** Show the space an import just wrote into.
+   *
+   *  An importer's writes all go through the vault's echo-guard (`markWrite`),
+   *  so the watcher stays silent about them by design — which means a whole new
+   *  space can appear on disk with nothing telling the sidebar it exists. The
+   *  notes were there and invisible until a relaunch. Hence the explicit
+   *  reload; and `syncSpaces` has to run BEFORE the switch, because the new
+   *  folder only becomes a *space* once reconcile has recorded it, and
+   *  switching to a folder that isn't one yet silently does nothing. */
+  openSpaceRef.current = async (folder: string): Promise<void> => {
+    try {
+      const t = await loadTree()
+      await syncSpaces(t, settingsRef.current)
+      await switchSpace(folder)
+    } catch (e) {
+      flash(`Couldn't open "${folder}": ${(e as Error).message}`)
+    }
+  }
+
+  // --- the saved-preset library (shared/presets.ts) ---------------------------
+  // Two halves. The effect MIRRORS every space into the library — that is why
+  // there is no "save preset" button and no way to end up with a stale one. The
+  // actions below are the other direction: pouring a saved look back onto a
+  // space, which is what makes the library worth keeping across a folder switch.
+  //
+  // It lives in App rather than in the settings window because the mirror has to
+  // run whether or not that window is open.
+
+  /** What was last mirrored. Without it every settings write would rewrite the
+   *  whole library, and `session` alone is written on each click between panes —
+   *  on a vault inside OneDrive that is real sync churn for no change at all. */
+  const mirroredRef = useRef('')
+
+  useEffect(() => {
+    // Not `if (!vault)`: mid-switch, `vault` is already the new folder while
+    // `settings` is still the old one's, and mirroring then would save the old
+    // vault's spaces under the new vault's name. Wait for the two to agree.
+    if (!vault || settingsVault.current !== vault) return
+    const origin = vaultFolderName(vault)
+    // An unbound space (`folder: ''`) stands for the whole vault and has no
+    // name, so there is nothing to call its preset — it isn't mirrored.
+    const drafts = settings.spaces.filter((s) => s.folder).map((s) => presetFromSpace(s, origin, 0))
+    if (drafts.length === 0) return
+    // `origin` is part of the key so switching vault always counts as a change,
+    // even between two vaults whose spaces happen to look identical.
+    // Stringified rather than concatenated with a separator: no character is
+    // illegal in a folder name, and a raw control character as the delimiter is
+    // what already makes this file read as binary to grep (CLAUDE.md).
+    const key = JSON.stringify([origin, drafts.map((d) => [d.name, lookKey(d.look)])])
+    if (key === mirroredRef.current) return
+    const t = setTimeout(() => {
+      mirroredRef.current = key
+      const at = Date.now()
+      void window.api
+        .syncPresets(drafts.map((d) => ({ ...d, savedAt: at })))
+        .then(setPresets)
+        .catch(() => {
+          mirroredRef.current = '' // let the next change try again
+        })
+    }, 800)
+    return () => clearTimeout(t)
+  }, [vault, settings.spaces])
+
+  /** Make a space out of a saved look: a folder named after the preset, with
+   *  that look already on it. The one thing the drag cannot express — there is
+   *  no tab to drop onto when the space doesn't exist yet — and what rebuilds a
+   *  setup in a folder that has never seen it. */
+  const newSpaceFromPreset = async (preset: SpacePreset): Promise<void> => {
+    if (settingsRef.current.spaces.filter((s) => s.folder).length >= SPACE_CAP) {
+      flash(`You can have up to ${SPACE_CAP} spaces`)
+      return
+    }
+    try {
+      // Created with its final name, never created-then-renamed: `syncSpaces`
+      // runs on every tree load and would register a temporary "New folder" as
+      // a real space in between.
+      const folder = await window.api.createFolder('', preset.name)
+      await loadTree()
+      const current = settingsRef.current
+      const created = withNewSpace(current, folder)
+      // ONE settings write. Registering the space and then patching its look
+      // would paint the app twice — default theme for a frame, then the
+      // preset's.
+      const merged = { ...current, ...created }
+      await changeSettings({ ...created, ...withSpacePatch(merged, folder, preset.look) })
+      flash(
+        folder === preset.name
+          ? `Created "${folder}" from your saved look`
+          : `Created "${folder}" from your saved look (name adjusted for cross-platform safety)`
+      )
+    } catch (e) {
+      flash(`Couldn't create a space from "${preset.name}": ${(e as Error).message}`)
+    }
+  }
+
+  /** `newSpaceFromPreset` is a plain const, rebuilt every render; the memo below
+   *  must not depend on it or the actions would rebuild each time. Same ref
+   *  idiom `onColorExistingFolders` uses, and for the same reason. */
+  const newSpaceFromPresetRef = useRef(newSpaceFromPreset)
+  newSpaceFromPresetRef.current = newSpaceFromPreset
+
+  const presetActions: PresetActions = useMemo(
+    () => ({
+      // The folder and everything in it are untouched — only the ticked parts of
+      // the look move. `withSpacePatch` re-pins `folder` last for exactly this
+      // reason, and `pickLook` is what makes "leave my format buttons alone"
+      // mean it.
+      onApply: (preset, folder, parts) => {
+        const patch = pickLook(preset.look, parts)
+        const current = settingsRef.current
+        if (folder === ALL_SPACES) {
+          // Deliberately one write across every space rather than a loop of
+          // them: each `setSettings` is a full read-modify-write of
+          // settings.json, so a loop would rewrite the file once per space and
+          // repaint the app in between.
+          void changeSettings({ spaces: current.spaces.map((sp) => ({ ...sp, ...patch, folder: sp.folder })) })
+          flash(`"${preset.name}" applied to every space`)
+          return
+        }
+        void changeSettings(withSpacePatch(current, folder, patch))
+        flash(`"${preset.name}" applied to ${folder}`)
+      },
+      onNewSpace: (preset) => void newSpaceFromPresetRef.current(preset),
+      onDelete: (id) => {
+        void window.api.deletePreset(id).then(setPresets)
+      },
+      onExport: (ids) => {
+        void window.api
+          .exportPresets(ids)
+          .then((written) => {
+            // null means the save dialog was cancelled, which needs no report.
+            if (written) flash(`Saved to ${written.split(/[\\/]/).pop()}`)
+          })
+          .catch((e: Error) => flash(`Couldn't export: ${e.message}`))
+      },
+      onImport: (text) => {
+        void window.api
+          .importPresets(text)
+          .then(({ added, found, cancelled, presets: list }) => {
+            setPresets(list)
+            if (cancelled) return // closed the picker; nothing to report
+            // Three outcomes, three sentences. Saying "no presets in that file"
+            // when the file was fine and the library was full sends you to look
+            // at the wrong thing.
+            flash(
+              added > 0
+                ? `Imported ${added} ${added === 1 ? 'preset' : 'presets'}`
+                : found > 0
+                  ? `Your preset library is full (${PRESET_CAP}) — delete some first`
+                  : 'No presets in that file'
+            )
+          })
+          .catch((e: Error) => flash(`Couldn't import: ${e.message}`))
+      }
+    }),
+    [changeSettings, flash]
+  )
 
   // external changes → refresh the tree, and every open tab that changed (not
   // just the focused one: a note edited on disk while it sits in the other half
@@ -787,9 +1038,13 @@ export default function App(): React.JSX.Element {
       setLinkRows([])
       openTargetsRef.current.clear()
       spaceTabs.current.clear() // a different vault's spaces are different spaces
+      // Image blobs are keyed by vault-RELATIVE path, so the same
+      // "Import/photo.png" names a different file in a different vault — a kept
+      // cache would show the previous vault's picture. Also frees the blobs.
+      clearImageCache()
       const t = await loadTree()
       await loadWorkspace()
-      const s = await loadSettings() // a vault may carry its own saved appearance
+      const s = await loadSettings(v) // a vault may carry its own saved appearance
       // The watcher only reports CHANGES from here on (ignoreInitial: true), so
       // a vault's pre-existing top-level folders never self-announce as spaces
       // otherwise — nothing would reconcile them until some later fs event.
@@ -797,6 +1052,10 @@ export default function App(): React.JSX.Element {
       // Each vault remembers its own tabs, so switching to one reopens what you
       // were doing there — the same restore as a cold start.
       restoreSession(t, s)
+      // Nothing about the library changes on a switch — it is in the app, not in
+      // either folder. This re-read only exists so a preset written while
+      // another vault was open shows up in the list straight away.
+      await loadPresets()
     }
   }
 
@@ -894,9 +1153,61 @@ export default function App(): React.JSX.Element {
 
   const newFolder = (dir: string): Promise<void> =>
     run(async () => {
-      await window.api.createFolder(inSpace(dir))
+      const rel = await window.api.createFolder(inSpace(dir))
       await loadTree()
+      // Auto-colour, if the space asks for it: a new folder comes out a colour
+      // its siblings aren't already using, so a sidebar of folders reads as
+      // distinct without anyone assigning anything. Notes are deliberately left
+      // alone — they inherit this folder's colour, and colouring each one
+      // individually would make the sidebar louder rather than clearer.
+      if (!space.colorAuto) return
+      // Read the sidecar back rather than closing over `workspace`: the state in
+      // this closure is from the render that made the button, and what matters
+      // is which colours the siblings hold NOW.
+      const ws = await window.api.getWorkspace()
+      const hex = pickAutoColor(space.colorPalette, siblingColors(ws, parentOf(rel)))
+      if (hex) setWorkspace(await window.api.updateEntry(rel, { color: hex }))
     })
+
+  /** Write (or clear) the colour on some rows. `null` removes it — the merge in
+   *  main drops an undefined field, the same way un-archiving clears
+   *  `archivedAt`, so there is no separate "delete" channel to keep in step. */
+  const setColor = (paths: string[], hex: string | null): void =>
+    void run(async () =>
+      setWorkspace(await window.api.updateEntries(paths, { color: hex ?? undefined }))
+    )
+
+  const pickColor = (paths: string[], at: Anchor): void => {
+    if (paths.length) setColorFor({ paths, at })
+  }
+
+  /** Colour the folders that already exist in `spaceFolders`, from each space's
+   *  own palette. Called when auto-colour is switched on — see
+   *  `SpaceActions.onColorExistingFolders`. Groups the writes by colour so a
+   *  vault of 200 folders is a handful of round trips, not 200. */
+  const colorExistingFolders = (spaceFolders: string[]): void =>
+    void run(async () => {
+      const fresh = await window.api.listTree()
+      let ws = await window.api.getWorkspace()
+      for (const folder of spaceFolders) {
+        const sp = settings.spaces.find((s) => s.folder === folder)
+        if (!sp?.colorPalette.length) continue
+        // '' is the whole-vault space, whose folders are the tree's own roots.
+        const roots = folder === '' ? fresh : (findNode(fresh, folder)?.children ?? [])
+        const plan = autoColorPlan(roots, ws, sp.colorPalette, folder)
+        const byColor = new Map<string, string[]>()
+        for (const [path, hex] of Object.entries(plan)) {
+          const list = byColor.get(hex)
+          if (list) list.push(path)
+          else byColor.set(hex, [path])
+        }
+        for (const [hex, paths] of byColor) {
+          ws = await window.api.updateEntries(paths, { color: hex })
+        }
+      }
+      setWorkspace(ws)
+    })
+  colorExistingRef.current = colorExistingFolders
 
   const rename = (node: TreeNode): Promise<void> =>
     run(async () => {
@@ -925,10 +1236,24 @@ export default function App(): React.JSX.Element {
     ]
     if (node) {
       items.push({ label: 'Rename', onClick: () => void rename(node) })
+      // The row's hover swatch opens the same picker. Both, deliberately and to
+      // the same pattern "Move to bin" already follows: the hover button is the
+      // fast path once you know it's there, the menu is where you look when you
+      // don't. The menu has no anchor element to measure, so it points at the
+      // click — which is where you are looking anyway.
+      items.push({
+        label: 'Colour…',
+        onClick: () =>
+          pickColor([node.path], { left: e.clientX, top: e.clientY, bottom: e.clientY })
+      })
       items.push({ label: 'Move to bin', danger: true, onClick: () => trash([node.path]) })
     }
     setMenu({ x: e.clientX, y: e.clientY, items })
   }
+
+  // Set to jump Settings straight to a section (currently just File > Import
+  // notes…), bypassing the gear. Sidebar/SettingsButton clear it once opened.
+  const [settingsJumpTo, setSettingsJumpTo] = useState<SectionId | null>(null)
 
   // Route application-menu commands (New Note / New Folder) to the current
   // handlers via a ref, so the subscription mounts once but never goes stale.
@@ -937,6 +1262,7 @@ export default function App(): React.JSX.Element {
     if (!vault) return
     if (cmd === 'new-note') void newNote('')
     else if (cmd === 'new-folder') void newFolder('')
+    else if (cmd === 'import-notes') setSettingsJumpTo('import')
   }
   useEffect(() => window.api.onMenuCommand((cmd) => menuHandler.current(cmd)), [])
 
@@ -1129,6 +1455,10 @@ export default function App(): React.JSX.Element {
         openPath={openPath}
         settings={settings}
         onChangeSettings={(p) => void changeSettings(p)}
+        presets={presets}
+        presetActions={presetActions}
+        settingsJumpToSection={settingsJumpTo}
+        onSettingsJumpHandled={() => setSettingsJumpTo(null)}
         query={query}
         onQuery={setQuery}
         deep={deep}
@@ -1149,6 +1479,7 @@ export default function App(): React.JSX.Element {
           onNewNoteIn: (dir) => void newNote(dir),
           onNewFolderIn: (dir) => void newFolder(dir),
           onRename: (node) => void rename(node),
+          onPickColor: pickColor,
           onNewNote: () => void newNote(''),
           onNewFolder: () => void newFolder(''),
           onArchive: setArchived,
@@ -1214,6 +1545,22 @@ export default function App(): React.JSX.Element {
                   linkIndex={linkIndex}
                   showLinks={space.showLinks}
                   pinLinks={space.pinLinks}
+                  markdownPro={space.markdownPro}
+                  // Which notes are RAW is a property of each note, so it sits
+                  // in workspace.json beside its pin and its colour — not in the
+                  // space, and not in React state that a reopen would forget.
+                  raw={!!workspace.entries[p]?.rawView}
+                  // Through `run` like every other updateEntry* call (pin,
+                  // colour): a bare .then() drops a rejection on the floor, so
+                  // a failed write left the button toggled in the UI with the
+                  // flag never persisted and nothing said.
+                  onToggleRaw={() =>
+                    void run(async () =>
+                      setWorkspace(
+                        await window.api.updateEntry(p, { rawView: !workspace.entries[p]?.rawView })
+                      )
+                    )
+                  }
                   onFollowLink={(target, how, heading) => void openLink(target, how, heading)}
                   onCreateLink={(dir, title, how) => void createFromLink(dir, title, how)}
                   onDragLink={(target) => setDrag(target ? { kind: 'tab', path: target } : null)}
@@ -1307,6 +1654,36 @@ export default function App(): React.JSX.Element {
       {inspect && <LinkInspector at={inspect} />}
 
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+
+      {/* The one colour picker, for whichever rows the sidebar asked about. It
+          stays open while you drag in the square, so the sidebar recolours live
+          under it — you are choosing against the real thing, not a preview. */}
+      {colorFor && (
+        <ColorPopover
+          at={colorFor.at}
+          value={workspace.entries[colorFor.paths[0]]?.color ?? ''}
+          palette={space.colorPalette}
+          inherited={((): { hex: string; from: string } | null => {
+            const c = colorOf(workspace, colorFor.paths[0], space.colorInherit)
+            return c && !c.own ? { hex: c.hex, from: c.from } : null
+          })()}
+          onPick={(hex) => setColor(colorFor.paths, hex)}
+          onClear={() => {
+            setColor(colorFor.paths, null)
+            setColorFor(null)
+          }}
+          onSaveToPalette={(hex) =>
+            void changeSettings(
+              withSpacePatch(settings, space.folder, {
+                // Oldest out when it's full, so "save" always saves rather than
+                // silently doing nothing once you hit the cap.
+                colorPalette: [...space.colorPalette, hex].slice(-PALETTE_MAX)
+              })
+            )
+          }
+          onClose={() => setColorFor(null)}
+        />
+      )}
 
       {notice && <div className="notice">{notice}</div>}
 

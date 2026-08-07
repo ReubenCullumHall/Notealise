@@ -17,6 +17,11 @@ release
 release [0-9]*
 *.local
 
+# impeccable (design skill, scoped to site/ — see .impeccable/config.json, which IS shared).
+# The skill itself and its hook now live at global scope (~/.claude), not in this project.
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+
 # per-machine vault path for dev:legacy
 legacy/.env
 legacy/.env.*

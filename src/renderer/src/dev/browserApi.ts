@@ -132,6 +132,11 @@ const api: VaultApi = {
     if (!(path in store.files)) throw new Error(`No such note: ${path}`)
     return store.files[path]
   },
+  // No real files in browser preview, so an inline image has nothing to show —
+  // imagePass falls back to its "not found" state, which is the honest answer.
+  readAsset: async () => {
+    throw new Error('No file access in browser preview')
+  },
   writeNote: async (path, content) => {
     store.files[path] = content
     save()
@@ -146,8 +151,8 @@ const api: VaultApi = {
     const list = paths ? paths.filter((p) => p in store.files) : Object.keys(store.files)
     return list.map((path) => ({ path, links: indexLinks(store.files[path]) }))
   },
-  createFolder: async (dirPath) => {
-    const path = unique(dirPath, 'New folder')
+  createFolder: async (dirPath, name) => {
+    const path = unique(dirPath, name || 'New folder')
     store.dirs.push(path)
     save()
     return path
@@ -181,6 +186,17 @@ const api: VaultApi = {
     save()
     return next
   },
+
+  // The saved-preset library lives in userData, which a browser tab has no
+  // equivalent of (shared/presets.ts). Inert rather than faked against
+  // localStorage: the Spaces page renders its empty state, and nothing here may
+  // grow behaviour the Electron app doesn't have (rule 8).
+  listPresets: async () => [],
+  syncPresets: async () => [],
+  renamePreset: async () => [],
+  deletePreset: async () => [],
+  exportPresets: async () => null,
+  importPresets: async () => ({ added: 0, found: 0, cancelled: true, presets: [] }),
 
   getWorkspace: async () => store.workspace,
   updateEntry: async (path, partial) => api.updateEntries([path], partial),
@@ -266,6 +282,22 @@ const api: VaultApi = {
   setBetaChannel: async () => ({ state: 'unsupported', reason: 'Browser preview' }),
   openReleases: () => {},
   sendBugReport: async () => false,
+  sendFeatureRequest: async () => false,
+  openExternal: async () => false, // no shell access outside Electron
+  importFormats: async () => [],
+  importPickSource: async () => null,
+  importPrepare: async (_format, paths) => paths,
+  importPreview: async () => ({
+    noteCount: 0,
+    folderCount: 0,
+    notes: [],
+    warnings: ['Import needs the Electron app']
+  }),
+  importRun: async () => {
+    throw new Error('Import needs the Electron app')
+  },
+  importCancel: async () => {},
+  onImportProgress: () => () => {},
   onUpdateStatus: () => () => {},
 
   onVaultChanged: (cb) => {

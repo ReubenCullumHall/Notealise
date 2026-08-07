@@ -148,6 +148,26 @@ describe('normalizeSettings', () => {
     expect(normalizeSettings({ spaces: [{ folder: ' Work ' }] }).spaces[0].folder).toBe('Work')
   })
 
+  it('keeps a long folder name intact rather than truncating it', () => {
+    // `folder` is the space's IDENTITY — the real folder name on disk — so a
+    // slice here doesn't shorten a label, it renames the space to a folder that
+    // does not exist. That is not cosmetic: the sidebar then scopes to nothing
+    // and "delete space" fails with "doesn't exist". A 40-char cap did this to
+    // every space named past 40 characters. Long names are a display problem,
+    // and `.space-tab`'s max-width + ellipsis already handles that.
+    const long = 'Tracker test Meiosis, DNA and Protein synthesis'
+    expect(long.length).toBeGreaterThan(40) // the cap this regressed against
+    expect(normalizeSettings({ spaces: [{ folder: long }] }).spaces[0].folder).toBe(long)
+  })
+
+  it('unbinds a folder name too long for any filesystem', () => {
+    // Not truncated either — a 300-byte name can't be a folder that exists, so
+    // it's invalid input and goes unbound ('') like every other invalid value,
+    // letting reconcileSpaces rebind or drop it.
+    const tooLong = 'x'.repeat(300)
+    expect(normalizeSettings({ spaces: [{ folder: tooLong }] }).spaces[0].folder).toBe('')
+  })
+
   it('drops a duplicated folder, keeping the first', () => {
     const s = normalizeSettings({ spaces: [{ folder: 'A', theme: 'light' }, { folder: 'A' }, { folder: 'B' }] })
     expect(s.spaces.map((x) => x.folder)).toEqual(['A', 'B'])
@@ -176,9 +196,37 @@ describe('normalizeSettings', () => {
     const s = normalizeSettings({})
     s.spaces[0].theme = 'light'
     s.spaces[0].toolbarSlots[0] = 'h1'
+    s.spaces[0].colorPalette.push('#123456')
     expect(DEFAULT_SPACE.theme).toBe('dark')
     expect(DEFAULT_SPACE.toolbarSlots).toEqual(['', '', '', ''])
+    expect(DEFAULT_SPACE.colorPalette).not.toContain('#123456')
     expect(DEFAULT_SETTINGS.spaces).toHaveLength(1)
+  })
+
+  it('gives a settings.json written before colours the starter palette', () => {
+    // A MISSING key means "this file predates the feature", and inheriting the
+    // starter hues is what lets someone switch auto-colour on without first
+    // being sent to build a palette.
+    expect(activeSpace(normalizeSettings({ theme: 'dark' })).colorPalette.length).toBeGreaterThan(0)
+  })
+
+  it('keeps an EMPTY palette empty', () => {
+    // The distinction the line above turns on. An empty array is a decision the
+    // user made with the remove buttons; refilling it from the defaults would
+    // make clearing the palette look like a bug in the clear button. The
+    // settings page offers "Restore the starter set" for going back.
+    expect(activeSpace(normalizeSettings({ colorPalette: [] })).colorPalette).toEqual([])
+  })
+
+  it('drops junk from a palette rather than rejecting the space around it', () => {
+    const s = activeSpace(normalizeSettings({ colorPalette: ['#fff', 'banana', '#FFFFFF', '#0a0a0a'] }))
+    expect(s.colorPalette).toEqual(['#ffffff', '#0a0a0a'])
+  })
+
+  it('falls back on an out-of-range colour style', () => {
+    expect(activeSpace(normalizeSettings({ colorStyle: 'sideways' })).colorStyle).toBe(
+      DEFAULT_SPACE.colorStyle
+    )
   })
 })
 

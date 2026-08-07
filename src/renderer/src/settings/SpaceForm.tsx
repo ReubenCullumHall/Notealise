@@ -1,11 +1,12 @@
 import { Icon } from '../icons'
 import { ToggleRow } from './primitives'
 import { Disclosure, SpaceAppearance, SpaceArranging, SpaceShortcuts } from './Spaces'
+import { SpaceColour } from './SpaceColour'
 import type { Space } from '../../../shared/settings'
 
 // Every setting that belongs to a space, in one form, rendered in two places:
 //
-//   Master settings         → writes to EVERY space at once
+//   Customisation           → writes to EVERY space at once
 //   Spaces → this space     → writes to that one
 //
 // One component, so the two can never offer different options or lay them out
@@ -34,21 +35,29 @@ const CHROME: { key: keyof Space & string; label: string; hint: string; needs?: 
     key: 'showNoteInfo',
     label: 'Show when it was last edited',
     hint: 'Puts the time beside the word count, on your machine’s clock. Hover it for the full dates, including when the note was created.'
+  },
+  {
+    key: 'markdownPro',
+    label: 'Markdown pro',
+    hint: 'Puts a button in the bottom-right corner of every note that switches between the formatted view and the raw Markdown — every asterisk, hash and table pipe visible, exactly as the file has them. Bold still looks bold and headings stay large; only the marks stop being hidden. Each note remembers which way you last looked at it.'
   }
 ]
 
 interface Props {
-  /** the space being edited — or, in master scope, the one whose values are
+  /** the space being edited — or, in whole-app scope, the one whose values are
    *  shown as the starting point */
   space: Space
   onChange: (patch: Partial<Space>) => void
-  /** true for a setting the spaces currently disagree about. Master scope only:
-   *  showing one value as though it were everyone's would be a lie, so the
+  /** true for a setting the spaces currently disagree about. Whole-app scope
+   *  only: showing one value as though it were everyone's would be a lie, so the
    *  control says so and changing it settles the disagreement. */
   differs?: (key: keyof Space) => boolean
+  /** colour the folders that already exist, across whatever this form is scoped
+   *  to — one space here, every space in the Customisation page */
+  onColorExisting: () => void
 }
 
-/** "Spaces differ" next to a control, in master scope only. */
+/** "Spaces differ" next to a control, in whole-app scope only. */
 function Differs(): React.JSX.Element {
   return (
     <span
@@ -61,7 +70,7 @@ function Differs(): React.JSX.Element {
   )
 }
 
-export function SpaceForm({ space, onChange, differs }: Props): React.JSX.Element {
+export function SpaceForm({ space, onChange, differs, onColorExisting }: Props): React.JSX.Element {
   return (
     <>
       <Disclosure label="Appearance" hint="Theme, accent colour, button edges and sidebar density">
@@ -71,6 +80,18 @@ export function SpaceForm({ space, onChange, differs }: Props): React.JSX.Elemen
           </p>
         )}
         <SpaceAppearance space={space} onChange={onChange} />
+      </Disclosure>
+
+      <Disclosure
+        label="Colour"
+        hint="Colouring notes and folders in the sidebar — how it shows, your palette, and colouring new folders automatically"
+      >
+        {differs && (['colorStyle', 'colorAuto', 'colorInherit', 'colorPalette'] as const).some(differs) && (
+          <p className="mb-2 text-[11.5px] text-ink-400">
+            Some of these differ between your spaces <Differs />
+          </p>
+        )}
+        <SpaceColour space={space} onChange={onChange} onColorExisting={onColorExisting} />
       </Disclosure>
 
       <Disclosure label="Arranging" hint="How the sidebar orders and labels things">

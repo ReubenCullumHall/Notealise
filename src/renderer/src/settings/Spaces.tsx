@@ -15,6 +15,8 @@ import { SettingRow, ToggleRow } from './primitives'
 import { ActionGrid, SlotFace } from '../editor/SlotPicker'
 import { SpaceForm } from './SpaceForm'
 import { findAction, SLOT_LABELS } from '../editor/commands'
+import { PRESET_DRAG, PresetLibrary, type PresetActions } from './Presets'
+import { ALL_PARTS, vaultName, type SpacePreset } from '../../../shared/presets'
 
 // Settings -> Spaces. Up to five presets; each carries its own look, its own
 // sidebar arranging and its own format-bar buttons, so a maths-revision space
@@ -36,12 +38,35 @@ export interface SpaceActions {
   /** send a top-level folder to the OS trash (never the app's own bin — see
    *  CLAUDE.md); returns whether it went */
   onDeleteSpace: (folder: string) => Promise<boolean>
+  /** Reload the tree, register any new top-level folder as a space, then switch
+   *  to `folder`. What an import needs when it finishes: everything it wrote
+   *  went through the vault's own echo-guard (`markWrite`), so the watcher
+   *  deliberately stays silent about the app's own writes and NOTHING would
+   *  otherwise tell the sidebar that a whole new space had appeared — the notes
+   *  were on disk but invisible until a restart. Lives here for the same reason
+   *  `onColorExistingFolders` does: it needs the tree and the active space,
+   *  which App owns. */
+  onOpenSpace: (folder: string) => Promise<void>
+  /** Colour every folder in these spaces that hasn't got a colour of its own.
+   *  What turning "colour new folders automatically" ON applies to the folders
+   *  you already have — the setting would otherwise only ever reach folders you
+   *  make from now on, which reads as it not working. Takes a list because the
+   *  same control exists in the whole-app scope, where it means every space.
+   *  Lives here rather than in the settings component because it needs the file
+   *  tree and the workspace, both of which App owns. */
+  onColorExistingFolders: (spaceFolders: string[]) => void
 }
 
 interface Props {
   settings: AppSettings
   onChange: (partial: Partial<AppSettings>) => void
   actions: SpaceActions
+  /** the saved-preset library — see Presets.tsx and shared/presets.ts */
+  presets: SpacePreset[]
+  presetActions: PresetActions
+  /** absolute path of the open vault; only its folder name is used, to tell a
+   *  preset that IS one of these spaces from one carried in from elsewhere */
+  vault: string | null
 }
 
 /** The per-space sections take the space directly; the binding to a settings
@@ -94,10 +119,20 @@ const spaceLabel = (s: Space): string => s.folder || 'Whole vault'
 
 // --- the page --------------------------------------------------------------
 
-export function Spaces({ settings, onChange, actions }: Props): React.JSX.Element {
+export function Spaces({
+  settings,
+  onChange,
+  actions,
+  presets,
+  presetActions,
+  vault
+}: Props): React.JSX.Element {
   const spaces = settings.spaces
   const space = activeSpace(settings)
   const [busy, setBusy] = useState(false)
+  /** the folder a dragged preset is currently hovering, so the tab it would
+   *  land on says so */
+  const [over, setOver] = useState<string | null>(null)
   // ONE place binds a space patch to a settings write; everything below just
   // patches the space and never has to know spaces exist.
   const patch = (p: Partial<Space>): void => onChange(withSpacePatch(settings, space.folder, p))
@@ -125,7 +160,13 @@ export function Spaces({ settings, onChange, actions }: Props): React.JSX.Elemen
       setBusy(false)
     }
   }
-  const deleteSpace = async (): Promise<void> => {
+  /** This space's own auto-saved preset, if it has one — what the delete
+   *  confirmation offers to remove alongside the folder. */
+  const ownPreset = presets.find(
+    (p) => p.name === space.folder && !!vault && p.origin === vaultName(vault)
+  )
+
+  const deleteSpace = async (alsoPreset: boolean): Promise<void> => {
     if (!space.folder) return
     setBusy(true)
     try {
@@ -133,7 +174,12 @@ export function Spaces({ settings, onChange, actions }: Props): React.JSX.Elemen
       // the same bin as an individually-trashed note is confusing. The
       // two-step button below is the confirmation.
       const ok = await actions.onDeleteSpace(space.folder)
-      if (ok) onChange(withoutSpace(settings, space.folder))
+      if (ok) {
+        onChange(withoutSpace(settings, space.folder))
+        // Only after the folder actually went: a refused delete must not take
+        // the saved look with it.
+        if (alsoPreset && ownPreset) presetActions.onDelete(ownPreset.id)
+      }
     } finally {
       setBusy(false)
     }
@@ -152,14 +198,40 @@ export function Spaces({ settings, onChange, actions }: Props): React.JSX.Elemen
         <div className="space-tabs" role="tablist" aria-label="Spaces">
           {spaces.map((s, i) => {
             const on = s.folder === space.folder
+            // Each tab is also where a saved look lands. Only a preset drag is
+            // accepted (`PRESET_DRAG`), so a tab dragged from the editor's own
+            // strip passes straight over it.
+            const canDrop = (e: React.DragEvent): boolean =>
+              !!s.folder && e.dataTransfer.types.includes(PRESET_DRAG)
             return (
               <button
                 key={s.folder}
                 role="tab"
                 aria-selected={on}
                 data-tip={spaceLabel(s)}
-                className={'space-tab' + (on ? ' on' : '')}
+                className={
+                  'space-tab' + (on ? ' on' : '') + (over === s.folder ? ' drop' : '')
+                }
                 onClick={() => onChange({ activeSpaceFolder: s.folder })}
+                onDragOver={(e) => {
+                  if (!canDrop(e)) return
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'copy'
+                  setOver(s.folder)
+                }}
+                onDragLeave={() => setOver((f) => (f === s.folder ? null : f))}
+                onDrop={(e) => {
+                  setOver(null)
+                  if (!canDrop(e)) return
+                  e.preventDefault()
+                  const id = e.dataTransfer.getData(PRESET_DRAG)
+                  const preset = presets.find((p) => p.id === id)
+                  // A drop copies the WHOLE look. There are no tick boxes on a
+                  // drag, so it must mean one predictable thing rather than
+                  // quietly inheriting whatever was last ticked in a menu the
+                  // user may never have opened.
+                  if (preset) presetActions.onApply(preset, s.folder, ALL_PARTS)
+                }}
               >
                 <span className="em">{s.emoji || i + 1}</span>
                 <span className="nm">{spaceLabel(s)}</span>
@@ -188,9 +260,16 @@ export function Spaces({ settings, onChange, actions }: Props): React.JSX.Elemen
         )}
       </section>
 
+
       <section className="settings-group">
         <h3>{spaceLabel(space)}</h3>
-        <p className="hint">Everything below belongs to this space alone.</p>
+        {/* The scope is stated rather than assumed: the settings here belong to
+            one space, but Saved presets below is a shared library, and a
+            heading claiming otherwise directly above it reads as a bug. */}
+        <p className="hint">
+          The settings below belong to this space alone. Your saved presets, at the bottom, are
+          shared — any space can use any of them.
+        </p>
 
         <SettingRow
           title="Name"
@@ -213,20 +292,45 @@ export function Spaces({ settings, onChange, actions }: Props): React.JSX.Elemen
         <SettingRow title="Representational emoji" desc="Shown on the switcher and the tab above, so you can tell them apart at a glance.">
           <EmojiPicker value={space.emoji} onPick={(emoji) => patch({ emoji })} />
         </SettingRow>
+        <div className="border-t border-ink-300/15" />
+
+        {/* Folded, and directly under the identity rows: a library of looks is
+            not what you open this page for, so it stays one click away rather
+            than sitting above the settings you came to change. */}
+        <div className="pt-3">
+          <Disclosure
+            label="Saved presets"
+            hint={
+              (presets.length === 1 ? '1 saved look' : `${presets.length} saved looks`) +
+              ', kept in the app and shared across all your spaces — apply, delete, import or share them'
+            }
+          >
+            <PresetLibrary
+              presets={presets}
+              openVault={vault ? vaultName(vault) : ''}
+              spaces={spaces}
+              actions={presetActions}
+            />
+          </Disclosure>
+        </div>
       </section>
 
       <ThemeCards space={space} onChange={patch} />
 
-      {/* The SAME form Master settings shows — one component, so "this space
+      {/* The SAME form Customisation shows — one component, so "this space
           only" and "every space" can never offer different options or lay them
           out differently. Only where the change lands differs. */}
       <div className="flex flex-col gap-2">
         <p className="px-1 text-[11.5px] leading-relaxed text-ink-400">
-          Space-specific settings. The same list is in{' '}
-          <span className="font-medium text-ink-500">Master settings</span>, where changing one
+          These belong to this space alone. The same list is in{' '}
+          <span className="font-medium text-ink-500">Customisation</span>, where changing one
           answers it for every space at once.
         </p>
-        <SpaceForm space={space} onChange={patch} />
+        <SpaceForm
+          space={space}
+          onChange={patch}
+          onColorExisting={() => actions.onColorExistingFolders([space.folder])}
+        />
       </div>
 
       <ComingSoon />
@@ -236,8 +340,13 @@ export function Spaces({ settings, onChange, actions }: Props): React.JSX.Elemen
           <p className="flex-1 text-[11.5px] leading-relaxed text-ink-400">
             Deleting a space sends its folder — and every note in it — to your computer&apos;s
             Recycle Bin, not this app&apos;s own bin. Recover it from there if you need to.
+            {ownPreset && ' Its saved look is kept unless you say otherwise.'}
           </p>
-          <DeleteSpace disabled={busy} onDelete={() => void deleteSpace()} />
+          <DeleteSpace
+            disabled={busy}
+            hasPreset={!!ownPreset}
+            onDelete={(alsoPreset) => void deleteSpace(alsoPreset)}
+          />
         </div>
       )}
     </>
@@ -366,28 +475,61 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
 }
 
 /** Two-step rather than a confirm dialog: there's no confirm primitive in the
- *  app, and window.confirm blocks the Electron renderer and looks foreign. */
+ *  app, and window.confirm blocks the Electron renderer and looks foreign.
+ *
+ *  The "and its saved look" tick appears only once armed, and only when there IS
+ *  one — a permanently visible checkbox would put a second decision in front of
+ *  a button most people press without wanting either. Unticked by default: the
+ *  library outliving a folder is the whole point of it, so throwing a look away
+ *  has to be the thing you asked for. */
 function DeleteSpace({
   disabled,
+  hasPreset,
   onDelete
 }: {
   disabled?: boolean
-  onDelete: () => void
+  hasPreset: boolean
+  onDelete: (alsoPreset: boolean) => void
 }): React.JSX.Element {
   const [armed, setArmed] = useState(false)
+  const [alsoPreset, setAlsoPreset] = useState(false)
   useEffect(() => {
     if (!armed) return
-    const t = setTimeout(() => setArmed(false), 3000)
+    const t = setTimeout(() => {
+      setArmed(false)
+      setAlsoPreset(false)
+    }, 5000)
     return () => clearTimeout(t)
   }, [armed])
   return (
-    <button
-      disabled={disabled}
-      className={'mini shrink-0' + (armed ? ' danger' : '')}
-      onClick={() => (armed ? onDelete() : setArmed(true))}
-    >
-      {armed ? 'Click again to delete' : 'Delete space'}
-    </button>
+    <span className="flex shrink-0 items-center gap-2">
+      {armed && hasPreset && (
+        <button
+          role="checkbox"
+          aria-checked={alsoPreset}
+          onClick={() => setAlsoPreset((v) => !v)}
+          className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[11.5px] text-ink-500 outline-none transition duration-150 hover:bg-brand-500/8 focus-visible:ring-2 focus-visible:ring-brand-300"
+        >
+          <span
+            aria-hidden="true"
+            className={
+              'flex h-3.5 w-3.5 items-center justify-center rounded-[4px] border ' +
+              (alsoPreset ? 'border-brand-400 bg-brand-500/25 text-brand-600' : 'border-ink-300/50')
+            }
+          >
+            {alsoPreset && <Icon name="check" className="h-3 w-3" />}
+          </span>
+          and its saved look
+        </button>
+      )}
+      <button
+        disabled={disabled}
+        className={'mini shrink-0' + (armed ? ' danger' : '')}
+        onClick={() => (armed ? onDelete(alsoPreset) : setArmed(true))}
+      >
+        {armed ? 'Click again to delete' : 'Delete space'}
+      </button>
+    </span>
   )
 }
 

@@ -2,9 +2,11 @@
 // Pure types only — safe to import from any process.
 
 import type { AppSettings } from './settings'
+import type { PresetDraft, PresetImportResult, SpacePreset } from './presets'
 import type { EntryMeta, Workspace } from './workspace'
 import type { LinkRow } from './links'
 import type { UpdatePrefs, UpdateStatus } from './update'
+import type { ImportFormat, ImportPreview, ImportProgress, ImportResult } from './notesImport'
 
 /** A node in the vault file tree. `path` is always vault-relative, POSIX-style
  *  ("/" separators), and "" denotes the vault root. */
@@ -42,15 +44,18 @@ export interface VaultApi {
   /** Recursive tree of the vault (folders first, then alphabetical). */
   listTree(): Promise<TreeNode[]>
   readNote(path: string): Promise<string>
+  /** Raw bytes of a vault file, for rendering an image inline in the editor. */
+  readAsset(path: string): Promise<Uint8Array>
   writeNote(path: string, content: string): Promise<void>
   /** Create `<dirPath>/<name>.md` ("" = vault root, name defaults to "Untitled"),
    *  or "<name> (2).md" etc. if that name's taken. The name is sanitised, so
    *  ALWAYS use the vault-relative path this returns rather than the one asked
    *  for. */
   createNote(dirPath: string, name?: string): Promise<string>
-  /** Create a "New folder" (or "New folder (2)" etc.) inside `dirPath`.
-   *  Returns the vault-relative path it landed at. */
-  createFolder(dirPath: string): Promise<string>
+  /** Create a folder inside `dirPath`, named `name` (or "New folder" when
+   *  omitted), suffixed " (2)" etc. if taken. The name is sanitised, so ALWAYS
+   *  use the vault-relative path this returns rather than the one asked for. */
+  createFolder(dirPath: string, name?: string): Promise<string>
   /** Rename/move; target segment sanitised. Migrates the entry's workspace.json
    *  key (and its descendants'). Returns the actual new rel path. */
   renameEntry(from: string, to: string): Promise<string>
@@ -62,6 +67,28 @@ export interface VaultApi {
   getSettings(): Promise<AppSettings>
   /** Merge a partial settings change; persists and returns the full result. */
   setSettings(partial: Partial<AppSettings>): Promise<AppSettings>
+
+  // --- space presets (userData/presets.json) --------------------------------
+  // The library that outlives the open vault, which is exactly why it is not
+  // stored in one. See shared/presets.ts.
+  /** Every saved look, newest first. */
+  listPresets(): Promise<SpacePreset[]>
+  /** Mirror the open vault's spaces into the library and return it. Writes only
+   *  what actually changed, so it is safe to call on every settings change.
+   *  Never deletes: a preset whose space is gone is the point of the feature. */
+  syncPresets(drafts: PresetDraft[]): Promise<SpacePreset[]>
+  /** Follow a space's folder rename, so the library keeps one row for it. */
+  renamePreset(from: string, to: string, origin: string): Promise<SpacePreset[]>
+  /** Remove one saved preset for good. */
+  deletePreset(id: string): Promise<SpacePreset[]>
+  /** Write presets to a `.mdpreset` file the user chooses — `ids` for a
+   *  selection, null for the whole library. Returns the path, or null if
+   *  cancelled. */
+  exportPresets(ids: string[] | null): Promise<string | null>
+  /** Add presets from a file. Pass nothing and main opens a picker; pass the
+   *  file's text (what a drag-and-drop already has) and it reads that. Always
+   *  ADDS — an imported look never overwrites one of yours. */
+  importPresets(text?: string): Promise<PresetImportResult>
 
   // --- workspace: order / pins / archive / bin (.mdnotes/workspace.json) -----
   /** The whole organisation sidecar for the active vault. */
@@ -108,8 +135,32 @@ export interface VaultApi {
   /** Opens the user's default mail app with a bug report pre-addressed to the
    *  support inbox. Returns false if no mail client could be opened. */
   sendBugReport(fromEmail: string, message: string): Promise<boolean>
+  /** Opens the user's default mail app with a feature request pre-addressed
+   *  to the features inbox. Returns false if no mail client could be opened. */
+  sendFeatureRequest(fromEmail: string, message: string): Promise<boolean>
+  /** Open a URL in the default browser; false if its host isn't allowlisted. */
+  openExternal(url: string): Promise<boolean>
   /** Subscribe to update state changes; returns an unsubscribe function. */
   onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
+
+  // --- notes import ------------------------------------------------------
+  /** Formats this build can import — Apple Notes only exists on macOS. */
+  importFormats(): Promise<ImportFormat[]>
+  /** Opens a native picker scoped to the format (a folder for Notion's
+   *  unzipped export, one or more .html files for HTML). Null if cancelled. */
+  importPickSource(format: ImportFormat): Promise<string[] | null>
+  /** Unpacks what was picked (a .zip) into a folder the importer can read.
+   *  Separate from the picker because it can take minutes on a big export. */
+  importPrepare(format: ImportFormat, paths: string[]): Promise<string[]>
+  /** A lightweight summary (counts/warnings) without writing anything. */
+  importPreview(format: ImportFormat, paths: string[]): Promise<ImportPreview>
+  /** Runs the import for real; everything lands in one new space. */
+  importRun(format: ImportFormat, paths: string[], spaceName: string): Promise<ImportResult>
+  /** Stop the running import at the next note boundary. What's already been
+   *  written stays, in its own space, for you to keep or delete. */
+  importCancel(): Promise<void>
+  /** Subscribe to progress pushed during a run; returns an unsubscribe function. */
+  onImportProgress(cb: (p: ImportProgress) => void): () => void
 
   /** Subscribe to external-change events; returns an unsubscribe function. */
   onVaultChanged(cb: (change: VaultChange) => void): () => void

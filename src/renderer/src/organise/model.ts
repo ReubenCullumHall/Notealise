@@ -6,6 +6,7 @@
 import type { TreeNode } from '../../../shared/types'
 import type { EntryMeta, Workspace } from '../../../shared/workspace'
 import { isSelfOrDescendant } from '../../../shared/workspace'
+import { pickAutoColor } from '../../../shared/color'
 
 export const NO_META: EntryMeta = {}
 
@@ -18,6 +19,106 @@ export function isArchived(ws: Workspace, path: string): boolean {
     if (meta.archived && isSelfOrDescendant(path, key)) return true
   }
   return false
+}
+
+/** A row's colour, and where it came from. `own` is false when the row has no
+ *  colour of its own and is showing an ancestor's. */
+export interface RowColor {
+  hex: string
+  own: boolean
+  /** the path the colour is stored on — the row itself, or the ancestor it was
+   *  inherited from. What the picker names when it says where a colour is set. */
+  from: string
+}
+
+/**
+ * What colour a row paints in.
+ *
+ * NEAREST coloured ancestor wins, unlike `isArchived` just above, where ANY
+ * flagged ancestor is enough. The difference is deliberate: archive is a yes/no
+ * that can only be turned on, so "any" is the same as "nearest", but two
+ * colours in one branch are a real disagreement — colouring `Revision` blue and
+ * `Revision/Physics` green has to mean the physics notes are green. Walking up
+ * from the row rather than scanning every entry also makes this O(depth)
+ * instead of O(entries) per row, which matters: it runs for every visible row
+ * on every sidebar render.
+ */
+export function colorOf(ws: Workspace, path: string, inherit = true): RowColor | null {
+  const own = ws.entries[path]?.color
+  if (own) return { hex: own, own: true, from: path }
+  if (!inherit) return null
+  let p = path
+  for (;;) {
+    const i = p.lastIndexOf('/')
+    if (i === -1) return null
+    p = p.slice(0, i)
+    const hex = ws.entries[p]?.color
+    if (hex) return { hex, own: false, from: p }
+  }
+}
+
+/** The colours already in use by the immediate children of `dir` — what
+ *  `pickAutoColor` avoids repeating so a new folder doesn't come out the same
+ *  colour as the one above it. */
+export function siblingColors(ws: Workspace, dir: string): string[] {
+  const prefix = dir ? dir + '/' : ''
+  const out: string[] = []
+  for (const [key, meta] of Object.entries(ws.entries)) {
+    if (!meta.color) continue
+    if (!key.startsWith(prefix)) continue
+    if (key.slice(prefix.length).includes('/')) continue // a grandchild, not a sibling
+    out.push(meta.color)
+  }
+  return out
+}
+
+/**
+ * Colours for every folder under `nodes` that hasn't got one — what switching
+ * "colour new folders automatically" ON applies to the folders you already have.
+ * Returns a `path -> hex` plan rather than writing, so the caller can do it in
+ * one round trip and so the rules below are testable without a vault.
+ *
+ * Three of them, each learned from the alternative looking wrong:
+ *  1. **A folder with its own colour is never touched.** The setting is about
+ *     folders you have not decided about; overwriting a deliberate choice
+ *     because a switch was flipped elsewhere is not something a toggle may do.
+ *  2. **Colours already assigned in THIS pass count as taken.** Without that,
+ *     every folder in a parent sees the same "used" set and the whole level
+ *     comes out one colour — the exact thing auto-colour exists to prevent.
+ *  3. **Notes are skipped.** They inherit their folder's colour; colouring each
+ *     one individually is what makes a sidebar loud rather than legible.
+ */
+export function autoColorPlan(
+  nodes: TreeNode[],
+  ws: Workspace,
+  palette: readonly string[],
+  /** the folder `nodes` are the children of — '' for the vault root */
+  rootDir = '',
+  rand: () => number = Math.random
+): Record<string, string> {
+  const plan: Record<string, string> = {}
+  if (!palette.length) return plan
+
+  const walk = (list: TreeNode[], dir: string): void => {
+    // What this level has already spoken for. It starts from the colours on
+    // disk and grows as this pass hands them out, which is rule 2: reading the
+    // used-set once per level would show every sibling the same answer and
+    // paint the whole level one colour.
+    const used = [...siblingColors(ws, dir)]
+    for (const n of list) {
+      if (n.type !== 'dir') continue
+      if (!ws.entries[n.path]?.color) {
+        const hex = pickAutoColor(palette, used, rand)
+        if (hex) {
+          plan[n.path] = hex
+          used.push(hex)
+        }
+      }
+      if (n.children) walk(n.children, n.path)
+    }
+  }
+  walk(nodes, rootDir)
+  return plan
 }
 
 /** The archived entries that are the *top* of their branch — the only ones the

@@ -9,6 +9,8 @@ export const CH = {
   createNote: 'vault:createNote',
   createFolder: 'vault:createFolder',
   renameEntry: 'vault:renameEntry',
+  /** renderer -> main: raw bytes of a vault file, for showing an image inline */
+  readAsset: 'vault:readAsset',
   /** renderer -> main: the [[wiki links]] of every note (or just the given ones) */
   scanLinks: 'vault:scanLinks',
   /** renderer -> main: read/write appearance settings (.mdnotes/settings.json) */
@@ -16,6 +18,19 @@ export const CH = {
   setSettings: 'settings:set',
   /** renderer(preload) -> main, SYNCHRONOUS: cached theme/density for pre-paint */
   settingsCache: 'settings:cache',
+  /** renderer -> main: the space-preset library (see shared/presets.ts). It
+   *  lives in the app itself (userData), never in a vault — which is what lets a
+   *  look survive changing source folder with nothing to move and nothing to ask. */
+  listPresets: 'presets:list',
+  /** mirror the open vault's spaces into the library — no "save" button */
+  syncPresets: 'presets:sync',
+  renamePreset: 'presets:rename',
+  deletePreset: 'presets:delete',
+  /** write presets to a .mdpreset file the user picks — one look, or the lot */
+  exportPresets: 'presets:export',
+  /** read one back in: the button passes nothing and main opens a picker; a
+   *  drag-and-drop passes the file's text, already read in the renderer */
+  importPresets: 'presets:import',
   /** renderer -> main: order/pins/archive/bin (.mdnotes/workspace.json) */
   getWorkspace: 'workspace:get',
   updateEntry: 'workspace:updateEntry',
@@ -36,6 +51,24 @@ export const CH = {
   getAppVersion: 'app:version',
   /** renderer -> main: open the default mail app with a pre-filled bug report */
   sendBugReport: 'app:sendBugReport',
+  /** renderer -> main: open the default mail app with a pre-filled feature request */
+  sendFeatureRequest: 'app:sendFeatureRequest',
+  /** renderer -> main: open a URL in the default browser (host-allowlisted) */
+  openExternal: 'app:openExternal',
+  /** renderer -> main: which import formats this build supports */
+  importFormats: 'import:formats',
+  /** renderer -> main: notes import — open a native picker scoped by format */
+  importPickSource: 'import:pickSource',
+  /** renderer -> main: unpack what was picked (a .zip) into a readable folder */
+  importPrepare: 'import:prepare',
+  /** renderer -> main: a lightweight summary, before anything is written */
+  importPreview: 'import:preview',
+  /** renderer -> main: run the import for real */
+  importRun: 'import:run',
+  /** renderer -> main: stop the running import at the next safe point */
+  importCancel: 'import:cancel',
+  /** main -> renderer: progress pushed during a run */
+  importProgress: 'import:progress',
   /** main -> renderer: update progress/state changed */
   updateStatus: 'update:status',
   /** main -> renderer: debounced external-change notification */

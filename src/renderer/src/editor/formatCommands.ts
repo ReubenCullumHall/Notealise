@@ -3,6 +3,7 @@ import { EditorSelection } from '@codemirror/state'
 // import means the commands can be exercised against a plain EditorState.
 import type { EditorView } from '@codemirror/view'
 import { mathInsert, toggleMarker, wrapRange, type MarkerKind, type MarkerMode } from './formatModel'
+import { emptyTable, serializeTable } from './tableModel'
 
 // Toolbar/keymap formatting. Bold/italic/strikethrough are plain Markdown;
 // underline has no Markdown syntax so it uses inline HTML (<u>), the same as
@@ -151,8 +152,31 @@ export function wikiLink(view: EditorView): void {
 
 export const horizontalRule = (view: EditorView): void => insertBlock(view, '---')
 
-/** A 2-column GFM starter table, with the first header cell selected. */
+/**
+ * A starter table: 2×2 on screen — two columns, a header row and one body row.
+ *
+ * Empty cells, not "Column | Column": the table renders as a grid you click into
+ * now, so placeholder words are text you have to delete rather than a hint. An
+ * all-empty table IS still a valid GFM table — verified against the real
+ * @lezer/markdown parser, not assumed, because an empty cell produces no
+ * `TableCell` node and it was worth checking the block still parses at all.
+ *
+ * Markdown has no table without a header row, so "2×2" is the header plus one
+ * row; the same reason the smallest table this app will shrink to is one header
+ * cell.
+ */
 export function table(view: EditorView): void {
   const br = view.state.lineBreak
-  insertBlock(view, ['| Column | Column |', '| --- | --- |', '|  |  |'].join(br), 'Column')
+  // TWO trailing line breaks, and both are load-bearing.
+  //
+  // The first ends the table: the whole block renders as a widget, so a cursor
+  // left at the end of its last row is *inside* the replaced range — invisible,
+  // and the next character typed goes into the table rather than the note.
+  //
+  // The second is the blank line that ends the table as far as MARKDOWN is
+  // concerned. Verified against the real parser: a non-blank line immediately
+  // under a table is parsed as another ROW of it (GFM continues a table until a
+  // blank line), so with only one break, typing the first word after inserting a
+  // table would silently have appended it as a row.
+  insertBlock(view, serializeTable(emptyTable(2, 1), br) + br + br)
 }

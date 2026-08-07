@@ -22,3 +22,18 @@ async function boot(): Promise<void> {
 }
 
 void boot()
+
+// A file dropped on a window that isn't expecting one makes the renderer
+// NAVIGATE to it — the whole UI replaced by a rendering of the file, with no way
+// back but restarting the app, and every unsaved buffer gone with it. That is
+// Chromium's default and it has to be turned off explicitly.
+//
+// It only started to matter when presets became importable by dropping a
+// `.mdpreset` on the library: that is the first gesture in this app that asks
+// you to drag a file onto the window at all, and a drop that misses its target
+// by a few pixels lands here. Handlers that DO want a drop (the preset library)
+// call `preventDefault` themselves and are unaffected — these listeners are on
+// `window` and run after the React tree has had its turn.
+for (const type of ['dragover', 'drop'] as const) {
+  window.addEventListener(type, (e) => e.preventDefault())
+}

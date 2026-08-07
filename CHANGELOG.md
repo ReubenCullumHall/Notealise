@@ -7,6 +7,121 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Bring notes in from other apps, in Settings -> Import (or File -> Import notes...). Pick the
+  format, choose your files, and everything lands in one new space in your vault — never mixed in
+  with the notes you already have, so an import you don't like is one space to delete
+- Import from Notion: export your workspace from Notion as Markdown & CSV, then just hand the app
+  the .zip it downloaded. It unpacks it for you, rebuilds your page hierarchy as folders, strips
+  the long ID that Notion adds to every filename, and repoints the links between your pages at
+  their new homes
+- Import from HTML: choose .html files or a whole folder of them and each page comes in as a note,
+  with headings, lists, tables and links converted to Markdown, images copied in alongside, and any
+  folders inside kept as folders
+- Import from Markdown: point it at a folder of .md files — an Obsidian vault, a Bear export,
+  anything already in Markdown — and it comes across untouched, folders and pictures included.
+  Nothing is converted, because it's already the format your notes are kept in
+- Import from Word: choose .docx files and each becomes a note, with its pictures pulled out as
+  real image files rather than buried in the text. Bold, italic, underline, highlights, tables,
+  lists and links all survive; older .doc files can't be read, so the picker won't offer them
+- Import from Google Keep: download your notes from Google Takeout, unzip it and choose the "Keep"
+  folder. Checklists keep their ticks, pictures come across, notes in the Bin are left behind, and
+  each note is filed under its first Keep label
+- Import from Apple Notes (Mac only): brings in the notes from the Notes app on your Mac, keeping
+  your folder structure. macOS asks once for permission. Notes locked with a password can't be read
+  by anything outside Apple Notes, so they're listed rather than imported
+- Imported notes keep the date they were really last edited, so they sort alongside your own notes
+  instead of all arriving as if written today
+- A long import can be stopped part-way. Whatever has already come across stays, in its own space,
+  for you to keep or delete
+- If notes you're importing already exist in your vault, the preview says so before you commit —
+  importing again makes a second copy rather than merging
+- Every import leaves an Import Report note in the new space, listing anything that was skipped or
+  that lost some formatting on the way in
+- Tables, images and tick-boxes now draw properly in the editor instead of showing their raw
+  Markdown, and web links can be clicked to open in your browser. Underlined and superscript text
+  reads as underlined and superscript rather than as visible tags
+- Add colours for notes and folders. Hover a row in the sidebar and click the circle in the buttons
+  that appear, or right-click it and choose Colour. Pick one from your palette, or any colour at all
+  from the picker — a saturation square, a hue slider and a hex box. Select several rows first and
+  they all take it at once
+- A folder's colour carries to everything inside it, so a coloured folder reads as one group.
+  Colouring a note or a subfolder directly overrides what it inherited, and the inheriting can be
+  switched off entirely
+- Choose how a colour shows, per space: a coloured tag on the six-dot handle, which marks the row
+  without recolouring it; a tinted row; or a solid row, where the whole row is the colour and the
+  name switches to black or white to stay readable against it
+- Add "Give a new folder a colour": each folder you make takes one from your palette straight away,
+  picked from the colours its neighbours aren't using, so folders look different from each other
+  without you choosing one every time. Switching it on also colours the folders you already have,
+  and never touches one you'd coloured yourself
+- Your palette starts as eight colours and holds up to twelve. Edit it in Settings -> Customisation
+  -> Colour, or save a colour into it from the picker on any row
+- Colours are kept alongside your pins and folder order, never inside your notes — the `.md` files
+  this app writes are unchanged
+- Selecting notes and folders is now a mode. Click a row's six-dot handle once, then click anywhere
+  on any other row to add it, instead of aiming at the dots every time. A folder's arrow still opens
+  it, so you can reach the notes inside; and the selection clears only on Esc or Clear, never by
+  clicking the background by mistake
+- Split Settings -> Master settings into two pages: General, for startup, dates, numbers and the
+  clock, and Customisation, for everything about how the app looks and what it shows. Customisation
+  still answers for every space at once, and links through to Spaces for setting just one
+- Every space now saves its own look as a preset, on its own — there's no button to press and
+  nothing to remember. Change a space's theme, colours, density or format buttons and its preset
+  keeps up. Find them under Settings -> Spaces -> Saved presets
+- Saved presets are kept in the app rather than in your notes folder, so switching source folder no
+  longer wipes the spaces you set up. Your looks from every folder you've opened are all there,
+  grouped by which folder they came from
+- Use a saved preset on any space: drag it onto a space at the top of the page, or open "Use on..."
+  and pick one space, all of them at once, or a brand-new space named after the preset. The folder
+  and the notes in it are never touched — only the look moves
+- Choose what a preset brings with it. Tick Appearance, Colour, Arranging, Note chrome or Format
+  buttons, so you can take one space's colours without losing your own shortcuts
+- Presets are shareable files. Export one to send to someone, or export the lot to carry your looks
+  to another machine, then drop the file onto the list or use Import. A shared preset carries no
+  trace of your folder names, and importing one never overwrites a look you already had
+- Deleting a space now offers to delete its saved preset too, rather than leaving it behind or
+  silently taking it with the folder
+- Tables now stay tables while you edit them. They no longer turn back into `| --- |` the moment
+  your cursor goes near one — click any cell and type, Tab to the next, Shift+Tab back. You never
+  see a pipe
+- Text in a table cell now wraps and the row grows taller, instead of stretching its column further
+  and further across the note
+- Hover a table for a + down its right edge and along its bottom: click to add a column or a row, or
+  drag it out for several at once and back in to remove them, down to a single cell
+- Empty rows and cells no longer look smaller than filled ones — every cell holds a full line's
+  height whether or not you've typed anything in it, so a freshly added row is just as easy to click
+- Remove a row by clearing it and pressing Backspace again, the same as an empty block in most
+  editors — no separate control sitting on every row
+- Drag a column by the small handle above it to reorder your columns, like Notion. Click the handle
+  to select the column, then Backspace or Delete to remove it
+- Set a column's alignment from the small mark in the corner of its heading — left, centred, right,
+  or none — instead of editing the dashes by hand. Alignment a note already had is kept exactly
+- `/table` and the table button now insert an empty 2x2 grid, ready to type into, instead of a table
+  full of the word "Column"
+- Add "Markdown pro" (Settings -> Customisation -> Linking content, or per space). It puts a button
+  in the bottom-right of every note that switches to the raw Markdown — every asterisk, hash and
+  table pipe visible, exactly as the file has them. Bold still looks bold and headings stay large;
+  only the hidden marks come back. Each note remembers which way you last looked at it
+- Report a bug (Settings) now goes to a real support inbox with the subject fixed to "bug report",
+  so it sorts straight into a filter instead of a placeholder address
+- Add "Request a feature", right below Report a bug in Settings — same idea, its own inbox, subject
+  fixed to "feature request"
+- The app finally has a real logo: the sidebar now shows the mark beside your vault name, switching
+  between the light and dark version to match your theme. The Dock/taskbar icon uses it too
+- Fix a setting changed just as you switch source folder being saved into the folder you moved to
+  rather than the one you changed it in — which could hand the new folder the old one's list of
+  spaces. The theme the app paints on next launch is now left alone in that moment too
+- Fix renaming a space reporting that it couldn't be renamed when the folder had in fact been
+  renamed and only its saved look hadn't followed. The rename now stands, and the message tells you
+  the look kept its old name instead of claiming the whole thing failed
+- Fix the settings gear reopening on whichever page you last jumped to from the File menu. Once that
+  window has closed the gear goes back to General, the way it does before you ever use the menu
+- Fix the outline marking the open note vanishing on sidebar rows coloured with the "solid" style:
+  on a colour close to the app's own accent there was nothing left to show which note was open
+- A table's add-row, add-column and column handles now appear when you reach them with the Tab key,
+  not only when hovered — they could be focused but stayed invisible while they were
+- Switching a note in and out of Markdown pro now tells you if the change couldn't be saved, instead
+  of the button quietly springing back with nothing said
 
 ## [0.6.0] - 2026-08-02
 - Add tabs: open several notes at once as a strip across the top of the editor. Ctrl/Cmd+click a

@@ -27,6 +27,8 @@
 // only. Unavoidable without a schema-version refusal path — documented rather
 // than engineered around.
 
+import { DEFAULT_PALETTE, normalizePalette } from './color'
+
 /** 'black' is Extra dark: the dark ramp with every surface taken to (near)
  *  pitch black, for OLED panels and dim rooms. It is a VARIANT of dark, not a
  *  third independent palette — theme.css only overrides what differs. */
@@ -37,6 +39,15 @@ export type ThemeId = 'dark' | 'light' | 'black'
 export type TextToneId = 'grey' | 'white'
 export type DensityId = 'large' | 'cozy' | 'compact' | 'ultra'
 export type AccentMode = 'text' | 'tint'
+/** Where a note's or folder's own colour is painted in the sidebar, quietest
+ *  first. 'tag' puts it on the grip — the 3×2 dot handle at the head of the row
+ *  — so the row is marked without being recoloured. 'row' washes the row at low
+ *  alpha, keeping the theme's own text colours. 'solid' fills the row with the
+ *  colour outright, and is the only one that has to restate the text colour:
+ *  the ink flips to black or white by luminance (`inkOn`), because at full
+ *  strength the theme's ramp has nothing to say about what is readable on a
+ *  colour the user chose. */
+export type ColorStyle = 'tag' | 'row' | 'solid'
 export type StartupId = 'empty' | 'last'
 export type DateFormatId = 'full' | 'short' | 'mdy' | 'dmy' | 'ymd' | 'relative'
 export type NumberFormatId = 'default' | 'comma' | 'dot'
@@ -71,6 +82,27 @@ export interface Space {
   accent: string
   /** whether the accent recolours just the text or surfaces too */
   accentMode: AccentMode
+  // --- entry colour ---
+  // The accent above is ONE colour for the whole app. These are about telling
+  // individual rows apart from each other, which is a different job: the colour
+  // lives on the entry (workspace.json's `EntryMeta.color`) and only how it is
+  // PAINTED is decided here, per space — a revision space full of subject
+  // folders wants the whole row washed, a journal wants a quiet tag or nothing.
+  /** paint an entry's colour on the grip, or across the whole row */
+  colorStyle: ColorStyle
+  /** give a folder a colour from `colorPalette` the moment it is created, so a
+   *  sidebar of folders looks different folder-to-folder with nothing assigned
+   *  by hand. Notes are deliberately NOT auto-coloured — they take their
+   *  folder's colour by inheritance, and colouring each one individually would
+   *  make the sidebar louder, not clearer. */
+  colorAuto: boolean
+  /** whether a note (or subfolder) with no colour of its own shows the nearest
+   *  coloured ancestor's. Off, only what you coloured is coloured. */
+  colorInherit: boolean
+  /** the hexes offered as quick picks and drawn from by `colorAuto`. Validated
+   *  loosely, like `accent` and `toolbarSlots`: junk entries are dropped rather
+   *  than failing the file. */
+  colorPalette: string[]
   // --- arranging ---
   /** off: folders sit above notes at each level; on: one shared drag order */
   freeArrange: boolean
@@ -91,6 +123,13 @@ export interface Space {
   showPath: boolean
   /** show when the note was made and last edited, beside its word count */
   showNoteInfo: boolean
+  /** "Markdown pro": put a button in the corner of every note that switches
+   *  between the formatted view and the raw Markdown. Per-space like the rest of
+   *  this list — a revision space full of tables wants it, a journal doesn't —
+   *  and off by default, because the button is permanent furniture for people
+   *  who never want to see a `**`. Which notes are currently RAW is not here:
+   *  that is a property of each note, and lives in workspace.json. */
+  markdownPro: boolean
   // --- shortcuts ---
   /** The four custom format-bar buttons, in bar order: [farLeft, left, right,
    *  farRight]. Each is an action id from the renderer's catalogue
@@ -104,6 +143,33 @@ export interface Space {
   pageLook: string
   font: string
   tint: string
+}
+
+/** A space's whole look, with the question of *which folder* removed — every
+ *  field of `Space` except its identity. This is what a preset carries
+ *  (`shared/presets.ts`), and what pouring one onto a space writes: the folder
+ *  and the notes in it are never part of the deal. */
+export type SpaceLook = Omit<Space, 'folder'>
+
+/** Split a space into "which folder" and "how it looks".
+ *
+ *  The arrays are copied, not handed over: guarantee 5 above ("never share a
+ *  mutable reference") applies to a look held in the preset library exactly as
+ *  it does to one held in settings — a saved look that changed under you because
+ *  the space it was taken from was edited afterwards would be a bug nothing in
+ *  the type system could see. */
+export function spaceLook(s: Space): SpaceLook {
+  const { folder: _folder, ...look } = s
+  return { ...look, toolbarSlots: [...s.toolbarSlots], colorPalette: [...s.colorPalette] }
+}
+
+/** Coerce arbitrary parsed JSON into a valid SpaceLook — a preset file read off
+ *  disk, which is as untrusted as settings.json is. Goes through the same
+ *  `normalizeSpace` the settings file does rather than repeating its field list:
+ *  a new key on `Space` must not be able to validate in one place and not the
+ *  other. The `folder` it derives is discarded, which is the whole point. */
+export function normalizeLook(raw: unknown): SpaceLook {
+  return spaceLook(normalizeSpace(raw))
 }
 
 /** The open tabs and the split, as last seen. Shape only — this file validates
@@ -157,6 +223,13 @@ export const DEFAULT_SPACE: Space = {
   density: 'cozy',
   accent: 'default',
   accentMode: 'text',
+  colorStyle: 'tag',
+  // Off by default: a fresh vault filling itself with colour nobody asked for
+  // is the app making a decision that is the user's. The palette IS pre-filled,
+  // so switching it on is one click and not "now go and build a palette".
+  colorAuto: false,
+  colorInherit: true,
+  colorPalette: [...DEFAULT_PALETTE],
   freeArrange: false,
   compactNav: false,
   showLinks: true,
@@ -166,6 +239,7 @@ export const DEFAULT_SPACE: Space = {
   // read as the feature being missing rather than switched off.
   showPath: true,
   showNoteInfo: false,
+  markdownPro: false,
   toolbarSlots: ['', '', '', ''],
   pageLook: '',
   font: '',
@@ -185,10 +259,25 @@ export const DEFAULT_SETTINGS: AppSettings = {
   timezone: 'system'
 }
 
+/** A brand-new space, defaults throughout. Every array on DEFAULT_SPACE is
+ *  copied here rather than at each call site — guarantee 5 (never share a
+ *  mutable reference with the defaults) was previously re-stated at three
+ *  places, and a fourth array added to `Space` would have had to remember all
+ *  three. */
+export function freshSpace(folder: string): Space {
+  return {
+    ...DEFAULT_SPACE,
+    toolbarSlots: [...DEFAULT_SPACE.toolbarSlots],
+    colorPalette: [...DEFAULT_SPACE.colorPalette],
+    folder
+  }
+}
+
 const THEMES: readonly ThemeId[] = ['dark', 'light', 'black']
 const TEXT_TONES: readonly TextToneId[] = ['grey', 'white']
 const DENSITIES: readonly DensityId[] = ['large', 'cozy', 'compact', 'ultra']
 const MODES: readonly AccentMode[] = ['text', 'tint']
+const COLOR_STYLES: readonly ColorStyle[] = ['tag', 'row', 'solid']
 const STARTUPS: readonly StartupId[] = ['empty', 'last']
 const DATE_FORMATS: readonly DateFormatId[] = ['full', 'short', 'mdy', 'dmy', 'ymd', 'relative']
 const NUMBER_FORMATS: readonly NumberFormatId[] = ['default', 'comma', 'dot']
@@ -208,14 +297,31 @@ function shortString(v: unknown): string {
   return typeof v === 'string' ? v.slice(0, NAME_MAX) : ''
 }
 
+/** The longest single path segment every target filesystem accepts (APFS, NTFS
+ *  and ext4 all cap a name at 255 bytes). A longer string cannot be the name of
+ *  a folder that exists, so it cannot be a space's identity either. */
+const SEGMENT_MAX_BYTES = 255
+
 /** A folder name is one path segment: no separators, no traversal. Anything
  *  else is treated as unbound ('') and `reconcileSpaces` will rebind or drop it
- *  — main validates the real path again at the fs boundary regardless. */
+ *  — main validates the real path again at the fs boundary regardless.
+ *
+ *  **`folder` is NEVER truncated.** It is the space's *identity* — the real
+ *  folder name on disk — not a label, so shortening it doesn't shorten what the
+ *  user reads, it points the space at a folder that does not exist: the sidebar
+ *  scopes to nothing and deleting the space fails with "doesn't exist". A
+ *  `NAME_MAX` (40) slice here did exactly that to every space whose name ran
+ *  long, confirmed 2026-08-05 against a real vault where
+ *  "Tracker test Meiosis, DNA and Protein synthesis" was recorded as
+ *  "Tracker test Meiosis, DNA and Protein sy". Long names are a *display*
+ *  problem, and `.space-tab` already solves it (max-width + ellipsis).
+ *  Something too long for the filesystem goes unbound like every other invalid
+ *  value here, rather than being reshaped into a plausible-looking lie. */
 function normalizeFolder(v: unknown): string {
   if (typeof v !== 'string') return ''
   const f = v.trim()
   if (!f || f === '.' || f === '..' || f.includes('/') || f.includes('\\')) return ''
-  return f.slice(0, NAME_MAX)
+  return new TextEncoder().encode(f).length > SEGMENT_MAX_BYTES ? '' : f
 }
 
 /**
@@ -256,6 +362,18 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     accentMode: MODES.includes(s.accentMode as AccentMode)
       ? (s.accentMode as AccentMode)
       : DEFAULT_SPACE.accentMode,
+    colorStyle: COLOR_STYLES.includes(s.colorStyle as ColorStyle)
+      ? (s.colorStyle as ColorStyle)
+      : DEFAULT_SPACE.colorStyle,
+    colorAuto: typeof s.colorAuto === 'boolean' ? s.colorAuto : DEFAULT_SPACE.colorAuto,
+    colorInherit: typeof s.colorInherit === 'boolean' ? s.colorInherit : DEFAULT_SPACE.colorInherit,
+    // An EMPTY palette is a real answer ("I cleared it"), so it is kept as-is
+    // rather than refilled from the default — refilling would make the clear
+    // button appear not to work. Only a MISSING key falls back, which is what
+    // carries the starter hues to a settings.json written before this feature.
+    colorPalette: Array.isArray(s.colorPalette)
+      ? normalizePalette(s.colorPalette)
+      : [...DEFAULT_SPACE.colorPalette],
     freeArrange: typeof s.freeArrange === 'boolean' ? s.freeArrange : DEFAULT_SPACE.freeArrange,
     compactNav: typeof s.compactNav === 'boolean' ? s.compactNav : DEFAULT_SPACE.compactNav,
     showLinks: chrome(s.showLinks, legacy.showLinks, DEFAULT_SPACE.showLinks),
@@ -263,6 +381,7 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     showPath: chrome(s.showPath, legacy.showPath, DEFAULT_SPACE.showPath),
     showNoteInfo:
       typeof s.showNoteInfo === 'boolean' ? s.showNoteInfo : DEFAULT_SPACE.showNoteInfo,
+    markdownPro: typeof s.markdownPro === 'boolean' ? s.markdownPro : DEFAULT_SPACE.markdownPro,
     toolbarSlots: normalizeSlots(s.toolbarSlots),
     pageLook: shortString(s.pageLook),
     font: shortString(s.font),
@@ -398,7 +517,7 @@ export function reconcileSpaces(s: AppSettings, folders: readonly string[]): Par
   }
   for (const folder of free) {
     if (next.length >= SPACE_CAP) break
-    next.push({ ...DEFAULT_SPACE, toolbarSlots: [...DEFAULT_SPACE.toolbarSlots], folder })
+    next.push(freshSpace(folder))
   }
   // Nothing to bind to — a vault whose top level holds only notes, or whose last
   // space folder was just deleted. Keep ONE space as the whole-vault space
@@ -462,7 +581,7 @@ export function withNewSpace(s: AppSettings, folder: string): Partial<AppSetting
     return { spaces: [{ ...s.spaces[0], folder }], activeSpaceFolder: folder }
   }
   if (s.spaces.length >= SPACE_CAP) return {}
-  const space: Space = { ...DEFAULT_SPACE, toolbarSlots: [...DEFAULT_SPACE.toolbarSlots], folder }
+  const space: Space = freshSpace(folder)
   return { spaces: [...s.spaces, space], activeSpaceFolder: folder }
 }
 
@@ -531,8 +650,7 @@ export function settingsFromThemeCache(c: ThemeCache): AppSettings {
     ...DEFAULT_SETTINGS,
     spaces: [
       {
-        ...DEFAULT_SPACE,
-        toolbarSlots: [...DEFAULT_SPACE.toolbarSlots],
+        ...freshSpace(DEFAULT_SPACE.folder),
         theme: c.theme,
         density: c.density,
         textTone: c.textTone,
