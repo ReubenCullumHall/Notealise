@@ -7,6 +7,8 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+
+## [0.7.0] - 2026-08-08
 - Bring notes in from other apps, in Settings -> Import (or File -> Import notes...). Pick the
   format, choose your files, and everything lands in one new space in your vault — never mixed in
   with the notes you already have, so an import you don't like is one space to delete
