@@ -502,13 +502,13 @@ function UpdatesSection(): React.JSX.Element {
       case 'checking':
         return 'Checking…'
       case 'none':
-        return "You're on the latest version."
+        return "You're up to date."
       case 'available':
-        return `Version ${status.version} is available.`
+        return 'An update is available.'
       case 'downloading':
-        return `Downloading ${status.version}… ${status.percent ?? 0}%`
+        return `Downloading update… ${status.percent ?? 0}%`
       case 'ready':
-        return `Version ${status.version} is ready — restart to apply.`
+        return 'An update is ready — restart to apply.'
       case 'error':
         return `Couldn't check: ${status.message ?? 'unknown error'}`
       case 'unsupported':
@@ -523,8 +523,10 @@ function UpdatesSection(): React.JSX.Element {
       <h3>Updates</h3>
       <p className="hint">
         {version
-          ? `You're running version ${version}${isBeta ? ' — a test build.' : '.'}`
-          : 'Checking your version…'}
+          ? isBeta
+            ? "You're on a test build — thanks for helping try things early."
+            : "You're all set."
+          : 'Checking for updates…'}
       </p>
 
       <div className="mode-row">

@@ -21,14 +21,12 @@ export function UpdateBanner({ status, canSelfUpdate }: Props): React.JSX.Elemen
     return null
   }
 
-  const v = status.version ? `v${status.version}` : 'A new version'
-
   if (status.state === 'downloading') {
     return (
       <div className="fade-in mb-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] leading-snug text-brand-600">
         <span className="flex items-center gap-1.5">
           <Icon name="restore" className="h-3.5 w-3.5" />
-          Downloading {v}
+          Downloading update
           {typeof status.percent === 'number' ? ` · ${status.percent}%` : '…'}
         </span>
         {/* a hairline progress track, so a 100 MB download doesn't look stalled */}
@@ -45,7 +43,7 @@ export function UpdateBanner({ status, canSelfUpdate }: Props): React.JSX.Elemen
   if (status.state === 'ready') {
     return (
       <div className="fade-in mb-2 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] leading-snug text-brand-600">
-        <span className="flex-1">{v} is ready</span>
+        <span className="flex-1">Update ready</span>
         <button
           onClick={() => window.api.installUpdate()}
           className="rounded border-none bg-transparent px-1.5 py-0.5 font-medium text-brand-600 outline-none transition-colors hover:bg-transparent hover:underline"
@@ -60,7 +58,7 @@ export function UpdateBanner({ status, canSelfUpdate }: Props): React.JSX.Elemen
   // platform can't self-update and the only route is the releases page.
   return (
     <div className="fade-in mb-2 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] leading-snug text-brand-600">
-      <span className="flex-1">{v} available</span>
+      <span className="flex-1">Update available</span>
       <button
         onClick={() => (canSelfUpdate ? void window.api.downloadUpdate() : window.api.openReleases())}
         className="rounded border-none bg-transparent px-1.5 py-0.5 font-medium text-brand-600 outline-none transition-colors hover:bg-transparent hover:underline"

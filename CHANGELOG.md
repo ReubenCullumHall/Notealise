@@ -8,6 +8,13 @@ enough for a solo project). History before this file existed lives in the `v*` g
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-08
+- Settings and the update banner no longer show the app's version number — an update now just says
+  it's available/downloading/ready, so a new release feels like a new update rather than a number
+  going up
+- The app icon's document glyph is bigger within its card, so it doesn't look undersized next to
+  other apps in the taskbar/dock
+
 ## [0.7.0] - 2026-08-08
 - Bring notes in from other apps, in Settings -> Import (or File -> Import notes...). Pick the
   format, choose your files, and everything lands in one new space in your vault — never mixed in
