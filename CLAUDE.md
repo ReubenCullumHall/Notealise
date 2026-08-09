@@ -414,6 +414,20 @@ Actions builds the NSIS `.exe` + the `.dmg`, and — because `electron-builder.y
 whole ~103 MB). Installed apps poll that feed; the download page keys off the same
 `releases/latest`. One tag updates both.
 
+**Renaming the product (`productName` and/or `appId` in `electron-builder.yml`) breaks
+auto-update for already-installed copies, and is not a code bug.** Confirmed on v0.8.0's
+Notes→Notealise rename (2026-08-09): electron-builder derives the Windows NSIS per-user registry
+GUID from `appId`, so a build with a new `appId` is NOT recognized as an upgrade of the old
+install — it silently adds a **second** Add/Remove Programs entry alongside the old one, and both
+entries' uninstallers point at the SAME shared install folder (the folder name tracked the npm
+`name` field, not `productName`, so it didn't change). Left alone, uninstalling the stale old entry
+deletes that shared folder and takes the new install down with it. After any rename release: check
+`HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*` for a stale entry with the old
+`DisplayName`, delete that key and its `Uninstall <old name>.exe` stub, and leave the new entry
+alone. Also: installs on OTHER machines will not silently update themselves across a rename — they
+need a manual reinstall of the new installer. Auto-update resumes normally on the release after
+that, once `appId` is stable again.
+
 **macOS cannot auto-update, and it is not a code bug.** `electron-builder.yml` sets
 `identity: null`, and Squirrel.Mac *refuses to apply an unsigned update* — a signature check, not
 a dismissible warning. There is also no `latest-mac.yml` and no `.zip` (mac updates need a zip;
