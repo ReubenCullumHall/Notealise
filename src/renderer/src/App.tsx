@@ -85,6 +85,17 @@ const baseName = (osPath: string): string => osPath.split(/[\\/]/).filter(Boolea
 const stripMd = (s: string): string => (s.toLowerCase().endsWith('.md') ? s.slice(0, -3) : s)
 const countWords = (t: string): number => (t.trim().match(/\S+/g) ?? []).length
 
+// Steps up to the nearest shared ancestor folder, then back down — 0 for two
+// notes in the same folder, 1 for parent/child, etc. Used to bias search
+// results toward whatever folder you're currently working in.
+const folderDistance = (a: string, b: string): number => {
+  const as = a.split('/').filter(Boolean)
+  const bs = b.split('/').filter(Boolean)
+  let shared = 0
+  while (shared < as.length && shared < bs.length && as[shared] === bs[shared]) shared++
+  return as.length - shared + (bs.length - shared)
+}
+
 const EMPTY_WS: Workspace = { entries: {}, trash: [] }
 
 /** The placeholder command row has no editor behind it; its buttons are inert
@@ -147,10 +158,12 @@ export default function App(): React.JSX.Element {
   // the app, so a vault switch neither moves it nor has anything to ask.
   const [presets, setPresets] = useState<SpacePreset[]>([])
   // Search (spotlight pill). `deep` also matches note contents, not just titles;
-  // `withArchived` lets shelved notes back into the results.
+  // `withArchived` lets shelved notes back into the results; `allSpaces` widens
+  // the index from the active space to the whole vault.
   const [query, setQuery] = useState('')
   const [deep, setDeep] = useState(false)
   const [withArchived, setWithArchived] = useState(false)
+  const [allSpaces, setAllSpaces] = useState(false)
   const [cacheVersion, setCacheVersion] = useState(0)
   const contentCache = useRef<Map<string, string>>(new Map())
   // Every note's outgoing [[links]], as main last read them off disk. The
@@ -1320,11 +1333,12 @@ export default function App(): React.JSX.Element {
   }, [flush])
 
   // --- search ---------------------------------------------------------------
-  // Every note in the vault, flattened and tagged with whether it's archived.
-  // Search covers what the sidebar covers: the active space, plus the loose
-  // notes shown alongside it. Searching the whole vault would hand back results
-  // the sidebar can't show and can't highlight — you'd open a note that appears
-  // to be in no folder at all.
+  // Every note the search can currently reach, flattened and tagged with
+  // whether it's archived and which space owns it. By default that's what the
+  // sidebar covers — the active space, plus the loose notes shown alongside it
+  // — since the sidebar can't show or highlight a result from elsewhere. The
+  // `allSpaces` toggle widens the walk to the whole vault; `spaceOf` (used
+  // elsewhere for link-following) says which space each hit lands back in.
   const allNotes = useMemo<SearchHit[]>(() => {
     const out: SearchHit[] = []
     const walk = (nodes: TreeNode[]): void => {
@@ -1333,15 +1347,20 @@ export default function App(): React.JSX.Element {
           out.push({
             path: n.path,
             title: stripMd(nameOf(n.path)),
-            archived: isArchived(workspace, n.path)
+            archived: isArchived(workspace, n.path),
+            spaceFolder: spaceOf(n.path)
           })
         } else if (n.children) walk(n.children)
       }
     }
-    walk(spaceTree)
-    walk(looseNotes)
+    if (allSpaces) {
+      walk(tree)
+    } else {
+      walk(spaceTree)
+      walk(looseNotes)
+    }
     return out
-  }, [spaceTree, looseNotes, workspace])
+  }, [allSpaces, tree, spaceTree, looseNotes, workspace])
 
   // Deep search reads every note's contents once (lazily, cached), then bumps a
   // version so the hit list recomputes. Titles are always searched instantly.
@@ -1393,15 +1412,46 @@ export default function App(): React.JSX.Element {
         hits.push({ ...n, snippet })
       }
     }
-    return hits
-  }, [query, deep, withArchived, allNotes, cacheVersion])
+    // No open note means no "where you're working" to be close to — leave the
+    // default (tree) order alone. Otherwise a stable sort nudges hits that
+    // share a folder with the open note ahead of ones that don't, without
+    // hiding anything the plain substring match already found.
+    if (openPath) {
+      const home = parentOf(openPath)
+      hits.sort((a, b) => folderDistance(parentOf(a.path), home) - folderDistance(parentOf(b.path), home))
+    }
+    // Tag hits that live outside the active space — only meaningful once
+    // search has actually widened past it. Builds fresh objects rather than
+    // mutating `n` in place, since title-match hits above are `allNotes`
+    // entries by reference and those are cached across renders.
+    if (!allSpaces) return hits
+    return hits.map((h) => {
+      if (h.spaceFolder === space.folder) return h
+      const sp = settings.spaces.find((s) => s.folder === h.spaceFolder)
+      const tag = h.spaceFolder ? (sp?.emoji ? `${sp.emoji} ${h.spaceFolder}` : h.spaceFolder) : 'Loose notes'
+      return { ...h, spaceTag: tag }
+    })
+  }, [query, deep, withArchived, allNotes, cacheVersion, openPath, allSpaces, space.folder, settings.spaces])
+
+  // Shown in the results header so the reordering isn't invisible — only when
+  // it actually did something (an open note outside the space root).
+  const searchContextLabel = openPath ? nameOf(parentOf(openPath)) || null : null
 
   // The new column arrives empty and asks what goes in it, so the only thing
   // that can stop it is the cap — no second note required.
   const canSplit = layout.panes.length < MAX_PANES
 
   const openSearchResult = (h: SearchHit, newTab = false): void => {
-    void openNote(h.path, newTab)
+    void (async () => {
+      // An all-spaces hit from elsewhere: land in its space first (same
+      // ordering as following a cross-space `[[link]]`, see `openLink`) so the
+      // note opens into a layout the sidebar is actually showing.
+      const owner = h.spaceFolder
+      if (owner && owner !== space.folder && settings.spaces.some((s) => s.folder === owner)) {
+        await switchSpace(owner)
+      }
+      await openNote(h.path, newTab)
+    })()
     setQuery('')
   }
 
@@ -1465,7 +1515,10 @@ export default function App(): React.JSX.Element {
         onToggleDeep={() => setDeep((d) => !d)}
         withArchived={withArchived}
         onToggleWithArchived={() => setWithArchived((a) => !a)}
+        allSpaces={allSpaces}
+        onToggleAllSpaces={() => setAllSpaces((a) => !a)}
         searchHits={searchHits}
+        searchContextLabel={searchContextLabel}
         onOpenSearchHit={openSearchResult}
         revealRef={revealRef}
         update={update}

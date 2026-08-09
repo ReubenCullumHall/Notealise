@@ -38,6 +38,10 @@ export type ThemeId = 'dark' | 'light' | 'black'
  *  contrast. Ignored by the light theme, which has no white to give. */
 export type TextToneId = 'grey' | 'white'
 export type DensityId = 'large' | 'cozy' | 'compact' | 'ultra'
+/** How wide the editor's text column is allowed to grow. 'normal' is the
+ *  long-standing reading width; 'wide' and 'full' trade line length for using
+ *  more of a large monitor, which 'normal' leaves as empty space either side. */
+export type EditorWidthId = 'normal' | 'wide' | 'full'
 export type AccentMode = 'text' | 'tint'
 /** Where a note's or folder's own colour is painted in the sidebar, quietest
  *  first. 'tag' puts it on the grip — the 3×2 dot handle at the head of the row
@@ -56,9 +60,10 @@ export type NumberFormatId = 'default' | 'comma' | 'dot'
  *  right of it. Fixed at four so the bar's shape never depends on the file. */
 export const TOOLBAR_SLOTS = 4
 
-/** How many spaces a vault may have. Capped so the sidebar switcher stays a
- *  glanceable row of emoji rather than a crowded strip. */
-export const SPACE_CAP = 7
+/** How many spaces a vault may have. Capped so the sidebar switcher stays
+ *  glanceable — up to two rows of five emoji (see the switcher in Sidebar.tsx)
+ *  rather than a crowded strip. */
+export const SPACE_CAP = 10
 
 /** One space: a top-level vault folder, plus how the app looks while you're in
  *  it. */
@@ -78,6 +83,9 @@ export interface Space {
   buttonDefinition: boolean
   /** how tightly the sidebar packs rows */
   density: DensityId
+  /** how wide the editor's text column grows — the sidebar and note chrome are
+   *  unaffected, this is only the writing area itself */
+  editorWidth: EditorWidthId
   /** accent id from the renderer palette; 'default' means no accent */
   accent: string
   /** whether the accent recolours just the text or surfaces too */
@@ -99,6 +107,11 @@ export interface Space {
   /** whether a note (or subfolder) with no colour of its own shows the nearest
    *  coloured ancestor's. Off, only what you coloured is coloured. */
   colorInherit: boolean
+  /** turn a coloured row's opacity down once it's nested inside a folder — the
+   *  colour itself is untouched (same hue, same saturation), only how strongly
+   *  it's painted. Off by default: a coloured row reads the same whether it's
+   *  top-level or nested unless this is deliberately switched on. */
+  colorFadeNested: boolean
   /** the hexes offered as quick picks and drawn from by `colorAuto`. Validated
    *  loosely, like `accent` and `toolbarSlots`: junk entries are dropped rather
    *  than failing the file. */
@@ -221,6 +234,7 @@ export const DEFAULT_SPACE: Space = {
   textTone: 'grey',
   buttonDefinition: false,
   density: 'cozy',
+  editorWidth: 'normal',
   accent: 'default',
   accentMode: 'text',
   colorStyle: 'tag',
@@ -229,6 +243,7 @@ export const DEFAULT_SPACE: Space = {
   // so switching it on is one click and not "now go and build a palette".
   colorAuto: false,
   colorInherit: true,
+  colorFadeNested: false,
   colorPalette: [...DEFAULT_PALETTE],
   freeArrange: false,
   compactNav: false,
@@ -276,6 +291,7 @@ export function freshSpace(folder: string): Space {
 const THEMES: readonly ThemeId[] = ['dark', 'light', 'black']
 const TEXT_TONES: readonly TextToneId[] = ['grey', 'white']
 const DENSITIES: readonly DensityId[] = ['large', 'cozy', 'compact', 'ultra']
+const EDITOR_WIDTHS: readonly EditorWidthId[] = ['normal', 'wide', 'full']
 const MODES: readonly AccentMode[] = ['text', 'tint']
 const COLOR_STYLES: readonly ColorStyle[] = ['tag', 'row', 'solid']
 const STARTUPS: readonly StartupId[] = ['empty', 'last']
@@ -358,6 +374,9 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     buttonDefinition:
       typeof s.buttonDefinition === 'boolean' ? s.buttonDefinition : DEFAULT_SPACE.buttonDefinition,
     density: DENSITIES.includes(s.density as DensityId) ? (s.density as DensityId) : DEFAULT_SPACE.density,
+    editorWidth: EDITOR_WIDTHS.includes(s.editorWidth as EditorWidthId)
+      ? (s.editorWidth as EditorWidthId)
+      : DEFAULT_SPACE.editorWidth,
     accent: typeof s.accent === 'string' && s.accent ? s.accent : DEFAULT_SPACE.accent,
     accentMode: MODES.includes(s.accentMode as AccentMode)
       ? (s.accentMode as AccentMode)
@@ -367,6 +386,8 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
       : DEFAULT_SPACE.colorStyle,
     colorAuto: typeof s.colorAuto === 'boolean' ? s.colorAuto : DEFAULT_SPACE.colorAuto,
     colorInherit: typeof s.colorInherit === 'boolean' ? s.colorInherit : DEFAULT_SPACE.colorInherit,
+    colorFadeNested:
+      typeof s.colorFadeNested === 'boolean' ? s.colorFadeNested : DEFAULT_SPACE.colorFadeNested,
     // An EMPTY palette is a real answer ("I cleared it"), so it is kept as-is
     // rather than refilled from the default — refilling would make the clear
     // button appear not to work. Only a MISSING key falls back, which is what

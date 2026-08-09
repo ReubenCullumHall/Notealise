@@ -63,7 +63,12 @@ interface Props {
   onToggleDeep: () => void
   withArchived: boolean
   onToggleWithArchived: () => void
+  allSpaces: boolean
+  onToggleAllSpaces: () => void
   searchHits: SearchHit[] | null
+  /** name of the folder the results are being biased toward, for the results
+   *  header; null when nothing's open to be close to. */
+  searchContextLabel: string | null
   onOpenSearchHit: (hit: SearchHit, newTab?: boolean) => void
   update: UpdateStatus
   /** Handed a function that opens one folder and closes the rest. An imperative
@@ -192,7 +197,10 @@ export function Sidebar({
   onToggleDeep,
   withArchived,
   onToggleWithArchived,
+  allSpaces,
+  onToggleAllSpaces,
   searchHits,
+  searchContextLabel,
   onOpenSearchHit,
   update,
   revealRef,
@@ -340,6 +348,7 @@ export function Sidebar({
     freeArrange: space.freeArrange,
     colorStyle: space.colorStyle,
     colorInherit: space.colorInherit,
+    colorFadeNested: space.colorFadeNested,
     selection,
     onSelectionChange: setSelection,
     dragging,
@@ -399,6 +408,8 @@ export function Sidebar({
         onToggleDeep={onToggleDeep}
         withArchived={withArchived}
         onToggleWithArchived={onToggleWithArchived}
+        allSpaces={allSpaces}
+        onToggleAllSpaces={onToggleAllSpaces}
       />
 
       {/* hidden in the shelf views: nothing here applies to them */}
@@ -454,6 +465,27 @@ export function Sidebar({
           onContextMenu={(e) => {
             if (e.target === e.currentTarget) actions.onContext(e, null)
           }}
+          // Catches a drag released in the dead space below the rendered rows —
+          // each TreeView's own box is only as tall as its content, so the rest
+          // of this scrollable pane (often most of the sidebar) had no drop
+          // target at all. Any row or TreeView background that already claimed
+          // the drag calls stopPropagation in its own onDrop, so this only fires
+          // when nothing more specific did — i.e. genuinely empty space. Drops
+          // land in the active space's root, same as dragging above the first row.
+          onDragOver={(e) => {
+            if (inArchive || inBin || searching || !dragging) return
+            if (dragging.some((p) => activeSpaceFolder === p || activeSpaceFolder.startsWith(p + '/')))
+              return
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+          }}
+          onDrop={(e) => {
+            if (inArchive || inBin || searching || !dragging) return
+            e.preventDefault()
+            actions.onMove(dragging, activeSpaceFolder, null, false)
+            setDragging(null)
+            clearSel()
+          }}
         >
           {/* a search always searches everywhere, so it outranks the shelf views */}
           {searching ? (
@@ -463,6 +495,7 @@ export function Sidebar({
               onOpen={onOpenSearchHit}
               deep={deep}
               archivedCount={searchHits.filter((h) => h.archived).length}
+              contextLabel={searchContextLabel}
             />
           ) : inBin ? (
             workspace.trash.length ? (
@@ -629,9 +662,11 @@ export function Sidebar({
         <UpdateBanner status={update} canSelfUpdate={update.state !== 'unsupported'} />
 
         {/* The space switcher, directly above "Switch folder": one row of
-            emoji, one per top-level folder. Deliberately a horizontal strip
-            *inside* the sidebar footer and not a vertical rail beside the tree
-            — the rail is the shape that was removed in 2026-07-25 (CLAUDE.md).
+            emoji, one per top-level folder (up to SPACE_CAP = 10), wrapping
+            once the sidebar isn't wide enough to fit them all on one line.
+            Deliberately a horizontal strip *inside* the sidebar footer and not
+            a vertical rail beside the tree — the rail is the shape that was
+            removed in 2026-07-25 (CLAUDE.md).
             Hidden entirely when the vault has no spaces, so a flat vault shows
             no dead control. */}
         {/* A single unbound space means "the whole vault" — there is nothing to

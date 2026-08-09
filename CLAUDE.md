@@ -215,7 +215,7 @@ script-made notes are NOT representative of typed ones). Treat a first failure i
 gives a note's `body` as HTML, so the whole reverse-engineered-protobuf problem disappears, and it
 needs only the ordinary Automation consent rather than Full Disk Access — which matters because this
 app is unsigned, and TCC keys Full Disk Access on the code signature. Address Notes by **bundle id**
-(`com.apple.Notes`): this app's own productName is "Notes". macOS-only in two layers — the runtime
+(`com.apple.Notes`): this app's own productName is "Notealise". macOS-only in two layers — the runtime
 guard (never registered off darwin) and `__MAC_BUILD__` in `electron.vite.config.ts`, which lets
 rollup drop the module from the Windows bundle. It IS dropped: verified by building with the flag
 false and confirming the chunk is not emitted. The dynamic `import()` is load-bearing — a static one
@@ -376,6 +376,19 @@ is built AND the user has verified it works in the **live Electron app** (`npm r
 kept, append one line to `Unreleased` in the same terse, user-facing style as past tag messages
 (e.g. "Add KaTeX inline math rendering in the editor"). Don't log automatically and don't log on
 the strength of unit tests alone — this is specifically gated on the user's own live-app check.
+
+**"Log that" / "log that change" (or close wording) is a two-part default, not just the changelog
+line.** Reuben says this right before clearing the chat, so treat it as the session-end ritual:
+
+1. Append the one-line entry to `CHANGELOG.md`'s `Unreleased`, as above, for the feature/change just
+   built and verified in the live Electron app.
+2. **Scan the conversation for anything worth keeping that lives outside the diff** — a decision, a
+   constraint, a "cost a rewrite" gotcha, a rule the user stated out loud — and fold anything that
+   qualifies into this file before the context clears, since git history and the code itself won't
+   carry the *why*. If nothing in the conversation clears that bar, say so rather than skipping the
+   check silently.
+
+Do both halves without being asked separately; that's the whole point of the shorthand.
 
 When the user says "push the latest update" (or similar — see the ritual below), read
 `Unreleased` first, sanity-check it against `git status` and `git log vX.Y.Z..HEAD --stat` (cheap
@@ -564,9 +577,11 @@ accent, density, arranging, the four format-bar buttons — so a maths-revision 
 formula shortcut while a journal space doesn't. Make a folder in Explorer and it becomes a space;
 delete one there and it stops being one (`reconcileSpaces`, run on every tree load). Switching space
 re-scopes the sidebar to that folder's subtree, and **new notes and folders land inside the active
-space, not at the vault root** (`inSpace()` in `App.tsx`). Cap is **7**, so the switcher stays a
-glanceable row. The switcher itself is a horizontal strip in the sidebar footer, above "Switch
-folder".
+space, not at the vault root** (`inSpace()` in `App.tsx`). Cap is **10**, so the switcher stays
+glanceable rather than a crowded strip. It wraps like ordinary text — same-size emoji buttons,
+however many fit the sidebar's current width per row — rather than a fixed count per row; a wider
+sidebar fits more on one line, a narrower one wraps sooner. The switcher itself is a horizontal
+strip in the sidebar footer, above "Switch folder".
 
 **History, and what is actually banned.** An earlier version (removed 2026-07-25) hoisted top-level
 folders into an **Arc-style vertical rail beside the tree**. That was pulled because the surrounding
@@ -935,12 +950,22 @@ watcher, so binned entries leave the tree for free. Still pending:
   height. The row gives the gutter out of padding it already has, which is why `--row-gutter` is
   capped below `--row-py` (a negative padding invalidates the declaration outright).
   Two consequences: an **inset** box-shadow is clipped to the padding box so the leading edge bar and
-  the selection ring align for free, while an **outline** tracks the border box and needs
-  `outline-offset: calc(-1px - var(--row-gutter))`. And every painted rule sets `background-color`,
-  **never the `background` shorthand — the shorthand resets `background-clip` to `border-box`** and
-  silently undoes the whole thing from a line that looks like it only picks a colour. That one cost a
-  debugging pass: the border and padding were right in the computed styles and the gap just wasn't
-  there.
+  the selection ring align for free, and **every ring on a painted row is an inset box-shadow, never
+  `outline`** (fixed 2026-08-08). `outline` was tried first with a matching negative
+  `outline-offset: calc(-1px - var(--row-gutter))` to sit inside the colour, and the offset alone
+  looked right in isolation — but `outline` does not shrink its corner radius to match a negative
+  offset, so on these stadium-rounded rows the ring's corners stayed at the *outer* radius while the
+  ring itself moved inward, pulling away from the fill at the rounded ends and leaving a visible
+  crescent of colour there (worse at higher density, where `--row-radius` is larger relative to
+  `--row-gutter`). An inset box-shadow's corners shrink together with its offset, so it stays flush at
+  every density with no extra math. Every combination of `.tint-row`/`.tint-solid` with `.is-open`
+  and/or `.row-picked` therefore needs its own rule spelling out the full `box-shadow` value — the
+  property doesn't merge across separate selectors of equal specificity the way `outline` (a distinct
+  property from `box-shadow`) could sit alongside `row-picked`'s box-shadow for free. And every painted
+  rule sets `background-color`, **never the `background` shorthand — the shorthand resets
+  `background-clip` to `border-box`** and silently undoes the whole thing from a line that looks like
+  it only picks a colour. That one cost a debugging pass: the border and padding were right in the
+  computed styles and the gap just wasn't there.
   The paint is `.tint-tag` / `.tint-row` / `.tint-solid` in `app.css`,
   fed by two inline custom properties — `--row-rgb` and `--row-ink` — because the value is user
   data while the styling stays in the stylesheet (rule 5). **`rowClass` opts out of

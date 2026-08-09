@@ -65,13 +65,18 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     </>
   ),
   grip: (
+    // r=1.35 rendered crisp dots as fuzzy anti-aliased blobs once the row's icon
+    // box dropped below ~15px — which nested rows do by default (theme.css) — so
+    // the six dots read as a grey smear rather than a grip. 1.7 keeps a visible
+    // gap between dots (spacing here is 6 units) while giving each one enough
+    // area to survive scaling down.
     <g fill="currentColor" stroke="none">
-      <circle cx="9" cy="6" r="1.35" />
-      <circle cx="9" cy="12" r="1.35" />
-      <circle cx="9" cy="18" r="1.35" />
-      <circle cx="15" cy="6" r="1.35" />
-      <circle cx="15" cy="12" r="1.35" />
-      <circle cx="15" cy="18" r="1.35" />
+      <circle cx="9" cy="6" r="1.7" />
+      <circle cx="9" cy="12" r="1.7" />
+      <circle cx="9" cy="18" r="1.7" />
+      <circle cx="15" cy="6" r="1.7" />
+      <circle cx="15" cy="12" r="1.7" />
+      <circle cx="15" cy="18" r="1.7" />
     </g>
   ),
   plus: <path d="M12 5v14M5 12h14" />,

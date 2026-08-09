@@ -8,6 +8,13 @@ export interface SearchHit {
   /** true when the hit lives in the archive — a search covers everywhere, so the
    *  row says so rather than silently mixing shelved notes into the results. */
   archived?: boolean
+  /** the top-level space folder this hit lives in ('' for loose notes) —
+   *  carried on every hit so opening one can switch spaces first, whether or
+   *  not the badge below is showing. */
+  spaceFolder?: string
+  /** emoji + name of that space, set only when it differs from the one you're
+   *  currently in — an all-spaces search result needs to say where it lives. */
+  spaceTag?: string
 }
 
 interface Props {
@@ -17,6 +24,8 @@ interface Props {
   onToggleDeep: () => void
   withArchived: boolean
   onToggleWithArchived: () => void
+  allSpaces: boolean
+  onToggleAllSpaces: () => void
 }
 
 /** One filter toggle inside the pill (legacy's `SearchToggle`). */
@@ -58,7 +67,9 @@ export function SearchBar({
   deep,
   onToggleDeep,
   withArchived,
-  onToggleWithArchived
+  onToggleWithArchived,
+  allSpaces,
+  onToggleAllSpaces
 }: Props): React.JSX.Element {
   return (
     <div className="px-3 pb-2">
@@ -69,7 +80,7 @@ export function SearchBar({
         <input
           className="min-w-0 flex-1 bg-transparent text-sm text-ink-900 outline-none placeholder:text-ink-300"
           value={query}
-          placeholder={deep ? 'Search notes' : 'Search titles'}
+          placeholder={(deep ? 'Search notes' : 'Search titles') + (allSpaces ? ', all spaces' : '')}
           onChange={(e) => onQuery(e.target.value)}
           spellCheck={false}
         />
@@ -98,6 +109,13 @@ export function SearchBar({
         >
           <Icon name="archive" className="h-4 w-4" />
         </SearchToggle>
+        <SearchToggle
+          on={allSpaces}
+          onClick={onToggleAllSpaces}
+          title={allSpaces ? 'Searching every space' : 'Searching this space only'}
+        >
+          <Icon name="spaces" className="h-4 w-4" />
+        </SearchToggle>
       </div>
     </div>
   )
@@ -110,6 +128,9 @@ interface ResultsProps {
   onOpen: (hit: SearchHit, newTab?: boolean) => void
   deep: boolean
   archivedCount: number
+  /** folder results are being biased toward (the open note's folder); null
+   *  when nothing's open, so results sit in their plain default order. */
+  contextLabel: string | null
 }
 
 /** The flat result list shown in place of the tree while a search is active. */
@@ -118,7 +139,8 @@ export function SearchResults({
   activePath,
   onOpen,
   deep,
-  archivedCount
+  archivedCount,
+  contextLabel
 }: ResultsProps): React.JSX.Element {
   if (hits.length === 0) {
     return (
@@ -133,6 +155,12 @@ export function SearchResults({
         {hits.length} result{hits.length === 1 ? '' : 's'}
         {archivedCount > 0 && (
           <span className="normal-case tracking-normal"> · {archivedCount} archived</span>
+        )}
+        {contextLabel && (
+          <span className="normal-case tracking-normal" data-tip="Closest matches to where you're working come first">
+            {' '}
+            · nearest to {contextLabel} first
+          </span>
         )}
       </p>
       {hits.map((h) => (
@@ -160,6 +188,14 @@ export function SearchResults({
             <span className="tree-title truncate font-medium text-ink-900">{h.title}</span>
             <span className="tree-sub truncate text-ink-500">{h.snippet ?? h.path}</span>
           </span>
+          {h.spaceTag && (
+            <span
+              className="tree-sub shrink-0 truncate rounded-full bg-ink-300/15 px-1.5 py-0.5 text-[11px] text-ink-500"
+              data-tip={`Lives in ${h.spaceTag} — opening it switches you there`}
+            >
+              {h.spaceTag}
+            </span>
+          )}
           {h.archived && (
             <span className="shrink-0 text-ink-400" data-tip="In the archive">
               <Icon name="archive" />

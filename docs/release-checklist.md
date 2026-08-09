@@ -31,7 +31,7 @@ Catches: logic, layout, interaction.
 ```powershell
 npm run typecheck; npm run lint; npm test
 npm run package:dir
-.\release\win-unpacked\Notes.exe
+.\release\win-unpacked\Notealise.exe
 ```
 
 `npm run dev` serves unbundled source through a dev server. Users run minified code out of an
@@ -58,20 +58,20 @@ are supposed to be absent from stable builds.
 
 - They share `userData`, so you get "Unable to move the cache" errors and can corrupt each other's
   config. Launch the test build with its own profile:
-  `.\release\win-unpacked\Notes.exe --user-data-dir=$env:TEMP\notes-test`
+  `.\release\win-unpacked\Notealise.exe --user-data-dir=$env:TEMP\notes-test`
 - **Don't check whether it booted with `Start-Process -PassThru` + `$p.HasExited`.** That reports on
   a launcher stub, not Electron's process tree, and gives both false failures *and* false passes.
   Check by path instead:
-  `Get-Process Notes | Where-Object { $_.Path -like "*win-unpacked*" }`
+  `Get-Process Notealise | Where-Object { $_.Path -like "*win-unpacked*" }`
 
 ### Gate 2 — installed
 
 ```powershell
 npm run package
-.\release\Notes-Setup.exe
+.\release\Notealise-Setup.exe
 ```
 
-Installs over your current copy, exactly as a user experiences it. **Quit Notes first** or NSIS
+Installs over your current copy, exactly as a user experiences it. **Quit Notealise first** or NSIS
 can't replace the running binary.
 
 Only gate that can test: the NSIS install, upgrade-over-existing, desktop shortcut, and
@@ -144,7 +144,7 @@ $l = Invoke-RestMethod "https://api.github.com/repos/ReubenCullumHall/Notes-app/
 $l.assets | ForEach-Object { "{0} {1:N1} MB {2}" -f $_.name, ($_.size/1MB), $_.state }
 ```
 
-All four assets (`Notes-Setup.exe`, `Notes-Setup.exe.blockmap`, `latest.yml`, `Notes.dmg`) must read
+All four assets (`Notealise-Setup.exe`, `Notealise-Setup.exe.blockmap`, `latest.yml`, `Notealise.dmg`) must read
 `uploaded` **and** `latest` must be the new tag. Only then tell anyone to download.
 
 ---

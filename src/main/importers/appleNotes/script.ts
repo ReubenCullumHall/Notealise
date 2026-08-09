@@ -1,9 +1,10 @@
 // The JXA sent to `osascript`. Kept as source strings rather than a .scpt so
 // there's nothing to build or ship alongside the bundle.
 //
-// **Addressed by bundle id, never by name.** This app's own productName is
-// "Notes" (electron-builder.yml), so `Application('Notes')` could resolve to
-// the app doing the importing instead of Apple's.
+// **Addressed by bundle id, never by name.** Apple's own app is also called
+// "Notes" in some contexts, so `Application('Notes')` could resolve
+// ambiguously — the bundle id is unambiguous regardless of what either app
+// is named.
 const APP = `Application('com.apple.Notes')`
 
 /** Folder tree + note counts. Cheap: no bodies, so a big library still answers

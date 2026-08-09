@@ -36,7 +36,10 @@ const editorTheme = EditorView.theme({
     overflow: 'auto',
     padding: '24px 0 40vh'
   },
-  '.cm-content': { maxWidth: '46rem', margin: '0 auto', padding: '0 28px' },
+  // reads the --editor-max-width set per-space by settings/model.ts's
+  // applySettings (theme.css's `[data-editor-width]` block) — Settings →
+  // Customisation/Spaces → Appearance → Editor width.
+  '.cm-content': { maxWidth: 'var(--editor-max-width, 46rem)', margin: '0 auto', padding: '0 28px' },
   '.cm-line': { padding: '0' },
   '.cm-bullet': { color: 'var(--ed-bullet)', paddingRight: '0.4em' },
   // slash-command / completion popup — ported from legacy/src/livePreview.js's

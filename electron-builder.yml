@@ -2,8 +2,8 @@
 # Windows -> NSIS .exe, macOS -> universal .dmg. Unsigned for the MVP (testers
 # click through the OS "unverified developer" warning). Artifact names are fixed
 # (no version) so the download page can link to a stable /releases/latest/download/ URL.
-appId: com.notesapp.desktop
-productName: Notes
+appId: com.notealise.desktop
+productName: Notealise
 directories:
   output: release
   buildResources: build

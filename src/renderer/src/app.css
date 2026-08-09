@@ -193,6 +193,48 @@ button.icon:hover {
    in a row (doc, folder, chevron, grip) scales together */
 .tree-row svg { width: var(--row-icon); height: var(--row-icon); }
 
+/* Rows inside an open folder run smaller than top-level rows, so a folder's
+   contents read as a distinct, tucked-away group instead of the same-size
+   list repeated at an indent. Top-level rows (no .nested) are unchanged —
+   those are the "out of a folder on purpose" rows and stay full-size. */
+.tree-row.nested { padding-top: calc(var(--row-py) * 0.7); padding-bottom: calc(var(--row-py) * 0.7); }
+.tree-row.nested .tree-title { font-weight: 500; }
+.tree-row.nested .tree-sub { display: none; }
+.tree-row.nested svg { width: calc(var(--row-icon) - 1px); height: calc(var(--row-icon) - 1px); }
+/* The grip is a control, not a type glyph — shrinking it in step with the doc/
+   folder icon is what made the six dots on a subfolder row hard to make out.
+   It stays at the un-nested size so it's exactly as legible on a subfolder as
+   on a top-level row. */
+.tree-row.nested .grip svg { width: var(--row-icon); height: var(--row-icon); }
+/* A nested row is shorter, so the top-level --row-radius (chosen against a
+   TALLER row) reads as a full stadium/pill instead of the same rounded-square
+   "squircle" the top-level rows have. Scaling it down with the row keeps the
+   corner-radius-to-height ratio close to the top-level one, at every density —
+   this is a ratio fix, not a fixed px, on purpose. Kept in step with the 0.7
+   padding factor above: if that changes, this should move with it. */
+.tree-row.nested { border-radius: calc(var(--row-radius) * 0.8); }
+
+/* Settings → Colour → "Reduce opacity for nested colours" (Space.colorFadeNested,
+   off by default). Only the ALPHA changes here — hue and saturation are exactly
+   what the user picked, at every depth — unlike an earlier version of this that
+   ran nested colour through `filter: saturate()`, which dulled the tone itself
+   rather than just letting more of the sidebar show through. Only applied when
+   this class is present, so a coloured row looks identical nested or not until
+   someone opts in. */
+.tree-row.colorFade.tint-solid { background-color: rgb(var(--row-rgb) / 0.55); }
+.tree-row.colorFade.tint-solid:hover { background-color: rgb(var(--row-rgb) / 0.68); }
+.tree-row.colorFade.tint-row { background-color: rgb(var(--row-rgb) / 0.09); }
+.tree-row.colorFade.tint-row:hover { background-color: rgb(var(--row-rgb) / 0.14); }
+.tree-row.colorFade.tint-row.row-picked { background-color: rgb(var(--row-rgb) / 0.18); }
+.tree-row.colorFade.tint-tag .grip { opacity: 0.55; }
+
+/* The folder guide line, coloured from --wash rather than the ink ramp: wash
+   is white on dark/black and black on light (theme.css) specifically so a
+   translucent overlay reads against whichever paper it's on, which is a
+   closer match to "visible on every theme" than a fixed grey ink shade
+   ever was. */
+.tree-guide { border-color: rgb(var(--wash) / 0.32); }
+
 .chev { transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
 .chev.open { transform: rotate(90deg); }
 
@@ -210,11 +252,13 @@ button.icon:hover {
   box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.22);
 }
 .tree-row.row-picked:hover { background: rgb(var(--wash) / 0.13); }
-/* the open note, when it's also selected — outline, because .row-picked already
-   owns box-shadow and would beat Tailwind's ring utilities */
+/* the open note, when it's also selected — an inset ring, not `outline`:
+   outline draws at the same corner radius as the row regardless of how far
+   it's offset inward, so on a stadium-shaped pill it visibly pulls away from
+   the fill at the rounded ends. An inset box-shadow shrinks its radius along
+   with its offset, so it stays flush with the row at every density. */
 .tree-row.row-picked.is-open {
-  outline: 1px solid rgb(var(--brand-300) / 0.7);
-  outline-offset: -1px;
+  box-shadow: inset 0 0 0 1.5px rgb(var(--brand-300) / 0.85);
 }
 
 /* insertion line when reordering */
@@ -272,10 +316,15 @@ button.icon:hover {
    whatever colour it is — which is also why --row-gutter is capped below
    --row-py in theme.css (a negative padding invalidates the declaration).
 
-   The two inset box-shadows below need no adjustment: an inset shadow is
-   clipped to the PADDING box, so the leading edge bar and the selection ring
-   line up with the visible background on their own. `outline` is the one that
-   doesn't — it tracks the border box — hence the offsets further down.
+   The inset box-shadows below need no adjustment for it: an inset shadow is
+   clipped to the PADDING box, so the leading edge bar and every selection
+   ring line up with the visible background on their own — which is also why
+   every ring on a painted row below is a box-shadow and never `outline`.
+   `outline` tracks the border box, so it needs a matching negative offset to
+   sit inside the colour at all — but offsetting it doesn't shrink its corner
+   radius to match, so on these heavily-rounded rows it pulled away from the
+   fill at the rounded ends instead of following it. Box-shadow doesn't have
+   that gap: an inset shadow's corners shrink together with its offset.
 
    Every painted rule below sets `background-color`, never the `background`
    shorthand. The shorthand resets background-clip to `border-box`, which
@@ -290,6 +339,19 @@ button.icon:hover {
   padding-bottom: calc(var(--row-py) - var(--row-gutter));
   background-clip: padding-box;
 }
+/* A nested row (.nested, above) that's ALSO painted ties on specificity with
+   the rule above — same two classes each — so without this, source order
+   alone decided the winner, and it kept coloured/selected rows inside a
+   folder at full size while their plain siblings shrank around them. Three
+   classes outranks both, so the smaller nested padding wins regardless of
+   where either rule sits in the file. Every ring below is an inset box-shadow
+   reading off this same padding, so fixing it is enough to bring the colour
+   block AND the selection ring in line with the smaller row. */
+.tree-row.nested.tint-row,
+.tree-row.nested.tint-solid {
+  padding-top: max(0px, calc(var(--row-py) * 0.7 - var(--row-gutter)));
+  padding-bottom: max(0px, calc(var(--row-py) * 0.7 - var(--row-gutter)));
+}
 
 /* 'row' — the whole row washes, with a solid edge at the leading side. Reads
    from further away, and groups a folder with the notes under it. */
@@ -299,31 +361,39 @@ button.icon:hover {
 }
 .tree-row.tint-row:hover { background-color: rgb(var(--row-rgb) / 0.24); }
 /* Selection must stay visible ON a coloured row, so it keeps its wash and takes
-   the selection ring on top rather than losing the colour altogether. */
+   the selection ring on top rather than losing the colour altogether. Ringed in
+   --wash (white on dark, black on light — theme.css), the same reason .is-open
+   below is: a fixed brand-hued ring clashes against whichever hue the row
+   happens to be, while --wash reads as a clean frame around any of them. */
 .tree-row.tint-row.row-picked {
   background-color: rgb(var(--row-rgb) / 0.32);
-  box-shadow: inset 3px 0 0 0 rgb(var(--row-rgb)), inset 0 0 0 1px rgb(var(--wash) / 0.22);
+  box-shadow: inset 3px 0 0 0 rgb(var(--row-rgb)), inset 0 0 0 1px rgb(var(--wash) / 0.7);
 }
-/* the open note, when its row is washed — outline, for the same reason
-   .row-picked.is-open uses one: box-shadow is already spoken for.
-   A brand-hued outline is fine HERE: `tint-row` is a 0.16 wash over the
-   theme's own surface, so the ink ramp still means what it was chosen to mean. */
+/* the open note, when its row is washed — a ring on top of the colour bar
+   rather than replacing it (box-shadow is a single property, so restating
+   the bar here is what keeps both visible at once).
+   --wash, not a brand hue: this ring sits ON the row's own colour, so it has
+   to read as a neutral frame around it rather than a second, competing colour. */
 .tree-row.tint-row.is-open {
-  outline: 1px solid rgb(var(--brand-300) / 0.7);
-  /* An outline tracks the BORDER box, and the gutter above is a transparent
-     border — so without the extra offset this would be drawn out in the gap
-     rather than around the colour it is marking. */
-  outline-offset: calc(-1px - var(--row-gutter));
+  box-shadow: inset 3px 0 0 0 rgb(var(--row-rgb)), inset 0 0 0 1.5px rgb(var(--wash) / 0.85);
+}
+/* picked AND open at once: same ring either rule would draw alone, but named
+   explicitly — two selectors of equal specificity setting the same property
+   would otherwise let source order pick a winner instead of this. */
+.tree-row.tint-row.row-picked.is-open {
+  box-shadow: inset 3px 0 0 0 rgb(var(--row-rgb)), inset 0 0 0 1.5px rgb(var(--wash) / 0.85);
 }
 /* On a SOLID row the background is the user's colour at full strength, so a
-   fixed brand-hued outline can land on a near-identical colour and the open
+   fixed brand-hued ring can land on a near-identical colour and the open
    note stops being identifiable. --row-ink is chosen by luminance against that
    exact colour (shared/color.ts's `inkOn`), so it always separates — the same
    reason .tint-solid.row-picked below rings in --row-ink rather than brand,
    and the same "everything on a solid row restates its colours" rule. */
 .tree-row.tint-solid.is-open {
-  outline: 1px solid rgb(var(--row-ink) / 0.8);
-  outline-offset: calc(-1px - var(--row-gutter));
+  box-shadow: inset 0 0 0 1.5px rgb(var(--row-ink) / 0.85);
+}
+.tree-row.tint-solid.row-picked.is-open {
+  box-shadow: inset 0 0 0 2px rgb(var(--row-ink) / 0.85);
 }
 
 /* 'solid' — the row IS the colour. The only style that has to restate the row's

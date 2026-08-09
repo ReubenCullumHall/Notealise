@@ -9,7 +9,7 @@ import {
   type AppSettings,
   type Space
 } from '../../../shared/settings'
-import { ACCENT_MODES, ACCENTS, DENSITIES, TEXT_TONES, THEMES } from './model'
+import { ACCENT_MODES, ACCENTS, DENSITIES, EDITOR_WIDTHS, TEXT_TONES, THEMES } from './model'
 import { Icon } from '../icons'
 import { SettingRow, ToggleRow } from './primitives'
 import { ActionGrid, SlotFace } from '../editor/SlotPicker'
@@ -732,6 +732,29 @@ export function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Elem
                   <span className="s">{d.hint}</span>
                 </span>
                 {on ? <span aria-hidden="true">✓</span> : null}
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className="settings-group">
+        <h3>Editor width</h3>
+        <p className="hint">
+          How wide the writing area grows. Only the text column — the sidebar keeps its own width.
+        </p>
+        <div className="mode-row">
+          {EDITOR_WIDTHS.map((w) => {
+            const on = space.editorWidth === w.id
+            return (
+              <button
+                key={w.id}
+                className={'mode-btn' + (on ? ' on' : '')}
+                aria-pressed={on}
+                onClick={() => onChange({ editorWidth: w.id })}
+              >
+                <span className="t">{w.label}</span>
+                <span className="s">{w.hint}</span>
               </button>
             )
           })}

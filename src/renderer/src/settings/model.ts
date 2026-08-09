@@ -32,6 +32,12 @@ export const DENSITIES: {
   { id: 'ultra', label: 'Ultra compact', hint: 'Minimal spacing', bar: { h: 3, gap: 1 } }
 ]
 
+export const EDITOR_WIDTHS: { id: Space['editorWidth']; label: string; hint: string }[] = [
+  { id: 'normal', label: 'Normal', hint: 'The comfortable reading width used today.' },
+  { id: 'wide', label: 'Wide', hint: 'More room per line — good for a big monitor.' },
+  { id: 'full', label: 'Full width', hint: 'Uses nearly all the window, edge to edge.' }
+]
+
 export const ACCENT_MODES: { id: Space['accentMode']; label: string; hint: string }[] = [
   { id: 'text', label: 'Text only', hint: 'Just the writing takes the colour.' },
   { id: 'tint', label: 'Tinted', hint: 'Surfaces and controls take it too.' }
@@ -168,6 +174,7 @@ export function applySettings(s: AppSettings): void {
   const a = activeSpace(s)
   root.dataset.theme = a.theme
   root.dataset.density = a.density
+  root.dataset.editorWidth = a.editorWidth
   root.dataset.textTone = a.textTone
   root.dataset.buttonDef = a.buttonDefinition ? 'on' : 'off'
   applyAccent(root, {

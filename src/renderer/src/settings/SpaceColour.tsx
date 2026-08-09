@@ -134,6 +134,15 @@ export function SpaceColour({ space, onChange, onColorExisting }: ColourProps): 
             hint="A note or subfolder with no colour of its own shows the nearest coloured folder above it, so a coloured folder reads as one group. Off, only what you colour directly is coloured."
           />
         </div>
+
+        <div className="mt-3">
+          <ToggleRow
+            on={space.colorFadeNested}
+            onClick={() => onChange({ colorFadeNested: !space.colorFadeNested })}
+            label="Reduce opacity for nested colours"
+            hint="A coloured note or folder is painted more quietly once it's inside a folder — same colour, just more of the sidebar showing through. Off, a coloured row looks the same whether it's nested or not."
+          />
+        </div>
       </section>
 
       <section className="settings-group">

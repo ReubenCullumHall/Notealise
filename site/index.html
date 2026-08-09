@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Notes — Download</title>
-  <meta name="description" content="Download Notes for Windows and macOS." />
+  <title>Notealise — Download</title>
+  <meta name="description" content="Download Notealise for Windows and macOS." />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <style>
     :root {
@@ -70,7 +70,7 @@
 <body>
   <main class="card">
     <img class="logo" src="favicon.svg" alt="Notealise" width="60" height="60" />
-    <h1>Notes</h1>
+    <h1>Notealise</h1>
     <p class="tagline">A local-first Markdown editor. Your notes stay as plain <code>.md</code> files on your disk.</p>
 
     <div id="configWarn" class="config-warn hidden">
@@ -94,7 +94,7 @@
       <summary>First launch: getting past the "unverified developer" warning</summary>
       <p>This MVP build is <b>unsigned</b>, so your OS will warn you the first time. It's safe to open:</p>
       <p><b>Windows</b> — on the blue "Windows protected your PC" screen, click <b>More info</b> → <b>Run anyway</b>.</p>
-      <p><b>macOS</b> — after dragging Notes to Applications, <b>right-click</b> the app → <b>Open</b>, then confirm. (If it says the app is "damaged", open Terminal and run <code>xattr -cr /Applications/Notes.app</code>, then open it.)</p>
+      <p><b>macOS</b> — after dragging Notealise to Applications, <b>right-click</b> the app → <b>Open</b>, then confirm. (If it says the app is "damaged", open Terminal and run <code>xattr -cr /Applications/Notealise.app</code>, then open it.)</p>
     </details>
   </main>
 
@@ -104,8 +104,8 @@
     // Fixed fallback links — match the artifactName in electron-builder.yml, so
     // /releases/latest/download/<name> always points at the newest build.
     const FALLBACK = {
-      win: `https://github.com/${REPO}/releases/latest/download/Notes-Setup.exe`,
-      mac: `https://github.com/${REPO}/releases/latest/download/Notes.dmg`,
+      win: `https://github.com/${REPO}/releases/latest/download/Notealise-Setup.exe`,
+      mac: `https://github.com/${REPO}/releases/latest/download/Notealise.dmg`,
     };
 
     const winBtn = document.getElementById("winBtn");

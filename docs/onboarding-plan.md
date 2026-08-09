@@ -120,15 +120,13 @@ if you think one should change, say so and get confirmation rather than quietly 
 - Must be **interactive**, not a static screenshot or a scripted/faked animation: the user should
   actually type or click and watch Markdown syntax hide/reveal live, per the real engine described
   in `docs/decorations.md` (CM6 `ViewPlugin`, syntax-tree-driven, hidden marks as `atomicRanges`).
-- **New technical question, not previously raised**: does this step embed the app's real editor
-  chrome (`renderer/src/editor/`, as used by `NotePane.tsx` — full format bar, command registry
-  per `docs/commands.md`), or a **stripped-down standalone CM6 instance** carrying just the
-  live-preview extension, with no tabs/panes/format-bar chrome around it? A full `NotePane` is the
-  most "authentic" (zero drift risk from the real editor), but brings UI (tabs strip, split
-  controls) that makes no sense in a single-note onboarding step. A minimal instance is more
-  purpose-built but is a second, parallel place the live-preview extension gets wired up, which
-  can drift from the real one. Needs a decision before building this step — flagged here rather
-  than assumed.
+- **Decided 2026-08-08: a stripped-down standalone CM6 instance**, carrying just the live-preview
+  extension, no tabs/panes/format-bar chrome around it — not the full `NotePane` editor chrome.
+  Purpose-built for a single-note onboarding step rather than dragging in UI (tabs strip, split
+  controls) that makes no sense there. **Accepted trade-off**: this is a second, parallel place the
+  live-preview extension gets wired up, alongside `NotePane.tsx`'s real usage — it can drift from
+  the real one over time and that risk was taken on knowingly, not overlooked. When touching
+  `livePreview.ts`, check this instance still matches.
 
 **Disk-reveal (step 4)**
 - **Real side effect** — a button that actually opens the OS file window (Finder/Explorer) on the
@@ -282,8 +280,8 @@ full-screen onboarding itself **never replays** — this static guide is the onl
 1. **Does the shortened "populated vault" path still show the import offramp?**
 2. **Exact "already has content" detection heuristic** — any `.md` anywhere / any existing space /
    any non-empty folder at all.
-3. **Live-preview demo: full `NotePane` chrome vs. a minimal standalone CM6 instance?** (New
-   question, section 3 above — not raised in the original planning conversation.)
+3. ~~Live-preview demo: full `NotePane` chrome vs. a minimal standalone CM6 instance?~~ **Resolved
+   2026-08-08: minimal standalone CM6 instance.** See section 3.
 4. **Copy tone: spare vs. narrative/guided — flagged conflict, needs a real decision** (section 3).
 5. **Actual step copy** — none drafted yet; only tone constraints are settled.
 6. **What happens if the app closes mid-*import*, specifically** — not just mid-onboarding in

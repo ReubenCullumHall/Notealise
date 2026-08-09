@@ -140,8 +140,8 @@ export type LookPart = (typeof LOOK_PARTS)[number]
 const PART_KEYS: Record<LookPart, readonly (keyof SpaceLook)[]> = {
   // The emoji rides with appearance: it is the space's marker, and a look
   // without it is half a look (the user's call — applying DOES overwrite it).
-  appearance: ['emoji', 'theme', 'textTone', 'buttonDefinition', 'density', 'accent', 'accentMode', 'pageLook', 'font', 'tint'],
-  colour: ['colorStyle', 'colorAuto', 'colorInherit', 'colorPalette'],
+  appearance: ['emoji', 'theme', 'textTone', 'buttonDefinition', 'density', 'editorWidth', 'accent', 'accentMode', 'pageLook', 'font', 'tint'],
+  colour: ['colorStyle', 'colorAuto', 'colorInherit', 'colorFadeNested', 'colorPalette'],
   arranging: ['freeArrange', 'compactNav'],
   chrome: ['showLinks', 'pinLinks', 'showPath', 'showNoteInfo', 'markdownPro'],
   shortcuts: ['toolbarSlots']

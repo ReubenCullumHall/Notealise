@@ -73,12 +73,18 @@ function Differs(): React.JSX.Element {
 export function SpaceForm({ space, onChange, differs, onColorExisting }: Props): React.JSX.Element {
   return (
     <>
-      <Disclosure label="Appearance" hint="Theme, accent colour, button edges and sidebar density">
-        {differs && (['theme', 'textTone', 'buttonDefinition', 'density', 'accent', 'accentMode'] as const).some(differs) && (
-          <p className="mb-2 text-[11.5px] text-ink-400">
-            Some of these differ between your spaces <Differs />
-          </p>
-        )}
+      <Disclosure
+        label="Appearance"
+        hint="Theme, accent colour, button edges, sidebar density and editor width"
+      >
+        {differs &&
+          (['theme', 'textTone', 'buttonDefinition', 'density', 'editorWidth', 'accent', 'accentMode'] as const).some(
+            differs
+          ) && (
+            <p className="mb-2 text-[11.5px] text-ink-400">
+              Some of these differ between your spaces <Differs />
+            </p>
+          )}
         <SpaceAppearance space={space} onChange={onChange} />
       </Disclosure>
 

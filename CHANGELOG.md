@@ -8,6 +8,37 @@ enough for a solo project). History before this file existed lives in the `v*` g
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-09
+- Dragging a note out of a folder now works by dropping it on empty space in the sidebar, not just
+  by dragging it above the folder — the empty space below your notes had no drop target at all
+- Notes and folders inside an open folder are now smaller, indented in from the sidebar edge, and
+  connected to it with a guide line, so it's clear where a folder's contents start and end. A
+  coloured or selected nested row is inset to match instead of its colour running edge to edge like
+  a top-level row's
+- New setting: Colour -> Reduce opacity for nested colours, for painting a nested note or folder's
+  colour more quietly than a top-level one's while keeping the exact same hue
+- Editor width, in Settings -> Customisation / Spaces -> Appearance: Normal (the width it's always
+  been), Wide, or Full width, for using more of a large monitor instead of leaving empty space on
+  either side of the text
+- Renamed the app to Notealise — new name in the installer, Start Menu/desktop shortcut, window
+  title, and macOS app menu
+- Raised the space cap from 7 to 10, so a vault with more top-level folders can register all of
+  them as spaces instead of the switcher silently dropping the extras
+- Fixed the open-note and multi-select rings on a coloured, washed-style row: they used to be a
+  fixed brand-hued outline that clashed against the row's own colour (e.g. a blue ring on a red
+  note); now both ring in white on dark themes / black on light, framing the note's colour cleanly
+  instead of fighting it
+- Search results are now ranked by how close they are to the note you have open — a match in the
+  same folder as what you're working on comes before one from elsewhere in the space; with nothing
+  open, results are unchanged
+- New toggle on the search bar: search every space at once instead of just the active one. Results
+  from elsewhere are tagged with their space, and opening one switches you there first
+- Fixed the open note's selection ring on a coloured row pulling away from the colour at its
+  rounded ends, leaving a sliver of colour showing outside a supposedly-connected ring — happened
+  at every density, worse the more rounded the row
+- The drag-handle dots are bigger and no longer shrink on subfolder rows, so they stay legible
+  instead of blurring into a grey smear at the smaller size
+
 ## [0.7.1] - 2026-08-08
 - Settings and the update banner no longer show the app's version number — an update now just says
   it's available/downloading/ready, so a new release feels like a new update rather than a number

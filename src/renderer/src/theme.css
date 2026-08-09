@@ -213,3 +213,20 @@
   --row-sub: 11px; --row-icon: 13px; --row-indent: 10px; --row-pad0: 5px;
   --row-sub-display: none; --row-gutter: 1px;
 }
+
+/* ---- editor width --------------------------------------------------------- */
+/* How wide the editor's text column is allowed to grow (editor/highlight.ts's
+   .cm-content reads --editor-max-width). Only the writing area — the sidebar
+   keeps its own width regardless. 'normal' matches the width this app has
+   always used; 'full' still keeps .cm-content's own side padding, so text
+   never touches the window edge even at 100%. */
+:root,
+:root[data-editor-width='normal'] {
+  --editor-max-width: 46rem;
+}
+:root[data-editor-width='wide'] {
+  --editor-max-width: 68rem;
+}
+:root[data-editor-width='full'] {
+  --editor-max-width: 100%;
+}

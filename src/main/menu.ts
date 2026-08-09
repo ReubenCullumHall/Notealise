@@ -35,7 +35,7 @@ export function installMenu(): void {
     ...(isMac
       ? [
           {
-            label: 'Notes',
+            label: 'Notealise',
             submenu: [
               { role: 'about' },
               checkForUpdates,

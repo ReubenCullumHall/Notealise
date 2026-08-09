@@ -55,6 +55,9 @@ interface Props extends TreeActions {
   colorStyle: ColorStyle
   /** whether an uncoloured row shows its nearest coloured ancestor's colour */
   colorInherit: boolean
+  /** turn a coloured row's opacity down once it's nested — same hue, just
+   *  painted more quietly. Off by default (see shared/settings.ts). */
+  colorFadeNested: boolean
   mode: RowMode
   selection: Selection
   onSelectionChange: (next: Selection) => void
@@ -85,6 +88,18 @@ const parentOf = (p: string): string => {
  *  re-indents the tree without React re-measuring anything. */
 const padFor = (depth: number): string =>
   `calc(var(--row-pad0) + ${depth} * var(--row-indent))`
+
+/** How far a depth-N row's own BOX is pushed in — as opposed to `padFor`,
+ *  which only pads its content. A row's colour/selection paint fills its own
+ *  box, so indenting with padding alone left a coloured or selected nested
+ *  row's background flush against the sidebar's edge, same as a top-level
+ *  one. Splitting the same total offset into `marginFor` (indent, depth>0
+ *  only) + a flat `var(--row-pad0)` of padding moves the box itself in,
+ *  leaving bare sidebar background in the gutter to its left, while landing
+ *  the icon/text at the exact same pixel `padFor` used to. Depth 0 keeps
+ *  margin at 0, so top-level rows are pixel-identical to before. */
+const marginFor = (depth: number): string | undefined =>
+  depth > 0 ? `calc(${depth} * var(--row-indent))` : undefined
 
 /** Hover-only actions (new note, new folder, trash, unset pin/star…) float over
  *  the row instead of reserving flow width — `opacity-0` alone still occupies
@@ -135,6 +150,7 @@ export function TreeView({
   freeArrange,
   colorStyle,
   colorInherit,
+  colorFadeNested,
   mode,
   selection,
   onSelectionChange,
@@ -384,8 +400,8 @@ export function TreeView({
         key={node.path}
         role="button"
         tabIndex={0}
-        className={rowClass(node, c)}
-        style={{ paddingLeft: padFor(depth), ...colorVars(c) }}
+        className={rowClass(node, c) + (depth > 0 ? ' nested' : '') + (depth > 0 && colorFadeNested ? ' colorFade' : '')}
+        style={{ marginLeft: marginFor(depth), paddingLeft: 'var(--row-pad0)', ...colorVars(c) }}
         draggable={!shelved}
         onDragStart={shelved ? undefined : (e) => startDrag(e, node.path)}
         onDragEnd={endDrag}
@@ -494,8 +510,8 @@ export function TreeView({
           // is the target, and a selector would have to guess which of the four
           // TreeViews rendered it.
           ref={node.path === revealTarget ? revealRef : undefined}
-          className={rowClass(node, c)}
-          style={{ paddingLeft: padFor(depth), ...colorVars(c) }}
+          className={rowClass(node, c) + (depth > 0 ? ' nested' : '') + (depth > 0 && colorFadeNested ? ' colorFade' : '')}
+          style={{ marginLeft: marginFor(depth), paddingLeft: 'var(--row-pad0)', ...colorVars(c) }}
           draggable={!shelved}
           onDragStart={shelved ? undefined : (e) => startDrag(e, node.path)}
           onDragEnd={endDrag}
@@ -614,7 +630,19 @@ export function TreeView({
         </div>
 
         {expandedNow && (
-          <div className="mt-0.5">
+          <div className="relative mt-0.5">
+            {/* Connects a folder's contents back to it — the guide line a flat
+                indent alone doesn't give you, so where a nested group ends is
+                as legible as where it starts. This folder's own box starts at
+                marginFor(depth) and its children's start one --row-indent step
+                further right; the line sits centred in that gutter, so it
+                clears both boxes (and their colour/selection paint) at any
+                density or depth. */}
+            <span
+              aria-hidden="true"
+              className="tree-guide pointer-events-none absolute inset-y-0 border-l"
+              style={{ left: `calc((${depth} + 0.5) * var(--row-indent))` }}
+            />
             {kids.map((k) => renderRow(k, depth + 1))}
             {count === 0 && (
               <p
