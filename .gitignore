@@ -37,3 +37,21 @@ legacy/.env.*
 *.njsproj
 *.sln
 *.sw?
+
+# build_centerlines.py keeps the previous centerlines beside the new ones;
+# git history already has them, so the copy is local convenience only.
+tools/wordmark/*.bak
+
+# Behind-the-scenes promo exports (ProRes masters, frame sequences, webm/webp). Reuben's
+# working material for marketing videos, not project files - nothing here ships with the
+# app or the site. Regenerate with tools/wordmark/render_promo.py.
+promo/
+
+# Python bytecode from the wordmark tooling
+__pycache__/
+*.pyc
+
+# OneDrive writes a "<name>-<machine>" copy when the same file is edited on two
+# workstations. They are conflict artefacts, never something to commit.
+*-MacBook Air.*
+*-MacBook Air

@@ -7,6 +7,15 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- The "alise" wordmark on the landing page is now drawn in the order the word is actually written
+  by hand — every letter rises out of the baseline where the last one left off, doubles back where
+  a pen would, and the i is dotted at the top mid-word. It used to start each letter at its top or
+  its middle and fly the pen across the word between them
+- Each letter's first mark is now a rounded pen-down instead of a squared-off cut edge
+- Fixed white hairline cracks that were left through the finished s and e — they were there in
+  every frame, including the final one, and were invisible to the animation's own coverage check
+- Fixed a stray mark in the landing page's "Note" typing: a slice of the t's crossbar appeared
+  next to "No" a step before the t itself did
 
 ## [0.8.0] - 2026-08-09
 - Dragging a note out of a folder now works by dropping it on empty space in the sidebar, not just

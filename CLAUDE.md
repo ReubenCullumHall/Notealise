@@ -305,6 +305,10 @@ notes-app/
         app.css             @tailwind directives + only what legacy keeps out of Tailwind (see rule 8)
         assets/fonts/       bundled woff2 (Inter / Fraunces / JetBrains Mono) — no CDN
   legacy/                   pre-Electron browser app — reference only, NOT built (legacy/README.md)
+  site/                     the Vercel download page. site/DESIGN.md is its design directive and
+                            decision log — read it before any visual change here
+  tools/wordmark/           GENERATOR for the wordmark animation in site/index.html, plus its
+                            verification harness. Not shipped, not an app dependency. See below
   <vault>/.mdnotes/         created (hidden on Windows); settings.json + workspace.json + trash/
 ```
 
@@ -388,7 +392,14 @@ line.** Reuben says this right before clearing the chat, so treat it as the sess
    carry the *why*. If nothing in the conversation clears that bar, say so rather than skipping the
    check silently.
 
-Do both halves without being asked separately; that's the whole point of the shorthand.
+3. **Commit the session's work**, pathspec-scoped (2026-08-14). Reuben's default is to batch
+   commits at the end of a session rather than as each piece is verified, so "log that" is also
+   the commit signal. Leave genuinely undecided artefacts out (e.g. large binaries whose home
+   hasn't been settled) and say what you excluded.
+
+Do all three halves without being asked separately; that's the whole point of the shorthand.
+The projects-root `CLAUDE.md` carries the cross-project versions of these defaults, plus the
+rule about offering an artifact when a complex task hasn't landed in 1–2 prompts.
 
 When the user says "push the latest update" (or similar — see the ritual below), read
 `Unreleased` first, sanity-check it against `git status` and `git log vX.Y.Z..HEAD --stat` (cheap
@@ -1053,6 +1064,83 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
   in the Commands section above assumes cwd is the projects root. **In an agent session, pass an
   absolute `--prefix`.**
 
+- **The wordmark animation in `site/index.html` is GENERATED — don't hand-edit it.** Everything
+  between `<!-- wordmark:begin -->` and `<!-- wordmark:end -->` (the five `<g>` blocks: a glyph, a
+  clip path per slice, and a `<use>` per slice) and everything between
+  `wordmark-keyframes:begin/end` are output from `tools/wordmark/gen_pen.py`, which is idempotent
+  and re-runnable. Edit the generator's constants and re-run; hand edits inside those markers are
+  destroyed by the next run. `ALISE_SCALE` and `NUDGE` are coupled (the nudge puts alise on Note's
+  baseline); changing one without the other visibly breaks the alignment.
+  **The reveal is ~44 ownership SLICES per letter, each switched on whole as the pen reaches it —
+  there is no swept stroke and no mask.** A slice is the set of glyph pixels whose nearest point on
+  the centreline falls in that stretch of the journey, so the boundary between consecutive slices
+  is the clean cut across the stroke a pen leaves, and the only other edge on screen is the
+  letter's own outline. Until 2026-08-12 it WAS a thick stroke swept along the centreline and grown
+  with `stroke-dashoffset`, and every "harsh edge / sharp bit / splot" complaint against this
+  animation came from that one choice — mid-stroke you were seeing the edge of the disc, not the
+  edge of the letter. **Don't reintroduce a swept stroke to smooth anything.** `SLICES` is a
+  resolution in time: raise it if the cut ever reads as jumping.
+  **The verification trap that cost a whole pass:** checking the finished animation against the
+  `prefers-reduced-motion` render proves nothing, because the mask is applied in *both* — they are
+  clipped identically and the diff comes out clean while 11% of the glyph is missing. Coverage must
+  be checked against the element with its `mask` attribute removed (`verify_nomask.py`). More
+  generally here: a test that compares two things sharing the suspected defect cannot fail.
+  `tools/wordmark/README.md` has the run/verify commands; `site/DESIGN.md` has the nine passes of
+  reasoning, including several approaches already tried and rejected.
+- **The wordmark's WRITING ORDER is `TRAVERSAL`, not `HINTS`/`ROUTE` — and `HINTS` is silently
+  ignored for some letters.** Two structural facts, both of which cost a session to find:
+  (1) **Skeletonisation merges a letter's up-stroke and down-stroke into one branch.** A hand writes
+  `l`, `i` and `s` by going up a narrow loop and back down nearly the same ink; painted with the 190
+  stroke that is one solid limb. So the graph has **no baseline entry node on any of them**, and a
+  graph walk can only cross a branch once — meaning no value of `HINTS` can make a letter start
+  where a hand starts. (2) `main()` snaps `start` to the nearest **odd-degree** node, so a hint that
+  doesn't resolve to one is discarded outright. The `s` is the worst case: its entire body is a
+  single **self-loop** on one node, so its start was never movable and its hint had never once taken
+  effect. `TRAVERSAL` re-walks the finished centreline by arc fraction, which is the only way to
+  start partway along a limb, double back, or cut a closed loop. `assert_continuous()` fails the
+  build if those fractions ever drift off the features they were chosen for — **don't widen
+  `JOIN_TOL` to make a build pass**, re-read the fractions off a fresh route diagram.
+- **The whole class of defect the coverage check cannot see: a ribbon flank that stops INSIDE the
+  outline.** Wherever a bound pulls a slice's flank short of the glyph edge, the neighbouring slice
+  abuts it instead of overlapping, the two traced edges land on one pixel each covering part of it,
+  and the result is a white hairline **in the finished word**. The raster check measures on a 4-unit
+  grid and reports it as clean. Diagnose by attributing the shortfall per letter to its two bounds:
+  separation dominated on exactly the three letters that cracked (`a`/`s`/`e`, 67–70%) and curvature
+  on the two that didn't (`l`/`i`, 100%). `SEP_BLEED` is the fix, and it is deliberately **not**
+  applied to the curvature bound — reaching past a fold is a spike, not a seam.
+- **A pen-down is exactly where the local halfwidth collapses, so never size anything at sample 0
+  from it.** A letter touches down beside ink belonging to a later pass, so the separation bound
+  fires immediately: measured 18 units at sample 0 on the `a`, `s` and `e` against a real reach of
+  142–198. A rounded pen-down cap sized off that halfwidth is invisible, and the first ink a viewer
+  sees is the *next* slice's flat chord. Size it off the pen instead (`STROKE / 2`), which is inside
+  the letter's own ink by construction because the glyph is painted with that stroke.
+- **A retrace must be recognised by GEOMETRY, not by adjacency.** The fold that stops two passes
+  over the same ink clamping each other used to compare a pass only with the one before it across a
+  reversal. That breaks the moment the writing order puts anything in between — the `a` goes up its
+  stalk, out to its entry flick and back, and only then down the stalk — and the symptom is the
+  stalk tiling as **hatched stripes**. Match on coincident position plus a minimum contiguous run:
+  a crossing coincides for a sample or two, a retrace for a long run.
+- **A reversal is a TERMINAL.** Once the pen doubles back, the turning point has a round cap of
+  glyph beyond it exactly like a path end, and a ribbon that stops at a perpendicular chord leaves
+  it bare. Testing only the first/last sample of the whole path left the `l`'s ascender tip and the
+  `s`'s hook tip untiled and dropped three letters back to the raster fallback. Test the end of the
+  **pass**.
+- **In the `Note` typing, a character's advance box is not its ink box.** `@keyframes note-type`
+  clips at fractions of the element's width, and cutting at an *advance* boundary left a slice of
+  the `t`'s crossbar hanging beside "No" (and the `e`'s left edge beside "Not") — the crossbar
+  reaches back past where the glyph's box starts. The stops must sit in the **gaps between the
+  letters' ink**, measured off a real render, and at the midpoint of each gap: the o/t gap is only
+  0.39% wide and erring toward the `t` shaves the `o`, which Reuben has rejected twice. These
+  percentages are specific to this font stack and weight — re-measure if either changes. The block
+  sits *before* `wordmark-keyframes:begin`, so `gen_pen.py` cannot overwrite it.
+- **On the Mac workstation the wordmark toolchain is not the one `README.md` documents.** There is
+  **no Node at all**, so `vite site` cannot run — but `site/index.html` is fully static (its only
+  external reference is `favicon.svg`), so `python3 -m http.server 8788` inside `site/` serves it
+  identically and every `verify_*.py` script works against it unchanged. System Python has `numpy`,
+  `pillow` and `playwright` (with chromium cached) but **not `scipy` or `scikit-image`**, which
+  `build_centerlines.py` needs; a `venv --system-site-packages` plus those two is enough, and keep
+  it out of the repo. The Windows path and `Python312` exe in any older instructions do not resolve
+  here.
 - **`grep` treats `App.tsx` as a binary file, and silently reports nothing.** It contains a real
   NUL character — `.join('\0')`, the separator for the open-note link-target signature — and one
   NUL is all `grep` needs to switch to "Binary file matches" mode, which with a plain `grep -n`
