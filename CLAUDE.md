@@ -439,12 +439,24 @@ every session — see the table in **Folder structure** above for the full list.
 - In this environment, launch Electron via `node_modules/electron/dist/electron.exe` directly,
   not the `.bin/electron.cmd` shim (the shim's fallback ran the app under system Node).
 - First `electron` run may download its binary (~100 MB) — let it finish.
-- **A background `npm run dev` from an earlier agent turn can outlive that turn.** Launching the
-  app again later starts a *second* `electron-vite dev`, which logs "Port 5173 is in use, trying
-  another one" and opens on 5174 instead — two live windows, one on stale code, with nothing in
-  either log calling that out as wrong. Before trusting what a freshly-launched window shows,
-  `pgrep -fl "electron-vite dev"` and kill any leftover instance (and its Electron child) rather
-  than assuming the newest one is the only one.
+- **A running `electron-vite dev` you didn't start is not necessarily stale — it may be someone
+  else's live session.** `~/notes-app-mac` and its Electron `userData` are a single **shared**
+  sandbox (see the Mac gotcha above); Reuben sometimes runs several Claude Code sessions on this
+  repo at once, in separate VS Code panes, each syncing into and launching from the same
+  `~/notes-app-mac`. Launching `npm run dev` again while another session's instance is still up
+  logs "Port 5173 is in use, trying another one" and opens on 5174 instead — two live windows, one
+  possibly belonging to another session's active test, with nothing in either log saying so.
+  **Before assuming a running `electron-vite dev` is a leftover and killing it**, check
+  `pgrep -fl "electron-vite dev"` alongside whether other Claude Code sessions on this repo are
+  active (ListAgents, or ask Reuben) — killing another session's window mid-test loses them
+  nothing durable (no source lives outside OneDrive/git), but it does yank their live window out
+  from under them without warning. Confirmed the hard way 2026-08-16: a session building this exact
+  animations-toggle setting killed what turned out to very likely be another concurrent session's
+  dev instance, two minutes into it, while also independently confirming (via a `git status` a few
+  minutes apart, and a mid-session `CHANGELOG.md` edit appearing from nowhere) that two OTHER
+  features were being built live in the same repo at the same time. See
+  `notesapp-mac-sandbox-concurrency` in project memory for the shared-`userData` risk and the
+  isolated-`--user-data-dir` workaround.
 - `out/` is the build dir (gitignored). `node_modules` lives under OneDrive — installs work but
   sync churn is possible; moving the project out of OneDrive is a later cleanup.
 - **`npm run package:dir` can fail with `EPERM ... rename 'win-unpacked.tmp' -> 'win-unpacked'`.**
