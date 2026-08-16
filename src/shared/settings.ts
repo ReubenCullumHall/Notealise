@@ -229,6 +229,13 @@ export interface AppSettings {
    *  like the rest of this block: it's about the app's own opening moment,
    *  not about any one space. */
   playStartupAnimation: boolean
+  /** the app's own interface motion — the settings window's genie open/close,
+   *  hover/press transitions, dropdown fades. Off resolves all of it instantly.
+   *  Global rather than per-space: this is about how the user wants to
+   *  interact with the chrome, not about how any set of notes looks. Separate
+   *  from `playStartupAnimation`, which is one specific clip; this is every
+   *  transition everywhere. */
+  animationsEnabled: boolean
 }
 
 export const DEFAULT_SPACE: Space = {
@@ -276,7 +283,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dateFormat: 'relative',
   numberFormat: 'default',
   timezone: 'system',
-  playStartupAnimation: true
+  playStartupAnimation: true,
+  animationsEnabled: true
 }
 
 /** A brand-new space, defaults throughout. Every array on DEFAULT_SPACE is
@@ -476,7 +484,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
     // any IANA string is legal; the picker only ever offers real ones
     timezone: typeof s.timezone === 'string' && s.timezone ? s.timezone : DEFAULT_SETTINGS.timezone,
     playStartupAnimation:
-      typeof s.playStartupAnimation === 'boolean' ? s.playStartupAnimation : DEFAULT_SETTINGS.playStartupAnimation
+      typeof s.playStartupAnimation === 'boolean' ? s.playStartupAnimation : DEFAULT_SETTINGS.playStartupAnimation,
+    animationsEnabled:
+      typeof s.animationsEnabled === 'boolean' ? s.animationsEnabled : DEFAULT_SETTINGS.animationsEnabled
   }
 }
 

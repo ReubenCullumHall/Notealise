@@ -168,7 +168,9 @@ function applyAccent(
 /** Apply the settings to the document: theme + density as data-* attributes,
  *  accent as inline variables on <html>. Appearance lives on the ACTIVE space,
  *  resolved here rather than by the caller — this is the only DOM writer and it
- *  has two call sites, so resolving once keeps them from ever disagreeing. */
+ *  has two call sites, so resolving once keeps them from ever disagreeing.
+ *  `data-motion` is the one attribute here read from `s` directly rather than
+ *  `a`: animationsEnabled is global (see AppSettings), not per-space. */
 export function applySettings(s: AppSettings): void {
   const root = document.documentElement
   const a = activeSpace(s)
@@ -177,6 +179,7 @@ export function applySettings(s: AppSettings): void {
   root.dataset.editorWidth = a.editorWidth
   root.dataset.textTone = a.textTone
   root.dataset.buttonDef = a.buttonDefinition ? 'on' : 'off'
+  root.dataset.motion = s.animationsEnabled ? 'on' : 'off'
   applyAccent(root, {
     accent: a.accent,
     mode: a.accentMode,

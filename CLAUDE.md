@@ -439,6 +439,12 @@ every session — see the table in **Folder structure** above for the full list.
 - In this environment, launch Electron via `node_modules/electron/dist/electron.exe` directly,
   not the `.bin/electron.cmd` shim (the shim's fallback ran the app under system Node).
 - First `electron` run may download its binary (~100 MB) — let it finish.
+- **A background `npm run dev` from an earlier agent turn can outlive that turn.** Launching the
+  app again later starts a *second* `electron-vite dev`, which logs "Port 5173 is in use, trying
+  another one" and opens on 5174 instead — two live windows, one on stale code, with nothing in
+  either log calling that out as wrong. Before trusting what a freshly-launched window shows,
+  `pgrep -fl "electron-vite dev"` and kill any leftover instance (and its Electron child) rather
+  than assuming the newest one is the only one.
 - `out/` is the build dir (gitignored). `node_modules` lives under OneDrive — installs work but
   sync churn is possible; moving the project out of OneDrive is a later cleanup.
 - **`npm run package:dir` can fail with `EPERM ... rename 'win-unpacked.tmp' -> 'win-unpacked'`.**

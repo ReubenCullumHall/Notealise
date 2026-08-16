@@ -7,6 +7,9 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- New setting, Settings -> General -> Animations: turn off interface motion (the settings
+  window's open/close animation, hovers, dropdown fades and the like) for instant transitions
+  everywhere
 - A short wordmark animation now plays while a vault opens — white ink on dark themes, dark ink on
   light, matching whichever space was last open — then fades into the app. Off switch in
   Settings -> General

@@ -427,6 +427,17 @@ function General({ settings, onChange }: Props): React.JSX.Element {
           hint="A short wordmark animation while a vault opens, in white or ink to match your theme."
         />
       </div>
+
+      <h3 className="mt-6 font-display text-[15px] font-semibold text-ink-900">Animations</h3>
+      <p className="mt-0.5 text-[12px] text-ink-500">Motion used throughout the interface.</p>
+      <div className="mt-3">
+        <ToggleRow
+          on={settings.animationsEnabled}
+          onClick={() => onChange({ animationsEnabled: !settings.animationsEnabled })}
+          label="Interface animations"
+          hint="Opening settings, hovers, dropdowns and the like. Off makes all of it instant."
+        />
+      </div>
     </>
   )
 }

@@ -1179,6 +1179,23 @@ button.icon:hover {
   .genie.run.closing { animation: genie-fade-out 140ms ease both; }
 }
 
+/* Settings → General → "Interface animations" (animationsEnabled in AppSettings,
+   applied as data-motion by settings/model.ts). Same trick the OS-level media query above
+   uses, but app-driven rather than OS-driven, and total rather than a fallback
+   to a shorter fade: every transition and keyframe animation collapses to
+   near-zero rather than being hand-picked per component. Near-zero rather than
+   literally 0 so a still-required `animationend` (the genie's close unmount,
+   Settings.tsx) keeps firing. */
+:root[data-motion='off'] *,
+:root[data-motion='off'] *::before,
+:root[data-motion='off'] *::after {
+  transition-duration: 0.001ms !important;
+  transition-delay: 0s !important;
+  animation-duration: 0.001ms !important;
+  animation-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+
 .settings-group > h3 {
   margin: 0;
   font-family: var(--font-serif);
