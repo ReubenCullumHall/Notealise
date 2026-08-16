@@ -1,317 +1,345 @@
-# First-run onboarding — implementation plan
+# First-run onboarding
 
-Status: **planned, not built.** Decided in a planning conversation with Reuben on 2026-08-08.
-Target: next release. This doc is the single source of truth for that plan — read it in full
-before writing any onboarding code, and update it if a decision changes rather than letting the
-code and this doc drift apart.
+Status: **ready to build.** The spec below is copied verbatim from
+`<vault>/Note taking app/Onboarding/2026-08-14-onboarding-spec.md` (2026-08-16, so a coding
+session without that vault mounted still has it) — its own frontmatter says it **supersedes** the
+2026-08-08 draft that used to be the whole of this file. Confirmed current by Reuben 2026-08-16.
+Implementation notes from that older draft that still hold up follow the spec; anything the two
+disagreed on (chip-created spaces, the curated five-note welcome sequence vs. one welcome note) is
+settled in the spec's favour — build from the spec, not from memory of the old plan.
 
-## 1. Why this exists
+---
 
-Read `notes-app/CLAUDE.md` and `notes-app/PROJECT-CONTEXT-BRIEF.md` first if you haven't. Short
-version: this is a local-first Electron Markdown editor whose whole pitch is "the ownership of
-plain files, with the polish of a modern editor" — live-preview syntax hiding, no account, no
-cloud, notes as real `.md` files. None of that is discoverable today. First launch is one bare
-screen (`src/renderer/src/App.tsx:1416-1425`):
+**The single biggest launch blocker.** Your own words (5.61): *"I can spin a website up but
+onboarding I've got no idea about sequences yet."* This is the sequence.
 
-```tsx
-if (!vault) {
-  return (
-    <div className="center picker">
-      <h1>Notes</h1>
-      <p className="muted">Choose a folder to use as your vault. Your notes stay as plain .md files inside it.</p>
-      <button className="primary" onClick={() => void pick()}>Choose folder…</button>
-    </div>
-  )
-}
+Build it from this document. Every screen, every line of copy, every artefact is specified — you
+should be transcribing, not deciding.
+
+## The rules it obeys
+
+| | Ruling | Source |
+|---|---|---|
+| Five steps, full-screen, **not skippable** | Forces interaction so people get used to the app | 2.7 |
+| **Every step leaves a real artefact behind** | Primary job is "leave them set up," not "explain" | this session |
+| Ends in a **curated set of notes**, not an empty app | A particular set you curate, showing delete + customise | 4B.51, 4B.52, 4B.43 |
+| **Imports get their own space, always** | Plus a post-import organise popup, per source format | 4B.53, 2.30 |
+| **No theme picker** — the app already follows their OS | Final screen points at Settings instead | 4B.20, this session |
+| Voice is **calm, plain, unhurried**. Product never says "I" | Except the trust beat | 3.91, this session |
+| **No exclamation marks. No "we."** | One-person business | 3.90 |
+| Looks like the app's default, with the site's restraint | The handshake between the two surfaces | 4B.40, 4B.41 |
+
+**Why it matters more than anything else on the list:** your most-heard objection from people who
+already have the app is *"I don't know how to use it"* — and you identified the cause yourself
+(3.74): no onboarding, they're just thrown in.
+
+## The shared skeleton
+
+Every one of the five screens uses the same layout. Build this once.
+
+```
+┌──────────────────────────────────────────────┐
+│  ←                                           │   back arrow, top-left, hidden on step 1
+│                                              │
+│              [Fraunces, one line]            │   the step's headline
+│         [Inter, one short paragraph]         │   never more than two sentences
+│                                              │
+│        ┌────────────────────────┐            │
+│        │                        │            │   the live piece — different per step,
+│        │   THE INTERACTION      │            │   same box, same size, every time
+│        │                        │            │
+│        └────────────────────────┘            │
+│                                              │
+│                [  Continue  ]                │   disabled until the step is done
+│                  ● ● ○ ○ ○                   │   progress dots, bottom-centre
+└──────────────────────────────────────────────┘
 ```
 
-A heading, one sentence, one button — a file dialog with a caption, not an onboarding flow. This
-plan replaces it with a real first-run sequence that actually shows the product's differentiators
-instead of asserting them.
+- Centred column, **max 520px** for the text; the interaction box may be wider.
+- Background is the app's own paper colour — **not white, not a gradient.** It should feel like the
+  app has cleared its desk, not like a different program.
+- Transition between steps: horizontal slide, matching the dots' direction. This is the one place
+  motion carries meaning. Standard duration (260ms).
+- **Nothing in the chrome changes height between steps.** Reserve the space, fill it later.
+- Quitting mid-flow is frictionless and resumes where you left off. That's the exit valve for
+  someone who hates it — there's no skip button.
 
-## 2. How the current first-run path actually works (verified in code)
+## Step 1 — Your notes are files
 
-- `vault` state is seeded from `window.api.getVault()` in the boot `useEffect`
-  (`App.tsx:787-791`). If a vault path is already saved, the app opens straight into it — this
-  bare screen (and therefore the new onboarding) only ever shows on a genuinely first-ever launch,
-  or after "no vault saved."
-- `pick()` (`App.tsx:1012-1045`) calls `window.api.pickVault()` → main's
-  `dialog.showOpenDialog` (`src/main/ipc.ts:106-115`).
-- On a successful pick, main (`src/main/ipc.ts:95`) runs, in order: `saveVault(root)` →
-  `activateVault(root)` → `void ensureMdnotes(root)`.
-- `ensureMdnotes` (`src/main/mdnotes.ts:13-23`) **only** does `fs.mkdir('<vault>/.mdnotes')` (+
-  sets the Windows hidden attribute). **No note file, no README, no seeded content of any kind is
-  ever written into a fresh vault today** — confirmed by grep across `main/vault.ts`,
-  `main/ipc.ts`, `main/settings.ts`, `App.tsx` for `welcome`/`seed`/`starter`/`getting started`:
-  no matches. A brand-new vault opens to a genuinely empty sidebar.
-- `pickVault` is the same function/button whether it's the first-run screen or "Switch folder" in
-  Settings → Source folder later in a live session — there is no separate "no vault" state,
-  it's one code path reused. **This matters for scoping**: the trigger for onboarding must be
-  "first launch ever," not "vault is currently null," or switching folders later would re-run it.
+**Artefact left behind:** the vault folder is chosen and created.
 
-## 3. Locked decisions
+**Headline:** `Everything here is a file on your computer`
 
-These came out of ~20 explicit questions put to Reuben across several rounds. Treat as settled —
-if you think one should change, say so and get confirmation rather than quietly reinterpreting it.
+**Body:**
+> Not a database. Not an account. Pick a folder and that's where your notes live — you can open
+> them in anything, and if you delete this app tomorrow they're exactly where you left them.
 
-**Shape of the sequence**
-- Full sequence, five steps: **trust beat → import offramp → live-preview demo → disk-reveal →
-  spaces explanation.**
-- **Not skippable.** No skip button anywhere.
-- **Full-screen takeover** — not an overlay on the real app UI, not a separate OS window.
-- **Progress dots + a back button**, shown throughout.
-- **Back is view-only.** It re-shows a prior step's screen but never re-runs or reverses a real
-  action — going back to the import-offramp step after an import already ran just re-displays it
-  in its "already imported" state; it does not re-trigger or undo the import.
+**Interaction:** a single button — `Choose a folder` — opening the OS folder picker. Once chosen,
+the path appears below it in mono, with a quiet `Change` link beside it.
 
-**Triggering and persistence**
-- **Triggers once ever, at the app level**, not per-vault. The flag (`hasOnboarded`, plus
-  whatever's needed to resume mid-step) belongs in **`userData/config.json`** (main's
-  `src/main/config.ts`) — the same file that already holds the vault path and the auto-update
-  preference, which CLAUDE.md rule 2 carves out specifically as "properties of *this install*"
-  rather than of a vault. It must **not** go in `<vault>/.mdnotes/settings.json` (`AppSettings`),
-  which is per-vault and already has no such flag (confirmed: full read of
-  `src/shared/settings.ts:190-260`, the `AppSettings` interface and `DEFAULT_SETTINGS` — nothing
-  in `startup`/`session` answers "has this vault seen onboarding," and per-vault would be wrong
-  anyway since the decision is app-level).
-- **Resumes at the same step** if the app closes mid-onboarding, including a bare quit —
-  **quitting mid-flow is frictionless, no confirmation dialog.** Cmd+Q / closing the window
-  partway through is just another way to pause.
-- **Dev-testing hook wanted**: an easy way to re-trigger onboarding without manually deleting
-  `userData/config.json` every test pass. Mirror the existing pattern: `dev-app-update.yml` +
-  `NOTES_TEST_UPDATER=1 npm run dev` (see `src/main/updater.ts`, `AppUpdater.js:278`) already does
-  exactly this shape of thing for update testing — an env var or hidden dev-menu item that clears
-  `hasOnboarded`.
+**Copy after a folder is picked:**
+> `~/Documents/Notes` — this is yours. Nothing else goes in it.
 
-**The import offramp (step 2)**
-- Explicit screen: "Already have notes elsewhere?" Sits **second**, right after the trust beat,
-  **before any seeded demo content is created** — no point seeding a welcome note for someone
-  about to import 400 real ones.
-- **Yes** → embed the real `ImportPanel` directly inside onboarding's own chrome. Run the import,
-  then **resume onboarding adapted to the real imported content** — the remaining steps
-  (live-preview demo, disk-reveal, spaces) should reference the user's actual imported note/space,
-  not generic seeded content.
-- **No** → seed an ordinary welcome note (fully editable/deletable, not pinned or protected — it's
-  just a real note like any other) and continue with the generic demo content.
-- `ImportPanel` (`src/renderer/src/import/ImportPanel.tsx`) today is only ever reached two ways:
-  Settings modal nav (`Settings.tsx:352-353`, nav item at `Settings.tsx:71`), or **File → Import
-  notes…** (`main/menu.ts:64` → IPC `'import-notes'` → `Sidebar.tsx:643-651` sets
-  `settingsJumpTo('import')`, which pre-jumps the Settings modal straight to that section,
-  bypassing the gear — see the comment at `Sidebar.tsx:50`). **Neither path is "standalone" —
-  embedding it inside onboarding's full-screen chrome instead of the Settings modal is new
-  integration work**, not a reuse-as-is. Check what, if anything, `ImportPanel` assumes about
-  being inside that modal shell (sizing, close behavior, focus trap) before reusing it directly.
+*(Show their real path, not this example.)*
 
-**Populated-vault detection**
-- If the very first folder picked already contains real content, **shorten the sequence** — skip
-  the seeded-welcome-note steps rather than dropping demo content into someone's real vault.
-- **Build this efficiently**: don't add a second directory walk. The tree is already listed on
-  vault activation (`activateVault` → whatever populates the initial `TreeNode` list the sidebar
-  renders) — reuse that result to decide "empty or not" rather than writing new fs-scanning code
-  in main.
-- **Open, not decided**: does the shortened path still show the import offramp? (They already
-  have notes in *this* vault, but might still want to pull in more from elsewhere.)
-- **Open, not decided**: the exact "already has content" heuristic — any `.md` file anywhere in
-  the tree vs. any existing space vs. "folder isn't empty at all" (could hold non-note files).
+**Continue is disabled until a folder exists.**
 
-**Live-preview demo (step 3)**
-- **This is THE showcase moment of the whole sequence** — it should get the most design attention
-  and the most polish passes; if anything has to be cut under time pressure, cut elsewhere first.
-- Must be **interactive**, not a static screenshot or a scripted/faked animation: the user should
-  actually type or click and watch Markdown syntax hide/reveal live, per the real engine described
-  in `docs/decorations.md` (CM6 `ViewPlugin`, syntax-tree-driven, hidden marks as `atomicRanges`).
-- **Decided 2026-08-08: a stripped-down standalone CM6 instance**, carrying just the live-preview
-  extension, no tabs/panes/format-bar chrome around it — not the full `NotePane` editor chrome.
-  Purpose-built for a single-note onboarding step rather than dragging in UI (tabs strip, split
-  controls) that makes no sense there. **Accepted trade-off**: this is a second, parallel place the
-  live-preview extension gets wired up, alongside `NotePane.tsx`'s real usage — it can drift from
-  the real one over time and that risk was taken on knowingly, not overlooked. When touching
-  `livePreview.ts`, check this instance still matches.
+### Notes for building
 
-**Disk-reveal (step 4)**
-- **Real side effect** — a button that actually opens the OS file window (Finder/Explorer) on the
-  welcome note, not descriptive text. Proves the "just a file" claim rather than stating it.
-- **This IPC does not exist yet.** Checked `src/main/externalLinks.ts`: it only guards
-  `shell.openExternal` by URL **scheme** (http/https/mailto) — a different capability
-  (opening a link in the default browser/mail client, not revealing a file in the OS file
-  manager). A new `shell.showItemInFolder`-based IPC channel is required.
-- **Security note, not a suggestion — apply the existing pattern**: every other fs-adjacent IPC in
-  this app resolves paths through the vault-root boundary check in `src/main/vault.ts`
-  (`toRel`/`resolveInVault`; `rel = path.relative(root, abs); reject if rel.startsWith('..') ||
-  path.isAbsolute(rel)` — see CLAUDE.md's Cross-platform rules and rule 6, "the vault root is a
-  hard security boundary"). The renderer must send a **vault-relative path**, never an absolute
-  one it constructed itself; main resolves it inside the boundary before calling
-  `shell.showItemInFolder`. This keeps the new IPC consistent with the one fs-boundary rule
-  everything else in the app already follows — don't add a second, looser path-handling
-  convention just for this one button.
+- This is the one screen where the founder is allowed to be present (3.91) — but keep it in the
+  product voice, not yours. No "I built this so that…".
+- If the folder they pick already contains `.md` files, say so plainly and continue: *"There are
+  already 34 notes in here. They'll show up as they are."*
+- If it's inside OneDrive, iCloud or Dropbox, say nothing here — but log it, because
+  `renameWithRetry` exists for a reason and Ops #4 is about to test it.
 
-**Spaces explanation (step 5)**
-- The app already **auto-creates one real folder-backed space** for any vault
-  (`reconcileSpaces`/`syncSpaces`, see notes-app/CLAUDE.md's "Spaces" section — this runs on every
-  tree load and guarantees at least one bound space). This step is **explanation only** — point at
-  the space that already exists, explain "a space is just a top-level folder." **No new
-  space-seeding logic needed.**
+## Step 2 — Bring your notes across
 
-**Ending**
-- **One quiet closing line, then straight into the app.** No separate "you're all set!" screen, no
-  celebratory animation — matches the app's no-fanfare, no-telemetry positioning.
-- On completion: mark `hasOnboarded: true` in `userData/config.json`, dismiss the takeover.
+**Artefact left behind:** either an import has run into its own space, or the step is explicitly
+declined.
 
-**Copy and tone**
-- Baseline: **spare, plain-spoken**, matching the existing picker sentence
-  ("Choose a folder to use as your vault. Your notes stay as plain .md files inside it.") — no
-  forced enthusiasm, no onboarding-voice pivot from the rest of the app.
-- **Exception, deliberate**: the trust-beat step (step 1) should **state the privacy positioning
-  explicitly, once** — "no account, no cloud, no telemetry" or equivalent plain phrasing. This is
-  the one moment spelling it out beats understatement, since it's the actual moment someone
-  decides whether to trust the app with their files. (This is the app's real positioning per
-  `PROJECT-CONTEXT-BRIEF.md` section 7 — "no account, no cloud, no telemetry surface" is listed as
-  a structural differentiator versus Notion/Evernote.)
-- **Room for exactly one signature/personality touch**, not a general tone shift across every
-  step. Candidates floated (pick one, don't scatter it):
-  - A specific, memorable line at the exact instant the Markdown syntax hides during the
-    live-preview demo (pairs with that step already being the showcase moment).
-  - A distinctive one-liner on the disk-reveal button/caption, since that step is already about
-    proving a claim rather than explaining a feature.
-- ⚠️ **Flagged tension, not resolved — do not silently pick a side.** Two separate answers in the
-  planning conversation gave conflicting style references: "spare, plain-spoken, matches the
-  picker's one-sentence style" **and**, in a later round, "narrative/guided, Notion/Craft-style"
-  (more "here's why this matters" framing between steps). These pull in different directions —
-  narrative framing generally means *more* words and more explicit "why" per step, while the
-  spare-tone decision was chosen specifically to match the app's existing no-nonsense voice. A
-  reasonable synthesis — spare sentences, with a couple of steps (the trust beat, the live-preview
-  demo) earning one extra sentence of *why* it matters, rather than a wholesale narrative rewrite —
-  is a **proposal**, not a decision. Get this confirmed before final copy is written; don't average
-  the two silently.
+**Headline:** `Already have notes somewhere?`
 
-**No new dependencies.** Build all transitions with existing Tailwind/CSS, consistent with how the
-rest of the app already animates (theme system, tab strip) with no animation library. This
-project's rule is "ask before adding any dependency beyond the stack list" — don't reach for one
-here without asking first.
+**Body:**
+> Bring them in now, or do it later from Settings. Everything you import lands in its own space so
+> it can't get mixed up with anything else.
 
-**Add a static Tutorials entry too**, once the interactive flow ships — a new `Guide` card in
-`src/renderer/src/settings/tutorials/index.tsx` covering the same explanation, for anyone who
-wants to re-read it later. See section 5 below for exactly how that file works. The interactive
-full-screen onboarding itself **never replays** — this static guide is the only way to revisit it.
+**Interaction:** the six format buttons you already have registered — Notion, Markdown, HTML, Word,
+Google Keep, Apple Notes (macOS only, and it must not appear at all on Windows). Plus a plain text
+link underneath: `Skip — I'm starting fresh`.
 
-## 4. Sequence, step by step (consolidated)
+**During an import:** a determinate progress bar, never a spinner. Local work is fast; the only
+slow paths are a large import and a font-pack download, and both are measurable.
 
-1. **Trust beat.** Replaces the bare picker screen. Same "choose a folder, plain `.md` files, no
-   account" idea as today's one sentence, but framed as an onboarding beat with the privacy
-   positioning stated explicitly, ending in the same "Choose folder…" action that calls the
-   existing `pick()` → `pickVault()` path (no changes needed to the picker mechanism itself).
-2. **Detect empty vs. populated** (using the tree already fetched on activation, not a new walk).
-   - Populated → shortened path (open question: does it still show the offramp?).
-   - Empty → step 3.
-3. **Import offramp.** "Already have notes elsewhere?"
-   - Yes → embed `ImportPanel` in onboarding's own chrome, run the import, adapt remaining steps
-     to the real imported space/note.
-   - No → seed the welcome note (via the existing `createNote`-style path in `main/vault.ts`, see
-     section 5 — not a raw `fs.writeFile`), continue.
-4. **Live-preview demo.** Interactive, on the real note (seeded or imported) — the showcase step.
-5. **Disk-reveal.** Real OS file-manager window opens on the note, via the new boundary-checked
-   IPC.
-6. **Spaces explanation.** Points at the already-auto-created default space.
-7. **Done.** One closing line, mark `hasOnboarded`, dismiss into the normal app.
+**After an import completes:**
+> `412 notes brought in. They're in a space called "Notion import."`
 
-## 5. Where things live — concrete architecture notes
+**Then the organise popup fires** — the one you asked for (2.30, 4B.53). It differs by source
+format:
+
+| Source | What the popup says |
+|---|---|
+| Notion | "Notion databases came in as folders. You can drag any of them into their own space." |
+| Google Keep | "Keep has no folders, so everything came in flat. Labels became tags in the note text." |
+| Apple Notes | "Attachments couldn't come across — Apple doesn't allow it. Locked notes were skipped." |
+| Word | "Text colour didn't survive the conversion. Everything else did." |
+| Markdown / HTML | "Folder structure came across as-is." |
+
+Each popup ends with the same line and one button:
+> You can reorganise any of this later — nothing's locked in place.
+> `[ Got it ]`
+
+### Notes for building
+
+- **The importer's writes are echo-guarded**, so after a run the renderer must explicitly reload
+  the tree and switch to the new space, or the notes are on disk and invisible.
+- Skipping is a real answer and must not be made to feel like a mistake. No "Are you sure?".
+
+## Step 3 — What do you take notes for?
+
+**Artefact left behind:** their spaces exist, named and created on disk.
+
+**Headline:** `What do you take notes for?`
+
+**Body:**
+> Pick as many as you like. Each one becomes a space — its own section of the app, which you can
+> make look and work however you want.
+
+**Interaction:** a grid of selectable chips. Multi-select, minimum one, plus a free-text field for
+their own.
+
+```
+   School      Work       Journal     Projects
+   Ideas       Revision   Personal    Reading
+                [ + something else ]
+```
+
+Selected chips get the accent border. Below the grid, live-updating:
+> `You'll start with three spaces: School, Ideas, Journal.`
+
+**This step runs even if they imported** (your call this session). The imported space and their new
+spaces coexist — the copy just acknowledges it:
+> Your imported notes already have their own space. These are for everything new.
+
+### Notes for building
+
+- Each chip creates a real folder via the existing `createFolder` IPC — **create with the final
+  name, never create-then-rename**, because `syncSpaces` runs on every tree load and would register
+  a temporary "New folder" as a real space mid-flow.
+- Cap is 10 spaces. If they somehow select more, take the first 10 and say so.
+- Sanitised names come back from main — use the path main actually used, not the one you sent.
+
+## Step 4 — Try writing something
+
+**Artefact left behind:** their first real note, saved in their first space.
+
+**Headline:** `Try writing something`
+
+**Body:**
+> Type a `#` and a space before a line to make it a heading. Watch what happens to the `#`.
+
+**Interaction:** a **real CodeMirror instance**, not a mockup, not a video. Same extensions as the
+app, same live preview, same fonts. Pre-filled with nothing; placeholder text reads
+`Start typing…`.
+
+**Continue stays disabled until they've typed at least one character.** The whole feature is the
+feeling of it happening to your own typing — a video of live preview is worthless.
+
+**When they type a heading, a quiet line appears below the box:**
+> That's Markdown. The app hides the symbols while you're not on that line, so it stays readable.
+
+### Notes for building
+
+- Whatever they type here **is saved as a real note** in their first space, titled from the first
+  line. This is the artefact — and it's also what step 5 needs.
+- If they type only whitespace, treat it as nothing typed.
+- Keep the demo box to a fixed height; it must not grow as they type and shift the button.
+
+## Step 5 — There it is on your disk
+
+**Artefact left behind:** proof. And the file explorer open on their actual note.
+
+**This is the emotional peak of the whole product.** Give it more room than the other four.
+
+**Headline:** `That note is already a file`
+
+**Body:**
+> No saving, no exporting, no account. It's sitting in the folder you picked, and it'll open in any
+> app that reads text.
+
+**Interaction:** two panes side by side — what they wrote, and the file as text on disk at its real
+path.
+
+Below it, one button: `Show me the file` — which calls `shell.showItemInFolder` and opens their
+real file explorer with the real `.md` selected. **Showing the OS's own window is the proof. A
+mockup isn't.**
+
+**Final line on the screen, above the button that ends onboarding:**
+> Nearly everything about how this looks and works can be changed — themes, colours, spacing,
+> what's in the toolbar. It's all in Settings when you want it.
+
+**The button says `Start writing`. Not "Finish", not "Done", not "Get started".**
+
+## After onboarding — the curated welcome notes
+
+**They land in the main/first space.** Imports always go to their own space, so these can't clash
+(4B.53, MacBook Air copy — the authoritative one).
+
+Five notes and one folder. Each demonstrates something by *being* it, not by describing it:
+`Start here.md`, `How this app is organised.md`, `Make it yours.md`, `Things you can delete.md`
+(the demo folder's index) and `Things you can delete/This one's safe to bin.md`. Full copy for all
+five lives in the source spec (`<vault>/Note taking app/Onboarding/2026-08-14-onboarding-spec.md`)
+— transcribe from there rather than redrafting, except for the two pieces Reuben is rewriting
+himself (see "Still yours to write" below).
+
+### Notes for building
+
+- **Written in the product voice** — calm, plain, unhurried. No exclamation marks, no "we", no "I".
+- The `[[wiki links]]` between them are deliberate: they demonstrate linking by working, and they
+  populate the links strip on first open so it isn't empty.
+- They must be created with `createNote(dir, name)` at their final names, auto-suffixed on
+  collision. Never create-then-rename.
+- **They are ordinary notes.** No flag, no special handling, no "welcome note" type. Deleting them
+  leaves no trace and breaks nothing.
+
+## Definition of done
+
+- [ ] A fresh install with no vault runs all five steps and cannot be skipped
+- [ ] Quitting at step 3 and relaunching resumes at step 3
+- [ ] Choosing a folder that already has notes in it works and says so
+- [ ] An import lands in its own space and the correct per-format popup fires
+- [ ] Skipping the import still produces spaces at step 3
+- [ ] Step 4's editor is the real CodeMirror with live preview working
+- [ ] Continue is disabled at step 4 until a character is typed
+- [ ] The note typed at step 4 exists on disk afterwards
+- [ ] `Show me the file` opens the real file explorer with the real file selected
+- [ ] The five welcome notes and the demo folder exist in the first space
+- [ ] The `[[links]]` between the welcome notes resolve
+- [ ] Deleting every welcome note leaves a working, empty app
+- [ ] Nothing in the five screens changes height between steps
+- [ ] macOS: Apple Notes appears in step 2. Windows: it does not appear at all
+
+## Still yours to write
+
+Two things Reuben drafted and should rewrite in his own words before it ships: **the step 1 trust
+beat** (the most important sentence in the product), and **the five welcome notes** (structurally
+right, voice close, but a user's first impression of the app's personality is these five files).
+
+## Deliberately not in scope
+
+The cheat sheet referenced in the pre-2026-08-14 plan belongs to the tutorial system (October
+half-term), not onboarding. Onboarding gets people set up; the tutorials teach. Don't merge them.
+
+---
+
+## Implementation notes carried over from the 2026-08-08 draft
+
+The spec above is UX/copy, not IPC-level architecture — these notes from the earlier draft fill
+that gap and are **not** contradicted by the spec, except where marked.
 
 **New state (`userData/config.json`, via `src/main/config.ts`)**
-- `hasOnboarded: boolean`
-- A resume marker (e.g. `onboardingStep: number | null`) for the "resume at the same step" rule.
-- This file already holds vault path + auto-update preference per rule 2 — extend the same shape,
-  same normalize/default pattern main already uses there.
+- `hasOnboarded: boolean`, plus a resume marker (e.g. `onboardingStep: number | null`) for
+  "resume at the same step." Same file that already holds vault path + auto-update preference per
+  CLAUDE.md rule 2 — extend the same shape, same normalize/default pattern main already uses there.
+- **Triggers once ever, at the app level, not per-vault** — `pickVault()` is the same
+  function/button whether it's first-run or "Switch folder" later, so the trigger has to be
+  "first launch ever," not "vault is currently null," or switching folders later would re-run it.
+- **Dev-testing hook wanted**: mirror `dev-app-update.yml` + `NOTES_TEST_UPDATER=1 npm run dev`
+  (`src/main/updater.ts`) — an env var or hidden dev-menu item that clears `hasOnboarded`.
 
-**Welcome-note seeding (new, main process)**
-- `main/mdnotes.ts`'s `ensureMdnotes` (`:13-23`) currently only makes the `.mdnotes/` folder — this
-  is new code, not a tweak to existing seeding (there isn't any).
-- **Reuse the existing note-creation path**, not a raw fs write: the "Importing notes" section of
-  CLAUDE.md explicitly warns "never create-then-rename in the vault" and documents that
-  `createFolder(dir, name)` / `createNote(dir, name)` in `main/vault.ts` already create with the
-  final name and auto-suffix collisions correctly, and that `syncSpaces` runs on every tree load so
-  ad-hoc file writes can get picked up in surprising ways. Route the welcome note through whatever
-  the "New note" context-menu action already calls, not a bespoke `fs.writeFile`.
-- Renderer never touches `fs` directly (rule 6) — this has to be a main-process function exposed
-  through IPC → preload, like every other vault operation.
+**Welcome-note / space seeding (new, main process) — corrected from the old draft**
+- The 2026-08-08 draft said "no new space-seeding logic needed" for the spaces step and assumed
+  one welcome note. **Both are now wrong per the spec**: step 3's chips create real spaces, and the
+  after-onboarding sequence seeds five notes plus a demo folder. This IS new seeding logic.
+- **Reuse the existing note/folder-creation path**, not a raw fs write: `createFolder(dir, name)` /
+  `createNote(dir, name)` in `main/vault.ts` already create with the final name and auto-suffix
+  collisions, and `syncSpaces` runs on every tree load so ad-hoc file writes can get picked up in
+  surprising ways. Route every welcome note and the demo folder through whatever "New note"/"New
+  folder" already call, not a bespoke `fs.writeFile`.
+- Renderer never touches `fs` directly (rule 6) — main-process function exposed through IPC.
 
 **Disk-reveal (new IPC)**
-- New channel in `src/shared/channels.ts`, handler in `main/ipc.ts` (or a new `main/reveal.ts` /
-  folded into `main/vault.ts`), calling `shell.showItemInFolder` on a path resolved through the
-  same `resolveInVault` boundary check as everything else (see security note in section 3).
-- Exposed to the renderer via `preload/index.ts`'s `contextBridge` → typed on `window.api`
-  (`VaultApi` in `src/shared/types.ts`) and `preload/index.d.ts`.
+- **Does not exist yet.** `src/main/externalLinks.ts` only guards `shell.openExternal` by URL
+  scheme — a different capability. New channel in `shared/channels.ts`, handler in `main/ipc.ts`,
+  resolving the path through the same `resolveInVault` boundary check as everything else (rule 6)
+  before calling `shell.showItemInFolder`. The renderer sends a vault-relative path, never one it
+  constructed itself.
 
 **Import embedding**
-- `ImportPanel.tsx` needs to be renderable outside the Settings modal shell it currently assumes.
-  Check its props/context assumptions (does it read anything from Settings' own state/layout?)
-  before wiring it into the onboarding takeover.
+- `ImportPanel.tsx` currently assumes it's inside the Settings modal shell. Check its
+  props/context assumptions (sizing, close behavior, focus trap) before wiring it into onboarding's
+  full-screen chrome — this is new integration work, not reuse-as-is.
+
+**Live-preview demo**
+- Decided 2026-08-08: a stripped-down standalone CM6 instance, carrying just the live-preview
+  extension, not the full `NotePane` chrome. Accepted trade-off: a second, parallel place the
+  live-preview extension gets wired up — it can drift from `NotePane.tsx`'s real usage. When
+  touching `livePreview.ts`, check this instance still matches.
 
 **Populated-vault detection**
-- Runs off the tree data already fetched when `activateVault` completes — check what shape that
-  data already takes (the same `TreeNode` list the sidebar consumes) rather than adding a second
-  fs walk in main.
+- Runs off the tree data already fetched when `activateVault` completes — reuse that `TreeNode`
+  list rather than adding a second fs walk in main. **Still an open question** (not addressed by
+  the spec): does a populated first vault still show the import offramp, and what exactly counts
+  as "already has content" — any `.md` anywhere, any existing space, or any non-empty folder at
+  all?
+
+**Testing**
+- This codebase's test philosophy is pure logic only (`vitest`, no React/Electron harness). Write
+  the onboarding step sequence/state machine as a pure function module (e.g.
+  `renderer/src/onboarding/model.ts`), independent of React, the same way `tabs/model.ts` holds
+  pane/tab arithmetic separately from `NotePane.tsx`. The React shell stays untested per the
+  project's existing "no React harness" stance.
 
 **Tutorials entry**
-- `src/renderer/src/settings/tutorials/index.tsx`: `Tutorials()` holds a `Guide[]` array
-  (`{id, title, blurb, icon, body}`) and local `useState<string | null>(openId)` — no router, no
-  separate modal. List view (default) renders cards; clicking one sets `openId` and renders that
-  guide's `body` component with a "← All tutorials" back button that clears `openId`. Currently one
-  entry (`linking` → `LinkingGuide.tsx`) plus a "More on the way" placeholder card. **Adding the
-  onboarding-recap guide is: one new body component (mirror `LinkingGuide.tsx`'s structure — plain
-  static JSX) + one new entry in the `Guide[]` array.** No new modal/portal/routing work.
+- Add a static Tutorials guide once the interactive flow ships:
+  `src/renderer/src/settings/tutorials/index.tsx`'s `Tutorials()` holds a `Guide[]` array; mirror
+  `LinkingGuide.tsx`'s structure (plain static JSX) + one new `Guide[]` entry. No new
+  modal/routing work. The interactive onboarding itself never replays — this static guide is the
+  only way to revisit it.
 
-**Testing — fits the project's existing pattern**
-- This codebase's test philosophy (see notes-app/CLAUDE.md's "Commands" section) is **pure logic
-  only**, via `vitest`, no React/Electron harness — e.g. `tabs/model.ts`, `organise/model.ts`,
-  `shared/settings.ts` are all plain-function modules with `*.test.ts` beside them, and the UI
-  layer is a thin wrapper over them.
-- **Follow that shape here**: write the onboarding step sequence/state machine (which step comes
-  next given "populated vault" / "did they import" / "back pressed", what `hasOnboarded` should
-  become) as a **pure function module** (e.g. `renderer/src/onboarding/model.ts`), independent of
-  React, the same way `tabs/model.ts` holds pane/tab arithmetic separately from `NotePane.tsx`.
-  That gets you a real, fast, meaningful test suite for the branching logic (populated vs. empty,
-  import-taken vs. not, resume-from-step-N) without needing a DOM harness this project doesn't have
-  yet. The React shell (full-screen takeover, progress dots, transitions) stays untested per the
-  project's existing "no React harness" stance — same division of labor as everywhere else in the
-  app.
+## Related but deliberately separate
 
-## 6. Open questions — resolve while building, don't silently pick one
-
-1. **Does the shortened "populated vault" path still show the import offramp?**
-2. **Exact "already has content" detection heuristic** — any `.md` anywhere / any existing space /
-   any non-empty folder at all.
-3. ~~Live-preview demo: full `NotePane` chrome vs. a minimal standalone CM6 instance?~~ **Resolved
-   2026-08-08: minimal standalone CM6 instance.** See section 3.
-4. **Copy tone: spare vs. narrative/guided — flagged conflict, needs a real decision** (section 3).
-5. **Actual step copy** — none drafted yet; only tone constraints are settled.
-6. **What happens if the app closes mid-*import*, specifically** — not just mid-onboarding in
-   general. Resume-at-step covers the onboarding sequence itself, but a half-finished import
-   landing back on the offramp screen with a partially-populated vault hasn't been discussed.
-
-## 7. Suggested build order
-
-1. `userData/config.json` schema + IPC for onboarding state (`hasOnboarded`, resume step).
-2. Onboarding step model as a pure function module (`renderer/src/onboarding/model.ts`) + its
-   `*.test.ts` — settle the state machine and the two open branching questions (1 and 2 above)
-   here, in tests, before touching any UI.
-3. Populated-vs-empty vault detection, reusing the existing post-activation tree data.
-4. Full-screen shell: step router wired to the model, progress dots, back button (view-only),
-   no-skip enforcement.
-5. Trust beat step (privacy copy) + import offramp step (decide and build the `ImportPanel`
-   embedding).
-6. Welcome-note seeding (via `main/vault.ts`'s existing `createNote` path) + the live-preview demo
-   step (resolve open question 3 first).
-7. Disk-reveal IPC (boundary-checked) + step.
-8. Spaces-explanation step.
-9. Closing line + wire completion into normal app boot.
-10. Dev-only reset hook (mirroring `NOTES_TEST_UPDATER`).
-11. Tutorials guide entry (`settings/tutorials/index.tsx`) — can trail behind the rest, once copy
-    is settled.
-
-## 8. Related but deliberately separate
-
-The download-site install-guide page (a different first-run touchpoint — explaining Windows/Mac
-unsigned-app security warnings *before* the app is even installed) is a **separate concern by
-Reuben's explicit call**, made in the same planning conversation. Don't merge messaging or design
-work between the two without asking — they're different moments (pre-download marketing site vs.
-post-launch in-app) with different constraints.
+The download-site install-guide page (explaining Windows/Mac unsigned-app security warnings
+*before* the app is even installed) is a separate concern by Reuben's explicit call — different
+moments (pre-download marketing site vs. post-launch in-app) with different constraints. Don't
+merge messaging or design work between the two without asking.

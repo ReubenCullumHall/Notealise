@@ -36,6 +36,14 @@ python3 -m playwright install chromium
 
 `scikit-image` is only needed by `build_centerlines.py` (for `skeletonize`).
 
+**On the Mac workstation this is not the toolchain to reach for whole.** There is no Node at all,
+so `vite site` cannot run — but `site/index.html` is fully static (its only external reference is
+`favicon.svg`), so `python3 -m http.server 8788` inside `site/` serves it identically and every
+`verify_*.py` script works against it unchanged. System Python has `numpy`, `pillow` and
+`playwright` (with chromium cached) but **not `scipy` or `scikit-image`**, which
+`build_centerlines.py` needs; a `venv --system-site-packages` plus those two is enough, and keep
+it out of the repo.
+
 ## Regenerating
 
 Serve the site first — the tools drive a real browser against a real URL:
@@ -207,6 +215,66 @@ composite darker — that inflates the "true letterform" and invents holes. The 
 glyph rendered **once**. The sharper check is to diff the finished animation against the previous
 build and ask how many differing pixels fall in the letters' **interior**: an outline-only
 difference is antialiasing, an interior one is a seam or a hole.
+
+## Gotchas folded in here from CLAUDE.md (2026-08-16)
+
+These were living as a duplicate explanation in the app's CLAUDE.md; consolidated here so there's
+one copy. Genuinely additional to the sections above, not restating them.
+
+**Writing order is `TRAVERSAL`, not `HINTS`/`ROUTE` — and `HINTS` is silently ignored for some
+letters.** Two structural facts, both of which cost a session to find: (1) **Skeletonisation
+merges a letter's up-stroke and down-stroke into one branch.** A hand writes `l`, `i` and `s` by
+going up a narrow loop and back down nearly the same ink; painted with the 190 stroke that is one
+solid limb. So the graph has **no baseline entry node on any of them**, and a graph walk can only
+cross a branch once — meaning no value of `HINTS` can make a letter start where a hand starts.
+(2) `main()` snaps `start` to the nearest **odd-degree** node, so a hint that doesn't resolve to
+one is discarded outright. The `s` is the worst case: its entire body is a single **self-loop** on
+one node, so its start was never movable and its hint had never once taken effect. `TRAVERSAL`
+re-walks the finished centreline by arc fraction, which is the only way to start partway along a
+limb, double back, or cut a closed loop. `assert_continuous()` fails the build if those fractions
+ever drift off the features they were chosen for — **don't widen `JOIN_TOL` to make a build
+pass**, re-read the fractions off a fresh route diagram.
+
+**A ribbon flank that stops INSIDE the outline is a whole class of defect the coverage check
+cannot see.** Wherever a bound pulls a slice's flank short of the glyph edge, the neighbouring
+slice abuts it instead of overlapping, the two traced edges land on one pixel each covering part
+of it, and the result is a white hairline **in the finished word**. The raster check measures on a
+4-unit grid and reports it as clean. Diagnose by attributing the shortfall per letter to its two
+bounds: separation dominated on exactly the three letters that cracked (`a`/`s`/`e`, 67–70%) and
+curvature on the two that didn't (`l`/`i`, 100%). `SEP_BLEED` is the fix, and it is deliberately
+**not** applied to the curvature bound — reaching past a fold is a spike, not a seam.
+
+**A pen-down is exactly where the local halfwidth collapses, so never size anything at sample 0
+from it.** A letter touches down beside ink belonging to a later pass, so the separation bound
+fires immediately: measured 18 units at sample 0 on the `a`, `s` and `e` against a real reach of
+142–198. A rounded pen-down cap sized off that halfwidth is invisible, and the first ink a viewer
+sees is the *next* slice's flat chord. Size it off the pen instead (`STROKE / 2`), which is inside
+the letter's own ink by construction because the glyph is painted with that stroke.
+
+**A retrace must be recognised by GEOMETRY, not by adjacency.** The fold that stops two passes
+over the same ink clamping each other used to compare a pass only with the one before it across a
+reversal. That breaks the moment the writing order puts anything in between — the `a` goes up its
+stalk, out to its entry flick and back, and only then down the stalk — and the symptom is the
+stalk tiling as **hatched stripes**. Match on coincident position plus a minimum contiguous run: a
+crossing coincides for a sample or two, a retrace for a long run. (This is a different bug from
+`CROSS_WINDOW_PX`'s chevron-boundary fix above — that one decides which pass owns a pixel; this
+one decides whether two passes are the same stroke retracing itself at all.)
+
+**A reversal is a TERMINAL.** Once the pen doubles back, the turning point has a round cap of
+glyph beyond it exactly like a path end, and a ribbon that stops at a perpendicular chord leaves
+it bare. Testing only the first/last sample of the whole path left the `l`'s ascender tip and the
+`s`'s hook tip untiled and dropped three letters back to the raster fallback. Test the end of the
+**pass**.
+
+**In the "Note" typing (site/index.html's `@keyframes note-type`, separate from the alise reveal
+above), a character's advance box is not its ink box.** The keyframes clip at fractions of the
+element's width, and cutting at an *advance* boundary left a slice of the `t`'s crossbar hanging
+beside "No" (and the `e`'s left edge beside "Not") — the crossbar reaches back past where the
+glyph's box starts. The stops must sit in the **gaps between the letters' ink**, measured off a
+real render, and at the midpoint of each gap: the o/t gap is only 0.39% wide and erring toward the
+`t` shaves the `o`, which Reuben has rejected twice. These percentages are specific to this font
+stack and weight — re-measure if either changes. The block sits *before*
+`wordmark-keyframes:begin`, so `gen_pen.py` cannot overwrite it.
 
 ## Exporting the animation with a transparent background
 

@@ -14,6 +14,11 @@ database that happens to export Markdown**. No accounts, no sync, no cloud.
 If a rule below and the code disagree, the rule wins: fix the code, or ask. Do not weaken a
 rule to match the code.
 
+**This file holds what's relevant to almost any task here — architecture, cross-platform rules,
+the settings/theme system, general gotchas.** Feature-specific build history, the release ritual,
+the import pipeline, and one-off product decisions live in `docs/` instead, read on demand rather
+than loaded every session — see "Where the rest of it lives" near the end of this file.
+
 ## Hard architectural rules (non-negotiable)
 
 1. **Files are the source of truth.** No SQLite, no IndexedDB-as-note-store, no ORM, no note
@@ -131,95 +136,11 @@ comparison.
 
 ## Importing notes
 
-Six formats, one pipeline. **Every source is made to produce HTML, and one converter turns that
-into Markdown** — which is why a format is ~150 lines rather than the ~1,500 Obsidian's Apple Notes
-importer needs:
-
-```
-Notion .zip --ditto unzip--> .html --+
-Markdown .md ---------- copied verbatim, never converted (it IS the target format)
-HTML files/folder -------------------+
-Word .docx --mammoth--> HTML --------+--> turndown (html/turndown.ts) --> one NEW space
-Google Keep Takeout .json -----------+                                    + Import Report
-Apple Notes --AppleScript--> HTML ---+
-```
-
-**Adding a format is a module + one `registerImporter` call + one entry in `ImportPanel`'s
-`FORMATS`.** Nothing else. The dropdown asks main which formats are *registered* (`import:formats`),
-so availability can't drift from reality — that is how Apple Notes is macOS-only without the
-renderer knowing what platform it is on.
-
-Rules learned the hard way here; breaking one has cost a rewrite each time:
-
-- **Verify the real export against a real file before writing a parser.** Notion's "Markdown & CSV"
-  export contains `.html`, not `.md`, and every source said otherwise. Apple's `account.folders()`
-  returns subfolders flat as well as nested, so recursing imports them twice.
-- **Child processes:** `stdio: ['ignore','pipe','pipe']`, drain BOTH pipes, always a timeout. An
-  undrained stdout hung a 6-second unzip for 30+ minutes with no error. See `notionZip/extractZip.ts`.
-- **macOS unzip is `ditto -x -k`, never `unzip`** — Apple's fork mangles non-ASCII filenames into
-  invalid UTF-8 and then aborts the whole archive.
-- **Never create-then-rename in the vault.** `syncSpaces` runs on every tree load, so a temporary
-  "New folder" gets registered as a real space mid-import. `createFolder(dir, name)` /
-  `createNote(dir, name)` create with the final name and auto-suffix; `renameEntry` THROWS on
-  collision and one throw aborts everything.
-- **An importer's writes are echo-guarded** (`markWrite`), so the watcher says nothing about them:
-  after a run the renderer must explicitly reload the tree and switch to the new space
-  (`SpaceActions.onOpenSpace`), or the notes are on disk and invisible.
-- **turndown does not strip `<head>`/`<style>`** — an embedded print stylesheet lands in the note as
-  literal CSS. `createConverter()` handles it.
-- Everything lands in **one new space, never merged**; re-importing makes another space (warned
-  about at preview) rather than merging. Imports preserve the source's modification time
-  (`setNoteTimes`); a file's *creation* time can't be set from Node, so that still shows the import.
-
-### What is verified, and what is not (as of 2026-08-05)
-
-**Verified in the running app:** Notion (a real 400MB export), Word (a real .docx with images,
-tables, lists), and the editor rendering — tables, inline images, clickable links, tick-boxes,
-`<u>`/`<sup>`/`<mark>`, and `[1]` citations keeping their brackets.
-
-**Built and tested only against fixtures, NOT against the user's real data:** Markdown folders,
-HTML folders, Google Keep (fixture built from Google's documented Takeout schema — a real Takeout
-has never been run through it), and Apple Notes (tested against notes created BY SCRIPT, which
-Notes.app rewrites — it turned an injected `<a href>` into `<u>` and dropped an `<img>` — so
-script-made notes are NOT representative of typed ones). Treat a first failure in any of these as
-"the fixture was wrong", and go and look at the real file before changing code.
-
-### Known limits — decided, not bugs
-
-- **Word text colour is unrecoverable.** mammoth's run model exposes bold/italic/underline/strike/
-  vertical-align/font/size/highlight and simply never parses `w:color`. Getting colour means
-  parsing the .docx XML alongside mammoth.
-- **Apple Notes attachments stay behind** (its scripting dictionary has no attachment-save command;
-  only `open note location` and `show` exist) and **password-locked notes cannot be read** at all.
-- **A file's creation time can't be set from Node**, so imports restore the *modified* time only —
-  which is what the sidebar shows and sorts on. "Created" shows the import date.
-
-### Flagged, not fixed (rule 9 — say so rather than silently leave or silently change)
-
-- **`blockTable` re-scans the WHOLE syntax tree when the document changes**, unlike the
-  viewport-scoped passes in `livePreview.ts`. A StateField can't see the viewport, and
-  `blockMath.ts` already does the same, so this is inherent to block decorations rather than an
-  oversight — but on a very large note it is a real cost, and it contradicts this file's own "only
-  the visible viewport is decorated" claim. Narrowed 2026-08-07: it no longer rebuilds on selection
-  changes at all (the table renders the same wherever the cursor is), which removed the most
-  frequent trigger by a wide margin.
-- **`inlineHtmlPass` keeps its tag stack across CodeMirror's disjoint visible ranges**, so an
-  unclosed `<u>` could in principle pair with a `</u>` past a scroll gap. `colorPass` beside it has
-  exactly the same shape; changing one of the two would be worse than leaving both consistent.
-- **`ImportPanel` uses the `format` STATE for its API calls but `current` for display.** They can
-  only diverge if the selected format stops being available mid-session, which can't happen today
-  (the default, Notion, is always registered) — but it is a trap if a format ever becomes
-  conditional.
-
-**Apple Notes is AppleScript, not the SQLite/protobuf route** Obsidian uses. Notes.app's dictionary
-gives a note's `body` as HTML, so the whole reverse-engineered-protobuf problem disappears, and it
-needs only the ordinary Automation consent rather than Full Disk Access — which matters because this
-app is unsigned, and TCC keys Full Disk Access on the code signature. Address Notes by **bundle id**
-(`com.apple.Notes`): this app's own productName is "Notealise". macOS-only in two layers — the runtime
-guard (never registered off darwin) and `__MAC_BUILD__` in `electron.vite.config.ts`, which lets
-rollup drop the module from the Windows bundle. It IS dropped: verified by building with the flag
-false and confirming the chunk is not emitted. The dynamic `import()` is load-bearing — a static one
-would be hoisted and survive.
+Six formats, one pipeline (Notion, Markdown, HTML, Word, Google Keep, Apple Notes), all converted
+through one HTML→Markdown path. **Read `docs/importing-notes.md` before touching an importer** —
+the pipeline diagram, the hard-won rules (child-process draining, macOS unzip, never
+create-then-rename in the vault), what's verified against real user data vs. fixtures only, and
+the known, decided limits (Word colour, Apple Notes attachments).
 
 ## Folder structure
 
@@ -231,9 +152,18 @@ notes-app/
   tsconfig*.json            root refs + tsconfig.node.json (main+preload) / .web.json (renderer)
   package.json              scripts + deps ("main": out/main/index.js)
   dev-app-update.yml        ONLY read by NOTES_TEST_UPDATER=1 npm run dev; never packaged
-  docs/release-checklist.md the four gates, the release ritual, and how to recover a bad release
-  docs/commands.md          the ONE editor-command registry — read before adding any command
-  docs/decorations.md       the live-preview pass engine and its extension point
+  docs/
+    release-checklist.md    the four gates, the release ritual, and how to recover a bad release
+    commands.md             the ONE editor-command registry — read before adding any command
+    decorations.md          the live-preview pass engine and its extension point
+    importing-notes.md      the import pipeline, its rules, and what's verified vs. fixture-only
+    feature-tabs-spaces.md  tabs/panes, Spaces, space presets — build history and decisions
+    feature-organise.md     pins/archive/bin, the theme/token system's build state
+    feature-editor.md       format buttons, command registry, note links, entry colours, tables
+    product-rulings.md      decisions from the 2026-08-09 interview that the code has to honour
+    onboarding-plan.md      the first-run onboarding plan — READ THE FLAGGED CONFLICT AT ITS TOP
+    voice.md                the locked UI-copy voice rules
+    appearance-research-brief.md
   .github/workflows/        verify.yml (every push) + release.yml (v* tags; verify gates packaging)
   src/
     main/                   MAIN PROCESS — the only code allowed to touch fs
@@ -244,12 +174,12 @@ notes-app/
       workspace.ts          .mdnotes/workspace.json: order/pins/archive/bin (debounced, atomic)
       settings.ts           .mdnotes/settings.json (spaces + globals) + userData pre-paint mirror
       presets.ts            userData/presets.json — the saved-preset library, which is NOT in a
-                            vault precisely because it outlives one (see "Space presets" below)
+                            vault precisely because it outlives one (see docs/feature-tabs-spaces.md)
       watcher.ts            chokidar → debounced (100ms) change events, echo-guarded
       ipc.ts                ipcMain handlers + vault activation (starts the watcher)
       support.ts            bug-report mailto: link (fixed destination is still a placeholder)
       externalLinks.ts      shell.openExternal, guarded by SCHEME (http/https/mailto) not host
-      importers/            note import — see "Importing notes" below
+      importers/            note import — see docs/importing-notes.md
         types.ts            ImportRunner + registry + the cancel flag
         files.ts            expand a picked folder/files into a list, keeping folder paths
         space.ts            the one new space every import lands in
@@ -276,7 +206,7 @@ notes-app/
       src/                  React UI: App (tabs + panes) + Sidebar (the whole aside)
         Sidebar.tsx         header/archive toggle, nav bar, pinned, archive & bin views, bottom strip
         TreeView.tsx        the row renderers: 2-line rows, multi-select, drag-reorder
-        tabs/               open notes as tabs + the 1–3 side-by-side panes
+        tabs/               open notes as tabs + the 1–3 side-by-side panes — docs/feature-tabs-spaces.md
                             model.ts (pure layout arithmetic), TabStrip.tsx, NotePane.tsx
         dev/browserApi.ts   DEV ONLY: a localStorage stand-in for window.api so the real
                             renderer also runs at localhost:5173 in a browser (see rule 8)
@@ -308,7 +238,8 @@ notes-app/
   site/                     the Vercel download page. site/DESIGN.md is its design directive and
                             decision log — read it before any visual change here
   tools/wordmark/           GENERATOR for the wordmark animation in site/index.html, plus its
-                            verification harness. Not shipped, not an app dependency. See below
+                            verification harness and its own gotchas doc. Not shipped, not an
+                            app dependency. See tools/wordmark/README.md
   <vault>/.mdnotes/         created (hidden on Windows); settings.json + workspace.json + trash/
 ```
 
@@ -368,666 +299,71 @@ file pulls in the DOM build and dies. Run these with `npm test` from `notes-app/
 `npx --prefix … vitest` resolves a different copy and fails on import with a bogus
 `Cannot read properties of undefined (reading 'config')`.
 
-## Shipping a release ("push that update to Vercel")
+## Tracking pending changes, and the "log it" / "log that" ritual
 
-**Read `docs/release-checklist.md` before releasing.** Short version below.
+**`CHANGELOG.md`'s `## [Unreleased]` section is the running list of what's built and verified
+since the last tag** — read *that* to answer "what would a release include right now," never scan
+the codebase for it. It's populated incrementally: once a feature is built AND the user has
+verified it works in the **live Electron app** (`npm run dev`) — not `legacy/`, which never ships
+(rule 8) — ask whether to add it to the next update or scrap it. If kept, append one line to
+`Unreleased` in the same terse, user-facing style as past tag messages (e.g. "Add KaTeX inline
+math rendering in the editor"). Don't log automatically and don't log on the strength of unit
+tests alone — this is specifically gated on the user's own live-app check.
 
-**Tracking pending changes (`CHANGELOG.md`).** Its `## [Unreleased]` section is the running list
-of what's built and verified since the last tag — read *that* to answer "what would a release
-include right now," never scan the codebase for it. It's populated incrementally: once a feature
-is built AND the user has verified it works in the **live Electron app** (`npm run dev`) — not
-`legacy/`, which never ships (rule 8) — ask whether to add it to the next update or scrap it. If
-kept, append one line to `Unreleased` in the same terse, user-facing style as past tag messages
-(e.g. "Add KaTeX inline math rendering in the editor"). Don't log automatically and don't log on
-the strength of unit tests alone — this is specifically gated on the user's own live-app check.
+**When Reuben says "log it" about a feature just built, that means three things, in order — not
+just the changelog line:**
 
-**"Log that" / "log that change" (or close wording) is a two-part default, not just the changelog
-line.** Reuben says this right before clearing the chat, so treat it as the session-end ritual:
+1. **Append the CHANGELOG line**, as above.
+2. **Work out where in the files a lesson belongs, don't just default to this file.** Ask: is this
+   a rule that should change how *any* future task here is approached (→ this file, CLAUDE.md
+   itself)? Is it specific to one feature area (→ that feature's `docs/*.md`, e.g.
+   `feature-editor.md` for an editor bug)? Or is it a *process* lesson about how the build itself
+   went, not about the code (→ memory, not a repo file at all — repo docs are for the codebase,
+   memory is for how we work together)? Don't default to appending everything here just because
+   it's the file already open.
+3. **Name the lesson, not just the fact.** Beyond "what got built," ask what would have made this
+   build faster or avoided a wrong turn — a question that should have been asked earlier, an
+   assumption that cost a rewrite, a pattern in this codebase that made something easy or hard.
+   If nothing clears that bar, say so rather than inventing one.
 
-1. Append the one-line entry to `CHANGELOG.md`'s `Unreleased`, as above, for the feature/change just
-   built and verified in the live Electron app.
-2. **Scan the conversation for anything worth keeping that lives outside the diff** — a decision, a
-   constraint, a "cost a rewrite" gotcha, a rule the user stated out loud — and fold anything that
-   qualifies into this file before the context clears, since git history and the code itself won't
-   carry the *why*. If nothing in the conversation clears that bar, say so rather than skipping the
-   check silently.
+"Log that" (session-end wording) does all of the above **plus**:
 
-3. **Commit the session's work**, pathspec-scoped (2026-08-14). Reuben's default is to batch
+4. **Scan the whole conversation for anything else worth keeping that lives outside the diff** — a
+   decision, a constraint, a rule the user stated out loud — beyond just the one feature "log it"
+   was about.
+5. **Commit the session's work**, pathspec-scoped (2026-08-14). Reuben's default is to batch
    commits at the end of a session rather than as each piece is verified, so "log that" is also
    the commit signal. Leave genuinely undecided artefacts out (e.g. large binaries whose home
    hasn't been settled) and say what you excluded.
 
-Do all three halves without being asked separately; that's the whole point of the shorthand.
-The projects-root `CLAUDE.md` carries the cross-project versions of these defaults, plus the
-rule about offering an artifact when a complex task hasn't landed in 1–2 prompts.
+Do this without being asked to break it into steps separately; that's the whole point of the
+shorthand. The projects-root `CLAUDE.md` carries the cross-project versions of these defaults,
+plus the rule about offering an artifact when a complex task hasn't landed in 1–2 prompts.
 
-When the user says "push the latest update" (or similar — see the ritual below), read
-`Unreleased` first, sanity-check it against `git status` and `git log vX.Y.Z..HEAD --stat` (cheap
-and targeted, not a full-repo scan), then run the gates. When tagging, move the `Unreleased`
-bullets under a new `## [x.y.z] - YYYY-MM-DD` heading in the same commit that bumps
-`package.json`'s version.
+**Shipping a release is a separate, much longer ritual — read `docs/release-checklist.md` in
+full before running it.** Short version: when Reuben says "push the latest update," read
+`Unreleased` first, sanity-check it against `git status` and `git log vX.Y.Z..HEAD --stat`, run the
+four gates in the checklist, then bump `package.json`'s version, move `Unreleased`'s bullets under
+a new `## [x.y.z] - YYYY-MM-DD` heading, and tag. The release checklist doc covers the beta
+channel, the "renaming the product breaks auto-update" trap, macOS's auto-update limitation, and
+how to pull back a bad release — none of that is repeated here.
 
-The Vercel page (`site/`) is **not** where a release lives. It always links at
-`releases/latest/download/`, so redeploying it ships nothing — pushing `site/` alone produces a
-byte-identical page. **The release is the git tag.** The ritual:
+## Where the rest of it lives
 
-```powershell
-# bump "version" in package.json, move CHANGELOG.md's Unreleased bullets under a new
-# ## [x.y.z] - YYYY-MM-DD heading, then:
-git commit -am "vX.Y.Z: <what changed>"
-git tag vX.Y.Z
-git push && git push --tags        # the v* tag is what triggers GitHub Actions
-```
+Everything below this point is a rule or a gotcha relevant to nearly any task in this codebase.
+Deeper, narrower material moved to `docs/` on 2026-08-16 so it's read on demand instead of loaded
+every session — see the table in **Folder structure** above for the full list. In particular:
 
-Actions builds the NSIS `.exe` + the `.dmg`, and — because `electron-builder.yml` sets
-`publish: provider: github` — also publishes **`latest.yml`** (the update feed) and
-**`Notes-Setup.exe.blockmap`** (so an installed app downloads only the changed chunks, not the
-whole ~103 MB). Installed apps poll that feed; the download page keys off the same
-`releases/latest`. One tag updates both.
-
-**Renaming the product (`productName` and/or `appId` in `electron-builder.yml`) breaks
-auto-update for already-installed copies, and is not a code bug.** Confirmed on v0.8.0's
-Notes→Notealise rename (2026-08-09): electron-builder derives the Windows NSIS per-user registry
-GUID from `appId`, so a build with a new `appId` is NOT recognized as an upgrade of the old
-install — it silently adds a **second** Add/Remove Programs entry alongside the old one, and both
-entries' uninstallers point at the SAME shared install folder (the folder name tracked the npm
-`name` field, not `productName`, so it didn't change). Left alone, uninstalling the stale old entry
-deletes that shared folder and takes the new install down with it. After any rename release: check
-`HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*` for a stale entry with the old
-`DisplayName`, delete that key and its `Uninstall <old name>.exe` stub, and leave the new entry
-alone. Also: installs on OTHER machines will not silently update themselves across a rename — they
-need a manual reinstall of the new installer. Auto-update resumes normally on the release after
-that, once `appId` is stable again.
-
-**macOS cannot auto-update, and it is not a code bug.** `electron-builder.yml` sets
-`identity: null`, and Squirrel.Mac *refuses to apply an unsigned update* — a signature check, not
-a dismissible warning. There is also no `latest-mac.yml` and no `.zip` (mac updates need a zip;
-`dmg: writeUpdateInfo: false`). Fixing it needs an Apple Developer ID (~$99/yr) + notarization —
-deferred by decision, revisit at marketing time. Until then the Mac build shows the same UI, but
-the button opens the releases page and Settings says why.
-
-**Beta channel.** A tag containing `-` (`v0.2.0-beta.1`) is published as a GitHub **prerelease**.
-CI must pass **both** `--config.publish.releaseType=prerelease` *and*
-`--config.publish.channel=beta` — electron-builder does **not** infer the channel from the version
-for the GitHub provider (it assumes you'll use the prerelease flag instead), so without the second
-flag a beta ships `latest.yml`. electron-updater asks for `beta.yml` first and only falls back to
-`latest.yml`, so it would limp along undetected; don't rely on that. With both set:
-electron-builder writes `beta.yml` instead of `latest.yml`, GitHub excludes prereleases from
-`releases/latest` (so the download page keeps serving stable with no change), and stable installs
-have `allowPrerelease === false` and never see it. Testers opt in via **Settings → Updates →
-Receive test builds**, or just by installing a beta once. Turning it off steps back down to stable —
-which works only because setting `channel` also sets `allowDowngrade`.
-
-**Testing updates without releasing.** `NOTES_TEST_UPDATER=1 npm run dev` sets
-`forceDevUpdateConfig`, so electron-updater reads `dev-app-update.yml` and talks to the live feed
-(`AppUpdater.js:278` enables on `isPackaged || forceDevUpdateConfig`). Lower `version` in
-`package.json` to make it find something. `quitAndInstall` still needs a real install — dev covers
-check → download → sha512 verify, and `installNow` says so plainly rather than failing inside
-Squirrel.
-
-## Current state vs target
-
-The Electron foundation, vault layer, CM6 editor (live preview, colour/highlight, LaTeX,
-autosave), the theme/token system, the sidebar (icons + drag-to-move into folders,
-`TreeView.tsx`/`icons.tsx`), the note-title header (editable + word count), and the Edit/Read
-**reading view** (`reader/ReadingView.tsx`, marked+dompurify+katex) are **built**.
-
-**Tabs and split panes (built 2026-07-31).** Several notes are open at once: a strip of tabs
-across the top of the editor area, and **1–3 panes side by side** below it. Drag a tab onto a
-pane's left/right edge to split, onto its middle to replace what that pane shows.
-
-**The gestures, and why they are what they are** (revised 2026-07-31 after first use):
-- **A plain sidebar click replaces what's open** (`replaceActive`), exactly as it did before tabs
-  existed. Tabs do not accumulate behind your back, and **the strip only appears at the second
-  tab** — one open note is not a set of tabs, and a permanent one-tab strip would just repeat the
-  title already in the pane header.
-- **Cmd/Ctrl+click opens a note in another tab.** That gesture used to add a row to the sidebar
-  *selection*. It no longer clears the selection either — see the mode below.
-- **Selecting (for drag, archive, bin) is a MODE, entered by the six-dot grip** (revised
-  2026-08-03). The grip click is the only one that has to hit the dots: **once anything is
-  selected, a plain click anywhere on any row toggles that row in or out of the set** — rows and
-  folders alike. Before this, every subsequent pick meant hitting a 16px target, which is the
-  friction that made multi-select not worth reaching for.
-  Two things fall out of it and both are deliberate:
-  - **The folder chevron still expands** (it stops propagation) — you frequently have to open a
-    folder to reach the subnotes you are selecting. The folder's *name* selects, like the rest of
-    the row.
-  - **The mode ends on Escape or the Clear button only.** Clicking the sidebar background does
-    NOT clear any more: in this mode a click on a row selects, so the background is one slip away
-    from every row, and losing a set built over a dozen clicks to a near-miss is the exact failure
-    this mode exists to remove. Completing an action (a drag-move, bin, archive) still ends it —
-    finishing the job is not the same as backing out of it.
-  The selection bar (`Sidebar.tsx`) therefore appears at **one** item, not two: it is what tells you
-  the sidebar has changed mode, and it carries the only exit besides Escape.
-`tabs/model.ts` holds all of it as pure functions over `{ tabs, panes, focus }` and enforces two
-invariants the UI leans on: every pane shows an open tab, and **no note is in two panes at once**
-— one file must never have two CodeMirrors and two autosave buffers. Everything else follows from
-that (cycling skips notes already on screen; dropping a visible tab onto another pane *moves* it
-and collapses the pane it left; `MAX_PANES = 3`).
-**The chrome is two fixed rows, and they never appear or disappear** (2026-07-31, by the user's
-call): the tab strip — shown even with one tab, or none, held open by an invisible tab so an empty
-strip is exactly as tall as a full one — and below it ONE row per pane carrying the note's name,
-the format commands and, at the right, the word count and the **split button**. Splitting is a
-control now, not only `Cmd/Ctrl+\` and the drag (**all three work** — dragging a tab to an edge
-puts *that* note in a new column; the button and the shortcut open an empty one and ask). With nothing open, App renders the same
-row shell inert (`ROW_CLASS`, shared with `NotePane` precisely so the two can't drift in height).
-The rule to keep: **nothing in the editor chrome may be conditional on state in a way that changes
-its height** — reserve the space, fill it later. That is why the focused-pane accent line is a
-transparent `border-t-2` in every state, and why the row's layout flips which element is elastic
-instead of dropping one: wide, the title grows and the commands centre; narrow, the title is fixed
-at 5.5rem and the commands take the rest and scroll (`compact`). What a narrow column *does* drop
-is anything that can't act: empty "?" slots, the word count, and a split button with no second
-note to split to.
-
-**Two ways to rearrange, and they are different things.** Dragging a **tab** out of the strip
-opens/moves a note (edge = split, middle = replace). Dragging a **column by its own row** only
-rearranges what is already on screen: onto an edge it moves there (`movePane`), onto the middle of
-another column the two swap (`swapPanes`) — nothing opens, nothing closes, the strip doesn't
-change. `Drag` (kind `'tab' | 'pane'`) is what tells the drop handler which of the two it is; the
-row guards its `dragStart` against the title input and the buttons so a drag that starts there
-stays theirs.
-
-**The blank column, and why "+" and split are the same thing.** `BLANK` is the empty path, and a
-blank tab is genuinely just a tab whose path is `''` — it closes, drags, takes the focused pane and
-is *replaced in place* by the next note you click, all through the same functions as any other tab,
-with no parallel "pending" state to keep in step. **"+" opens one in the focused column**
-(`openTab`, so the note that was there stays as a tab); **the split button and `Cmd/Ctrl+\` open
-one in a NEW column** (`splitBlank`). Either way it says "Select a note", and any sidebar row, any
-tab, a new note, `Ctrl+Tab` — every route that opens a note — fills it, because they all end in
-`openTab`/`replaceActive` and the blank is what those replace.
-
-Three rules make it behave, and each was a bug first:
-- **Invariant 3** (`tidy`): a blank exists only while a pane shows it. Cycling or jumping away from
-  an unfilled blank leaves no orphan placeholder in the strip.
-- **A blank's column collapses when the blank goes** — it does NOT take the next open tab the way a
-  real note's pane does (`closeTab`). Backfilling would drop a note you didn't ask for into a space
-  you opened for one you did. The exception is the last pane, where collapsing would leave the
-  strip pointing at an empty screen.
-- **`replaceActive`**: pick a note that is *already on screen* and focus moves to that column while
-  the blank closes — it was a standing request, and the request has been answered.
-
-It never survives a quit (`normalizeSession` drops empty strings), only one can exist at a time
-(invariant 2 gives that free), and `loadDoc`/`dropDoc` skip it; nothing else in App knows it exists.
-
-**There is no Edit/Read toggle** — removed 2026-07-31. Live preview already renders as you type and
-reveals the source on the line the cursor is on, so a reading *mode* was a second way to look at
-the same thing. `reader/ReadingView.tsx` (marked + dompurify) is therefore **unimported**: left in
-place, not deleted, because it is the app's only sanitised-HTML path and deleting it would also
-strand `marked`/`dompurify` — say so before removing either. Nothing imports it, so it is not in
-the bundle.
-
-**The layout survives a quit.** `AppSettings.session` (`{ tabs, panes, focus }`, in
-`.mdnotes/settings.json`) is written 400ms after any layout change and put back at boot — and on
-"Switch folder" too, so each vault reopens its own tabs. **`session` replaced `lastNotePath`**,
-which a pre-tabs settings.json is migrated from *inside `normalizeSettings`* (a remembered note is
-a one-tab session), the same one-code-path rule the Spaces migration follows. Validation is split
-deliberately: `shared/settings.ts` checks the **shape** (strings, an integer), and
-`restoreLayout` checks the **meaning** against the tree — dropping notes renamed or binned since,
-de-duplicating, capping panes — because only the renderer can see whether a path still exists.
-Two things follow from that: an empty session must boot to the blank screen, and the persist
-effect must not run until the restore has (`sessionReady`), or the first render would overwrite
-the session it is restoring.
-`startup` still governs it, and its default is now **`'last'`** ("Reopen your tabs"): with tabs,
-"start empty" throws away an arrangement rather than one note.
-Each pane owns its own title, format bar and CodeMirror (`NotePane.tsx`);
-App owns the documents (`docsRef` keyed by path) and one autosave map keyed by path. **Every
-layout change goes through `applyLayout`** — that is where a note that just left the strip gets
-its unsaved buffer written and its loaded copy dropped, so "which notes are loaded" can't drift
-from "which notes are open"; it also keeps `layoutRef` correct for the handler that runs next,
-before React has re-rendered. **The
-keyboard is the renderer's**, not the menu's — `Ctrl+Tab` cycles (Cmd+Tab is the macOS app
-switcher), `Cmd/Ctrl+1…9` jumps, `Cmd/Ctrl+\` opens an empty column, `Cmd/Ctrl+W` closes a tab. That last one
-cost a change in `main/menu.ts`: a menu accelerator is consumed before the renderer sees the key,
-so macOS's stock Cmd+W ("Close Window", in both File and the Window menu) had to move to
-Shift+Cmd+W. If a tab shortcut ever stops firing, suspect a menu item took the key.
-
-**In-app updates (built).** Windows installs update themselves: a new version downloads quietly,
-a strip appears above "Switch folder", and it applies on quit. Settings → Updates has the version,
-an auto-update toggle, and a manual check; there's also File → Check for Updates…. See
-**Shipping a release** above for the tag ritual and the macOS caveat.
-
-**Spaces (rebuilt 2026-07-29) — read this before "removing Spaces" again.** Spaces are **the layer
-of the hierarchy between the vault and the sidebar**:
-
-```
-<vault>/          the folder picked at onboarding
-  Revision/       a SPACE — a top-level folder
-    Physics/      an ordinary folder, a row in the sidebar
-      waves.md
-  Journal/        another space
-```
-
-**The folders on disk ARE the spaces** (rule 1). `settings.json` only decorates them — emoji, theme,
-accent, density, arranging, the four format-bar buttons — so a maths-revision space can carry the
-formula shortcut while a journal space doesn't. Make a folder in Explorer and it becomes a space;
-delete one there and it stops being one (`reconcileSpaces`, run on every tree load). Switching space
-re-scopes the sidebar to that folder's subtree, and **new notes and folders land inside the active
-space, not at the vault root** (`inSpace()` in `App.tsx`). Cap is **10**, so the switcher stays
-glanceable rather than a crowded strip. It wraps like ordinary text — same-size emoji buttons,
-however many fit the sidebar's current width per row — rather than a fixed count per row; a wider
-sidebar fits more on one line, a narrower one wraps sooner. The switcher itself is a horizontal
-strip in the sidebar footer, above "Switch folder".
-
-**History, and what is actually banned.** An earlier version (removed 2026-07-25) hoisted top-level
-folders into an **Arc-style vertical rail beside the tree**. That was pulled because the surrounding
-pieces — organise, pins, the bin, the theme system — didn't exist yet, so it read as chrome that
-broke the sidebar's match with `legacy/` for no gain. It was rebuilt on 2026-07-29 once those
-landed, by the user's explicit decision. **The banned thing is the rail, not the hierarchy**: legacy
-governs how *rows look*, not how many levels the vault has — `legacy/` is a browser app with no
-vault and no spaces, so it has nothing to say about this layer. Don't "restore" top-level folders to
-the tree; they're spaces, and showing them as rows too would double them up.
-
-The old `renderer/src/spaces/` and its `spaces.json` are gone and are *not* read — a stale
-`spaces.json` in an old vault stays inert, and this feature deliberately does not reuse that
-filename (its shape was a map keyed by folder name, which a lax loader would misread).
-
-*The model* (`shared/settings.ts`): `AppSettings = { spaces: Space[], activeSpaceFolder, …globals }`.
-Per-space: `folder` (the identity **and** the display name), emoji, theme, textTone,
-buttonDefinition, density, accent, accentMode, freeArrange, compactNav, toolbarSlots, and the inert
-`pageLook`/`font`/`tint`.
-**Global on purpose:** startup, `lastNotePath`, dateFormat, numberFormat, timezone — `lastNotePath`
-especially, because it's written on *every* note open, and nesting it would make each one rewrite
-the whole spaces array. Things to know before editing it:
-
-- **A vault always settles on at least one REAL, folder-backed space** (2026-07-29, reversing
-  earlier guidance here that said the opposite — read this before "fixing" it back). `spaces` can be
-  momentarily empty inside `reconcileSpaces`'s own arithmetic, and `AppSettings.spaces` can hold a
-  lone *unbound* placeholder (`folder: ''`, standing for "the whole vault") for one reconcile pass —
-  but `App.tsx`'s `syncSpaces` auto-creates a folder (the same "New folder" convention as everywhere
-  else) and binds it the moment reconcile would otherwise leave zero bound spaces. This runs on every
-  tree load, so it covers a brand-new/flat vault, switching to one, and deleting your last space back
-  down to none — one mechanism, not three. `withNewSpace` already special-cases "the only space is
-  the unbound placeholder" by *rebinding* it rather than appending, so the created folder inherits
-  whatever theme/density the placeholder was carrying rather than resetting to defaults. The reason
-  this matters: a hidden switcher with no real space meant every new note/folder silently landed at
-  the vault root ("Not in a space") — this is a bug fix, not a preference.
-- **`pick()` ("Switch folder") must call `syncSpaces` too**, not just the boot `useEffect` — the file
-  watcher is started with `ignoreInitial: true` (`main/watcher.ts`), so an existing vault's
-  pre-existing top-level folders never self-announce as spaces; nothing reconciles them otherwise
-  until some later fs event happens to fire.
-- **Notes loose at the vault root are never moved.** They render in a "Not in a space" group, in
-  every space. Moving a user's files to tidy the hierarchy is exactly what rule 1 forbids.
-- **Migration is inside `normalizeSettings`, not a separate pass.** A flat pre-Spaces file *is* a
-  valid raw space (the keys have the same names at top level), so `[wholeRawFile]` goes through the
-  same `normalizeSpace` the new shape does. One code path, so the two can't drift. It is idempotent,
-  and that's tested — the test that catches a migration which re-migrates its own output.
-- **A space with `folder: ''` is "unbound", and that's load-bearing.** `reconcileSpaces` binds
-  unbound spaces to unclaimed folders in order, which is what (a) carries a migrated pre-Spaces
-  user's theme and density onto their first real folder instead of resetting it, and (b) keeps a
-  space's look when its folder is renamed *outside* the app.
-- **Create / rename are real fs operations** going through the existing `createFolder` /
-  `renameEntry` IPC. Settings is only updated with the path **main actually used**, because names
-  get sanitised and de-duplicated.
-- **Deleting a space goes straight to the OS trash** (`main/vault.ts:trashEntryToOS`, IPC
-  `deleteSpace`) — deliberately **not** `trashEntries`, the app's own recoverable bin. A space is a
-  different level of the hierarchy from the notes and folders trashed individually inside one;
-  putting a deleted space in the same bin list as an individually-trashed note conflated the two.
-  Still recoverable, just from the OS's own Recycle Bin/Trash rather than in-app — the two-step
-  "click again to delete" button is the confirmation, and is trusted as sufficient on its own.
-- **The pre-paint cache mirrors the ACTIVE space**, flat, and holds exactly **the values
-  `renderer/index.html` writes onto `<html>` before React exists** — now `{theme, density, textTone,
-  buttonDefinition}`. That rule is the whole reason it's a separate shape from `AppSettings`: adding
-  a *paint* value means adding a key here (plus the mapping in `index.html` and the type in
-  `preload/index.ts`); adding any other setting must not. Old cache files still work — every key is
-  independently defaulted. It has its own validator (`normalizeThemeCache`) — running it through
-  `normalizeSettings` reads keys that don't exist there and silently paints the default theme on
-  every launch.
-- **Edits go through the pure helpers** `withSpacePatch` / `withNewSpace` / `withoutSpace`, which
-  return a `Partial<AppSettings>` for the existing `setSettings`. No `setSpace` IPC channel — main
-  stays unaware that spaces exist beyond resolving the active one for the cache.
-
-**Space presets — the saved-preset library (built 2026-08-06).** `spaces` lives in
-`<vault>/.mdnotes/settings.json`, per vault. That is right by rule 2 and it had one bad
-consequence: **changing source folder wiped every space you had set up**, because the new folder's
-settings.json has no spaces and `reconcileSpaces` adopts its top-level folders as fresh defaults.
-The library is the fix. `shared/presets.ts` · `main/presets.ts` · `settings/Presets.tsx`.
-
-- **It is stored IN THE APP — `userData/presets.json` — never in a vault**, and that is the whole
-  design, not a storage detail. Rule 2's userData exceptions are the things that are properties of
-  *this install*; a library whose entire purpose is to outlive the open vault is the sharpest case
-  there is. A library kept in a vault is lost the moment you point the app elsewhere, which is the
-  bug it exists to fix.
-- **Do not reinstate the "master vault" version.** For a few hours the library was
-  `<master>/.mdnotes/presets/*.json` with the master nominated in `config.json`, plus a "bring these
-  with you?" prompt on switching folders. It failed on its first real folder switch, and the reason
-  is worth keeping: **with no master pinned yet, the master defaulted to whichever vault was open**,
-  so switching folders silently moved it too — `here` was always true, the prompt never fired, and
-  nothing followed the user anywhere. The feature was inert until an explicit action that nothing
-  ever prompted for. There is no such state now: one library, one place, always. Gone with it:
-  `presetsVault`, `presetsDeclined`, `adoptPresets`, `leavePresets`, `PresetsInfo`, `PresetMovePrompt`.
-- **The trade, accepted deliberately:** the library no longer travels with a vault, so it does not
-  sync between two machines through OneDrive the way the vault does. "Survives a folder switch" is
-  what was asked for, and a library that can be left behind survives nothing. An export/import is
-  the answer if cross-machine ever matters — not a second storage location.
-- **There is no "save preset" button, by decision.** Every space mirrors itself into the library —
-  written when the space is created, rewritten (debounced 800ms) whenever anything about it changes.
-  So a preset is never stale and there is nothing to remember to press. The mirror **only ever
-  writes**: a preset whose space is gone is the feature working, not litter. Deleting one is
-  explicit.
-- **A preset is a MIRROR, not a source of truth** — the same relationship `theme-cache.json` has
-  with the theme. settings.json remains the answer for the open vault.
-- **Identity is (name, origin), never name alone.** Two vaults can each hold a "Revision" space and
-  those are different looks. `origin` is the vault's **folder name**, never its path — the same
-  OneDrive vault is `D:\Notes` on Windows and `/Users/…/Notes` on the Mac. `id` is a random handle
-  for the UI and is deliberately NOT the identity: matching on it would make each sync append a
-  second row for a space that already has one.
-- **Where it sits in the UI, and why:** a `Disclosure` labelled **Saved presets**, directly under
-  that space's Name and Representational-emoji rows in Settings → Spaces. It was briefly a section
-  at the top of the page; that put a list of looks above the settings you actually opened the page
-  to change. Folded under the identity rows it is one click away and out of the way. It is the one
-  SHARED thing in a per-space section, so that section's intro says so out loud — a heading reading
-  "everything below belongs to this space alone" directly above a shared library is the kind of
-  small lie that gets reported as a bug later.
-- **The list is grouped by folder**: the open folder's spaces first, then "From other folders". The
-  library gains a row per space per vault ever opened, so a flat list buries what is relevant now.
-- **Pouring a look onto a space never touches the folder:** drag a preset row onto a space tab, or
-  use its "Use on…" menu — which is not a nicety, since drag-only is unusable from a keyboard, and
-  it carries the two things a drag can't express ("All N spaces", and "new space called X").
-  `withSpacePatch` re-pins `folder` last, which is what makes "only the look moves" true rather than
-  merely intended. **Apply-to-all is ONE settings write**, not a loop: each `setSettings` is a full
-  read-modify-write of settings.json, so a loop would rewrite the file once per space and repaint
-  between each.
-- **Applying is selective** (`pickLook`): tick boxes for Appearance / Colour / Arranging / Note
-  chrome / Format buttons, remembered for the session in a module-scope `lastParts` — deliberately
-  not persisted, because it is the shape of the action you are about to take, like a selection, and
-  the settings rule has no home for it. **A DRAG copies the whole look** regardless: there are no
-  tick boxes on a drag, so it must mean one predictable thing rather than inheriting whatever was
-  last ticked in a menu the user may never have opened.
-  `presets.test.ts` pins that the five groups cover `SpaceLook` **exactly once each** — a field in
-  no group could never be copied by any combination of ticks, and a field in two couldn't be
-  excluded. Adding a key to `Space` fails that test rather than silently going missing.
-- **Deleting a space offers to take its preset with it** — a tick box that appears only once the
-  two-step delete is armed, and only when there is one, unticked by default. The library outliving a
-  folder is the point of it, so throwing a look away has to be asked for. The preset is removed only
-  after the folder actually went.
-- **Presets are shareable files** (`.mdpreset`, JSON inside, `{kind, version, presets: []}`): export
-  one from its row, or the whole library, and import by picker **or by dropping the file on the
-  library**. One file shape covers both, because it always holds a list — so import never has to
-  know which button wrote it.
-  **Export strips `origin`, `id` and `savedAt`**: `origin` is a folder name off the exporter's own
-  disk and must not travel to whoever they send it to. An import lands with `origin: ''` and reads
-  as "Imported", which also makes it **frozen** — the mirror matches on (name, origin) with origin
-  always a real folder name, so a space that happens to share its name can never overwrite it.
-  **Imports always ADD, never overwrite**, and same-named arrivals are suffixed: a look someone sent
-  you must not be able to silently replace one of yours.
-  The drop reads the file in the RENDERER (`File.text()`) and passes the text to main — Electron
-  removed `File.path`, and `webUtils` is a whole extra bridge surface for something the drop event
-  already hands over.
-  `PresetImportResult.cancelled` is separate from `added: 0` on purpose: "nothing in that file" and
-  "you closed the picker" are different messages.
-- **`SpaceLook = Omit<Space, 'folder'>`**, and `normalizeLook` runs it through the same
-  `normalizeSpace` settings.json uses — a new key on `Space` must not validate in one place and not
-  the other. A preset can never fail to load: unknown keys dropped, missing ones defaulted.
-- Two traps already paid for, both invisible to a typecheck: the mirror must **wait for `vault` and
-  `settings` to agree** (`settingsVault`), since `vault` is set at the start of a switch and the
-  settings land several awaits later — mirroring in that window files the old vault's spaces under
-  the new vault's name; and both sides of "has this look changed?" must compare with **`lookKey`**,
-  not a raw `JSON.stringify`, or a key-order difference between a look rebuilt on read and one built
-  in the renderer rewrites the whole library on every sync.
-
-**Organise (built).** Pins, archive, a recoverable bin, custom drag-reorder, multi-select and
-Organize mode — ported from the legacy Sidebar. State lives in `<vault>/.mdnotes/workspace.json`
-keyed by vault-relative POSIX path (`main/workspace.ts` — debounced + atomic writes, root captured
-at schedule time, key re-mapping on rename). **Archive is a flag; the `.md` file never moves**, and
-a folder carries its subtree by inheritance. **The bin is real:** deleting moves the entry to
-`<vault>/.mdnotes/trash/<id>-<name>` and records it in `workspace.trash`; Restore puts it back
-(collision-suffixed if the name was retaken), and **"Empty recycle bin" is the only path that
-reaches the OS trash**. This one flat folder holds everything regardless of which space (if any) an
-item came from — the random `id` prefix is what lets same-named notes from different spaces sit in
-the bin at once — and `TrashItem.from` remembers the item's original space-qualified path, so
-Restore recreates that folder if it's gone (which then reappears as an ordinary new space on the
-next reconcile, per the Spaces section above — self-healing, not orphaned). Emptying the bin has no
-confirmation prompt: the bin view itself is one click away, and every item in it already passed its
-own delete confirmation on the way in. `.mdnotes/` is already skipped by the tree walk and the
-watcher, so binned entries leave the tree for free. Still pending:
-
-- **`.mdnotes/` config (partial).** Holds `settings.json` (appearance) and `workspace.json`
-  (organisation). Window state and per-note placement still move in later.
-- **Theme/token system — done.** `theme.css` holds the `R G B` ramps (dark default + light and
-  **black ("Extra dark")** via `[data-theme]`), density vars (`[data-density]`, legacy's values verbatim, including
-  `--row-sub` / `--row-sub-display`), and bundled `@font-face`; Tailwind and the editor read only
-  tokens. Appearance is set in the Settings panel (gear in the sidebar header), persisted to
-  `<vault>/.mdnotes/settings.json` (source of truth) with a paint-value mirror in userData for
-  pre-paint. Accent generator ported from `legacy/src/settings.js` into
-  `src/renderer/src/settings/model.ts`.
-  Three appearance knobs past legacy's theme+density, all per-space, all `data-*` on `<html>`:
-  - **`black` — "Extra dark"** is a *variant* of dark, not a third palette. `:root` in the dark rule
-    still matches a `[data-theme='black']` root, so its block overrides only the surfaces
-    (`--surface`, the low `--brand-*`, `--code-bg`) and everything else — the ink ramp, `--wash`,
-    the `hl`/`tc` palette, `--ed-*` — inherits. Add a token to dark and black gets it for free.
-    `--surface` stays a hair above `--paper` on purpose: shadows are invisible black-on-black, so
-    that 4% and the border are all that separate a popover from the page.
-  - **`textTone` (`data-text-tone`)** — grey (the long-standing ramp) or white, on the dark themes
-    only; the light theme has no white to give, and its buttons say so rather than no-op silently.
-    A **Text-mode accent writes `--ink-*` inline, which beats any selector**, so `model.ts` folds
-    the tone into the accent ramp (`WHITE_LIFT`) rather than letting one silently cancel the other.
-  - **`buttonDefinition` (`data-button-def`)** — opt-in stronger button edges, every theme, painted
-    from `--btn-edge` (per theme: lighter on dark, light grey on black, darker on light). Buttons
-    **opt in** — `.btn-edge`, or by class name for the settings window's own controls — because a
-    blanket `button` rule outranks `hover:border-*` and would kill every hover state, and would
-    repaint the accent borders that mark active states. It only strengthens edges that already
-    exist: `border-none` buttons (the Note / Folder nav) are deliberately left alone.
-- **Visual match to legacy — chrome and structure done.** Sidebar chrome, search pill, two-line
-  tree rows (`TreeNode.preview` is filled from the head of each file in `vault.ts`), nav bar,
-  Pinned/Notes headers, archive and bin views, editor header, format bar, reading column and empty
-  states all use legacy's own class strings. **Remaining gap:** the editor header's
-  "· Edited &lt;date&gt; · &lt;save status&gt;", which needs `updatedAt` and a save-state string
-  surfaced to the renderer.
-  *When comparing against localhost, open the same folder there* — in browser-storage mode legacy
-  says "Local notes" / "Saved in this browser", which are its storage-mode strings, not a mismatch.
-- **Settings (partial).** The **shell is now legacy's genie window** — centred 720×600, faded
-  `bg-paper/50 backdrop-blur-[5px]` backdrop, left section nav, scrollable content pane, and the
-  scale-from-the-gear animation (`.genie` in `app.css`, ported verbatim). The nav is **General**
-  (startup) · **Spaces** · **Formatting** (date/number/timezone, `legacy/src/intl.js`) · **Your
-  collection** · **Updates** · **Report a bug** (a `mailto:` link opened by main,
-  `src/main/support.ts` — no account or API key needed, but the destination address is a
-  placeholder pending branding/support-inbox decisions).
-  **Legacy's Appearance and Arranging sections no longer exist at the top level** — they belong to
-  a space and live inside collapsible sections on the Spaces page, along with Shortcuts. Don't
-  "restore" them to the nav; per-space is the point.
-  **Your collection** is a shell: three empty states for page looks / fonts / tints, the future
-  features whose `pageLook` / `font` / `tint` fields a `Space` already persists (so they land
-  without a second migration). It invents **no** storage format — no `collection.json` — on purpose.
-  **"Paper", "page look", "font" and "tint" are reserved words in this UI** — they name those
-  planned features, so no other control may borrow them. The Light theme's card was briefly
-  subtitled "Warm paper"; it is neither (`--paper` is `247 247 246`, a neutral white) and it stole a
-  term the collection needs. Describe what the tokens actually are — "Plain white" — and don't coin
-  product vocabulary that collides with the roadmap.
-  Accent *scope*, and persisting `archiveSort` (Sidebar-local state, lost on relaunch), are still
-  to come.
-- **Custom format-bar buttons (built).** Two programmable slots sit each side of the built-in
-  B/I/U/S + colour group. A slot has **two modes and no overlap**: empty, it shows a "?" and opens
-  the picker; programmed, it is an ordinary format button and clicking runs the command. Changing an
-  assigned one is **Settings → Spaces → Shortcuts** only (all four against a preview of the bar,
-  with "Clear this button" per slot). The old right-click-to-reprogram gesture was **removed
-  2026-07-29** — it made a live command button double as its own settings control, on a gesture
-  nothing else in the app uses; don't reinstate it.
-  **They belong to the active space**, so the bar's own picker writes to whichever space you're in.
-  Persisted as `toolbarSlots` on a Space — four ids from `editor/toolbarActions.tsx`, with
-  `''` for empty. **Those ids are a file format:** rename one and every vault using it silently
-  empties that slot. Unknown ids read as empty rather than throwing, the same loose validation
-  `accent` gets, because the catalogue is renderer-side and `shared/settings.ts` can't see it.
-  The **LaTeX/formula button was removed from the permanent group** (2026-07-29) — not every user
-  writes maths — and is now one of the assignable actions. `Ctrl/Cmd+Shift+L` still inserts one
-  regardless of whether any slot holds it.
-  **Block commands must act on an empty line** (`toggleMarker`, `formatModel.ts`). Blank lines are
-  skipped only when there is other text in the selection, where they are paragraph gaps; a selection
-  that is entirely blank IS the target. Skipping it unconditionally — the original behaviour, fixed
-  2026-07-29 — meant every list, heading and quote button did nothing at all on a new note or right
-  after Enter, which is the single most common moment to press one. The bug was invisible from the
-  bar: the button was wired correctly and the command ran, it just declined to change anything.
-- **One command registry (built 2026-08-01).** `editor/commands.tsx` is the ONLY list of editor
-  commands. The programmable format-bar buttons, the picker in Settings → Spaces → Shortcuts, and
-  the `/` menu all read it, so **a command added there appears in all three with no second edit**.
-  Before this there were two catalogues that reimplemented the same nine commands with different
-  code and no shared ids; four commands existed on a button but not under `/`, and nothing said so.
-  **Read `docs/commands.md` before adding a command** — it covers the `run(view, slash?)` contract
-  (a `/` invocation must delete its own typed query, and *sets* a marker where a button *toggles*
-  one), why ids are a file format, and why `commands.test.ts` pins them.
-- **Note links (built 2026-08-01).** `[[Note name]]`, `[[Folder/Note]]`, `[[Note|alias]]`,
-  `[[Note#Heading]]` and `[[#Heading]]`. Plain Markdown that other editors render as text, never an
-  invented delimiter (rule 4). The parser/resolver is `shared/links.ts` — **shared because both
-  processes parse**: main scans the vault for the backlink index, the renderer scans the buffer you
-  are typing in, and two parsers would drift. It knows about code spans and fences itself, since
-  main has no syntax tree; the editor pass keeps `inCode()` as well.
-  A bare `[[Waves]]` matching several notes resolves by a fixed ladder — sibling, then nearest
-  common ancestor, then alphabetically — so the answer never depends on tree order, and the link is
-  marked ambiguous rather than silently guessed at.
-  **A folder is a link target too** (`[[Term 3]]`), and carries a folder icon where a note carries
-  a page one — a vault you cannot reference a folder in is a filing system you cannot talk about. A
-  folder has nothing to open, so clicking one SHOWS it: the sidebar opens it and closes the rest,
-  exactly as the path bar's crumbs do. A note beats a folder of the same name; the folder is still
-  reachable by its path.
-  **Clicking a link opens it in a NEW TAB** — the opposite of the sidebar, and deliberately: following
-  a link is reading onward from what you have, and losing the note that sent you there is exactly
-  the wrong thing. Cmd/Ctrl+click replaces instead (inverted from the browser convention for the
-  same reason), Alt+click opens a column, and a link can be dragged into any column (it carries the
-  tab strip's own `application/x-notes-tab` type). Clicking one whose note doesn't exist **creates
-  it**, beside the note that mentioned it, in one `createNote(dir, name)` call.
-  **The `[[` picker is scoped to the space you're writing in**, and typing another space's name is
-  the way out (`[[Physics/Wav`) — see `linkChoices`. A vault divided into spaces is divided for a
-  reason, and a picker listing every note in every space undoes that the moment you go to link
-  something. Scoping applies only to what is OFFERED: a link already written keeps resolving
-  wherever it points, which is what the cross-space marking is for.
-  Renaming a note rewrites the links that pointed at it — only notes the index says actually link
-  there, only links that *resolved* to it, after a `flush()`, and through `onDocChange` for notes
-  that are open so the autosave owns the write. Moving a note does NOT rewrite anything: links
-  resolve by title, so a move leaves them all working.
-- **The links block and the path bar (built 2026-08-01).** Both are chrome; **nothing either shows
-  is ever written into a note** (rule 1). The links strip sits at the top of each column — outgoing
-  first, then backlinks — and **does not put the direction on the face of a link**: which way a
-  connection runs is on the hover card, along with the line the link sits in, so the strip reads as
-  names rather than badges. It scrolls sideways at a fixed height, because the chrome may not change
-  height with what a note contains. Settings → General pins it; by default it scrolls away with the
-  text (translated against the CodeMirror scroller, whose top padding follows `--links-inset` — CM
-  keeps its own scroller, which is not worth restructuring for this).
-  The path bar is one row for the whole editor area, following the focused column, and is
-  **navigation, not a label**: clicking a folder opens it in the sidebar, closes every other folder,
-  and scrolls it into view — switching space first if the note lives in another one.
-  **Two settings pages, and they are not the same job.** `Settings → Linking content` holds the
-  switches; `Settings → Tutorials → Linking your notes` explains the five forms, what an alias is
-  for and how the space scoping works. Keep the guide in step when link behaviour changes — it is
-  the only place the rules are written for someone who isn't reading this file. The nav says
-  "Linking content" rather than "Links" on purpose: a link here is a relation between two things
-  the user wrote, and the short word kept reading as a URL.
-  **`showLinks` / `pinLinks` / `showPath` / `showNoteInfo` belong to a SPACE**, not the app: how a set of notes reads
-  is a property of that set. They were global until 2026-08-02 and `normalizeSettings` migrates an
-  older file by handing the top-level value down to every space (see `LegacyChrome`). The "use this
-  in every space" buttons are ACTIONS that write one value across all spaces — deliberately not a
-  global layer that spaces then override, because that is a precedence chain, and this app already
-  has one of those (the theme layer) to be careful about.
-  **The chrome reads top to bottom as three different questions**: the tab strip is which notes are
-  open, the path bar is where the one you're in lives, the format bar is what you can do to it, and
-  the links strip is what it connects to. Running the path and the links together is what made this
-  confusing the first time; they get separate rows.
-  **One hover card, portalled to `document.body`.** `HoverCard.tsx` owns the placement — directly
-  under whatever you are pointing at — and everything that shows detail on hover goes through it:
-  the link inspector (a chip in the links strip OR a `[[link]]` in the text) and a note's
-  timestamps. Native `title` tooltips are deliberately not used for any of it, because the OS parks
-  them at the cursor after a delay it chooses, which is neither under the thing nor consistent
-  between two places in the same window. The portal is NOT optional: the strip carries a `transform` (it slides
-  away as you scroll) and a `backdrop-filter`, and **either makes that element the containing block
-  for a `position: fixed` descendant** — which put the card hundreds of pixels from the link it
-  described. Same trap as the settings modal and the sidebar; if you add another floating thing,
-  portal it. In-text links carry no `title` attribute for the same reason a native tooltip was
-  wrong: the OS puts it at the cursor after a delay it chooses.
-  **`showNoteInfo` puts "Last edited <date> at <time>" beside the word count**, on the machine's own
-  clock (the Formatting page's timezone, "system" by default). Only the edited time is on the row —
-  it is the one that changes and the one you look for; **when the note was created is on the hover
-  card**, with both dates spelled out in full rather than as "Today". The times come from a
-  `fs.stat` per note in main's tree walk (`TreeNode.createdAt` / `updatedAt`, epoch ms, both
-  optional — not every filesystem records a creation time, and `formatDate` returns null rather
-  than 1970). They refresh with the tree, so an edit made in another app updates "last edited"
-  without anything extra. Both are hidden in a split, where the word count goes too.
-- **Entry colours (built 2026-08-03).** A note or folder can be tagged with a colour in the
-  sidebar. **The colour is a property of the ENTRY, so it lives in `workspace.json`**
-  (`EntryMeta.color`, a `#rrggbb`) beside its pin and its order — which is also what re-keys it for
-  free when the entry is renamed or moved (`migrateKey`), and what makes it losable per rule 2. It
-  reuses `updateEntries`; there is no new IPC channel, and clearing is `{ color: undefined }`, the
-  same merge-drops-undefined trick un-archiving already uses for `archivedAt`.
-  **A raw hex here is deliberate, and does NOT contradict rule 4.** Rule 4 governs what is written
-  *into a note*, where a baked hex cannot follow the theme and would not survive Obsidian — hence
-  `editor/palette.ts`'s named `hl`/`tc` classes. An entry colour is never written into a `.md` file;
-  it is chrome, and the user picking the exact colour they mean is the whole feature. The contrast
-  work that a named palette would otherwise do is in `shared/color.ts`'s `inkOn` instead.
-  `shared/color.ts` is shared for the same reason `links.ts` is: **main validates with the code the
-  renderer paints with**, so "what is a valid colour" has one definition.
-  **Inheritance is NEAREST ancestor, not any** (`colorOf`) — the opposite of `isArchived` beside it,
-  and on purpose: archive is a flag that can only be turned on, so any/nearest agree, but colouring
-  `Revision` blue and `Revision/Physics` green has to mean the physics notes are green.
-  Per-space (so Customisation sets it for all, per the settings rule below):
-  `colorStyle` — `tag` (the six-dot grip becomes the chip) / `row` (a low-alpha wash + leading edge)
-  / `solid` (the row IS the colour) — plus `colorInherit`, `colorAuto`, `colorPalette`.
-  **`solid` is the only style that restates the row's text colours**, because at full strength the
-  theme's ink ramp is meaningless — it was chosen against `--paper`, not against a colour the user
-  picked — so everything switches to `--row-ink`. Its rules use the DIRECT-child combinator so the
-  hover-action group, a floating panel with its own `bg-surface/95`, keeps the theme's colours
-  without needing a `:not()` that names it.
-  **Switching `colorAuto` ON also colours the folders you already have** (`autoColorPlan` →
-  `SpaceActions.onColorExistingFolders`), scoped to the space, or to every space from Customisation.
-  A setting whose promise is "folders look different from each other" that changed nothing visible
-  read as broken. Folders with a colour of their own are never touched.
-  **Two painted rows never share an edge.** A painted row's background stops
-  `--row-gutter` short top and bottom (per-density, theme.css) so the sidebar shows between them —
-  flush, a run of coloured rows reads as one striped block rather than as rows. It is a
-  **transparent border + `background-clip: padding-box`, not a margin**: a margin would make a
-  coloured row taller than an uncoloured one, so the density variables would stop describing one row
-  height. The row gives the gutter out of padding it already has, which is why `--row-gutter` is
-  capped below `--row-py` (a negative padding invalidates the declaration outright).
-  Two consequences: an **inset** box-shadow is clipped to the padding box so the leading edge bar and
-  the selection ring align for free, and **every ring on a painted row is an inset box-shadow, never
-  `outline`** (fixed 2026-08-08). `outline` was tried first with a matching negative
-  `outline-offset: calc(-1px - var(--row-gutter))` to sit inside the colour, and the offset alone
-  looked right in isolation — but `outline` does not shrink its corner radius to match a negative
-  offset, so on these stadium-rounded rows the ring's corners stayed at the *outer* radius while the
-  ring itself moved inward, pulling away from the fill at the rounded ends and leaving a visible
-  crescent of colour there (worse at higher density, where `--row-radius` is larger relative to
-  `--row-gutter`). An inset box-shadow's corners shrink together with its offset, so it stays flush at
-  every density with no extra math. Every combination of `.tint-row`/`.tint-solid` with `.is-open`
-  and/or `.row-picked` therefore needs its own rule spelling out the full `box-shadow` value — the
-  property doesn't merge across separate selectors of equal specificity the way `outline` (a distinct
-  property from `box-shadow`) could sit alongside `row-picked`'s box-shadow for free. And every painted
-  rule sets `background-color`, **never the `background` shorthand — the shorthand resets
-  `background-clip` to `border-box`** and silently undoes the whole thing from a line that looks like
-  it only picks a colour. That one cost a debugging pass: the border and padding were right in the
-  computed styles and the gap just wasn't there.
-  The paint is `.tint-tag` / `.tint-row` / `.tint-solid` in `app.css`,
-  fed by two inline custom properties — `--row-rgb` and `--row-ink` — because the value is user
-  data while the styling stays in the stylesheet (rule 5). **`rowClass` opts out of
-  `hover:bg-surface/70` in JS when a row is washed**: a utility and an app.css rule at equal
-  specificity would be settled by source order, which is exactly the drift the Tailwind section
-  below warns about.
-  `colorAuto` colours a **folder** on creation and never a note — notes inherit, and colouring each
-  one individually makes the sidebar louder, not clearer. `pickAutoColor` picks among the
-  *least-used* sibling colours rather than uniformly at random, because uniform random repeats the
-  neighbour often enough to defeat the point of the feature.
-  Two ways in, matching the pin/bin precedent: the swatch in a row's hover actions, and
-  **right-click → Colour…**. Both open the one `ColorPopover`, which App owns and portals to
-  `document.body` — four TreeViews are on screen and the sidebar's `backdrop-blur` would otherwise
-  become its containing block. Not painted in the archive/bin shelf views or in search results.
-- **Editable tables (built 2026-08-07).** A table is drawn as a table *always* — it used to revert
-  to `| --- |` source whenever the selection touched it, which is the complaint the feature was
-  rebuilt to answer. Click a cell to edit it, Tab between cells, hover for the strips that add and
-  remove rows/columns (drag the `+` for several), and set a column's alignment from its heading.
-  `tableModel.ts` is pure and unit-tested because it is **the only code in the app that rewrites a
-  block of a note from a structure held in memory**. Three things it must never get wrong, each a
-  file-corrupting bug otherwise: an empty cell produces **no `TableCell` node at all**, so rows are
-  read by slicing the line rather than walking the tree; `---` and `:---` are different bytes and
-  only one of them is something the user wrote; and a line written directly under a table **is a row
-  of that table** per GFM, which is why `/table` leaves a blank line after itself. See
-  `docs/decorations.md`.
-- **Markdown pro / raw view (built 2026-08-07).** A per-space setting puts a button in the
-  bottom-right of a note that shows the file as it really is. Implemented as a `Facet` read by every
-  decoration producer, swapped through a `Compartment` so toggling keeps the cursor, scroll and undo
-  history. **Which notes are raw is per-note state in `workspace.json`** (`EntryMeta.rawView`),
-  beside the pin and the colour — re-keyed on rename for free, and losable like the rest of it.
-  Styling is deliberately untouched: bold stays bold, only the marks come back.
-- **Remaining editor live-preview** (lists beyond the bullet) — a new decoration
-  pass in `livePreview.ts` (see `docs/decorations.md`). Fenced code blocks and multi-line `$$`
-  math are done as of 2026-07-28; images (`imagePass`) as of 2026-08-07.
-
-When you do work here, move *toward* the rules; never add code that deepens a gap (e.g. a
-direct-`fs` call in the renderer, config written into the vault's notes, hardcoded style values).
+- Touching **tabs, panes, or Spaces** → `docs/feature-tabs-spaces.md`
+- Touching **organise (pins/archive/bin) or the theme/token system** → `docs/feature-organise.md`
+- Touching **format buttons, commands, links, entry colours, or tables** → `docs/feature-editor.md`
+- Touching **an importer** → `docs/importing-notes.md`
+- Touching **the wordmark generator** (`tools/wordmark/`) → `tools/wordmark/README.md`, which now
+  also carries the implementation-level gotchas (routing, slice geometry, retrace) that used to be
+  duplicated here
+- Planning **onboarding** → `docs/onboarding-plan.md` — read the flagged conflict at its top first
+- A **product decision that isn't in the code** → `docs/product-rulings.md`
+- **UI copy** → `docs/voice.md`
 
 ## Gotchas (append as you learn)
 
@@ -1063,84 +399,6 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
   resolving to `notes-app/legacy/notes-app/package.json` (ENOENT, exit 38). The relative `--prefix`
   in the Commands section above assumes cwd is the projects root. **In an agent session, pass an
   absolute `--prefix`.**
-
-- **The wordmark animation in `site/index.html` is GENERATED — don't hand-edit it.** Everything
-  between `<!-- wordmark:begin -->` and `<!-- wordmark:end -->` (the five `<g>` blocks: a glyph, a
-  clip path per slice, and a `<use>` per slice) and everything between
-  `wordmark-keyframes:begin/end` are output from `tools/wordmark/gen_pen.py`, which is idempotent
-  and re-runnable. Edit the generator's constants and re-run; hand edits inside those markers are
-  destroyed by the next run. `ALISE_SCALE` and `NUDGE` are coupled (the nudge puts alise on Note's
-  baseline); changing one without the other visibly breaks the alignment.
-  **The reveal is ~44 ownership SLICES per letter, each switched on whole as the pen reaches it —
-  there is no swept stroke and no mask.** A slice is the set of glyph pixels whose nearest point on
-  the centreline falls in that stretch of the journey, so the boundary between consecutive slices
-  is the clean cut across the stroke a pen leaves, and the only other edge on screen is the
-  letter's own outline. Until 2026-08-12 it WAS a thick stroke swept along the centreline and grown
-  with `stroke-dashoffset`, and every "harsh edge / sharp bit / splot" complaint against this
-  animation came from that one choice — mid-stroke you were seeing the edge of the disc, not the
-  edge of the letter. **Don't reintroduce a swept stroke to smooth anything.** `SLICES` is a
-  resolution in time: raise it if the cut ever reads as jumping.
-  **The verification trap that cost a whole pass:** checking the finished animation against the
-  `prefers-reduced-motion` render proves nothing, because the mask is applied in *both* — they are
-  clipped identically and the diff comes out clean while 11% of the glyph is missing. Coverage must
-  be checked against the element with its `mask` attribute removed (`verify_nomask.py`). More
-  generally here: a test that compares two things sharing the suspected defect cannot fail.
-  `tools/wordmark/README.md` has the run/verify commands; `site/DESIGN.md` has the nine passes of
-  reasoning, including several approaches already tried and rejected.
-- **The wordmark's WRITING ORDER is `TRAVERSAL`, not `HINTS`/`ROUTE` — and `HINTS` is silently
-  ignored for some letters.** Two structural facts, both of which cost a session to find:
-  (1) **Skeletonisation merges a letter's up-stroke and down-stroke into one branch.** A hand writes
-  `l`, `i` and `s` by going up a narrow loop and back down nearly the same ink; painted with the 190
-  stroke that is one solid limb. So the graph has **no baseline entry node on any of them**, and a
-  graph walk can only cross a branch once — meaning no value of `HINTS` can make a letter start
-  where a hand starts. (2) `main()` snaps `start` to the nearest **odd-degree** node, so a hint that
-  doesn't resolve to one is discarded outright. The `s` is the worst case: its entire body is a
-  single **self-loop** on one node, so its start was never movable and its hint had never once taken
-  effect. `TRAVERSAL` re-walks the finished centreline by arc fraction, which is the only way to
-  start partway along a limb, double back, or cut a closed loop. `assert_continuous()` fails the
-  build if those fractions ever drift off the features they were chosen for — **don't widen
-  `JOIN_TOL` to make a build pass**, re-read the fractions off a fresh route diagram.
-- **The whole class of defect the coverage check cannot see: a ribbon flank that stops INSIDE the
-  outline.** Wherever a bound pulls a slice's flank short of the glyph edge, the neighbouring slice
-  abuts it instead of overlapping, the two traced edges land on one pixel each covering part of it,
-  and the result is a white hairline **in the finished word**. The raster check measures on a 4-unit
-  grid and reports it as clean. Diagnose by attributing the shortfall per letter to its two bounds:
-  separation dominated on exactly the three letters that cracked (`a`/`s`/`e`, 67–70%) and curvature
-  on the two that didn't (`l`/`i`, 100%). `SEP_BLEED` is the fix, and it is deliberately **not**
-  applied to the curvature bound — reaching past a fold is a spike, not a seam.
-- **A pen-down is exactly where the local halfwidth collapses, so never size anything at sample 0
-  from it.** A letter touches down beside ink belonging to a later pass, so the separation bound
-  fires immediately: measured 18 units at sample 0 on the `a`, `s` and `e` against a real reach of
-  142–198. A rounded pen-down cap sized off that halfwidth is invisible, and the first ink a viewer
-  sees is the *next* slice's flat chord. Size it off the pen instead (`STROKE / 2`), which is inside
-  the letter's own ink by construction because the glyph is painted with that stroke.
-- **A retrace must be recognised by GEOMETRY, not by adjacency.** The fold that stops two passes
-  over the same ink clamping each other used to compare a pass only with the one before it across a
-  reversal. That breaks the moment the writing order puts anything in between — the `a` goes up its
-  stalk, out to its entry flick and back, and only then down the stalk — and the symptom is the
-  stalk tiling as **hatched stripes**. Match on coincident position plus a minimum contiguous run:
-  a crossing coincides for a sample or two, a retrace for a long run.
-- **A reversal is a TERMINAL.** Once the pen doubles back, the turning point has a round cap of
-  glyph beyond it exactly like a path end, and a ribbon that stops at a perpendicular chord leaves
-  it bare. Testing only the first/last sample of the whole path left the `l`'s ascender tip and the
-  `s`'s hook tip untiled and dropped three letters back to the raster fallback. Test the end of the
-  **pass**.
-- **In the `Note` typing, a character's advance box is not its ink box.** `@keyframes note-type`
-  clips at fractions of the element's width, and cutting at an *advance* boundary left a slice of
-  the `t`'s crossbar hanging beside "No" (and the `e`'s left edge beside "Not") — the crossbar
-  reaches back past where the glyph's box starts. The stops must sit in the **gaps between the
-  letters' ink**, measured off a real render, and at the midpoint of each gap: the o/t gap is only
-  0.39% wide and erring toward the `t` shaves the `o`, which Reuben has rejected twice. These
-  percentages are specific to this font stack and weight — re-measure if either changes. The block
-  sits *before* `wordmark-keyframes:begin`, so `gen_pen.py` cannot overwrite it.
-- **On the Mac workstation the wordmark toolchain is not the one `README.md` documents.** There is
-  **no Node at all**, so `vite site` cannot run — but `site/index.html` is fully static (its only
-  external reference is `favicon.svg`), so `python3 -m http.server 8788` inside `site/` serves it
-  identically and every `verify_*.py` script works against it unchanged. System Python has `numpy`,
-  `pillow` and `playwright` (with chromium cached) but **not `scipy` or `scikit-image`**, which
-  `build_centerlines.py` needs; a `venv --system-site-packages` plus those two is enough, and keep
-  it out of the repo. The Windows path and `Python312` exe in any older instructions do not resolve
-  here.
 - **`grep` treats `App.tsx` as a binary file, and silently reports nothing.** It contains a real
   NUL character — `.join('\0')`, the separator for the open-note link-target signature — and one
   NUL is all `grep` needs to switch to "Binary file matches" mode, which with a plain `grep -n`
@@ -1195,24 +453,6 @@ direct-`fs` call in the renderer, config written into the vault's notes, hardcod
   (double-click; uses `cmd`+`npm.cmd`, so no PowerShell exec-policy error, no admin) or
   `npm run dev:legacy` / `build:legacy` + `serve:legacy` (Vite on localhost:5173). See
   `legacy/README.md`.
-
-### Tabs belong to a space
-
-Each space keeps its own tab strip and split. Switching space stashes the current layout under the
-space you're leaving and applies the one you're going to (`spaceTabs` in App) — the notes stay
-open, they're just not on screen, because **a strip showing notes the sidebar beside it doesn't
-have is the confusing part**. Two consequences worth knowing:
-
-- The swap is **explicit**, in `switchSpace`, not an effect keyed on the active folder. Following a
-  cross-space link both switches space and opens a note, and an effect-driven swap would race that
-  — the note would land in the layout of the space it just left.
-- **A restored session is filtered by space too** (`restoreSession`). A saved session can carry
-  tabs from a space you left, and reopening them into whichever space is active reproduces exactly
-  the confusion this avoids. Notes loose at the vault root belong to no space and come back in all
-  of them.
-
-`spaceTabs` is in memory only. `settings.session` remembers the space you were in, which is the one
-you return to; the other spaces open empty and fill as you use them.
 
 ### Tooltips are `data-tip`, never `title`
 
@@ -1331,3 +571,6 @@ feature done:
    actually in (empty note, empty line, no selection), not the state that makes the code path obvious.
 3. **A stale process.** See the dev-server gotcha above. If behaviour contradicts the source you just
    read, suspect the running bundle before you suspect the logic.
+
+When you do work here, move *toward* the rules above; never add code that deepens a gap (e.g. a
+direct-`fs` call in the renderer, config written into the vault's notes, hardcoded style values).
