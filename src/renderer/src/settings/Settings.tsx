@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom'
 import { STARTUPS, type AppSettings } from './model'
 import { Icon, type IconName } from '../icons'
-import { Select, SettingRow } from './primitives'
+import { Select, SettingRow, ToggleRow } from './primitives'
 import { Spaces, type SpaceActions } from './Spaces'
 import { Collection } from './Collection'
 import { Customisation } from './Customisation'
@@ -419,6 +419,14 @@ function General({ settings, onChange }: Props): React.JSX.Element {
         })}
       </div>
 
+      <div className="mt-5">
+        <ToggleRow
+          on={settings.playStartupAnimation}
+          onClick={() => onChange({ playStartupAnimation: !settings.playStartupAnimation })}
+          label="Play startup animation"
+          hint="A short wordmark animation while a vault opens, in white or ink to match your theme."
+        />
+      </div>
     </>
   )
 }

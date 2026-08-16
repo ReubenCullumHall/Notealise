@@ -34,6 +34,7 @@ import { applySettings } from './settings/model'
 import { liveIndex, noteRefs } from './links/model'
 import { PathBar } from './PathBar'
 import { Tooltip } from './Tooltip'
+import { StartupSplash } from './StartupSplash'
 import { LinkInspector, type Inspect } from './links/LinkInspector'
 import { indexLinks, rewriteLinks, titleOf, type LinkRow } from '../../shared/links'
 import type { LinkEnv, LinkHandlers, OpenHow } from './editor/linkEnv'
@@ -118,6 +119,17 @@ const remapRecord = <T,>(r: Record<string, T>, map: (p: string) => string): Reco
 export default function App(): React.JSX.Element {
   const [ready, setReady] = useState(false)
   const [vault, setVault] = useState<string | null>(null)
+  // Set once, the moment a vault becomes active from a cold boot or a first-run
+  // folder pick (never from a mid-session "Switch folder") — see the two call
+  // sites below. StartupSplash reads `settings.playStartupAnimation` itself at
+  // render time, so a settings.json that turns this off still wins even though
+  // this flips true first.
+  const [splashActive, setSplashActive] = useState(false)
+  // A ref alongside the state for the capture-phase keydown listener below,
+  // which — like layoutRef beside it — reads this without depending on it, so
+  // the global listener doesn't unsubscribe/resubscribe on every change.
+  const splashActiveRef = useRef(splashActive)
+  splashActiveRef.current = splashActive
   const [tree, setTree] = useState<TreeNode[]>([])
   const treeRef = useRef(tree)
   treeRef.current = tree
@@ -818,12 +830,22 @@ export default function App(): React.JSX.Element {
       const v = await window.api.getVault()
       setVault(v)
       setReady(true)
+      // Three independent reads (tree walk, workspace.json, settings.json) —
+      // run concurrently rather than summing their latencies, which matters on
+      // a large or slow-syncing vault (see MAX_MS in StartupSplash.tsx).
       let loadedTree: TreeNode[] = []
+      let s: AppSettings
       if (v) {
-        loadedTree = await loadTree()
-        await loadWorkspace()
+        const [t, , loadedSettings] = await Promise.all([loadTree(), loadWorkspace(), loadSettings(v)])
+        loadedTree = t
+        s = loadedSettings
+      } else {
+        s = await loadSettings(null)
       }
-      const s = await loadSettings(v)
+      // Gated on the just-loaded REAL settings, not the optimistic default —
+      // triggering off the default and correcting a moment later flashed the
+      // splash on and yanked it off mid-clip for anyone who'd turned it off.
+      if (v && s.playStartupAnimation) setSplashActive(true)
       if (v) await syncSpaces(loadedTree, s)
       if (v) restoreSession(loadedTree, s)
       if (v) await loadPresets()
@@ -1038,6 +1060,11 @@ export default function App(): React.JSX.Element {
   }, [loadTree, syncSpaces, applyLayout, rescanLinks])
 
   const pick = async (): Promise<void> => {
+    // Captured before the await: true only for the very first "Choose folder…"
+    // pick, never for "Switch folder" in Settings, which only exists once a
+    // vault is already open. That's what keeps the splash a startup moment
+    // rather than something a mid-session vault switch retriggers.
+    const firstRun = !vault
     const v = await window.api.pickVault()
     if (v) {
       setVault(v)
@@ -1055,9 +1082,10 @@ export default function App(): React.JSX.Element {
       // "Import/photo.png" names a different file in a different vault — a kept
       // cache would show the previous vault's picture. Also frees the blobs.
       clearImageCache()
-      const t = await loadTree()
-      await loadWorkspace()
-      const s = await loadSettings(v) // a vault may carry its own saved appearance
+      // Three independent reads, run concurrently rather than summed — see the
+      // identical pattern (and why) in the boot effect above.
+      const [t, , s] = await Promise.all([loadTree(), loadWorkspace(), loadSettings(v)])
+      if (firstRun && s.playStartupAnimation) setSplashActive(true)
       // The watcher only reports CHANGES from here on (ignoreInitial: true), so
       // a vault's pre-existing top-level folders never self-announce as spaces
       // otherwise — nothing would reconcile them until some later fs event.
@@ -1272,7 +1300,7 @@ export default function App(): React.JSX.Element {
   // handlers via a ref, so the subscription mounts once but never goes stale.
   const menuHandler = useRef<(cmd: string) => void>(() => {})
   menuHandler.current = (cmd: string): void => {
-    if (!vault) return
+    if (!vault || splashActive) return
     if (cmd === 'new-note') void newNote('')
     else if (cmd === 'new-folder') void newFolder('')
     else if (cmd === 'import-notes') setSettingsJumpTo('import')
@@ -1287,6 +1315,7 @@ export default function App(): React.JSX.Element {
   // Capture phase, so a keystroke is decided here before CodeMirror sees it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
+      if (splashActiveRef.current) return
       const mod = e.metaKey || e.ctrlKey
       if (e.key === 'Tab' && e.ctrlKey) {
         e.preventDefault()
@@ -1491,7 +1520,9 @@ export default function App(): React.JSX.Element {
   }
 
   return (
-    <div className="flex h-full w-full">
+    <>
+      {splashActive && <StartupSplash theme={space.theme} onFinished={() => setSplashActive(false)} />}
+      <div className="flex h-full w-full">
       <Sidebar
         vaultName={baseName(vault)}
         vaultPath={vault}
@@ -1763,6 +1794,7 @@ export default function App(): React.JSX.Element {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }

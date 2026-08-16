@@ -45,7 +45,9 @@ tools/wordmark/*.bak
 # Behind-the-scenes promo exports (ProRes masters, frame sequences, webm/webp). Reuben's
 # working material for marketing videos, not project files - nothing here ships with the
 # app or the site. Regenerate with tools/wordmark/render_promo.py.
-promo/
+# Anchored to the repo root: unanchored, this also matched (and silently untracked)
+# src/renderer/src/assets/promo/, the bundled copy StartupSplash.tsx actually ships.
+/promo/
 
 # Python bytecode from the wordmark tooling
 __pycache__/

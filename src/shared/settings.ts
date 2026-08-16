@@ -225,6 +225,10 @@ export interface AppSettings {
   numberFormat: NumberFormatId
   /** an IANA zone name, or "system" to follow the OS */
   timezone: string
+  /** play the wordmark clip (StartupSplash.tsx) while a vault opens. Global,
+   *  like the rest of this block: it's about the app's own opening moment,
+   *  not about any one space. */
+  playStartupAnimation: boolean
 }
 
 export const DEFAULT_SPACE: Space = {
@@ -271,7 +275,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   session: EMPTY_SESSION,
   dateFormat: 'relative',
   numberFormat: 'default',
-  timezone: 'system'
+  timezone: 'system',
+  playStartupAnimation: true
 }
 
 /** A brand-new space, defaults throughout. Every array on DEFAULT_SPACE is
@@ -469,7 +474,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
       ? (s.numberFormat as NumberFormatId)
       : DEFAULT_SETTINGS.numberFormat,
     // any IANA string is legal; the picker only ever offers real ones
-    timezone: typeof s.timezone === 'string' && s.timezone ? s.timezone : DEFAULT_SETTINGS.timezone
+    timezone: typeof s.timezone === 'string' && s.timezone ? s.timezone : DEFAULT_SETTINGS.timezone,
+    playStartupAnimation:
+      typeof s.playStartupAnimation === 'boolean' ? s.playStartupAnimation : DEFAULT_SETTINGS.playStartupAnimation
   }
 }
 

@@ -7,6 +7,9 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- A short wordmark animation now plays while a vault opens — white ink on dark themes, dark ink on
+  light, matching whichever space was last open — then fades into the app. Off switch in
+  Settings -> General
 - The "alise" wordmark on the landing page is now drawn in the order the word is actually written
   by hand — every letter rises out of the baseline where the last one left off, doubles back where
   a pen would, and the i is dotted at the top mid-word. It used to start each letter at its top or
