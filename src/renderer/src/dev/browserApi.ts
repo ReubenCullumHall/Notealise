@@ -24,6 +24,7 @@ import {
   normalizeWorkspace,
   remapPath,
   type EntryMeta,
+  type RecoveryItem,
   type TrashItem,
   type Workspace
 } from '../../../shared/workspace'
@@ -37,6 +38,9 @@ interface Store {
   workspace: Workspace
   settings: unknown
   trashed: Record<string, { files: Record<string, string>; dirs: string[] }>
+  /** same shape as `trashed`, one step further along — mirrors the real app's
+   *  .mdnotes/recovery/ safety net (workspace.recovery). */
+  recovered: Record<string, { files: Record<string, string>; dirs: string[] }>
 }
 
 const SAMPLE: Record<string, string> = {
@@ -60,13 +64,21 @@ const load = (): Store => {
         dirs: raw.dirs ?? [],
         workspace: normalizeWorkspace(raw.workspace),
         settings: raw.settings ?? {},
-        trashed: raw.trashed ?? {}
+        trashed: raw.trashed ?? {},
+        recovered: raw.recovered ?? {}
       }
     }
   } catch {
     /* corrupt preview state — start over rather than block the page */
   }
-  return { files: { ...SAMPLE }, dirs: ['Demo'], workspace: EMPTY_WORKSPACE, settings: {}, trashed: {} }
+  return {
+    files: { ...SAMPLE },
+    dirs: ['Demo'],
+    workspace: EMPTY_WORKSPACE,
+    settings: {},
+    trashed: {},
+    recovered: {}
+  }
 }
 
 const store = load()
@@ -255,8 +267,47 @@ const api: VaultApi = {
   },
   purgeEntries: async (ids) => {
     const gone = ids ?? store.workspace.trash.map((t) => t.id)
-    for (const id of gone) delete store.trashed[id]
-    store.workspace = { ...store.workspace, trash: store.workspace.trash.filter((t) => !gone.includes(t.id)) }
+    const recovery: RecoveryItem[] = [...store.workspace.recovery]
+    for (const item of store.workspace.trash) {
+      if (!gone.includes(item.id)) continue
+      const held = store.trashed[item.id]
+      if (held) {
+        store.recovered[item.id] = held
+        delete store.trashed[item.id]
+      }
+      recovery.unshift({ id: item.id, from: item.from, name: item.name, type: item.type, purgedAt: Date.now() })
+    }
+    store.workspace = {
+      ...store.workspace,
+      trash: store.workspace.trash.filter((t) => !gone.includes(t.id)),
+      recovery
+    }
+    save()
+    return store.workspace
+  },
+  restoreRecoveryEntries: async (ids) => {
+    for (const id of ids) {
+      const held = store.recovered[id]
+      if (!held) continue
+      Object.assign(store.files, held.files)
+      store.dirs.push(...held.dirs)
+      delete store.recovered[id]
+    }
+    store.workspace = {
+      ...store.workspace,
+      recovery: store.workspace.recovery.filter((r) => !ids.includes(r.id))
+    }
+    save()
+    announce([])
+    return store.workspace
+  },
+  purgeRecoveryEntries: async (ids) => {
+    const gone = ids ?? store.workspace.recovery.map((r) => r.id)
+    for (const id of gone) delete store.recovered[id]
+    store.workspace = {
+      ...store.workspace,
+      recovery: store.workspace.recovery.filter((r) => !gone.includes(r.id))
+    }
     save()
     return store.workspace
   },

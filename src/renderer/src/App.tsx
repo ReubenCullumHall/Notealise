@@ -30,7 +30,7 @@ import {
   swapPanes,
   type TabLayout
 } from './tabs/model'
-import { applySettings } from './settings/model'
+import { applySettings, resolveTheme } from './settings/model'
 import { liveIndex, noteRefs } from './links/model'
 import { PathBar } from './PathBar'
 import { Tooltip } from './Tooltip'
@@ -45,7 +45,8 @@ import {
   SPACE_CAP,
   withNewSpace,
   withSpacePatch,
-  type AppSettings
+  type AppSettings,
+  type Space
 } from '../../shared/settings'
 import type { SpaceActions } from './settings/Spaces'
 import { ALL_SPACES, type PresetActions } from './settings/Presets'
@@ -82,6 +83,16 @@ const nameOf = (p: string): string => {
   return i === -1 ? p : p.slice(i + 1)
 }
 const joinPath = (dir: string, name: string): string => (dir ? `${dir}/${name}` : name)
+/** Which space's folder `path` sits under, or '' when it's outside every space
+ *  (loose at the vault root). Spaces are top-level vault folders (CLAUDE.md
+ *  rule 1: "the folders on disk ARE the spaces"), so this is pure path
+ *  arithmetic — no need to know which space is currently active. */
+const spaceFolderOf = (path: string, spaces: Space[]): string => {
+  for (const s of spaces) {
+    if (s.folder && (path === s.folder || path.startsWith(s.folder + '/'))) return s.folder
+  }
+  return ''
+}
 const baseName = (osPath: string): string => osPath.split(/[\\/]/).filter(Boolean).pop() ?? osPath
 const stripMd = (s: string): string => (s.toLowerCase().endsWith('.md') ? s.slice(0, -3) : s)
 const countWords = (t: string): number => (t.trim().match(/\S+/g) ?? []).length
@@ -97,7 +108,7 @@ const folderDistance = (a: string, b: string): number => {
   return as.length - shared + (bs.length - shared)
 }
 
-const EMPTY_WS: Workspace = { entries: {}, trash: [] }
+const EMPTY_WS: Workspace = { entries: {}, trash: [], recovery: [] }
 
 /** The placeholder command row has no editor behind it; its buttons are inert
  *  and it is only there to hold the space open. */
@@ -874,6 +885,19 @@ export default function App(): React.JSX.Element {
   const settingsRef = useRef(settings)
   settingsRef.current = settings
 
+  // Any space left on 'system' (the default for a brand-new one — see
+  // DEFAULT_SPACE) should re-skin live if the OS is switched while the app is
+  // open, not just at next launch. `applySettings` re-resolves 'system' itself
+  // and is a no-op paint for a space pinned to a fixed theme, so this can fire
+  // unconditionally rather than checking the active space's theme first.
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const mql = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = (): void => applySettings(settingsRef.current)
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [])
+
   /** Show the space an import just wrote into.
    *
    *  An importer's writes all go through the vault's echo-guard (`markWrite`),
@@ -1112,9 +1136,23 @@ export default function App(): React.JSX.Element {
 
   /** Move entries into `toDir`, optionally positioned around `anchor`. The files
    *  really move (renameEntry); the sibling order is then recorded in the
-   *  sidecar, since the filesystem alone is only alphabetical. */
+   *  sidecar, since the filesystem alone is only alphabetical.
+   *
+   *  A move that crosses from one space's subtree into a different one is
+   *  blind from the destination's point of view — the user was looking at the
+   *  space they dragged FROM, not the tree they dropped into (whether that's
+   *  a space tab or a subfolder reached by hovering one open), so an `anchor`
+   *  position, alphabetical order, or free-arrange mixing would bury it. Those
+   *  land at the very front instead, stamped `movedAt` so the sidebar can hold
+   *  them under a small "Moved" divider (`organise/model.ts`'s `splitMoved`)
+   *  until the user files them properly. An ordinary same-space move — a
+   *  reorder, or dragging one of those moved items into its final spot —
+   *  clears the flag: that action IS "sorting it into what's next". */
   const move = (paths: string[], toDir: string, anchor: string | null, after: boolean): void =>
     void run(async () => {
+      const toSpace = spaceFolderOf(toDir, settings.spaces)
+      const crossSpace = paths.some((p) => spaceFolderOf(p, settings.spaces) !== toSpace)
+
       const landed: string[] = []
       for (const from of paths) {
         if (toDir === from || toDir.startsWith(from + '/')) continue // into self/descendant
@@ -1131,7 +1169,8 @@ export default function App(): React.JSX.Element {
       setTree(fresh)
 
       // Re-sequence the destination folder: take its children in display order,
-      // pull out the ones that moved, and splice them back at the anchor.
+      // pull out the ones that moved, and splice them back at the anchor — or,
+      // for a cross-space arrival, at the very front, ignoring the anchor.
       const siblings =
         toDir === '' ? fresh : (findNode(fresh, toDir)?.children ?? [])
       const ws = await window.api.getWorkspace()
@@ -1139,12 +1178,24 @@ export default function App(): React.JSX.Element {
       const moved = new Set(landed)
       const rest = ordered.filter((p) => !moved.has(p))
       let at = rest.length
-      if (anchor) {
+      if (crossSpace) {
+        at = 0
+      } else if (anchor) {
         const i = rest.indexOf(anchor)
         if (i >= 0) at = after ? i + 1 : i
       }
       const next = [...rest.slice(0, at), ...landed.filter((p) => ordered.includes(p)), ...rest.slice(at)]
-      setWorkspace(await window.api.reorderEntries(next))
+      let nextWs = await window.api.reorderEntries(next)
+
+      if (crossSpace) {
+        nextWs = await window.api.updateEntries(landed, { movedAt: Date.now() })
+      } else {
+        // Merging an explicit `undefined` drops the field (see `setColor`
+        // below) — the same way un-archiving clears `archivedAt`.
+        const stale = landed.filter((p) => ws.entries[p]?.movedAt !== undefined)
+        if (stale.length) nextWs = await window.api.updateEntries(stale, { movedAt: undefined })
+      }
+      setWorkspace(nextWs)
     })
 
   const togglePin = (paths: string[], pinned: boolean): void =>
@@ -1176,6 +1227,17 @@ export default function App(): React.JSX.Element {
 
   const purge = (ids?: string[]): void =>
     void run(async () => setWorkspace(await window.api.purgeEntries(ids)))
+
+  // The 7-day safety net items purging the bin now land in, Settings-only
+  // (see shared/workspace.ts's RecoveryItem / RECOVERY_TTL_MS).
+  const restoreRecovery = (ids: string[]): void =>
+    void run(async () => {
+      setWorkspace(await window.api.restoreRecoveryEntries(ids))
+      await loadTree()
+    })
+
+  const purgeRecovery = (ids?: string[]): void =>
+    void run(async () => setWorkspace(await window.api.purgeRecoveryEntries(ids)))
 
   // No naming prompt — a click should just create the thing. A collision
   // (another "Untitled") is resolved by main with a " (2)", " (3)"... suffix,
@@ -1521,7 +1583,9 @@ export default function App(): React.JSX.Element {
 
   return (
     <>
-      {splashActive && <StartupSplash theme={space.theme} onFinished={() => setSplashActive(false)} />}
+      {splashActive && (
+        <StartupSplash theme={resolveTheme(space.theme)} onFinished={() => setSplashActive(false)} />
+      )}
       <div className="flex h-full w-full">
       <Sidebar
         vaultName={baseName(vault)}
@@ -1553,6 +1617,8 @@ export default function App(): React.JSX.Element {
         onOpenSearchHit={openSearchResult}
         revealRef={revealRef}
         update={update}
+        onRestoreRecovery={restoreRecovery}
+        onPurgeRecovery={purgeRecovery}
         actions={{
           onOpen: (p, newTab) => void openNote(p, newTab),
           onContext: openMenu,

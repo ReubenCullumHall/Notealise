@@ -7,9 +7,18 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Deleting something forever from the bin — one item, or the whole "Empty recycle bin" — no longer
+  sends it straight to the OS trash. It now waits 7 days in a hidden safety net (Settings ->
+  Recovery) before the app deletes it for good, so nothing you delete through the app can vanish
+  by accident. Restore it any time from there, or delete it immediately if you don't want to wait
 - New setting, Settings -> General -> Animations: turn off interface motion (the settings
   window's open/close animation, hovers, dropdown fades and the like) for instant transitions
   everywhere
+- A brand-new space (including your very first one) now defaults to following your system's
+  light/dark setting instead of always opening in Dark, so a fresh vault doesn't land jarring
+  against the OS. Pick "System" any time in Theme, under Settings -> Spaces or Customisation, to
+  switch a space back to following the OS — it re-applies live if you flip the OS setting while
+  the app is open
 - A short wordmark animation now plays while a vault opens — white ink on dark themes, dark ink on
   light, matching whichever space was last open — then fades into the app. Off switch in
   Settings -> General

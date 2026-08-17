@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import logoLight from './assets/logo/notealise-mark-circle-light.svg'
 import logoDark from './assets/logo/notealise-mark-circle-dark.svg'
 import type { TreeNode } from '../../shared/types'
@@ -71,6 +71,9 @@ interface Props {
   searchContextLabel: string | null
   onOpenSearchHit: (hit: SearchHit, newTab?: boolean) => void
   update: UpdateStatus
+  /** the 7-day recovery safety net (Settings-only) — see shared/workspace.ts */
+  onRestoreRecovery: (ids: string[]) => void
+  onPurgeRecovery: (ids?: string[]) => void
   /** Handed a function that opens one folder and closes the rest. An imperative
    *  handle, the same idiom as the editor's `editorRef`: the path bar lives in
    *  App and the tree state lives here, and passing the state up instead would
@@ -174,6 +177,12 @@ function SortMenu({
 const SECTION_TEXT = 'text-[11px] font-semibold uppercase tracking-wider text-ink-400'
 const SECTION_HEAD = 'px-3 pb-1 pt-1 ' + SECTION_TEXT
 
+/** How long a drag has to sit over an inactive space tab before it opens, the
+ *  same "hold over a folder to open it" gesture an OS file manager uses.
+ *  Long enough that passing over a tab on the way to the bin/archive doesn't
+ *  switch spaces by accident; short enough not to feel unresponsive. */
+const SPACE_HOVER_OPEN_MS = 600
+
 export function Sidebar({
   vaultName,
   vaultPath,
@@ -203,6 +212,8 @@ export function Sidebar({
   searchContextLabel,
   onOpenSearchHit,
   update,
+  onRestoreRecovery,
+  onPurgeRecovery,
   revealRef,
   actions
 }: Props): React.JSX.Element {
@@ -243,6 +254,24 @@ export function Sidebar({
   }, [])
   if (revealRef) revealRef.current = revealFolder
   const [archiveSort, setArchiveSort] = useState<ArchiveSort>('recent')
+  // "Hold over a space to open it": which inactive space tab (if any) a drag
+  // is currently sitting over, armed to switch after SPACE_HOVER_OPEN_MS. The
+  // timer id lives in a ref (it's fired imperatively, not read by render).
+  const [armingSpace, setArmingSpace] = useState<string | null>(null)
+  const spaceHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearSpaceHover = (): void => {
+    if (spaceHoverTimer.current) {
+      clearTimeout(spaceHoverTimer.current)
+      spaceHoverTimer.current = null
+    }
+    setArmingSpace(null)
+  }
+  // The drag can end without ever completing a drop on a tab — released
+  // elsewhere, or cancelled with Escape — so an armed timer has to be
+  // cancelled the moment dragging stops, not only from onDrop/onDragLeave.
+  useEffect(() => {
+    if (!dragging) clearSpaceHover()
+  }, [dragging])
   const [dropZone, setDropZone] = useState<'archive' | 'trash' | null>(null)
   const [lidClick, setLidClick] = useState(false)
   const [archiveLidClick, setArchiveLidClick] = useState(false)
@@ -675,12 +704,50 @@ export function Sidebar({
           <div className="mb-2 flex flex-wrap items-center justify-center gap-1">
             {spaces.map((s, i) => {
               const on = s.folder === activeSpaceFolder
+              const arming = armingSpace === s.folder
               return (
                 <button
                   key={s.folder}
                   onClick={() => onSwitchSpace(s.folder)}
                   aria-pressed={on}
-                  data-tip={s.folder}
+                  data-tip={
+                    !on && dragging
+                      ? `Hold to open ${s.folder} · drop to move here`
+                      : s.folder
+                  }
+                  // Drag-and-drop between spaces: dropping straight on a tab
+                  // files the selection at the top of that space (see
+                  // App.tsx's `move`); holding over an INACTIVE tab opens it
+                  // instead — the same "hover a folder to open it" gesture as
+                  // an OS file manager — so a subfolder inside it can be the
+                  // drop target instead. The active tab is already open, so
+                  // it only ever accepts a drop, never arms a timer.
+                  onDragOver={(e) => {
+                    if (!dragging) return
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    if (on || armingSpace === s.folder) return
+                    setArmingSpace(s.folder)
+                    if (spaceHoverTimer.current) clearTimeout(spaceHoverTimer.current)
+                    spaceHoverTimer.current = setTimeout(() => {
+                      spaceHoverTimer.current = null
+                      setArmingSpace(null)
+                      onSwitchSpace(s.folder)
+                    }, SPACE_HOVER_OPEN_MS)
+                  }}
+                  onDragLeave={() => {
+                    if (armingSpace === s.folder) clearSpaceHover()
+                  }}
+                  onDrop={(e) => {
+                    if (!dragging) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    clearSpaceHover()
+                    actions.onMove(dragging, s.folder, null, false)
+                    if (!on) onSwitchSpace(s.folder)
+                    setDragging(null)
+                    clearSel()
+                  }}
                   className={
                     'flex h-8 w-8 items-center justify-center rounded-lg border text-[15px] leading-none outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
                     // btn-edge only on the inactive ones: the selected space
@@ -688,7 +755,9 @@ export function Sidebar({
                     // space you're in
                     (on
                       ? 'border-brand-400/60 bg-brand-500/15 text-brand-600'
-                      : 'btn-edge border-ink-300/25 bg-transparent text-ink-500 hover:bg-brand-500/10 hover:text-brand-600')
+                      : arming
+                        ? 'scale-105 border-brand-400/70 bg-brand-500/20 text-brand-600 ring-2 ring-brand-400/50'
+                        : 'btn-edge border-ink-300/25 bg-transparent text-ink-500 hover:bg-brand-500/10 hover:text-brand-600')
                   }
                 >
                   {s.emoji || <span className="text-[12px] font-semibold">{i + 1}</span>}
@@ -722,6 +791,9 @@ export function Sidebar({
             onPickVault={actions.onPickVault}
             presets={presets}
             presetActions={presetActions}
+            recovery={workspace.recovery}
+            onRestoreRecovery={onRestoreRecovery}
+            onPurgeRecovery={onPurgeRecovery}
             jumpToSection={settingsJumpToSection}
             onJumpHandled={onSettingsJumpHandled}
           />

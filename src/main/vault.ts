@@ -509,8 +509,9 @@ export async function renameEntry(fromPath: string, toPath: string): Promise<str
 // The bin. Deleting moves an entry into <vault>/.mdnotes/trash/ rather than
 // handing it to the OS, so it stays recoverable in-app the way localhost's bin
 // is. `.mdnotes/` is already skipped by `ignored()` and by the watcher, so a
-// binned entry leaves the tree for free. Emptying the bin is the ONLY path that
-// reaches the OS trash — nothing here ever hard-unlinks a note.
+// binned entry leaves the tree for free. Emptying the bin (or force-deleting
+// one item from it) does NOT reach the OS trash — see the recovery block
+// below, which is where that now goes instead.
 // ---------------------------------------------------------------------------
 const TRASH_DIR = '.mdnotes/trash'
 
@@ -555,15 +556,16 @@ export async function restoreEntry(id: string, name: string, to: string): Promis
   return toRel(candidate)
 }
 
-/** Permanently remove a binned entry — hands it to the OS trash, so even this is
- *  recoverable outside the app. `shell` is imported lazily so the rest of this
- *  module (all node:fs/path) can be exercised outside the Electron runtime. */
+/** Move a binned entry out of the bin and into the recovery safety net,
+ *  rather than handing it to the OS trash — see the recovery block below. */
 export async function purgeTrashItem(id: string, name: string): Promise<void> {
-  const abs = trashAbs(id, name)
-  markWrite(abs)
-  const { shell } = await import('electron')
+  const src = trashAbs(id, name)
+  const dest = recoveryAbs(id, name)
+  await fs.mkdir(path.dirname(dest), { recursive: true })
+  markWrite(src)
+  markWrite(dest)
   try {
-    await shell.trashItem(abs)
+    await renameWithRetry(src, dest)
   } catch {
     // Already gone (bin emptied outside the app, or a failed earlier move) —
     // the caller still drops the record, so the bin doesn't keep a dead row.
@@ -575,11 +577,56 @@ export async function purgeTrashItem(id: string, name: string): Promise<void> {
  *  the hierarchy from the notes and folders inside it, and putting a deleted
  *  space in the same bin as an individual trashed note conflates the two. The
  *  two-step "click again to delete" button is the confirmation; this is still
- *  recoverable, just from the OS's own Recycle Bin/Trash rather than in-app. */
+ *  recoverable, just from the OS's own Recycle Bin/Trash rather than in-app
+ *  or the 7-day recovery net below — a deliberate, product-level choice to
+ *  keep deleting a whole space a heavier, differently-recoverable action. */
 export async function trashEntryToOS(relPath: string): Promise<void> {
   const abs = resolveInVault(relPath)
   if (path.relative(requireVault(), abs) === '') throw new Error('Cannot delete the vault root')
   markWrite(abs)
   const { shell } = await import('electron')
   await shell.trashItem(abs)
+}
+
+// ---------------------------------------------------------------------------
+// The recovery safety net. Emptying the bin, or force-deleting one item from
+// it, no longer hands off to the OS trash (see purgeTrashItem above) — it
+// moves the entry into <vault>/.mdnotes/recovery/ instead, where it sits for
+// RECOVERY_TTL_MS before the app deletes it for real. purgeRecoveryItem below
+// is the ONLY place this module ever hard-unlinks a note; every other "delete"
+// in this file is a move. Deliberately absent from the normal bin UI —
+// reachable only from Settings, since arriving here means delete was already
+// confirmed twice.
+// ---------------------------------------------------------------------------
+const RECOVERY_DIR = '.mdnotes/recovery'
+
+function recoveryAbs(id: string, name: string): string {
+  return resolveInVault(`${RECOVERY_DIR}/${id}-${name}`)
+}
+
+/** Put a recovery item back where it came from. Same collision/missing-parent
+ *  handling as restoreEntry, since it's the same situation one step later. */
+export async function restoreFromRecovery(id: string, name: string, to: string): Promise<string> {
+  const src = recoveryAbs(id, name)
+  const destRaw = resolveInVault(to)
+  const dir = path.dirname(destRaw)
+  await fs.mkdir(dir, { recursive: true })
+
+  const ext = path.extname(name)
+  const stem = ext ? name.slice(0, -ext.length) : name
+  const candidate = path.join(dir, await uniqueName(dir, stem, ext))
+  assertInVault(candidate)
+  assertPathLength(candidate)
+  markWrite(src)
+  markWrite(candidate)
+  await renameWithRetry(src, candidate)
+  return toRel(candidate)
+}
+
+/** The real, permanent delete — called by the 7-day sweep, or by a manual
+ *  "delete now" from the recovery panel in Settings. */
+export async function purgeRecoveryItem(id: string, name: string): Promise<void> {
+  const abs = recoveryAbs(id, name)
+  markWrite(abs)
+  await fs.rm(abs, { recursive: true, force: true })
 }

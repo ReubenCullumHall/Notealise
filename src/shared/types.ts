@@ -106,9 +106,16 @@ export interface VaultApi {
   trashEntries(paths: string[]): Promise<Workspace>
   /** Put binned items back where they came from, by trash id. */
   restoreEntries(ids: string[]): Promise<Workspace>
-  /** Permanently remove binned items — the only path that reaches the OS trash.
-   *  Pass no ids to empty the bin entirely. */
+  /** Move binned items into the 7-day recovery safety net — nothing is
+   *  actually deleted yet. Pass no ids to empty the bin entirely. */
   purgeEntries(ids?: string[]): Promise<Workspace>
+  /** Put an item from the recovery safety net back where it came from. Not
+   *  surfaced in the normal bin UI — reachable only from Settings. */
+  restoreRecoveryEntries(ids: string[]): Promise<Workspace>
+  /** Force-delete recovery items right now instead of waiting out the 7-day
+   *  window — for content sensitive enough that even that's too long. No ids
+   *  clears the whole safety net. This IS the permanent, unrecoverable delete. */
+  purgeRecoveryEntries(ids?: string[]): Promise<Workspace>
   /** Delete a space's folder straight to the OS trash — deliberately bypasses
    *  the app's own bin (a space is a different level of the hierarchy from the
    *  notes/folders trashed individually). Still recoverable, just from the

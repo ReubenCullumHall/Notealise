@@ -9,7 +9,7 @@ describe('normalizeWorkspace', () => {
   it('never throws on junk', () => {
     for (const junk of [null, undefined, 0, '', 'nope', [], true, NaN]) {
       expect(() => normalizeWorkspace(junk)).not.toThrow()
-      expect(normalizeWorkspace(junk)).toEqual({ entries: {}, trash: [] })
+      expect(normalizeWorkspace(junk)).toEqual({ entries: {}, trash: [], recovery: [] })
     }
   })
 
@@ -83,6 +83,32 @@ describe('normalizeWorkspace', () => {
   it('defaults an unknown trash type to file', () => {
     const ws = normalizeWorkspace({ trash: [{ id: 'x', from: 'a.md', deletedAt: 1, type: 'wat' }] })
     expect(ws.trash[0].type).toBe('file')
+  })
+
+  // The recovery safety net (RecoveryItem) mirrors TrashItem field-for-field
+  // except deletedAt -> purgedAt, so it needs the same "never lose the app"
+  // guarantees on malformed input.
+  it('drops recovery items that could not be restored', () => {
+    const ws = normalizeWorkspace({
+      recovery: [
+        { id: 'x1', from: 'notes/a.md', purgedAt: 5, type: 'file' },
+        { from: 'notes/b.md', purgedAt: 5 }, // no id -> file can't be found
+        { id: 'x3', purgedAt: 5 }, // no `from` -> nowhere to put it back
+        { id: 'x4', from: 'notes/d.md' }, // no timestamp
+        'not an object'
+      ]
+    })
+    expect(ws.recovery.map((r) => r.id)).toEqual(['x1'])
+  })
+
+  it('infers a missing recovery display name from the path', () => {
+    const ws = normalizeWorkspace({ recovery: [{ id: 'x', from: 'a/b/c.md', purgedAt: 1 }] })
+    expect(ws.recovery[0].name).toBe('c.md')
+  })
+
+  it('defaults an unknown recovery type to file', () => {
+    const ws = normalizeWorkspace({ recovery: [{ id: 'x', from: 'a.md', purgedAt: 1, type: 'wat' }] })
+    expect(ws.recovery[0].type).toBe('file')
   })
 })
 

@@ -6,6 +6,7 @@ import { activateVault, registerIpc } from './ipc'
 import { installMenu } from './menu'
 import { initUpdater } from './updater'
 import { stopWatching } from './watcher'
+import { startRecoverySweep } from './workspace'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -44,6 +45,10 @@ app.whenReady().then(async () => {
 
   // Parks in `unsupported` in dev and on macOS; never throws, never blocks boot.
   void initUpdater()
+
+  // The recovery safety net's 7-day expiry — one process-wide timer, not tied
+  // to any one window.
+  startRecoverySweep()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

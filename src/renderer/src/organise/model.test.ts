@@ -10,6 +10,7 @@ import {
   siblingColors,
   sortArchived,
   sortSiblings,
+  splitMoved,
   withoutArchived
 } from './model'
 
@@ -24,7 +25,7 @@ const dir = (path: string, children: TreeNode[] = []): TreeNode => ({
   type: 'dir',
   children
 })
-const ws = (entries: Workspace['entries']): Workspace => ({ entries, trash: [] })
+const ws = (entries: Workspace['entries']): Workspace => ({ entries, trash: [], recovery: [] })
 
 describe('isArchived', () => {
   it('inherits down the tree, so a folder carries its subtree', () => {
@@ -107,6 +108,39 @@ describe('sortSiblings', () => {
     const before = input.map((n) => n.path)
     sortSiblings(input, ws({}), false)
     expect(input.map((n) => n.path)).toEqual(before)
+  })
+})
+
+describe('splitMoved', () => {
+  const nodes = [file('b.md'), dir('zed'), file('a.md'), dir('alpha')]
+
+  it('leaves an untouched level entirely in rest, ordinarily sorted', () => {
+    const { moved, rest } = splitMoved(nodes, ws({}), false)
+    expect(moved).toEqual([])
+    expect(rest.map((n) => n.path)).toEqual(['alpha', 'zed', 'a.md', 'b.md'])
+  })
+
+  it('pulls moved entries out of rest and into their own group', () => {
+    const w = ws({ 'a.md': { movedAt: 1 } })
+    const { moved, rest } = splitMoved(nodes, w, false)
+    expect(moved.map((n) => n.path)).toEqual(['a.md'])
+    expect(rest.map((n) => n.path)).toEqual(['alpha', 'zed', 'b.md'])
+  })
+
+  it('orders the moved group most-recent first, regardless of type', () => {
+    const w = ws({ 'b.md': { movedAt: 100 }, alpha: { movedAt: 200 }, zed: { movedAt: 150 } })
+    const { moved } = splitMoved(nodes, w, false)
+    expect(moved.map((n) => n.path)).toEqual(['alpha', 'zed', 'b.md'])
+  })
+
+  it('rest still respects free-arrange for whatever is left', () => {
+    const w = ws({
+      'a.md': { movedAt: 1 },
+      'b.md': { order: 0 },
+      zed: { order: 1 }
+    })
+    const { rest } = splitMoved(nodes, w, true)
+    expect(rest.map((n) => n.path)).toEqual(['b.md', 'zed', 'alpha'])
   })
 })
 

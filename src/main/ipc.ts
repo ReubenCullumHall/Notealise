@@ -16,9 +16,11 @@ import {
   getWorkspace,
   migrateKey,
   purgeEntries,
+  purgeRecoveryEntries,
   reorderEntries,
   resetWorkspaceForVaultSwitch,
   restoreEntries,
+  restoreRecoveryEntries,
   trashEntries,
   updateEntries
 } from './workspace'
@@ -152,6 +154,8 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.trashEntries, (_e, paths: string[]) => trashEntries(paths))
   ipcMain.handle(CH.restoreEntries, (_e, ids: string[]) => restoreEntries(ids))
   ipcMain.handle(CH.purgeEntries, (_e, ids?: string[]) => purgeEntries(ids))
+  ipcMain.handle(CH.restoreRecoveryEntries, (_e, ids: string[]) => restoreRecoveryEntries(ids))
+  ipcMain.handle(CH.purgeRecoveryEntries, (_e, ids?: string[]) => purgeRecoveryEntries(ids))
   ipcMain.handle(CH.deleteSpace, (_e, folder: string) => deleteSpace(folder))
   ipcMain.handle(CH.getUpdateState, async () => ({
     version: app.getVersion(),

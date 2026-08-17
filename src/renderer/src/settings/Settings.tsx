@@ -8,11 +8,13 @@ import { Collection } from './Collection'
 import { Customisation } from './Customisation'
 import { Tutorials } from './tutorials'
 import { SourceFolder } from './SourceFolder'
+import { Recovery } from './Recovery'
 import { ImportPanel } from '../import/ImportPanel'
 import { DATE_FORMATS, NUMBER_FORMATS, formatDate, localZone, timezones } from '../intl'
 import { isPrereleaseVersion, type UpdateStatus } from '../../../shared/update'
 import type { PresetActions } from './Presets'
 import type { SpacePreset } from '../../../shared/presets'
+import type { RecoveryItem } from '../../../shared/workspace'
 
 /** What a plain settings section needs. Kept free of `spaceActions` so General
  *  and Formatting don't have to carry a dependency only Spaces uses. */
@@ -30,6 +32,11 @@ type ShellProps = Props & {
   /** the saved-preset library, which App owns because it outlives the open vault */
   presets: SpacePreset[]
   presetActions: PresetActions
+  /** the 7-day safety net beneath the bin — see shared/workspace.ts's
+   *  RecoveryItem. Settings-only; not shown in the sidebar's bin view. */
+  recovery: RecoveryItem[]
+  onRestoreRecovery: (ids: string[]) => void
+  onPurgeRecovery: (ids?: string[]) => void
 }
 
 export type SectionId =
@@ -38,6 +45,7 @@ export type SectionId =
   | 'spaces'
   | 'collection'
   | 'sourceFolder'
+  | 'recovery'
   | 'import'
   | 'tutorials'
   | 'updates'
@@ -68,6 +76,7 @@ const SECTIONS: { id: SectionId; label: string; icon: IconName }[] = [
   { id: 'spaces', label: 'Spaces', icon: 'spaces' },
   { id: 'collection', label: 'Your collection', icon: 'library' },
   { id: 'sourceFolder', label: 'Source folder', icon: 'folder' },
+  { id: 'recovery', label: 'Recovery', icon: 'restore' },
   { id: 'import', label: 'Import', icon: 'import' },
   { id: 'tutorials', label: 'Tutorials', icon: 'book' },
   { id: 'updates', label: 'Updates', icon: 'restore' },
@@ -86,6 +95,9 @@ export function SettingsButton({
   onPickVault,
   presets,
   presetActions,
+  recovery,
+  onRestoreRecovery,
+  onPurgeRecovery,
   jumpToSection,
   onJumpHandled
 }: ShellProps & {
@@ -236,6 +248,9 @@ export function SettingsButton({
               onPickVault={onPickVault}
               presets={presets}
               presetActions={presetActions}
+              recovery={recovery}
+              onRestoreRecovery={onRestoreRecovery}
+              onPurgeRecovery={onPurgeRecovery}
               initialSection={initialSection}
               onClose={close}
               armed={armed}
@@ -263,6 +278,9 @@ function SettingsWindow({
   onPickVault,
   presets,
   presetActions,
+  recovery,
+  onRestoreRecovery,
+  onPurgeRecovery,
   initialSection,
   onClose,
   armed,
@@ -363,6 +381,9 @@ function SettingsWindow({
             />
           )}
           {section === 'sourceFolder' && <SourceFolder vault={vault} onPickVault={onPickVault} />}
+          {section === 'recovery' && (
+            <Recovery items={recovery} onRestore={onRestoreRecovery} onPurge={onPurgeRecovery} />
+          )}
           {section === 'import' && (
             <ImportPanel onOpenSpace={spaceActions.onOpenSpace} onClose={onClose} />
           )}

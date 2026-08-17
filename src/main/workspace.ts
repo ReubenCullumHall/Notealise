@@ -3,9 +3,11 @@ import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import {
   getVaultRoot,
+  purgeRecoveryItem,
   purgeTrashItem,
   renameWithRetry,
   restoreEntry,
+  restoreFromRecovery,
   trashEntry,
   trashEntryToOS
 } from './vault'
@@ -14,7 +16,9 @@ import {
   isSelfOrDescendant,
   normalizeWorkspace,
   remapPath,
+  RECOVERY_TTL_MS,
   type EntryMeta,
+  type RecoveryItem,
   type TrashItem,
   type Workspace
 } from '../shared/workspace'
@@ -45,13 +49,13 @@ let writeChain: Promise<void> = Promise.resolve()
 
 async function readFromDisk(root: string | null): Promise<Workspace> {
   const p = workspacePathFor(root)
-  if (!p) return { ...EMPTY_WORKSPACE, entries: {}, trash: [] }
+  if (!p) return { ...EMPTY_WORKSPACE }
   try {
     let raw = await fs.readFile(p, 'utf8')
     if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1) // tolerate a UTF-8 BOM
     return normalizeWorkspace(JSON.parse(raw))
   } catch {
-    return { entries: {}, trash: [] } // no file yet — everything falls back to defaults
+    return { entries: {}, trash: [], recovery: [] } // no file yet — everything falls back to defaults
   }
 }
 
@@ -196,7 +200,7 @@ export async function trashEntries(paths: string[]): Promise<Workspace> {
       if (isSelfOrDescendant(key, p)) delete entries[key]
     }
   }
-  const next = { entries, trash }
+  const next = { entries, trash, recovery: ws.recovery }
   latest = next
   await flushNow()
   return next
@@ -220,29 +224,105 @@ export async function restoreEntries(ids: string[]): Promise<Workspace> {
       kept.push(item) // leave it in the bin rather than losing the record
     }
   }
-  const next = { entries: ws.entries, trash: kept }
+  const next = { entries: ws.entries, trash: kept, recovery: ws.recovery }
   latest = next
   await flushNow()
   return next
 }
 
-/** Permanently remove binned items (no ids = empty the bin). */
+/** Move binned items into the 7-day recovery safety net (no ids = empty the
+ *  bin). Nothing is actually deleted here — see restoreRecoveryEntries,
+ *  purgeRecoveryEntries and the sweep below for what happens to them next. */
 export async function purgeEntries(ids?: string[]): Promise<Workspace> {
   await flushNow()
   const ws = await ensureLoaded()
   const wanted = ids && ids.length ? new Set(ids) : null
   const kept: TrashItem[] = []
+  const recovery: RecoveryItem[] = [...ws.recovery]
   for (const item of ws.trash) {
     if (wanted && !wanted.has(item.id)) {
       kept.push(item)
       continue
     }
     await purgeTrashItem(item.id, item.name)
+    recovery.unshift({ id: item.id, from: item.from, name: item.name, type: item.type, purgedAt: Date.now() })
   }
-  const next = { entries: ws.entries, trash: kept }
+  const next = { entries: ws.entries, trash: kept, recovery }
   latest = next
   await flushNow()
   return next
+}
+
+/** Put recovery items back where they came from — the same restore as the
+ *  bin does, just one step later. */
+export async function restoreRecoveryEntries(ids: string[]): Promise<Workspace> {
+  await flushNow()
+  const ws = await ensureLoaded()
+  const wanted = new Set(ids)
+  const kept: RecoveryItem[] = []
+  for (const item of ws.recovery) {
+    if (!wanted.has(item.id)) {
+      kept.push(item)
+      continue
+    }
+    try {
+      await restoreFromRecovery(item.id, item.name, item.from)
+    } catch (e) {
+      console.error(`could not restore ${item.name} from recovery`, e)
+      kept.push(item) // leave it in the safety net rather than losing the record
+    }
+  }
+  const next = { entries: ws.entries, trash: ws.trash, recovery: kept }
+  latest = next
+  await flushNow()
+  return next
+}
+
+/** Permanently and immediately delete recovery items (no ids = clear the
+ *  whole safety net), rather than waiting out the 7-day window — for
+ *  genuinely sensitive content the user wants gone sooner. */
+export async function purgeRecoveryEntries(ids?: string[]): Promise<Workspace> {
+  await flushNow()
+  const ws = await ensureLoaded()
+  const wanted = ids && ids.length ? new Set(ids) : null
+  const kept: RecoveryItem[] = []
+  for (const item of ws.recovery) {
+    if (wanted && !wanted.has(item.id)) {
+      kept.push(item)
+      continue
+    }
+    await purgeRecoveryItem(item.id, item.name)
+  }
+  const next = { entries: ws.entries, trash: ws.trash, recovery: kept }
+  latest = next
+  await flushNow()
+  return next
+}
+
+let sweepTimer: ReturnType<typeof setInterval> | null = null
+
+/** Drop anything past its 7-day window. Runs hourly once started, and once
+ *  immediately — so an item that expired while the app was closed is swept
+ *  the moment it reopens, not just after the next hourly tick. */
+async function sweepExpiredRecovery(): Promise<void> {
+  const ws = await ensureLoaded()
+  if (!ws.recovery.length) return
+  const now = Date.now()
+  const expired = ws.recovery.filter((r) => now - r.purgedAt >= RECOVERY_TTL_MS)
+  if (!expired.length) return
+  for (const item of expired) await purgeRecoveryItem(item.id, item.name)
+  const expiredIds = new Set(expired.map((r) => r.id))
+  latest = { entries: ws.entries, trash: ws.trash, recovery: ws.recovery.filter((r) => !expiredIds.has(r.id)) }
+  scheduleWrite()
+}
+
+/** Start the recovery sweep. Call once, at app launch — safe to call whether
+ *  or not a vault is open yet, since it goes through ensureLoaded() same as
+ *  everything else here. */
+export function startRecoverySweep(): void {
+  if (sweepTimer) return
+  void sweepExpiredRecovery()
+  sweepTimer = setInterval(() => void sweepExpiredRecovery(), 60 * 60 * 1000)
 }
 
 /** Delete a space's folder straight to the OS trash — deliberately NEVER
@@ -258,7 +338,7 @@ export async function deleteSpace(folder: string): Promise<Workspace> {
   for (const key of Object.keys(entries)) {
     if (isSelfOrDescendant(key, folder)) delete entries[key]
   }
-  const next = { entries, trash: ws.trash }
+  const next = { entries, trash: ws.trash, recovery: ws.recovery }
   latest = next
   await flushNow()
   return next

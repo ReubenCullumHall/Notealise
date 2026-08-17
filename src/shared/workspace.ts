@@ -21,6 +21,14 @@ export interface EntryMeta {
   archived?: boolean
   /** epoch ms, set when archived; used by the archive's "recently archived" sort. */
   archivedAt?: number
+  /** epoch ms, set when this entry lands here via a cross-space drag-drop (see
+   *  organise/model.ts `splitMoved`). Hoists it into a "Moved" group at the top
+   *  of its new parent's list instead of wherever alphabetical/free-arrange
+   *  order would bury it — a cross-space drop is blind (the destination isn't
+   *  the list you were looking at), so it needs a deliberate parking spot.
+   *  Cleared the moment the entry is moved/reordered again: that action IS the
+   *  user sorting it into place, the same way `App.tsx`'s `move` clears it. */
+  movedAt?: number
   /** folders only — whether the row is collapsed in the tree. */
   collapsed?: boolean
   /** `#rrggbb`, the colour this row is tagged with in the sidebar. Absent means
@@ -57,12 +65,35 @@ export interface TrashItem {
   deletedAt: number
 }
 
+/** One item that has left the bin but not yet the disk — the second-stage
+ *  safety net (main/vault.ts's recovery block). Reaching here means "delete
+ *  this" was already said once (into the bin) and once more (emptying it /
+ *  force-deleting it). It expires RECOVERY_TTL_MS after `purgedAt`, at which
+ *  point the app deletes it for real, or the user can force that sooner from
+ *  Settings. Deliberately absent from the normal bin UI — Settings-only. */
+export interface RecoveryItem {
+  /** random id, also the on-disk prefix inside .mdnotes/recovery/. */
+  id: string
+  /** vault-relative path it was deleted from, for Restore. */
+  from: string
+  /** display name (basename of `from`). */
+  name: string
+  type: 'dir' | 'file'
+  /** epoch ms — when it left the bin and entered the safety net. */
+  purgedAt: number
+}
+
+/** How long a purged item survives in the safety net before the app deletes
+ *  it for real. */
+export const RECOVERY_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
 export interface Workspace {
   entries: Record<string, EntryMeta>
   trash: TrashItem[]
+  recovery: RecoveryItem[]
 }
 
-export const EMPTY_WORKSPACE: Workspace = { entries: {}, trash: [] }
+export const EMPTY_WORKSPACE: Workspace = { entries: {}, trash: [], recovery: [] }
 
 const num = (v: unknown): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) ? v : undefined
@@ -83,6 +114,8 @@ export function normalizeEntry(raw: unknown): EntryMeta {
   if (archived !== undefined) meta.archived = archived
   const archivedAt = num(v.archivedAt)
   if (archivedAt !== undefined) meta.archivedAt = archivedAt
+  const movedAt = num(v.movedAt)
+  if (movedAt !== undefined) meta.movedAt = movedAt
   const collapsed = bool(v.collapsed)
   if (collapsed !== undefined) meta.collapsed = collapsed
   // Anything that isn't a colour is dropped rather than stored — this value is
@@ -111,6 +144,21 @@ function normalizeTrashItem(raw: unknown): TrashItem | null {
   }
 }
 
+function normalizeRecoveryItem(raw: unknown): RecoveryItem | null {
+  const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const id = str(v.id)
+  const from = str(v.from)
+  const purgedAt = num(v.purgedAt)
+  if (!id || !from || purgedAt === undefined) return null
+  return {
+    id,
+    from,
+    name: str(v.name) ?? from.split('/').pop() ?? from,
+    type: v.type === 'dir' ? 'dir' : 'file',
+    purgedAt
+  }
+}
+
 /** Coerce arbitrary parsed JSON into a valid Workspace. Never throws; unknown or
  *  malformed entries are dropped rather than failing the whole file — a corrupt
  *  sidecar must never stop the vault from opening. */
@@ -131,7 +179,14 @@ export function normalizeWorkspace(raw: unknown): Workspace {
       if (item) trash.push(item)
     }
   }
-  return { entries, trash }
+  const recovery: RecoveryItem[] = []
+  if (Array.isArray(v.recovery)) {
+    for (const r of v.recovery) {
+      const item = normalizeRecoveryItem(r)
+      if (item) recovery.push(item)
+    }
+  }
+  return { entries, trash, recovery }
 }
 
 // ---------------------------------------------------------------------------

@@ -10,15 +10,32 @@ POSIX path (`main/workspace.ts` — debounced + atomic writes, root captured at 
 re-mapping on rename). **Archive is a flag; the `.md` file never moves**, and a folder carries its
 subtree by inheritance. **The bin is real:** deleting moves the entry to
 `<vault>/.mdnotes/trash/<id>-<name>` and records it in `workspace.trash`; Restore puts it back
-(collision-suffixed if the name was retaken), and **"Empty recycle bin" is the only path that
-reaches the OS trash**. This one flat folder holds everything regardless of which space (if any) an
-item came from — the random `id` prefix is what lets same-named notes from different spaces sit in
-the bin at once — and `TrashItem.from` remembers the item's original space-qualified path, so
-Restore recreates that folder if it's gone (which then reappears as an ordinary new space on the
-next reconcile, per `docs/feature-tabs-spaces.md` — self-healing, not orphaned). Emptying the bin has no
-confirmation prompt: the bin view itself is one click away, and every item in it already passed its
-own delete confirmation on the way in. `.mdnotes/` is already skipped by the tree walk and the
-watcher, so binned entries leave the tree for free. Still pending:
+(collision-suffixed if the name was retaken). This one flat folder holds everything regardless of
+which space (if any) an item came from — the random `id` prefix is what lets same-named notes from
+different spaces sit in the bin at once — and `TrashItem.from` remembers the item's original
+space-qualified path, so Restore recreates that folder if it's gone (which then reappears as an
+ordinary new space on the next reconcile, per `docs/feature-tabs-spaces.md` — self-healing, not
+orphaned). Emptying the bin has no confirmation prompt: the bin view itself is one click away, and
+every item in it already passed its own delete confirmation on the way in. `.mdnotes/` is already
+skipped by the tree walk and the watcher, so binned entries leave the tree for free.
+
+**The recovery safety net (2026-08-17).** Deleting something forever from the bin — one item, or
+"Empty recycle bin" — used to hand off straight to the OS trash (`shell.trashItem`). It no longer
+does: `purgeTrashItem` (main/vault.ts) now moves the entry into `<vault>/.mdnotes/recovery/`
+instead, and `main/workspace.ts`'s `purgeEntries` records a `RecoveryItem` (mirrors `TrashItem`,
+`purgedAt` instead of `deletedAt`) in the new `workspace.recovery` array. An hourly sweep
+(`startRecoverySweep`, started once from `main/index.ts`'s `whenReady`) permanently deletes
+(`fs.rm`, the only hard-unlink in the module) anything past `RECOVERY_TTL_MS` (7 days,
+`shared/workspace.ts`). Restore or force-delete-now are both exposed, but **only from Settings ->
+Recovery** (`settings/Recovery.tsx`) — deliberately absent from the sidebar's bin view, since
+reaching this list means delete was already confirmed twice. Force-delete uses the same two-step
+"click again" armed-button idiom as `Spaces.tsx`'s `DeleteSpace`, because it's now the genuine,
+unrecoverable delete. **`deleteSpace` deliberately still bypasses all of this**, straight to the OS
+trash same as before — a product decision, not an oversight, so don't fold it in without asking
+first. Still pending: the 7-day expiry itself is implemented and unit-tested (`RECOVERY_TTL_MS`
+math) but not yet observed end-to-end in the live app — that needs an actual week to pass.
+
+Still pending:
 
 - **`.mdnotes/` config (partial).** Holds `settings.json` (appearance) and `workspace.json`
   (organisation). Window state and per-note placement still move in later.

@@ -39,6 +39,9 @@ export const CH = {
   trashEntries: 'workspace:trash',
   restoreEntries: 'workspace:restore',
   purgeEntries: 'workspace:purge',
+  /** the 7-day safety net items purging the bin now land in, Settings-only */
+  restoreRecoveryEntries: 'workspace:restoreRecovery',
+  purgeRecoveryEntries: 'workspace:purgeRecovery',
   deleteSpace: 'workspace:deleteSpace',
   /** renderer -> main: in-app updates (electron-updater over the GitHub feed) */
   getUpdateState: 'update:get',
