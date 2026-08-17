@@ -1,5 +1,10 @@
 # Appearance research brief: dyslexia tints, fonts, and paper-look skins
 
+**Status (2026-08-17): the fonts half of this brief is built** — see `docs/feature-tabs-spaces.md`'s
+"Fonts" section for what shipped and why, which supersedes §6's font-related research questions
+below (2 and 3) and the font-bundling half of §5. Tints and paper-look skins are still exactly the
+inert shell §5 describes; their research questions (1 and 4) are still open.
+
 This document describes the front-end of a desktop notes app so that visual-appearance features (dyslexia-friendly color tints, additional fonts, and "paper-look" skins for the writing surface) can be researched without access to the codebase itself. It ends with specific research questions.
 
 ## 1. What the app is

@@ -61,14 +61,27 @@ the raw-view toggle.
   there, only links that *resolved* to it, after a `flush()`, and through `onDocChange` for notes
   that are open so the autosave owns the write. Moving a note does NOT rewrite anything: links
   resolve by title, so a move leaves them all working.
-- **The links block and the path bar (built 2026-08-01).** Both are chrome; **nothing either shows
-  is ever written into a note** (rule 1). The links strip sits at the top of each column — outgoing
-  first, then backlinks — and **does not put the direction on the face of a link**: which way a
-  connection runs is on the hover card, along with the line the link sits in, so the strip reads as
-  names rather than badges. It scrolls sideways at a fixed height, because the chrome may not change
-  height with what a note contains. Settings → General pins it; by default it scrolls away with the
-  text (translated against the CodeMirror scroller, whose top padding follows `--links-inset` — CM
-  keeps its own scroller, which is not worth restructuring for this).
+- **The links block and the path bar (built 2026-08-01; bottom placement added 2026-08-17).** Both
+  are chrome; **nothing either shows is ever written into a note** (rule 1). The links strip sits at
+  the top of each column by default — outgoing first, then backlinks — and **does not put the
+  direction on the face of a link**: which way a connection runs is on the hover card, along with the
+  line the link sits in, so the strip reads as names rather than badges. It scrolls sideways at a
+  fixed height, because the chrome may not change height with what a note contains. At the top,
+  Settings → Linking content pins it; unpinned (the default) it scrolls away with the text
+  (translated against the CodeMirror scroller, whose top padding follows `--links-inset` — CM keeps
+  its own scroller, which is not worth restructuring for this).
+  **`linksPosition` ('top' | 'bottom') moves the whole strip to a fixed bar under the editor
+  instead** — for a space whose header is already busy with tabs, the path bar and the title. It is
+  always a static row there (no floating/scroll-away variant, and pinning is meaningless once the
+  strip can't scroll away in the first place — `pinLinks` is greyed out in `SpaceForm` whenever
+  position is 'bottom'). Implemented as an ordinary sibling row after `.pane-body` in `NotePane.tsx`,
+  the same trick the top-pinned row already uses before it — flex-column layout shrinks `.pane-body`
+  from whichever side the row sits on, so no absolute-positioning or padding hack was needed for the
+  new side. `LinksBlock` takes an `edge: 'top' | 'bottom'` prop purely to flip which side gets the
+  border (`border-b` when the note text sits below the strip, `border-t` when it sits above).
+  **There is no separate "backlinks" panel to relocate independently** — outgoing and incoming links
+  render as one combined strip (see below), so "put the backlinks at the bottom" reads on this
+  strip as a whole, not on a filtered subset of it.
   The path bar is one row for the whole editor area, following the focused column, and is
   **navigation, not a label**: clicking a folder opens it in the sidebar, closes every other folder,
   and scrolls it into view — switching space first if the note lives in another one.
@@ -78,7 +91,7 @@ the raw-view toggle.
   the only place the rules are written for someone who isn't reading this file. The nav says
   "Linking content" rather than "Links" on purpose: a link here is a relation between two things
   the user wrote, and the short word kept reading as a URL.
-  **`showLinks` / `pinLinks` / `showPath` / `showNoteInfo` belong to a SPACE**, not the app: how a set of notes reads
+  **`showLinks` / `pinLinks` / `linksPosition` / `showPath` / `showNoteInfo` belong to a SPACE**, not the app: how a set of notes reads
   is a property of that set. They were global until 2026-08-02 and `normalizeSettings` migrates an
   older file by handing the top-level value down to every space (see `LegacyChrome`). The "use this
   in every space" buttons are ACTIONS that write one value across all spaces — deliberately not a

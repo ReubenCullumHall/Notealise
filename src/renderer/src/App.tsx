@@ -35,6 +35,7 @@ import { liveIndex, noteRefs } from './links/model'
 import { PathBar } from './PathBar'
 import { Tooltip } from './Tooltip'
 import { StartupSplash } from './StartupSplash'
+import { Onboarding } from './onboarding/Onboarding'
 import { LinkInspector, type Inspect } from './links/LinkInspector'
 import { indexLinks, rewriteLinks, titleOf, type LinkRow } from '../../shared/links'
 import type { LinkEnv, LinkHandlers, OpenHow } from './editor/linkEnv'
@@ -130,6 +131,10 @@ const remapRecord = <T,>(r: Record<string, T>, map: (p: string) => string): Reco
 export default function App(): React.JSX.Element {
   const [ready, setReady] = useState(false)
   const [vault, setVault] = useState<string | null>(null)
+  // null = not yet answered by main. Gates onboarding, not vault activation —
+  // an already-onboarded user whose vault folder went missing still gets the
+  // plain recovery picker below, never the full first-run flow again.
+  const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null)
   // Set once, the moment a vault becomes active from a cold boot or a first-run
   // folder pick (never from a mid-session "Switch folder") — see the two call
   // sites below. StartupSplash reads `settings.playStartupAnimation` itself at
@@ -467,6 +472,17 @@ export default function App(): React.JSX.Element {
         if (reconciled) await changeSettings(reconciled)
         return
       }
+      // Onboarding's own Spaces step is what's supposed to create the first
+      // real space, from what the user picks — this fallback firing first
+      // (on the very first tree load, before that screen even shows) would
+      // pre-empt it with a blank "New folder" nobody asked for. A vault with
+      // zero bound spaces for the length of onboarding is expected, not the
+      // "switcher hides, new notes land at the root" problem this guards
+      // against for the plain (already-onboarded, no-Onboarding-UI) picker.
+      if (!hasOnboarded) {
+        if (reconciled) await changeSettings(reconciled)
+        return
+      }
       try {
         const folder = await window.api.createFolder('')
         await loadTree()
@@ -476,7 +492,7 @@ export default function App(): React.JSX.Element {
         if (reconciled) await changeSettings(reconciled)
       }
     },
-    [changeSettings, loadTree, flash]
+    [changeSettings, loadTree, flash, hasOnboarded]
   )
 
   /** Kept pointing at the live `colorExistingFolders` below — see the note on
@@ -838,9 +854,9 @@ export default function App(): React.JSX.Element {
   // initial load: open the saved vault, or fall through to the picker.
   useEffect(() => {
     void (async () => {
-      const v = await window.api.getVault()
+      const [v, onboarded] = await Promise.all([window.api.getVault(), window.api.getOnboarded()])
       setVault(v)
-      setReady(true)
+      setHasOnboarded(onboarded)
       // Three independent reads (tree walk, workspace.json, settings.json) —
       // run concurrently rather than summing their latencies, which matters on
       // a large or slow-syncing vault (see MAX_MS in StartupSplash.tsx).
@@ -853,10 +869,19 @@ export default function App(): React.JSX.Element {
       } else {
         s = await loadSettings(null)
       }
+      // Only now, not before the settings read above: Onboarding (which reads
+      // `ready`) also reads `space.theme` for its Welcome-screen clip, and
+      // rendering that off DEFAULT_SETTINGS's optimistic default rather than
+      // the real loaded value picked the wrong clip once during testing —
+      // same class of bug the comment below already guards for splashActive.
+      setReady(true)
       // Gated on the just-loaded REAL settings, not the optimistic default —
       // triggering off the default and correcting a moment later flashed the
       // splash on and yanked it off mid-clip for anyone who'd turned it off.
-      if (v && s.playStartupAnimation) setSplashActive(true)
+      // Also gated on onboarding already being done: Onboarding's Welcome
+      // screen plays this same clip itself, so the ambient one stays off
+      // until that flow has actually finished.
+      if (v && s.playStartupAnimation && onboarded) setSplashActive(true)
       if (v) await syncSpaces(loadedTree, s)
       if (v) restoreSession(loadedTree, s)
       if (v) await loadPresets()
@@ -1109,7 +1134,7 @@ export default function App(): React.JSX.Element {
       // Three independent reads, run concurrently rather than summed — see the
       // identical pattern (and why) in the boot effect above.
       const [t, , s] = await Promise.all([loadTree(), loadWorkspace(), loadSettings(v)])
-      if (firstRun && s.playStartupAnimation) setSplashActive(true)
+      if (firstRun && s.playStartupAnimation && hasOnboarded) setSplashActive(true)
       // The watcher only reports CHANGES from here on (ignoreInitial: true), so
       // a vault's pre-existing top-level folders never self-announce as spaces
       // otherwise — nothing would reconcile them until some later fs event.
@@ -1122,6 +1147,23 @@ export default function App(): React.JSX.Element {
       // another vault was open shows up in the list straight away.
       await loadPresets()
     }
+  }
+
+  const finishOnboarding = async (): Promise<void> => {
+    await window.api.setOnboarded(true)
+    setHasOnboarded(true)
+  }
+
+  /** Onboarding's Fonts step, applied to EVERY space rather than just the
+   *  active one. Picking a font before you've really met the idea of spaces is
+   *  an answer to "how should this app look", not "how should this one folder
+   *  look" — the whole-app scope Customisation offers later, reached from a
+   *  screen that hasn't introduced the per-space one yet. One write across all
+   *  of them, not a loop: each setSettings is a full read-modify-write of
+   *  settings.json (same reasoning as the preset ALL_SPACES path above). */
+  const pickOnboardingFont = (id: string): void => {
+    const current = settingsRef.current
+    void changeSettings({ spaces: current.spaces.map((sp) => ({ ...sp, font: id })) })
   }
 
   const run = async (fn: () => Promise<void>): Promise<void> => {
@@ -1567,9 +1609,13 @@ export default function App(): React.JSX.Element {
     }
   }
 
-  if (!ready) return <div className="center muted">Loading…</div>
+  if (!ready || hasOnboarded === null) return <div className="center muted">Loading…</div>
 
-  if (!vault) {
+  // A vault-less, already-onboarded install means the saved folder went
+  // missing (moved/deleted) — the plain recovery picker, not the full flow
+  // again. A vault-less, not-yet-onboarded install falls through to
+  // Onboarding below instead, which owns its own vault-picking screen.
+  if (!vault && hasOnboarded) {
     return (
       <div className="center picker">
         <h1>Notes</h1>
@@ -1583,9 +1629,24 @@ export default function App(): React.JSX.Element {
 
   return (
     <>
+      {!hasOnboarded && (
+        <Onboarding
+          vault={vault}
+          activeSpaceFolder={space.folder}
+          theme={resolveTheme(space.theme)}
+          animationsEnabled={settings.animationsEnabled}
+          noteFont={space.font}
+          onPickVault={pick}
+          onOpenSpace={(folder) => openSpaceRef.current(folder)}
+          onPickNoteFont={pickOnboardingFont}
+          onOpenSettingsSection={(id) => setSettingsJumpTo(id)}
+          onFinished={() => void finishOnboarding()}
+        />
+      )}
       {splashActive && (
         <StartupSplash theme={resolveTheme(space.theme)} onFinished={() => setSplashActive(false)} />
       )}
+      {vault && (
       <div className="flex h-full w-full">
       <Sidebar
         vaultName={baseName(vault)}
@@ -1695,6 +1756,7 @@ export default function App(): React.JSX.Element {
                   linkIndex={linkIndex}
                   showLinks={space.showLinks}
                   pinLinks={space.pinLinks}
+                  linksPosition={space.linksPosition}
                   markdownPro={space.markdownPro}
                   // Which notes are RAW is a property of each note, so it sits
                   // in workspace.json beside its pin and its colour — not in the
@@ -1861,6 +1923,7 @@ export default function App(): React.JSX.Element {
         </div>
       )}
       </div>
+      )}
     </>
   )
 }

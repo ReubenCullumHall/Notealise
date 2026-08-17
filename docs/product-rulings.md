@@ -11,12 +11,6 @@ and `docs/voice.md` (the copy rules from this same interview).
 
 ## Rulings that contradict current code
 
-- **Default theme must follow the OS**, not `dark` (4A.34, 4B.17, 4B.20). `shared/settings.ts:233`
-  currently hardcodes `theme: 'dark'`. This needs a third state — the persisted value has to be able
-  to mean "follow the system" rather than a fixed theme, which `normalizeSettings` and the
-  `theme-cache.json` pre-paint mirror both have to understand. **Pre-paint is the trap:** `index.html`
-  writes the theme onto `<html>` before React exists, so it must resolve "system" itself rather than
-  reading a resolved value written by the renderer.
 - **The bounce easing stays, but needs an off switch** (4B.33, 4B.34). `cubic-bezier(0.34,1.56,0.64,1)`
   is deliberate now, not an accident — Reuben's call is that it adds character. The setting is for
   speed and hardware acceleration, and belongs with the other per-space appearance settings unless
@@ -68,7 +62,24 @@ retrofitting means rewriting their `.md` files.
 
 ## Unchanged and confirmed
 
-Wordmark doesn't change and never appears inside the app (website header only). Type stack stays
-(Inter / Fraunces / JetBrains Mono); font switching is post-launch. Density names stay. Backdrop
-blur stays. Off-white `--paper` is a deliberate softening, not drift from the site's `#ffffff`.
-Default app state shows no colour except highlighted text.
+Type stack stays (Inter / Fraunces / JetBrains Mono); font switching is post-launch. Density names
+stay. Backdrop blur stays. Off-white `--paper` is a deliberate softening, not drift from the site's
+`#ffffff`. Default app state shows no colour except highlighted text.
+
+## Superseded by later builds (this doc's own claims, corrected)
+
+Two lines above were true as of the 2026-08-09 interview and are **no longer true of the code** —
+caught 2026-08-17 while building onboarding, which reuses both:
+
+- ~~"Wordmark doesn't change and never appears inside the app (website header only)."~~ It does now:
+  `StartupSplash.tsx` plays the wordmark clip (`playStartupAnimation` setting) every time a vault
+  opens, and onboarding's Welcome screen reuses the same clip. Not tracked as a separate build —
+  it shipped between the interview and now with nothing here updated to say so.
+- ~~"Default theme must follow the OS, not `dark` — needs a third state..."~~ Already built:
+  `ThemeId = ResolvedThemeId | 'system'` (`shared/settings.ts`), `DEFAULT_SPACE.theme = 'system'`,
+  and `index.html`'s pre-paint script resolves it before React mounts. This was ruling 4A.34/4B.17/
+  4B.20; treat it as done, not outstanding.
+
+**Lesson for next time this file is read for planning**: a "contradicts current code" or "unchanged"
+claim here can go stale the moment the code it describes changes, and nothing forces a revisit.
+Spot-check against the actual source before relying on this doc for what's built vs. not.

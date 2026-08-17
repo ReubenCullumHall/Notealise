@@ -32,7 +32,14 @@ import { DEFAULT_PALETTE, normalizePalette } from './color'
 /** 'black' is Extra dark: the dark ramp with every surface taken to (near)
  *  pitch black, for OLED panels and dim rooms. It is a VARIANT of dark, not a
  *  third independent palette — theme.css only overrides what differs. */
-export type ThemeId = 'dark' | 'light' | 'black'
+export type ResolvedThemeId = 'dark' | 'light' | 'black'
+/** 'system' follows the OS light/dark setting rather than naming a ramp
+ *  directly — theme.css has no rule for it, so anything that paints from a
+ *  theme (applySettings, the pre-paint script in index.html) must resolve it
+ *  to a ResolvedThemeId via the OS preference first. Stored as-is in
+ *  settings.json/theme-cache.json: main never resolves it, only the renderer
+ *  does, since that's the only process with a `prefers-color-scheme` to ask. */
+export type ThemeId = ResolvedThemeId | 'system'
 /** How bright body text is on a dark theme. 'grey' is the long-standing soft
  *  ramp (#d6d6d6 at the top); 'white' pushes it to full white for maximum
  *  contrast. Ignored by the light theme, which has no white to give. */
@@ -52,6 +59,10 @@ export type AccentMode = 'text' | 'tint'
  *  strength the theme's ramp has nothing to say about what is readable on a
  *  colour the user chose. */
 export type ColorStyle = 'tag' | 'row' | 'solid'
+/** Where a note's links strip sits. 'top' is the long-standing spot, under the
+ *  format bar; 'bottom' fixes it to the bottom of the note instead, for a space
+ *  whose header is already busy with tabs, the path bar and the title. */
+export type LinksPosition = 'top' | 'bottom'
 export type StartupId = 'empty' | 'last'
 export type DateFormatId = 'full' | 'short' | 'mdy' | 'dmy' | 'ymd' | 'relative'
 export type NumberFormatId = 'default' | 'comma' | 'dot'
@@ -130,8 +141,12 @@ export interface Space {
   // → Linking content can push any of them to every space at once.
   /** show the strip of this note's links — what it points at, what points back */
   showLinks: boolean
-  /** keep that strip on screen while the note scrolls, instead of letting it go */
+  /** keep that strip on screen while the note scrolls, instead of letting it go.
+   *  Only meaningful when `linksPosition` is 'top' — a bottom strip is always
+   *  fixed, so this is ignored (and hidden in SpaceForm) once it isn't. */
   pinLinks: boolean
+  /** top (under the format bar) or fixed to the bottom of the note */
+  linksPosition: LinksPosition
   /** show the `Space › Folder › Note` bar between the tabs and the format bar */
   showPath: boolean
   /** show when the note was made and last edited, beside its word count */
@@ -154,7 +169,29 @@ export interface Space {
   //     but nothing reads them yet. '' means unset (there is no catalogue to
   //     hold a 'default' entry, unlike `accent`). ---
   pageLook: string
+  /** A whole-NOTE "skin": a font id from `settings/fonts.ts`'s catalogue,
+   *  applied to a note's own body, its rendered headings, and its title
+   *  (--note-font-sans / --note-font-serif) — uniformly, same family for
+   *  both. '' keeps the app's own mixed look (Inter body, Fraunces
+   *  headings). Deliberately separate from `uiFont` below: picking a font
+   *  for your writing shouldn't also restyle the settings window it's
+   *  picked from. Code text is never affected either way — it always
+   *  renders in JetBrains Mono. Validated loosely, like `accent`: an id
+   *  this build doesn't recognise is stored as typed but resolves to no
+   *  override when applied, rather than failing. */
   font: string
+  /** The same idea as `font`, for the app's own INTERFACE instead of a note
+   *  — sidebar, settings, buttons, onboarding (--font-sans / --font-serif).
+   *  Independent of `font`: a space can look one way to write in and
+   *  another way in its chrome, or share one look by setting both the
+   *  same. '' keeps the app's stock interface look. */
+  uiFont: string
+  /** A third, independent font id — one of the catalogue's `dyslexia`
+   *  entries — that overrides just a note's body text (--note-font-sans),
+   *  on top of whatever `font` above is set to. Its own field rather than
+   *  folded into `font`'s options: this is reached for as an accessibility
+   *  switch, not chosen alongside other looks. '' means off. */
+  dyslexiaFont: string
   tint: string
 }
 
@@ -241,7 +278,11 @@ export interface AppSettings {
 export const DEFAULT_SPACE: Space = {
   folder: '',
   emoji: '',
-  theme: 'dark',
+  // 'system' rather than a fixed ramp: a brand-new space — the first one most
+  // of all — shouldn't hand someone on a dark OS a white flash, or the other
+  // way round. Still just this space's own setting; SpaceForm's theme cards
+  // let it be pinned to a fixed theme like any other.
+  theme: 'system',
   textTone: 'grey',
   buttonDefinition: false,
   density: 'cozy',
@@ -260,6 +301,7 @@ export const DEFAULT_SPACE: Space = {
   compactNav: false,
   showLinks: true,
   pinLinks: false,
+  linksPosition: 'top',
   // On by default: knowing where the note you're reading actually lives is the
   // kind of thing you want in every space, and a new space starting without it
   // read as the feature being missing rather than switched off.
@@ -269,6 +311,8 @@ export const DEFAULT_SPACE: Space = {
   toolbarSlots: ['', '', '', ''],
   pageLook: '',
   font: '',
+  uiFont: '',
+  dyslexiaFont: '',
   tint: ''
 }
 
@@ -301,12 +345,13 @@ export function freshSpace(folder: string): Space {
   }
 }
 
-const THEMES: readonly ThemeId[] = ['dark', 'light', 'black']
+const THEMES: readonly ThemeId[] = ['system', 'dark', 'light', 'black']
 const TEXT_TONES: readonly TextToneId[] = ['grey', 'white']
 const DENSITIES: readonly DensityId[] = ['large', 'cozy', 'compact', 'ultra']
 const EDITOR_WIDTHS: readonly EditorWidthId[] = ['normal', 'wide', 'full']
 const MODES: readonly AccentMode[] = ['text', 'tint']
 const COLOR_STYLES: readonly ColorStyle[] = ['tag', 'row', 'solid']
+const LINKS_POSITIONS: readonly LinksPosition[] = ['top', 'bottom']
 const STARTUPS: readonly StartupId[] = ['empty', 'last']
 const DATE_FORMATS: readonly DateFormatId[] = ['full', 'short', 'mdy', 'dmy', 'ymd', 'relative']
 const NUMBER_FORMATS: readonly NumberFormatId[] = ['default', 'comma', 'dot']
@@ -412,6 +457,9 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     compactNav: typeof s.compactNav === 'boolean' ? s.compactNav : DEFAULT_SPACE.compactNav,
     showLinks: chrome(s.showLinks, legacy.showLinks, DEFAULT_SPACE.showLinks),
     pinLinks: chrome(s.pinLinks, legacy.pinLinks, DEFAULT_SPACE.pinLinks),
+    linksPosition: LINKS_POSITIONS.includes(s.linksPosition as LinksPosition)
+      ? (s.linksPosition as LinksPosition)
+      : DEFAULT_SPACE.linksPosition,
     showPath: chrome(s.showPath, legacy.showPath, DEFAULT_SPACE.showPath),
     showNoteInfo:
       typeof s.showNoteInfo === 'boolean' ? s.showNoteInfo : DEFAULT_SPACE.showNoteInfo,
@@ -419,6 +467,8 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     toolbarSlots: normalizeSlots(s.toolbarSlots),
     pageLook: shortString(s.pageLook),
     font: shortString(s.font),
+    uiFont: shortString(s.uiFont),
+    dyslexiaFont: shortString(s.dyslexiaFont),
     tint: shortString(s.tint)
   }
 }

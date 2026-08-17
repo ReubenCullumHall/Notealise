@@ -15,6 +15,7 @@ import { isPrereleaseVersion, type UpdateStatus } from '../../../shared/update'
 import type { PresetActions } from './Presets'
 import type { SpacePreset } from '../../../shared/presets'
 import type { RecoveryItem } from '../../../shared/workspace'
+import { useInstalledFonts } from './useInstalledFonts'
 
 /** What a plain settings section needs. Kept free of `spaceActions` so General
  *  and Formatting don't have to carry a dependency only Spaces uses. */
@@ -301,6 +302,12 @@ function SettingsWindow({
     setSection(initialSection)
   }, [initialSection])
 
+  // ONE instance, shared by Customisation/Spaces (the picker: only shows
+  // what's installed) and Collection (the catalogue: preview, download,
+  // import your own) — so a download made from any of the three shows up in
+  // all of them without a refresh. See useInstalledFonts.ts.
+  const fontLibrary = useInstalledFonts()
+
   return (
     <div
       ref={winRef}
@@ -378,6 +385,7 @@ function SettingsWindow({
                 spaceActions.onColorExistingFolders(settings.spaces.map((s) => s.folder))
               }
               onGoToSpaces={() => setSection('spaces')}
+              fontLibrary={fontLibrary}
             />
           )}
           {section === 'sourceFolder' && <SourceFolder vault={vault} onPickVault={onPickVault} />}
@@ -396,9 +404,12 @@ function SettingsWindow({
               presets={presets}
               presetActions={presetActions}
               vault={vault}
+              fontLibrary={fontLibrary}
             />
           )}
-          {section === 'collection' && <Collection />}
+          {section === 'collection' && (
+            <Collection onGoToSpaces={() => setSection('spaces')} fontLibrary={fontLibrary} />
+          )}
           {section === 'updates' && <UpdatesSection />}
           {section === 'reportBug' && <ReportBug />}
           {section === 'requestFeature' && <RequestFeature />}
@@ -409,6 +420,28 @@ function SettingsWindow({
 }
 
 function General({ settings, onChange }: Props): React.JSX.Element {
+  // Not part of AppSettings (it's app-level, in userData/config.json, like
+  // vaultPath) — read straight off the IPC rather than threaded through
+  // `settings`/`onChange`, the same way Updates/Recovery below own their reads.
+  const [onboarded, setOnboardedState] = useState(true)
+  useEffect(() => {
+    void window.api.getOnboarded().then(setOnboardedState)
+  }, [])
+  const toggleOnboarding = (): void => {
+    const next = !onboarded
+    setOnboardedState(next)
+    // A reload, not a live prop update: this is a dev testing hook, and a
+    // full boot from scratch is a truer "different setup" than patching
+    // Onboarding's live React state would be.
+    void window.api.setOnboarded(next).then(() => window.location.reload())
+  }
+
+  const [resetting, setResetting] = useState(false)
+  const resetTestVault = (): void => {
+    setResetting(true)
+    void window.api.resetOnboardingTestVault().then(() => window.location.reload())
+  }
+
   return (
     <>
       <h3 className="font-display text-[15px] font-semibold text-ink-900">Startup</h3>
@@ -458,6 +491,34 @@ function General({ settings, onChange }: Props): React.JSX.Element {
           label="Interface animations"
           hint="Opening settings, hovers, dropdowns and the like. Off makes all of it instant."
         />
+      </div>
+
+      <h3 className="mt-6 font-display text-[15px] font-semibold text-ink-900">Developer</h3>
+      <p className="mt-0.5 text-[12px] text-ink-500">Testing tools — not meant for a shipped build.</p>
+      <div className="mt-3 flex flex-col gap-2">
+        <ToggleRow
+          on={onboarded}
+          onClick={toggleOnboarding}
+          label="Onboarding completed"
+          hint="Off reloads straight into the first-run flow, to run through different setups without reinstalling. On skips it again."
+        />
+        <div className="btn-edge flex items-center gap-3 rounded-xl px-3 py-3 ring-1 ring-ink-300/20">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-medium text-ink-700">Reset test vault</span>
+            <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">
+              Wipes a disposable folder, switches to it, and clears onboarding — a genuinely blank
+              slate every time. Never touches your real vault.
+            </span>
+          </span>
+          <button
+            type="button"
+            disabled={resetting}
+            onClick={resetTestVault}
+            className="mini shrink-0"
+          >
+            {resetting ? 'Resetting…' : 'Reset'}
+          </button>
+        </div>
       </div>
     </>
   )

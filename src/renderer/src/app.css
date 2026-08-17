@@ -128,7 +128,7 @@ button.icon:hover {
    controls: an `.on` card keeps its accent border, and a hovered, focused or
    disabled control keeps whatever it already shows. */
 :root[data-button-def='on']
-  :is(.btn-edge, .mini, .theme-card, .mode-btn, .density-row, .space-tab, .space-add, .preset-row):not(.on):not(.drop):not(:hover):not(:focus-visible):not(:focus-within):not(:disabled) {
+  :is(.btn-edge, .mini, .theme-card, .mode-btn, .density-row, .font-card, .space-tab, .space-add, .preset-row):not(.on):not(.drop):not(:hover):not(:focus-visible):not(:focus-within):not(:disabled) {
   border-color: rgb(var(--btn-edge) / 0.7);
   /* the Tailwind v3 ring utilities read this, so `ring-1 ring-ink-300/20`
      controls (ToggleRow, the Spaces disclosures) firm up with the rest */
@@ -275,6 +275,27 @@ button.icon:hover {
 }
 .tree-row.drop-before::before { top: -1px; }
 .tree-row.drop-after::after { bottom: -1px; }
+
+/* onboarding step transitions — horizontal slide, matching the dots'
+   direction (docs/onboarding-plan.md's shared skeleton). Only the incoming
+   step animates in: each transition mounts a fresh step component rather
+   than keeping the outgoing one around to slide away too, so there's nothing
+   to key an "out" animation off. Onboarding.tsx skips the class entirely
+   when `animationsEnabled` is off, same switch every other transition here
+   already respects. */
+@keyframes onboarding-in-fwd {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes onboarding-in-back {
+  from { opacity: 0; transform: translateX(-28px); }
+  to { opacity: 1; transform: none; }
+}
+.onboarding-in-fwd { animation: onboarding-in-fwd 260ms cubic-bezier(0.4, 0, 0.2, 1); }
+.onboarding-in-back { animation: onboarding-in-back 260ms cubic-bezier(0.4, 0, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-in-fwd, .onboarding-in-back { animation: none; }
+}
 
 /* --- entry colour ----------------------------------------------------------
    The colour a note or folder is tagged with (EntryMeta.color). The row carries
@@ -809,12 +830,13 @@ button.icon:hover {
   padding: 2rem;
 }
 .prose-note {
+  font-family: var(--note-font-sans);
   color: rgb(var(--ink-700));
   font-size: 16px;
   line-height: 1.7;
 }
 .prose-note h1 {
-  font-family: var(--font-serif);
+  font-family: var(--note-font-serif);
   font-weight: 600;
   font-size: 2rem;
   line-height: 1.15;
@@ -823,7 +845,7 @@ button.icon:hover {
   margin: 0.2em 0 0.5em;
 }
 .prose-note h2 {
-  font-family: var(--font-serif);
+  font-family: var(--note-font-serif);
   font-weight: 600;
   font-size: 1.5rem;
   color: rgb(var(--ink-900));
@@ -1319,6 +1341,46 @@ button.icon:hover {
   font-size: 11px;
   color: rgb(var(--ink-400));
   margin-top: 2px;
+}
+
+.font-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 8px;
+}
+.font-card {
+  padding: 9px 11px;
+  border-radius: 12px;
+  border: 1px solid rgb(var(--wash) / 0.12);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+.font-card.on {
+  background: rgb(var(--brand-500) / 0.12);
+  border-color: rgb(var(--brand-400) / 0.6);
+}
+.font-card .preview {
+  display: block;
+  font-size: 17px;
+  line-height: 1.25;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.font-card .label {
+  display: block;
+  font-size: 10.5px;
+  color: rgb(var(--ink-400));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.font-card.on .label {
+  color: rgb(var(--brand-600));
+  font-weight: 500;
 }
 
 .density-list {

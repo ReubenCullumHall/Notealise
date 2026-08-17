@@ -17,6 +17,7 @@
 import type { TreeNode, VaultApi, VaultChange } from '../../../shared/types'
 import { indexLinks, stripMd } from '../../../shared/links'
 import { normalizeSettings, type AppSettings } from '../../../shared/settings'
+import { findFont, type InstalledFont } from '../../../shared/fonts'
 import {
   EMPTY_WORKSPACE,
   isSelfOrDescendant,
@@ -30,6 +31,25 @@ import {
 } from '../../../shared/workspace'
 
 const KEY = 'mdnotes.browser-preview.v1'
+const FONT_KEY = 'mdnotes.browser-preview.fonts.v1'
+
+function loadFontCache(): InstalledFont[] {
+  try {
+    const raw = localStorage.getItem(FONT_KEY)
+    return raw ? (JSON.parse(raw) as InstalledFont[]) : []
+  } catch {
+    return []
+  }
+}
+function saveFontCache(list: InstalledFont[]): void {
+  localStorage.setItem(FONT_KEY, JSON.stringify(list))
+}
+function bufToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary)
+}
 
 interface Store {
   /** vault-relative path → contents. Folders are the paths in `dirs`. */
@@ -210,6 +230,38 @@ const api: VaultApi = {
   exportPresets: async () => null,
   importPresets: async () => ({ added: 0, found: 0, cancelled: true, presets: [] }),
 
+  // Real fetches, same CDN the Electron app hits — this is the one place a
+  // fake window.api reaches the network, and it mirrors production rather
+  // than inventing behaviour (rule at the top of this file): only the cache
+  // differs (localStorage here, userData/fonts/ there). A native file picker
+  // has no browser-tab equivalent, so importCustomFont is the one font
+  // action that genuinely can't be prototyped here — same as everything else
+  // that touches real files (see the file header).
+  listInstalledFonts: async () => loadFontCache(),
+  downloadFont: async (id) => {
+    const entry = findFont(id)
+    if (!entry || entry.source !== 'downloadable' || !entry.cdnUrl) {
+      return { ok: false, error: 'Not a downloadable font.' }
+    }
+    try {
+      const res = await fetch(entry.cdnUrl)
+      if (!res.ok) return { ok: false, error: `Download failed (${res.status}).` }
+      const font: InstalledFont = {
+        id,
+        source: 'downloaded',
+        family: entry.family,
+        fallback: entry.fallback,
+        base64: bufToBase64(await res.arrayBuffer())
+      }
+      saveFontCache([...loadFontCache().filter((f) => f.id !== id), font])
+      return { ok: true, font }
+    } catch {
+      return { ok: false, error: 'No connection.' }
+    }
+  },
+  importCustomFont: async () => ({ ok: false, cancelled: true }),
+  removeCustomFont: async () => {},
+
   getWorkspace: async () => store.workspace,
   updateEntry: async (path, partial) => api.updateEntries([path], partial),
   updateEntries: async (paths, partial) => {
@@ -335,6 +387,12 @@ const api: VaultApi = {
   sendBugReport: async () => false,
   sendFeatureRequest: async () => false,
   openExternal: async () => false, // no shell access outside Electron
+  // Browser preview has no real folder picker or importer, so onboarding
+  // (which needs both) is never worth showing here — always "already done".
+  getOnboarded: async () => true,
+  setOnboarded: async () => {},
+  revealInFolder: async () => {},
+  resetOnboardingTestVault: async () => 'browser-preview',
   importFormats: async () => [],
   importPickSource: async () => null,
   importPrepare: async (_format, paths) => paths,

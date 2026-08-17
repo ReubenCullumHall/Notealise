@@ -12,6 +12,7 @@
       --ink: oklch(24% 0.02 50);
       --muted: oklch(24% 0.02 50 / 0.5);
       --line: oklch(24% 0.02 50 / 0.16);
+      --footer-h: 64px;
     }
     * { box-sizing: border-box; }
     html {
@@ -2482,12 +2483,18 @@
     .gap { min-height: 100dvh; }
 
     /* ── Download: simple, no extra copy. ────────────────────────────── */
+    /* The footer sits directly under this, and the two together make one
+       viewport — so jumping to #download lands the buttons centred with the
+       bottom bar in view rather than one scroll short of it. */
     .download {
-      min-height: 100dvh; display: flex; flex-direction: column;
+      min-height: calc(100dvh - var(--footer-h)); display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 16px;
       padding: 40px 20px;
     }
-    .btns { display: grid; gap: 12px; width: min(360px, 100%); }
+    .btns {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      width: min(560px, 100%);
+    }
     .btn {
       display: flex; align-items: center; justify-content: center; gap: 12px;
       width: 100%; text-decoration: none; font-weight: 600; font-size: 15px;
@@ -2502,9 +2509,30 @@
 
     .config-warn {
       margin: 0 0 4px; padding: 12px 14px; border-radius: 12px; font-size: 13px;
-      border: 1px solid var(--line); color: var(--muted); width: min(360px, 100%);
+      border: 1px solid var(--line); color: var(--muted); width: min(560px, 100%);
     }
     .hidden { display: none; }
+
+    /* ── Bottom bar. ─────────────────────────────────────────────────── */
+    .footer {
+      min-height: var(--footer-h);
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: 8px 24px; padding: 20px clamp(20px, 5vw, 48px);
+      border-top: 1px solid var(--line);
+      font-size: 13px; color: var(--muted);
+    }
+    .footer-brand { color: var(--ink); font-weight: 600; letter-spacing: -0.01em; }
+    .footer-est { color: var(--muted); font-weight: 400; letter-spacing: 0.06em; }
+
+    /* Too narrow for two side-by-side boxes without the labels wrapping. */
+    @media (max-width: 480px) {
+      /* The two footer lines stack here, so the reserved height has to grow
+         with them or the bar spills past the fold. */
+      :root { --footer-h: 92px; }
+      .btns { grid-template-columns: 1fr; width: min(360px, 100%); }
+      .config-warn { width: min(360px, 100%); }
+      .footer { justify-content: center; text-align: center; }
+    }
   </style>
 </head>
 <body>
@@ -3176,6 +3204,11 @@
       </a>
     </div>
   </section>
+
+  <footer class="footer">
+    <span class="footer-brand">Notealise <span class="footer-est">est. 2026</span></span>
+    <span class="footer-legal">© 2026 Notealise. All rights reserved.</span>
+  </footer>
 
   <script>
     // ── Set this to your GitHub "user/repo" once the repo exists. ──────────────

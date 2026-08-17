@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { CH } from '../shared/channels'
-import { saveVault } from './config'
+import { freshOnboardingTestVault, getHasOnboarded, saveVault, setHasOnboarded } from './config'
 import { ensureMdnotes } from './mdnotes'
 import { getSettings, readThemeCacheSync, setSettings } from './settings'
 import {
@@ -11,6 +11,7 @@ import {
   renamePreset,
   syncPresets
 } from './presets'
+import { downloadFont, importCustomFont, listInstalledFonts, removeCustomFont } from './fonts'
 import {
   deleteSpace,
   getWorkspace,
@@ -62,6 +63,7 @@ import {
   readAsset,
   readNote,
   renameEntry,
+  revealInFolder,
   scanLinks,
   setVaultRoot,
   writeNote
@@ -145,6 +147,11 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.exportPresets, (_e, ids: string[] | null) => exportPresets(window, ids))
   ipcMain.handle(CH.importPresets, (_e, text?: string) => importPresets(window, text))
 
+  ipcMain.handle(CH.listInstalledFonts, () => listInstalledFonts())
+  ipcMain.handle(CH.downloadFont, (_e, id: string) => downloadFont(id))
+  ipcMain.handle(CH.importCustomFont, () => importCustomFont(window))
+  ipcMain.handle(CH.removeCustomFont, (_e, id: string) => removeCustomFont(id))
+
   ipcMain.handle(CH.getWorkspace, () => getWorkspace())
   ipcMain.handle(CH.updateEntry, (_e, p: string, partial: EntryMeta) => updateEntries([p], partial))
   ipcMain.handle(CH.updateEntries, (_e, paths: string[], partial: EntryMeta) =>
@@ -175,6 +182,16 @@ export function registerIpc(window: BrowserWindow): void {
     sendFeatureRequest(fromEmail, message)
   )
   ipcMain.handle(CH.openExternal, (_e, url: string) => openAllowedExternal(url))
+  ipcMain.handle(CH.getOnboarded, () => getHasOnboarded())
+  ipcMain.handle(CH.setOnboarded, (_e, value: boolean) => setHasOnboarded(value))
+  ipcMain.handle(CH.resetOnboardingTestVault, async () => {
+    const dir = await freshOnboardingTestVault()
+    await saveVault(dir)
+    activateVault(dir)
+    await setHasOnboarded(false)
+    return dir
+  })
+  ipcMain.handle(CH.revealInFolder, (_e, p: string) => revealInFolder(p))
 
   // One entry per format rather than an isNotion ternary — the ternary only
   // held two formats, and a third would have silently inherited HTML's filter.

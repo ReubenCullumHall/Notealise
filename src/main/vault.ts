@@ -588,6 +588,16 @@ export async function trashEntryToOS(relPath: string): Promise<void> {
   await shell.trashItem(abs)
 }
 
+/** Open the OS file explorer with `relPath` selected — onboarding's disk-proof
+ *  step ("Show me the file"). Goes through the same vault-boundary check as
+ *  every other path (rule 6): the renderer sends a vault-relative path, never
+ *  one it constructed itself. */
+export async function revealInFolder(relPath: string): Promise<void> {
+  const abs = resolveInVault(relPath)
+  const { shell } = await import('electron')
+  shell.showItemInFolder(abs)
+}
+
 // ---------------------------------------------------------------------------
 // The recovery safety net. Emptying the bin, or force-deleting one item from
 // it, no longer hands off to the OS trash (see purgeTrashItem above) — it

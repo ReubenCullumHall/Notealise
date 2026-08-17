@@ -24,6 +24,9 @@ interface AppConfig {
   vaultPath?: string
   autoUpdate?: boolean
   betaChannel?: boolean
+  /** Has this install ever finished the onboarding flow? App-level, not
+   *  per-vault, like vaultPath — triggers once ever, not "no vault open". */
+  hasOnboarded?: boolean
 }
 
 async function read(): Promise<AppConfig> {
@@ -66,6 +69,30 @@ export async function getSavedVault(): Promise<string | null> {
 
 export async function saveVault(vaultPath: string): Promise<void> {
   await update({ vaultPath })
+}
+
+/** Whether this install has ever finished onboarding. Absent key = false, the
+ *  same "missing means never happened" reading as every other flag here. */
+export async function getHasOnboarded(): Promise<boolean> {
+  return (await read()).hasOnboarded === true
+}
+
+/** Set or clear the flag. Clearing it is the dev "replay onboarding" hook
+ *  (Settings → General → Developer) — go through different first-run setups
+ *  without reinstalling or hand-editing config.json. */
+export async function setHasOnboarded(value: boolean): Promise<void> {
+  await update({ hasOnboarded: value })
+}
+
+/** A disposable vault for repeatedly testing onboarding — one fixed path
+ *  under the OS temp dir, wiped and recreated empty on every call. Never the
+ *  user's real vault (`vaultPath` isn't touched until the caller explicitly
+ *  points at this folder), so there's nothing to confirm before running it. */
+export async function freshOnboardingTestVault(): Promise<string> {
+  const dir = path.join(app.getPath('temp'), 'notealise-onboarding-test')
+  await fs.rm(dir, { recursive: true, force: true })
+  await fs.mkdir(dir, { recursive: true })
+  return dir
 }
 
 /** Update preferences for this install (not for the open vault).

@@ -150,6 +150,29 @@ export function sortSiblings(
   return withOrder.map((x) => x.node)
 }
 
+/** Split one level of siblings into entries recently landed here via a
+ *  cross-space drag (`EntryMeta.movedAt`) and everything else. The caller
+ *  renders `moved` first, under a small "Moved" divider, then `rest` in the
+ *  ordinary sort — a cross-space drop is blind (the destination wasn't the
+ *  list the user was looking at when they let go), so alphabetical or
+ *  free-arrange order would bury it instead of prompting a decision.
+ *  Most-recently-moved first among themselves; `rest` keeps `sortSiblings`'s
+ *  own rules untouched. */
+export function splitMoved(
+  nodes: TreeNode[],
+  ws: Workspace,
+  freeArrange: boolean
+): { moved: TreeNode[]; rest: TreeNode[] } {
+  const moved: TreeNode[] = []
+  const rest: TreeNode[] = []
+  for (const n of nodes) {
+    if (metaOf(ws, n.path).movedAt) moved.push(n)
+    else rest.push(n)
+  }
+  moved.sort((a, b) => (metaOf(ws, b.path).movedAt ?? 0) - (metaOf(ws, a.path).movedAt ?? 0))
+  return { moved, rest: sortSiblings(rest, ws, freeArrange) }
+}
+
 /** Hide anything archived (or inside an archived branch) from the notes view. */
 export function withoutArchived(nodes: TreeNode[], ws: Workspace): TreeNode[] {
   const out: TreeNode[] = []

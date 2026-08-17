@@ -3,17 +3,51 @@
 // place that touches the DOM (applying settings as data-* attributes and inline
 // accent variables on <html>); persistence goes through IPC (window.api).
 
-import { activeSpace, type AppSettings, type Space } from '../../../shared/settings'
+import { activeSpace, type AppSettings, type ResolvedThemeId, type Space } from '../../../shared/settings'
+import { findFont, fontCssValue, type FontFallback } from './fonts'
+import { ensureInstalledFontsLoaded, findInstalledFont } from './fontLoader'
+
+/** `id` may name a catalogue entry (bundled or downloaded — shared/fonts.ts)
+ *  or a custom import, which has no catalogue entry at all (fontLoader.ts's
+ *  runtime registry, populated once its bytes have loaded). Checking the
+ *  catalogue first is deliberate: a custom import can never collide with a
+ *  catalogue id (main/fonts.ts mints a UUID), so order only matters for which
+ *  one resolves the id faster, not for correctness. */
+function resolveFont(id: string): { family: string; fallback: FontFallback } | undefined {
+  return findFont(id) ?? findInstalledFont(id)
+}
 
 export type { AppSettings, Space }
+export * from './fonts'
+export * from './fontLoader'
 
 export const THEMES: { id: Space['theme']; label: string; hint: string }[] = [
+  { id: 'system', label: 'System', hint: "Follows your computer's light or dark setting" },
   { id: 'dark', label: 'Dark', hint: 'Soft charcoal panels' },
   { id: 'black', label: 'Extra dark', hint: 'Pitch black, for OLED' },
   // NOT "paper" — page looks are their own feature later, and this is a plain
   // white page, not a warm one
   { id: 'light', label: 'Light', hint: 'Plain white' }
 ]
+
+/** Whether the OS is currently in dark mode. Renderer-only (matchMedia), never
+ *  called from main/shared — `prefers-color-scheme` tracks Electron's
+ *  `nativeTheme`, which defaults to following the OS, so no IPC round-trip is
+ *  needed to ask main instead. */
+export function systemPrefersDark(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  )
+}
+
+/** A space's theme as stored can be 'system'; everything that paints from a
+ *  theme (data-theme, the accent ramps below) needs a concrete ramp, so this
+ *  is the one place that resolution happens for the running app. */
+export function resolveTheme(theme: Space['theme']): ResolvedThemeId {
+  return theme === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : theme
+}
 
 export const TEXT_TONES: { id: Space['textTone']; label: string; hint: string; swatch: string }[] = [
   { id: 'grey', label: 'Light grey', hint: 'Softer on the eyes over a long session.', swatch: '#d6d6d6' },
@@ -41,6 +75,11 @@ export const EDITOR_WIDTHS: { id: Space['editorWidth']; label: string; hint: str
 export const ACCENT_MODES: { id: Space['accentMode']; label: string; hint: string }[] = [
   { id: 'text', label: 'Text only', hint: 'Just the writing takes the colour.' },
   { id: 'tint', label: 'Tinted', hint: 'Surfaces and controls take it too.' }
+]
+
+export const LINKS_POSITIONS: { id: Space['linksPosition']; label: string; hint: string }[] = [
+  { id: 'top', label: 'Top', hint: 'Under the format bar, above the text — today’s spot.' },
+  { id: 'bottom', label: 'Bottom', hint: 'Fixed to the bottom of the note, clear of the tabs, path and title.' }
 ]
 
 export const STARTUPS: { id: AppSettings['startup']; label: string; hint: string }[] = [
@@ -100,7 +139,7 @@ const BLACK_RAMP: Ramp = {
   '--brand-300': [24, 23], '--brand-400': [30, 31]
 }
 
-const RAMP: Record<Space['theme'], Ramp> = { dark: DARK_RAMP, light: LIGHT_RAMP, black: BLACK_RAMP }
+const RAMP: Record<ResolvedThemeId, Ramp> = { dark: DARK_RAMP, light: LIGHT_RAMP, black: BLACK_RAMP }
 
 // Text mode recolours only the ink ramp, and properly — this *is* the text
 // colour, so it carries real saturation. Surfaces/controls are left alone.
@@ -109,7 +148,7 @@ const DARK_TEXT_RAMP: Ramp = {
   '--ink-600': [44, 62], '--ink-500': [40, 54], '--ink-400': [36, 46], '--ink-300': [32, 39]
 }
 
-const TEXT_RAMP: Record<Space['theme'], Ramp> = {
+const TEXT_RAMP: Record<ResolvedThemeId, Ramp> = {
   dark: DARK_TEXT_RAMP,
   // the accent is a text colour, and text sits at the same brightness on both
   // dark themes — only the surfaces under it changed
@@ -149,7 +188,7 @@ function applyAccent(
   opts: {
     accent: string
     mode: Space['accentMode']
-    theme: Space['theme']
+    theme: ResolvedThemeId
     tone: Space['textTone']
     active: boolean
   }
@@ -165,16 +204,64 @@ function applyAccent(
   )
 }
 
+/** Write (or clear) the font variables onto `el`. Four variables, three
+ *  independent picks:
+ *   - `uiFont` is a whole-INTERFACE skin — sidebar, settings, buttons,
+ *     onboarding — so it sets --font-sans and --font-serif together.
+ *   - `font` is the same idea for a NOTE's own body, headings and title, so
+ *     it sets --note-font-sans and --note-font-serif together. Kept apart
+ *     from --font-sans/--font-serif on purpose: styling your writing
+ *     shouldn't restyle the settings window you picked it from.
+ *   - `dyslexiaFont` then overrides just --note-font-sans on top of
+ *     whatever `font` set, since it's about a note's body text specifically.
+ *  --font-mono is never touched by any of this: code stays JetBrains Mono in
+ *  every space, skin or no skin. Every property is cleared first, like
+ *  `applyAccent`, so switching a pick back to '' actually reverts to
+ *  theme.css's own defaults rather than leaving a stale override in place. */
+function applyFont(el: HTMLElement, uiFont: string, font: string, dyslexiaFont: string): void {
+  el.style.removeProperty('--font-sans')
+  el.style.removeProperty('--font-serif')
+  el.style.removeProperty('--note-font-sans')
+  el.style.removeProperty('--note-font-serif')
+
+  const ui = resolveFont(uiFont)
+  if (ui) {
+    const value = fontCssValue(ui)
+    el.style.setProperty('--font-sans', value)
+    el.style.setProperty('--font-serif', value)
+  }
+
+  const skin = resolveFont(font)
+  if (skin) {
+    const value = fontCssValue(skin)
+    el.style.setProperty('--note-font-sans', value)
+    el.style.setProperty('--note-font-serif', value)
+  }
+
+  const dys = resolveFont(dyslexiaFont)
+  if (dys) el.style.setProperty('--note-font-sans', fontCssValue(dys))
+}
+
 /** Apply the settings to the document: theme + density as data-* attributes,
- *  accent as inline variables on <html>. Appearance lives on the ACTIVE space,
- *  resolved here rather than by the caller — this is the only DOM writer and it
- *  has two call sites, so resolving once keeps them from ever disagreeing.
- *  `data-motion` is the one attribute here read from `s` directly rather than
- *  `a`: animationsEnabled is global (see AppSettings), not per-space. */
+ *  accent + font as inline variables on <html>. Appearance lives on the ACTIVE
+ *  space, resolved here rather than by the caller — this is the only DOM
+ *  writer and it has two call sites, so resolving once keeps them from ever
+ *  disagreeing. `data-motion` is the one attribute here read from `s` directly
+ *  rather than `a`: animationsEnabled is global (see AppSettings), not
+ *  per-space. */
 export function applySettings(s: AppSettings): void {
+  // Fire-and-forget: a downloaded/custom font that hasn't loaded yet just
+  // means one repaint at the fallback face once `ensureInstalledFontsLoaded`
+  // resolves and the next applySettings runs (settings changes are frequent
+  // enough in normal use that this self-corrects almost immediately; a
+  // bundled font never has this gap at all). Guarded to run once per
+  // session — see fontLoader.ts.
+  void ensureInstalledFontsLoaded()
+
   const root = document.documentElement
   const a = activeSpace(s)
-  root.dataset.theme = a.theme
+  const theme = resolveTheme(a.theme)
+  root.dataset.theme = theme
   root.dataset.density = a.density
   root.dataset.editorWidth = a.editorWidth
   root.dataset.textTone = a.textTone
@@ -183,8 +270,9 @@ export function applySettings(s: AppSettings): void {
   applyAccent(root, {
     accent: a.accent,
     mode: a.accentMode,
-    theme: a.theme,
+    theme,
     tone: a.textTone,
     active: a.accent !== 'default'
   })
+  applyFont(root, a.uiFont, a.font, a.dyslexiaFont)
 }

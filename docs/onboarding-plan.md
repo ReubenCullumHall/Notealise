@@ -1,6 +1,26 @@
 # First-run onboarding
 
-Status: **ready to build.** The spec below is copied verbatim from
+> ## Status: BUILT (2026-08-17) — and the spec below is no longer what shipped
+>
+> **The running code is `src/renderer/src/onboarding/` — read that, not the screen-by-screen
+> section here, for what the flow actually does.** The spec is kept in full because its
+> *reasoning* is still the best record of why each screen exists; four of its rulings were
+> deliberately overturned during the build, and it has not been rewritten to match:
+>
+> | The spec says | What shipped | Why |
+> |---|---|---|
+> | Five screens | **Eight**: Welcome → Vault → Import → Spaces → Write → Disk proof → Fonts → Walkthrough (Welcome and Walkthrough are orientation-only, the two deliberate exceptions to "every step leaves an artefact") | 2026-08-17 blueprint round with Reuben |
+> | **Not skippable** | Import's Continue is live from the moment it mounts | Starting fresh with nothing to import is a normal first run, not a step to force someone through |
+> | **No theme picker** (4B.20) — final screen points at Settings | A real **font** picker (the Fonts screen), offering the four bundled faces + App default | Ruling reversed 2026-08-17. Its other half — an accent-colour picker — is **still not built** |
+> | "Start writing" ends the flow on Disk proof | Moved to Walkthrough, now the last screen | Disk proof stopped being the end when two screens were added after it |
+>
+> Also still outstanding from the spec: the **five curated welcome notes** (nothing is seeded yet),
+> the **per-format organise popup** (one generic message is used for every import format), and
+> **resuming at the exact step** after a quit (relaunch restarts at Welcome; Vault auto-skips if a
+> folder was already chosen).
+
+Status of the spec text below: **as written 2026-08-14, superseded in the four rows above.** It is
+copied verbatim from
 `<vault>/Note taking app/Onboarding/2026-08-14-onboarding-spec.md` (2026-08-16, so a coding
 session without that vault mounted still has it) — its own frontmatter says it **supersedes** the
 2026-08-08 draft that used to be the whole of this file. Confirmed current by Reuben 2026-08-16.

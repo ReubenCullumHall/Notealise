@@ -175,6 +175,8 @@ notes-app/
       settings.ts           .mdnotes/settings.json (spaces + globals) + userData pre-paint mirror
       presets.ts            userData/presets.json — the saved-preset library, which is NOT in a
                             vault precisely because it outlives one (see docs/feature-tabs-spaces.md)
+      fonts.ts               userData/fonts/{downloaded,custom}/ — CDN download + native-picker
+                            import for anything beyond the 4 bundled fonts (docs/feature-tabs-spaces.md)
       watcher.ts            chokidar → debounced (100ms) change events, echo-guarded
       ipc.ts                ipcMain handlers + vault activation (starts the watcher)
       support.ts            bug-report mailto: link (fixed destination is still a placeholder)
@@ -199,6 +201,9 @@ notes-app/
       presets.ts            SpacePreset / SpaceLook + normalise. Shared for the same reason
                             links.ts and color.ts are: main writes these files, the renderer
                             mirrors and applies them, and two definitions would drift
+      fonts.ts               the font catalogue (bundled/downloadable, with each downloadable
+                            entry's CDN url) + InstalledFont/CustomFont — main needs this to know
+                            what to fetch, the renderer to render every picker (docs/feature-tabs-spaces.md)
       update.ts             UpdateStatus / UpdatePrefs contract + normalise
       channels.ts           IPC channel names
     renderer/
@@ -222,7 +227,12 @@ notes-app/
                             Spaces.tsx (the space tabs + that form),
                             Presets.tsx (the saved-preset library — the disclosure under a
                             space's emoji row, and the space tabs' drop target),
-                            SourceFolder.tsx (the vault path + switch), Collection.tsx,
+                            SourceFolder.tsx (the vault path + switch),
+                            SpaceFonts.tsx (the per-space Interface/Notes/Easier-reading pickers)
+                            + fonts.ts (re-exports shared/fonts.ts) + fontLoader.ts (FontFace
+                            injection for a downloaded/custom font) + useInstalledFonts.ts (the
+                            one FontLibrary instance, shared with Collection.tsx's browse-and-
+                            download page — docs/feature-tabs-spaces.md), Collection.tsx,
                             tutorials/ (an index one click deep: index.tsx + LinkingGuide.tsx),
                             SpaceColour.tsx (the Colour section inside SpaceForm),
                             primitives.tsx (SettingRow/Select/Switch/ToggleRow), model.ts (applySettings)
@@ -233,7 +243,11 @@ notes-app/
         update/             UpdateBanner: the quiet "update ready" strip in the sidebar footer
         theme.css           tokens (R G B ramps + density) + bundled @font-face; Tailwind reads them
         app.css             @tailwind directives + only what legacy keeps out of Tailwind (see rule 8)
-        assets/fonts/       bundled woff2 (Inter / Fraunces / JetBrains Mono) — no CDN
+        assets/fonts/       bundled woff2 (Inter / Fraunces / JetBrains Mono / OpenDyslexic) — no
+                            CDN. 16 more fonts are downloadable, not bundled — see
+                            assets/font-previews/ (their static preview images) and
+                            docs/feature-tabs-spaces.md's "Fonts" section for the one deliberate
+                            exception to offline-first this makes room for
   legacy/                   pre-Electron browser app — reference only, NOT built (legacy/README.md)
   site/                     the Vercel download page. site/DESIGN.md is its design directive and
                             decision log — read it before any visual change here
@@ -310,7 +324,7 @@ verified it works in the **live Electron app** (`npm run dev`) — not `legacy/`
 math rendering in the editor"). Don't log automatically and don't log on the strength of unit
 tests alone — this is specifically gated on the user's own live-app check.
 
-**When Reuben says "log it" about a feature just built, that means three things, in order — not
+**When Reuben says "log it" about a feature just built, that means four things, in order — not
 just the changelog line:**
 
 1. **Append the CHANGELOG line**, as above.
@@ -325,13 +339,20 @@ just the changelog line:**
    build faster or avoided a wrong turn — a question that should have been asked earlier, an
    assumption that cost a rewrite, a pattern in this codebase that made something easy or hard.
    If nothing clears that bar, say so rather than inventing one.
+4. **Close with a verdict, not just a log line (2026-08-17).** Before finishing, re-check the
+   change against this file's rules and against what's in memory (`MEMORY.md` and whatever notes
+   it points to) — does it slot cleanly into the architecture as documented, or does it leave
+   something open (an unresolved verification, a flagged-but-unremoved redundancy per rule 9, a
+   doc that still needs a follow-up)? End the note with one explicit line: **ready to clear**
+   (nothing outstanding) or **not yet — here's what's open and why**, so "logged" never quietly
+   reads as "done" when it isn't.
 
 "Log that" (session-end wording) does all of the above **plus**:
 
-4. **Scan the whole conversation for anything else worth keeping that lives outside the diff** — a
+5. **Scan the whole conversation for anything else worth keeping that lives outside the diff** — a
    decision, a constraint, a rule the user stated out loud — beyond just the one feature "log it"
    was about.
-5. **Commit the session's work**, pathspec-scoped (2026-08-14). Reuben's default is to batch
+6. **Commit the session's work**, pathspec-scoped (2026-08-14). Reuben's default is to batch
    commits at the end of a session rather than as each piece is verified, so "log that" is also
    the commit signal. Leave genuinely undecided artefacts out (e.g. large binaries whose home
    hasn't been settled) and say what you excluded.
@@ -394,6 +415,20 @@ every session — see the table in **Folder structure** above for the full list.
   `document.execCommand('insertText', …)` to type into CodeMirror (it handles `beforeinput`).
   React delegates `onMouseEnter`/`onBlur` from **`mouseover`/`focusout`**, so dispatching
   `mouseenter`/`blur` silently does nothing.
+- **When the Electron window has no debugging port, verify the component at localhost:5173
+  instead — including screens `browserApi` hardcodes its way past.** `npm run dev` does not open a
+  CDP port, so the window Reuben is actually using can't be driven or screenshotted; relaunching
+  Electron with one risks trampling his live session (see the shared-sandbox gotcha below). The
+  browser preview renders the *same* components against the same `theme.css`, which is enough for
+  layout, copy and font rendering — just not for anything touching real files. `browserApi.ts`
+  stubs some flags to a fixed answer (`getOnboarded: async () => true`, which hides onboarding
+  entirely), and it installs itself with a plain `window.api = api` at module load — so
+  **`page.addInitScript` can `Object.defineProperty(window, 'api', {set})` and wrap the object as
+  it's assigned**, overriding just that stub without editing the file. Verified 2026-08-17 on the
+  onboarding Fonts step. One trap when asserting on what you see: match a card/row by its *label
+  element*, not `textContent` — the "App default" card's blurb contains the word "Fraunces", so a
+  `textContent.includes('Fraunces')` selector clicked the wrong card and reported a bug that
+  wasn't there.
 - **The working directory persists across Bash *and* PowerShell tool calls, including a `cd` from a
   different tool.** A `cd .../notes-app/legacy` in one call left `npm --prefix ".\notes-app" run dev`
   resolving to `notes-app/legacy/notes-app/package.json` (ENOENT, exit 38). The relative `--prefix`

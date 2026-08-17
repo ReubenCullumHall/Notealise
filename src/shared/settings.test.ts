@@ -197,7 +197,7 @@ describe('normalizeSettings', () => {
     s.spaces[0].theme = 'light'
     s.spaces[0].toolbarSlots[0] = 'h1'
     s.spaces[0].colorPalette.push('#123456')
-    expect(DEFAULT_SPACE.theme).toBe('dark')
+    expect(DEFAULT_SPACE.theme).toBe('system')
     expect(DEFAULT_SPACE.toolbarSlots).toEqual(['', '', '', ''])
     expect(DEFAULT_SPACE.colorPalette).not.toContain('#123456')
     expect(DEFAULT_SETTINGS.spaces).toHaveLength(1)
@@ -446,7 +446,7 @@ describe('withSpacePatch / withSpaceRenamed / withNewSpace / withoutSpace', () =
     const s = three()
     const before = JSON.stringify(s)
     const next = withSpacePatch(s, 'B', { theme: 'light' })
-    expect(next.spaces?.map((x) => x.theme)).toEqual(['dark', 'light', 'dark'])
+    expect(next.spaces?.map((x) => x.theme)).toEqual(['system', 'light', 'system'])
     expect(JSON.stringify(s)).toBe(before)
   })
 

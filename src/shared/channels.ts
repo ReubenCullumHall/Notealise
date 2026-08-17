@@ -31,6 +31,12 @@ export const CH = {
   /** read one back in: the button passes nothing and main opens a picker; a
    *  drag-and-drop passes the file's text, already read in the renderer */
   importPresets: 'presets:import',
+  /** renderer -> main: fonts downloaded or imported on THIS install
+   *  (userData/fonts/) — see shared/fonts.ts and main/fonts.ts */
+  listInstalledFonts: 'fonts:listInstalled',
+  downloadFont: 'fonts:download',
+  importCustomFont: 'fonts:importCustom',
+  removeCustomFont: 'fonts:removeCustom',
   /** renderer -> main: order/pins/archive/bin (.mdnotes/workspace.json) */
   getWorkspace: 'workspace:get',
   updateEntry: 'workspace:updateEntry',
@@ -52,6 +58,16 @@ export const CH = {
   setBetaChannel: 'update:setBeta',
   openReleases: 'update:openReleases',
   getAppVersion: 'app:version',
+  /** renderer -> main: has this install ever finished onboarding? */
+  getOnboarded: 'app:getOnboarded',
+  /** renderer -> main: mark onboarding finished for good */
+  setOnboarded: 'app:setOnboarded',
+  /** renderer -> main: reveal a vault-relative path in the OS file explorer,
+   *  boundary-checked the same way every other vault path is */
+  revealInFolder: 'vault:revealInFolder',
+  /** renderer -> main: dev-only. Wipe the disposable onboarding-test vault,
+   *  switch to it, and clear hasOnboarded — one click, never the real vault */
+  resetOnboardingTestVault: 'app:resetOnboardingTestVault',
   /** renderer -> main: open the default mail app with a pre-filled bug report */
   sendBugReport: 'app:sendBugReport',
   /** renderer -> main: open the default mail app with a pre-filled feature request */

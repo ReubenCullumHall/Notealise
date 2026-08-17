@@ -1,6 +1,7 @@
 import { Icon } from '../icons'
 import { SpaceForm } from './SpaceForm'
 import { activeSpace, type AppSettings, type Space } from '../../../shared/settings'
+import type { FontLibrary } from './useInstalledFonts'
 
 // Settings → Customisation. How the app LOOKS and what it shows, set for every
 // space at once.
@@ -28,13 +29,15 @@ interface Props {
   onColorExisting: () => void
   /** send the reader to the per-space version of this page */
   onGoToSpaces: () => void
+  fontLibrary: FontLibrary
 }
 
 export function Customisation({
   settings,
   onChange,
   onColorExisting,
-  onGoToSpaces
+  onGoToSpaces,
+  fontLibrary
 }: Props): React.JSX.Element {
   const spaces = settings.spaces
   // Shown as the starting point. The active space rather than the first, so the
@@ -80,6 +83,7 @@ export function Customisation({
             onChange={(patch) => onChange({ spaces: spaces.map((s) => ({ ...s, ...patch })) })}
             differs={spaces.length > 1 ? differs : undefined}
             onColorExisting={onColorExisting}
+            fontLibrary={fontLibrary}
           />
         </div>
       </div>

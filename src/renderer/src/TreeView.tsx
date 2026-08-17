@@ -4,7 +4,7 @@ import type { Workspace } from '../../shared/workspace'
 import type { ColorStyle } from '../../shared/settings'
 import { inkOn, rgbChannels } from '../../shared/color'
 import { Icon } from './icons'
-import { colorOf, labelOf, metaOf, onDate, sortSiblings } from './organise/model'
+import { colorOf, labelOf, metaOf, onDate, sortSiblings, splitMoved } from './organise/model'
 
 // The sidebar tree. Ported from the legacy prototype's row renderers
 // (legacy/src/App.jsx:521-722) so the two apps render the same sidebar: two-line
@@ -107,6 +107,12 @@ const marginFor = (depth: number): string | undefined =>
  *  visible content to the left of the row even at rest. `always` actions (a
  *  set pin, restore in a shelf view) stay in flow beside them since they're
  *  meant to be visible without hovering. */
+/** The "Moved" divider's label — a small caps heading, same voice as
+ *  Sidebar's own SECTION_TEXT but kept local since it's rendered mid-tree
+ *  (possibly nested inside a folder), not as a page-level section. */
+const MOVED_LABEL_CLASS =
+  'select-none pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-300'
+
 const ROW_ACTIONS_CLASS =
   'absolute right-1.5 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md ' +
   'bg-surface/95 px-1 py-0.5 opacity-0 shadow-card backdrop-blur-sm pointer-events-none ' +
@@ -497,8 +503,11 @@ export function TreeView({
   }
 
   const folderRow = (node: TreeNode, depth: number): React.JSX.Element => {
-    const kids = sortSiblings(node.children ?? [], workspace, freeArrange)
-    const count = kids.length
+    const childNodes = node.children ?? []
+    const { moved: movedKids, rest: restKids } = reorders
+      ? splitMoved(childNodes, workspace, freeArrange)
+      : { moved: [] as TreeNode[], rest: sortSiblings(childNodes, workspace, freeArrange) }
+    const count = childNodes.length
     const expandedNow = isOpen(node.path)
     const isPinned = metaOf(workspace, node.path).pinned === true
     const c = rowColor(node.path)
@@ -643,7 +652,8 @@ export function TreeView({
               className="tree-guide pointer-events-none absolute inset-y-0 border-l"
               style={{ left: `calc((${depth} + 0.5) * var(--row-indent))` }}
             />
-            {kids.map((k) => renderRow(k, depth + 1))}
+            {movedGroup(movedKids, depth + 1)}
+            {restKids.map((k) => renderRow(k, depth + 1))}
             {count === 0 && (
               <p
                 onDragOver={(e) => {
@@ -671,7 +681,27 @@ export function TreeView({
   const renderRow = (node: TreeNode, depth: number): React.JSX.Element =>
     node.type === 'dir' ? folderRow(node, depth) : noteRow(node, depth)
 
-  const ordered = sortSiblings(nodes, workspace, freeArrange)
+  /** The "Moved" divider and its rows, indented to match `depth` — used both
+   *  at the top of the tree and inside an expanded folder, since a
+   *  cross-space drop can land in either (see `App.tsx`'s `move`). `null`
+   *  when there's nothing to show, so the caller can inline it. */
+  const movedGroup = (items: TreeNode[], depth: number): React.JSX.Element | null => {
+    if (!items.length) return null
+    const indent = { marginLeft: marginFor(depth), paddingLeft: 'var(--row-pad0)' }
+    return (
+      <div className="mb-1">
+        <p className={MOVED_LABEL_CLASS} style={indent}>
+          Moved
+        </p>
+        {items.map((n) => renderRow(n, depth))}
+        <div className="mx-1 mb-1 mt-0.5 border-b border-ink-300/20" style={indent} />
+      </div>
+    )
+  }
+
+  const { moved: movedTop, rest: restTop } = reorders
+    ? splitMoved(nodes, workspace, freeArrange)
+    : { moved: [] as TreeNode[], rest: sortSiblings(nodes, workspace, freeArrange) }
 
   return (
     <div
@@ -686,7 +716,8 @@ export function TreeView({
         if (e.target === e.currentTarget) onContext(e, null)
       }}
     >
-      {ordered.map((n) => renderRow(n, 0))}
+      {movedGroup(movedTop, 0)}
+      {restTop.map((n) => renderRow(n, 0))}
     </div>
   )
 }

@@ -318,3 +318,52 @@ have is the confusing part**. Two consequences worth knowing:
 
 `spaceTabs` is in memory only. `settings.session` remembers the space you were in, which is the one
 you return to; the other spaces open empty and fill as you use them.
+
+## Fonts (built 2026-08-17)
+
+Three of a Space's long-reserved-but-unused fields are now real: `font`, `uiFont`, `dyslexiaFont`
+(`pageLook` and `tint` are still the inert shell described in `appearance-research-brief.md`,
+which this section supersedes for fonts specifically — that brief's research questions are
+answered below).
+
+**Why three fields, not one.** The app already had two separate CSS variable pairs before this —
+`--font-sans`/`--font-serif` for the interface, nothing for notes — because a note's headings
+(Fraunces) and its body (Inter) were never independently swappable to begin with. Adding a font
+*picker* on top of that naively would have let one choice restyle both the note you're writing
+**and** the Settings window you're picking it from, which reads as a bug the first time someone
+tries it. So notes got their own pair (`--note-font-sans` / `--note-font-serif`), `font` drives
+that pair, `uiFont` drives the original one, and `dyslexiaFont` sits on top of `font` overriding
+only `--note-font-sans` — a note's body text, never its headings, never the interface. `--font-mono`
+is untouched by all three: code is always JetBrains Mono, in every space, because a font *skin* is
+about prose, not about the editor's own code-fence rendering. See `settings/model.ts`'s
+`applyFont` — it's the one function that resolves all three fields into all four variables, in
+that precedence order, every time.
+
+**Why three SOURCES of font, not one bundle.** Originally all 20 researched fonts were bundled
+(one `@font-face` each, ~450KB total — trivial for a desktop app). Reuben asked for a real
+"collection" model instead: a handful installed from the start, the rest **previewable, then
+downloaded on demand**. That's `shared/fonts.ts`'s `source: 'bundled' | 'downloadable'` split —
+bundled ships in `assets/fonts/` and theme.css like always; downloadable fonts have a `cdnUrl`
+(Fontsource's package mirror on jsdelivr) and no local file until `main/fonts.ts`'s `downloadFont`
+fetches and caches one in `userData/fonts/downloaded/`. **This is the app's first-ever runtime
+network dependency** — a deliberate, scoped exception to the "no CDN, offline-first" rule
+(CLAUDE.md's folder-structure note on `assets/fonts/`), not a quiet erosion of it: the app and
+every *other* feature still work with zero network access, and a font once downloaded stays
+usable offline too. A third source, `custom`, has no catalogue entry at all — `importCustomFont`
+opens a native picker, copies the file into `userData/fonts/custom/`, and names it from the
+filename; it's tracked in `userData/fonts/custom.json` (the only one of the three that needs a
+manifest, since there's no catalogue to read a name back out of).
+
+**Why the picker only ever shows what's installed, never the full catalogue.** You can't select a
+font you don't have. `useInstalledFonts.ts`'s `FontLibrary` is one hook instance, created once in
+`Settings.tsx` and threaded down to `Customisation`/`Spaces` (via `SpaceForm` → `SpaceFonts`) and
+to `Collection.tsx` alike — so a download made from *any* of those three surfaces shows up in all
+of them without a refresh, the same "one state, several scopes" shape `presets`/`presetActions`
+already use one level up.
+
+**Preview without downloading.** `Collection.tsx`'s "download more" shelf shows a small
+pre-rendered PNG (`assets/font-previews/*.png`, ~1KB each, generated once from the same font
+files) for anything not yet installed — a live `@font-face` render is impossible for a font that
+isn't on disk yet, and the whole point of "preview first" was seeing the shape before spending a
+download on it. `fontLoader.ts`'s `FontFace`/`document.fonts.add` swap-in (not a `<style>` tag)
+is what makes a just-downloaded font render immediately, no reload, the instant its bytes land.

@@ -7,6 +7,7 @@ import type { EntryMeta, Workspace } from './workspace'
 import type { LinkRow } from './links'
 import type { UpdatePrefs, UpdateStatus } from './update'
 import type { ImportFormat, ImportPreview, ImportProgress, ImportResult } from './notesImport'
+import type { DownloadFontResult, ImportCustomFontResult, InstalledFont } from './fonts'
 
 /** A node in the vault file tree. `path` is always vault-relative, POSIX-style
  *  ("/" separators), and "" denotes the vault root. */
@@ -90,6 +91,26 @@ export interface VaultApi {
    *  ADDS — an imported look never overwrites one of yours. */
   importPresets(text?: string): Promise<PresetImportResult>
 
+  // --- fonts: downloaded or user-imported on THIS install (userData/fonts/) -
+  // Bundled fonts (Inter/OpenDyslexic/JetBrains Mono/Fraunces) need none of
+  // this — they're already real @font-face rules in theme.css. This is only
+  // for the rest of shared/fonts.ts's catalogue, plus anything a user brings
+  // in themselves. See shared/fonts.ts and main/fonts.ts.
+  /** Everything installed so far, downloaded bytes included — read once at
+   *  startup so the renderer can inject a @font-face for each. */
+  listInstalledFonts(): Promise<InstalledFont[]>
+  /** Fetch a catalogue font's woff2 from its `cdnUrl` and cache it in
+   *  userData/fonts/downloaded/. Requires network; the app works offline
+   *  otherwise. */
+  downloadFont(id: string): Promise<DownloadFontResult>
+  /** Open a native picker for a .ttf/.otf/.woff/.woff2 file and copy it into
+   *  userData/fonts/custom/. The display name is derived from the filename. */
+  importCustomFont(): Promise<ImportCustomFontResult>
+  /** Delete a previously imported custom font's file and record. Any space
+   *  still pointing at its id just falls back to the built-in default, the
+   *  same way an unrecognised font id always has. */
+  removeCustomFont(id: string): Promise<void>
+
   // --- workspace: order / pins / archive / bin (.mdnotes/workspace.json) -----
   /** The whole organisation sidecar for the active vault. */
   getWorkspace(): Promise<Workspace>
@@ -139,6 +160,17 @@ export interface VaultApi {
   setBetaChannel(on: boolean): Promise<UpdateStatus>
   /** Open the GitHub releases page in the default browser. */
   openReleases(): void
+  /** Has this install ever finished the onboarding flow? App-level, like
+   *  vaultPath — not "is a vault currently open". */
+  getOnboarded(): Promise<boolean>
+  /** Set or clear it — clearing is the dev "replay onboarding" hook. */
+  setOnboarded(value: boolean): Promise<void>
+  /** Reveal a vault-relative path in the OS file explorer, selected. */
+  revealInFolder(path: string): Promise<void>
+  /** Dev-only. Wipes the disposable onboarding-test vault, switches to it,
+   *  and clears `hasOnboarded`. Returns the new vault path. Never touches
+   *  the real vault. */
+  resetOnboardingTestVault(): Promise<string>
   /** Opens the user's default mail app with a bug report pre-addressed to the
    *  support inbox. Returns false if no mail client could be opened. */
   sendBugReport(fromEmail: string, message: string): Promise<boolean>

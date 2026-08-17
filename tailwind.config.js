@@ -19,7 +19,12 @@ module.exports = {
       fontFamily: {
         display: 'var(--font-serif)',
         sans: 'var(--font-sans)',
-        mono: 'var(--font-mono)'
+        mono: 'var(--font-mono)',
+        // The note's own title (NotePane.tsx) — deliberately separate from
+        // `display` (used everywhere else: Settings headers, onboarding,
+        // the sidebar's vault name) so the Notes font picker can restyle a
+        // note's title without also restyling the app's own chrome around it.
+        note: 'var(--note-font-serif)'
       },
       colors: {
         /* monochrome accent: low numbers are the quietest fills and borders,

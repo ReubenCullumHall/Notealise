@@ -3,7 +3,8 @@ import type { OpenHow } from '../editor/linkEnv'
 import type { Inspect } from './LinkInspector'
 import type { LinkEntry } from './model'
 
-// The note's connections, in one strip at the top of the note.
+// The note's connections, in one strip — at the top of the note by default, or
+// fixed to the bottom (Settings → Linking content → position).
 //
 // Chrome, never text: nothing here is written into the .md file (rule 1 — the
 // file is the source of truth, and a generated header would make this app the
@@ -35,6 +36,10 @@ interface Props {
   incoming: LinkEntry[]
   /** stays put while the note scrolls (Settings → General) */
   pinned: boolean
+  /** which side touches the note text: 'top' borders its own bottom edge (text
+   *  sits below it), 'bottom' borders its own top edge (text sits above it).
+   *  Defaults 'top', the long-standing spot. */
+  edge?: 'top' | 'bottom'
   onOpen: (path: string, how: OpenHow, heading?: string | null) => void
   onCreate: (suggestedPath: string, how: OpenHow) => void
   onDrag: (path: string | null) => void
@@ -131,7 +136,7 @@ function Chip({
   )
 }
 
-export function LinksBlock({ outgoing, incoming, pinned, ...rest }: Props): React.JSX.Element {
+export function LinksBlock({ outgoing, incoming, pinned, edge = 'top', ...rest }: Props): React.JSX.Element {
   const all = [...outgoing, ...incoming]
   return (
     <div
@@ -139,7 +144,8 @@ export function LinksBlock({ outgoing, incoming, pinned, ...rest }: Props): Reac
       // block's. Only the backdrop differs: unpinned it floats over the note's
       // own text as that text scrolls up behind it.
       className={
-        'links-block flex shrink-0 items-center gap-1 border-b border-ink-300/20 px-3 ' +
+        'links-block flex shrink-0 items-center gap-1 border-ink-300/20 px-3 ' +
+        (edge === 'bottom' ? 'border-t ' : 'border-b ') +
         (pinned ? 'bg-surface/30' : 'bg-paper/85 backdrop-blur')
       }
       style={{ height: LINKS_BLOCK_HEIGHT }}

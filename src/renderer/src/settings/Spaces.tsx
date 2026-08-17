@@ -9,11 +9,12 @@ import {
   type AppSettings,
   type Space
 } from '../../../shared/settings'
-import { ACCENT_MODES, ACCENTS, DENSITIES, EDITOR_WIDTHS, TEXT_TONES, THEMES } from './model'
+import { ACCENT_MODES, ACCENTS, DENSITIES, EDITOR_WIDTHS, resolveTheme, TEXT_TONES, THEMES } from './model'
 import { Icon } from '../icons'
 import { SettingRow, ToggleRow } from './primitives'
 import { ActionGrid, SlotFace } from '../editor/SlotPicker'
 import { SpaceForm } from './SpaceForm'
+import type { FontLibrary } from './useInstalledFonts'
 import { findAction, SLOT_LABELS } from '../editor/commands'
 import { PRESET_DRAG, PresetLibrary, type PresetActions } from './Presets'
 import { ALL_PARTS, vaultName, type SpacePreset } from '../../../shared/presets'
@@ -67,6 +68,7 @@ interface Props {
   /** absolute path of the open vault; only its folder name is used, to tell a
    *  preset that IS one of these spaces from one carried in from elsewhere */
   vault: string | null
+  fontLibrary: FontLibrary
 }
 
 /** The per-space sections take the space directly; the binding to a settings
@@ -79,8 +81,12 @@ export interface SpaceProps {
 // Fixed swatch colours for the theme preview cards, so each card always shows
 // its own theme regardless of the theme currently in effect. `line` is the two
 // faux text lines drawn on the page half: without them Dark and Extra dark are
-// two near-black rectangles you cannot tell apart at 46px.
+// two near-black rectangles you cannot tell apart at 46px. System's card
+// deliberately pairs a dark `side` with a light `main` — the same two-rect
+// shape every other card uses, just split between the two looks it can
+// resolve to, rather than a new visual just for this one card.
 const THEME_PREVIEW: Record<Space['theme'], { side: string; main: string; line: string }> = {
+  system: { side: '#161616', main: '#f7f7f6', line: '#a3a3a3' },
   dark: { side: '#161616', main: '#000000', line: '#8f8f8f' },
   black: { side: '#0a0a0a', main: '#000000', line: '#8f8f8f' },
   light: { side: '#ffffff', main: '#f7f7f6', line: '#a3a3a3' }
@@ -125,7 +131,8 @@ export function Spaces({
   actions,
   presets,
   presetActions,
-  vault
+  vault,
+  fontLibrary
 }: Props): React.JSX.Element {
   const spaces = settings.spaces
   const space = activeSpace(settings)
@@ -330,6 +337,7 @@ export function Spaces({
           space={space}
           onChange={patch}
           onColorExisting={() => actions.onColorExistingFolders([space.folder])}
+          fontLibrary={fontLibrary}
         />
       </div>
 
@@ -586,6 +594,11 @@ export function Disclosure({
  *  it only means anything on a dark theme, so it belongs beside the choice that
  *  makes it relevant rather than three sections away. */
 function ThemeCards({ space, onChange }: SpaceProps): React.JSX.Element {
+  // Text tone only means anything on the two dark ramps (see TEXT_TONES'
+  // hint), so when the theme is 'system' this has to ask what it currently
+  // RESOLVES to, not the stored id — otherwise picking System on a light OS
+  // leaves the tone row enabled for a theme that isn't actually showing.
+  const resolvedLight = resolveTheme(space.theme) === 'light'
   return (
     <section className="settings-group">
       <h3>Theme</h3>
@@ -623,7 +636,7 @@ function ThemeCards({ space, onChange }: SpaceProps): React.JSX.Element {
         <h3>Text colour</h3>
         <p className="hint">
           How bright the writing sits on a dark background.{' '}
-          {space.theme === 'light'
+          {resolvedLight
             ? 'The light theme always uses dark ink, so this applies to the two dark themes.'
             : 'Grey is easier over a long session; white is sharpest against Extra dark.'}
         </p>
@@ -635,7 +648,7 @@ function ThemeCards({ space, onChange }: SpaceProps): React.JSX.Element {
                 key={t.id}
                 className={'mode-btn disabled:opacity-40 disabled:cursor-default' + (on ? ' on' : '')}
                 aria-pressed={on}
-                disabled={space.theme === 'light'}
+                disabled={resolvedLight}
                 onClick={() => onChange({ textTone: t.id })}
               >
                 <span className="t">
@@ -666,7 +679,11 @@ export function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Elem
           {ACCENTS.map((a) => {
             const on = space.accent === a.id
             const bg =
-              a.hue == null ? (space.theme === 'light' ? '#1a1a1a' : '#e8e8e8') : `hsl(${a.hue} 50% 55%)`
+              a.hue == null
+                ? resolveTheme(space.theme) === 'light'
+                  ? '#1a1a1a'
+                  : '#e8e8e8'
+                : `hsl(${a.hue} 50% 55%)`
             return (
               <button
                 key={a.id}
@@ -886,16 +903,18 @@ export function SpaceShortcuts({ space, onChange }: SpaceProps): React.JSX.Eleme
 
 // --- the three not built yet ----------------------------------------------
 
-/** Page look / Fonts / Tints. The fields are already persisted on a Space, so
- *  these controls light up later without a second migration — but nothing reads
- *  them yet, so both buttons are disabled rather than half-wired. */
+/** Page look / Tints. The fields are already persisted on a Space, so these
+ *  controls light up later without a second migration — but nothing reads
+ *  them yet, so both buttons are disabled rather than half-wired.
+ *  Fonts used to be a third row here; it's real now (see the Fonts
+ *  disclosure in SpaceForm) so it moved out rather than staying as a
+ *  disabled duplicate of a control that already works. */
 function ComingSoon(): React.JSX.Element {
   const rows = [
     {
       title: 'Page look',
       desc: 'Write on plain, lined or paper-textured pages. Per space, so revision notes can look different from a journal.'
     },
-    { title: 'Fonts', desc: 'Choose the typeface and size the editor uses in this space.' },
     {
       title: 'Tints',
       desc: 'Colour overlays that make text easier to read — useful for visual stress and dyslexia.'
@@ -903,7 +922,7 @@ function ComingSoon(): React.JSX.Element {
   ]
   return (
     <section className="settings-group">
-      <h3>Page, fonts and tints</h3>
+      <h3>Page and tints</h3>
       <p className="hint">
         Coming soon. Each will be set per space, and picked from Your collection.
       </p>

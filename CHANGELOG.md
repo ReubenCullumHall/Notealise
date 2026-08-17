@@ -7,6 +7,21 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- First-run onboarding: opening the app for the first time now walks you through it in eight
+  screens — the wordmark animation, choosing a vault folder, importing notes you already have,
+  naming the spaces you take notes for, writing your first note, seeing that note as a real .md
+  file on your disk, picking a font to write in, and where to find tutorials, report a bug or
+  request a feature. Everything in it is skippable, nothing is asked twice, and each step leaves
+  something real behind rather than a preview. Settings -> General -> Developer can replay it
+- New setting, Settings -> Spaces or Customisation -> Fonts: pick a typeface for a space's
+  interface (sidebar, settings, buttons) and separately for its notes (body, headings, title), plus
+  a dyslexia-friendly override for just a note's body text. Four fonts ship with the app (Inter,
+  OpenDyslexic, JetBrains Mono, Fraunces); sixteen more are previewable and downloadable on demand
+  from Settings -> Your collection -> Fonts, or bring in your own .ttf/.otf/.woff/.woff2. Code
+  blocks always stay JetBrains Mono, whatever else is picked
+- New setting, Settings -> Linking content -> position: put a note's links strip at the bottom of
+  the note instead of the top, for a space whose header is already busy. Top stays the default for
+  every existing space
 - Deleting something forever from the bin — one item, or the whole "Empty recycle bin" — no longer
   sends it straight to the OS trash. It now waits 7 days in a hidden safety net (Settings ->
   Recovery) before the app deletes it for good, so nothing you delete through the app can vanish

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { ThemeId } from '../../shared/settings'
+import type { ResolvedThemeId } from '../../shared/settings'
 import inkSrc from './assets/promo/notealise-ink.webm'
 import whiteSrc from './assets/promo/notealise-white.webm'
 
@@ -18,11 +18,19 @@ const MAX_MS = 6000
 
 /** Plays once while a vault opens, then fades into the app underneath (already
  *  mounting/loading behind it — see App.tsx's `splashActive`). `theme` is the
- *  active space's REAL theme (App only mounts this once settings have actually
- *  loaded — see the boot effect and `pick()`), not the pre-paint snapshot,
- *  which can be stale on a vault's first open on a given machine: light -> ink
- *  (dark ink on a light ground), dark AND black -> white. */
-export function StartupSplash({ theme, onFinished }: { theme: ThemeId; onFinished: () => void }): React.JSX.Element {
+ *  active space's REAL, RESOLVED theme (App only mounts this once settings
+ *  have actually loaded — see the boot effect and `pick()` — and resolves
+ *  'system' before passing it down here, since this component only knows two
+ *  clips), not the pre-paint snapshot, which can be stale on a vault's first
+ *  open on a given machine: light -> ink (dark ink on a light ground), dark
+ *  AND black -> white. */
+export function StartupSplash({
+  theme,
+  onFinished
+}: {
+  theme: ResolvedThemeId
+  onFinished: () => void
+}): React.JSX.Element {
   const [ended, setEnded] = useState(false)
   const [fading, setFading] = useState(false)
   const src = theme === 'light' ? inkSrc : whiteSrc

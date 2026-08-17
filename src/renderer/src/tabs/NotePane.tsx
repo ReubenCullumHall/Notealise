@@ -10,7 +10,7 @@ import type { Inspect } from '../links/LinkInspector'
 import { incomingLinks, outgoingLinks } from '../links/model'
 import type { LinkEnv, LinkHandlers, OpenHow } from '../editor/linkEnv'
 import { dirName, titleOf, type LinkRow } from '../../../shared/links'
-import type { AppSettings } from '../../../shared/settings'
+import type { AppSettings, LinksPosition } from '../../../shared/settings'
 
 /** Where a dragged tab or column would land in this pane. */
 export type DropZone = 'left' | 'center' | 'right'
@@ -56,8 +56,11 @@ interface Props {
   revealHeading: string | null
   /** show the strip of this note's links at all (Settings → Linking content) */
   showLinks: boolean
-  /** and keep it on screen while the note scrolls, instead of letting it go */
+  /** and keep it on screen while the note scrolls, instead of letting it go.
+   *  Ignored when `linksPosition` is 'bottom' — that spot is always fixed. */
   pinLinks: boolean
+  /** top (under the format bar) or fixed to the bottom of the note */
+  linksPosition: LinksPosition
   /** Markdown pro is on for this space: show the corner button at all */
   markdownPro: boolean
   /** this note is currently showing its raw Markdown */
@@ -136,6 +139,7 @@ export function NotePane({
   revealHeading,
   showLinks,
   pinLinks,
+  linksPosition,
   markdownPro,
   raw,
   onToggleRaw,
@@ -184,11 +188,14 @@ export function NotePane({
   // the block is translated by the scroll offset instead and the editor carries
   // matching top padding — the text starts below the block and stays clear of it.
   //
-  // Pinned, none of that happens: it is an ordinary row above the editor.
+  // Pinned, or at the bottom, none of that happens: it is an ordinary row
+  // instead (above the editor when pinned, below it at the bottom — see the
+  // sibling rows around `.pane-body` below).
+  const floatingTop = showLinks && linksPosition === 'top' && !pinLinks
   const [scrolled, setScrolled] = useState(0)
   const bodyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (blank || !showLinks || pinLinks) return
+    if (blank || !floatingTop) return
     const scroller = bodyRef.current?.querySelector<HTMLElement>('.cm-scroller')
     if (!scroller) return
     const onScroll = (): void => setScrolled(Math.min(scroller.scrollTop, LINKS_BLOCK_HEIGHT))
@@ -197,7 +204,7 @@ export function NotePane({
     return () => scroller.removeEventListener('scroll', onScroll)
     // `version` re-runs this after a note switch, when CodeMirror has a new
     // scroll position but the same scroller element.
-  }, [blank, showLinks, pinLinks, path, version])
+  }, [blank, floatingTop, path, version])
 
   // Only "last edited" is on the row — it is the one that changes, and the one
   // you look for. When it was CREATED is a thing you want occasionally, so it
@@ -273,7 +280,7 @@ export function NotePane({
         {blank ? (
           <span
             className={
-              'min-w-0 truncate font-display font-semibold text-ink-300 ' +
+              'min-w-0 truncate font-note font-semibold text-ink-300 ' +
               (split ? 'w-[5.5rem] shrink-0 text-[15px] ' : 'flex-1 text-lg ')
             }
           >
@@ -282,7 +289,7 @@ export function NotePane({
         ) : (
         <input
           className={
-            'min-w-0 truncate bg-transparent font-display font-semibold text-ink-900 outline-none placeholder:text-ink-300 ' +
+            'min-w-0 truncate bg-transparent font-note font-semibold text-ink-900 outline-none placeholder:text-ink-300 ' +
             // Which element is elastic flips with the width. Wide: the title
             // grows and the commands sit centred at their natural size. Narrow:
             // the title is fixed and the COMMANDS take what's left — leave the
@@ -376,7 +383,7 @@ export function NotePane({
         </div>
       </div>
 
-      {!blank && showLinks && pinLinks && (
+      {!blank && showLinks && linksPosition === 'top' && pinLinks && (
         <LinksBlock
           outgoing={outgoing}
           incoming={incoming}
@@ -408,9 +415,7 @@ export function NotePane({
             // block rather than underneath it. A CSS variable rather than a
             // style on .cm-scroller: the scroller is CodeMirror's DOM, and
             // reaching into it from React is how these two stop agreeing.
-            style={
-              { '--links-inset': !showLinks || pinLinks ? '0px' : `${LINKS_BLOCK_HEIGHT}px` } as React.CSSProperties
-            }
+            style={{ '--links-inset': floatingTop ? `${LINKS_BLOCK_HEIGHT}px` : '0px' } as React.CSSProperties}
           >
             <CodeEditor
               path={path}
@@ -448,7 +453,7 @@ export function NotePane({
           </div>
         )}
 
-        {!blank && showLinks && !pinLinks && (
+        {!blank && floatingTop && (
           <div
             className="pointer-events-none absolute inset-x-0 top-0 z-10"
             // Slides out of the way as the note scrolls, so the connections are
@@ -521,6 +526,19 @@ export function NotePane({
           </div>
         )}
       </div>
+
+      {!blank && showLinks && linksPosition === 'bottom' && (
+        <LinksBlock
+          outgoing={outgoing}
+          incoming={incoming}
+          pinned
+          edge="bottom"
+          onOpen={onFollowLink}
+          onCreate={(suggested, how) => onCreateLink(dirName(suggested), titleOf(suggested), how)}
+          onDrag={onDragLink}
+          onInspect={onInspect}
+        />
+      )}
     </section>
   )
 }

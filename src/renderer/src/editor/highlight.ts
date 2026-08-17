@@ -30,7 +30,7 @@ const editorTheme = EditorView.theme({
   '&': { height: '100%', backgroundColor: 'transparent' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': {
-    fontFamily: 'var(--font-sans)',
+    fontFamily: 'var(--note-font-sans)',
     fontSize: '16px',
     lineHeight: '1.7',
     overflow: 'auto',
@@ -57,7 +57,7 @@ const editorTheme = EditorView.theme({
   '.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
     padding: '6px 10px',
     borderRadius: '8px',
-    fontFamily: 'var(--font-sans)',
+    fontFamily: 'var(--note-font-sans)',
     color: c('--ink-800')
   },
   '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {

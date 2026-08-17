@@ -23,6 +23,14 @@
   src: url('./assets/fonts/jetbrainsmono-400.woff2') format('woff2'); }
 @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap;
   src: url('./assets/fonts/jetbrainsmono-500.woff2') format('woff2'); }
+/* The one bundled entry from the collectable-font catalogue (shared/fonts.ts)
+   — the app's default dyslexia-friendly pick, available offline from
+   install like the other three. Every OTHER catalogue entry is deliberately
+   NOT here: it's fetched on demand (main/fonts.ts's downloadFont) and its
+   @font-face is injected at runtime once downloaded (settings/fontLoader.ts)
+   — see shared/fonts.ts's file header for why. */
+@font-face { font-family: 'OpenDyslexic'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('./assets/fonts/opendyslexic-400.woff2') format('woff2'); }
 
 :root {
   /* Icon glyphs as CSS masks, for the two places a real <Icon> component cannot
@@ -33,9 +41,19 @@
   --icon-doc: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M6%203h7l5%205v12a1%201%200%200%201-1%201H6a1%201%200%200%201-1-1V4a1%201%200%200%201%201-1z%22%2F%3E%3Cpath%20d%3D%22M13%203v5h5%22%2F%3E%3C%2Fsvg%3E");
   --icon-folder: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M3%207a2%202%200%200%201%202-2h4l2%202h8a2%202%200%200%201%202%202v8a2%202%200%200%201-2%202H5a2%202%200%200%201-2-2V7z%22%2F%3E%3C%2Fsvg%3E");
 
+  /* --font-sans / --font-serif: the app's own interface — sidebar, settings,
+     buttons, onboarding. --note-font-sans / --note-font-serif: the actual
+     writing surface — a note's body, its rendered headings, its title.
+     Split apart (2026-08-17) so a Space's "Notes" font skin can restyle only
+     what you write, without also restyling the settings window it's picked
+     from — see settings/model.ts's applyFont and settings/SpaceFonts.tsx.
+     Both pairs share the same defaults, so the app's stock look is
+     unaffected until either is actually picked. */
   --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --note-font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --note-font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
 }
 
 /* ---- colour ramps -------------------------------------------------------- */
