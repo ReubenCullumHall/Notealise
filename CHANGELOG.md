@@ -7,6 +7,11 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Drag a note or folder onto a different space, in the switcher at the bottom of the sidebar, to
+  move it there — hold over a space while dragging to open it and drop into a specific subfolder,
+  and a multi-select moves together. Anything that arrives this way lands at the top of its new
+  home, under a small "Moved" divider, instead of getting lost in the usual sorting; drag it into
+  its final spot to clear that
 - First-run onboarding: opening the app for the first time now walks you through it in eight
   screens — the wordmark animation, choosing a vault folder, importing notes you already have,
   naming the spaces you take notes for, writing your first note, seeing that note as a real .md

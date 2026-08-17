@@ -94,3 +94,43 @@ Still pending:
 
 See `CLAUDE.md`'s "the settings rule" and "the theme layer's precedence chain" for the rules that
 govern where a new appearance setting goes and why a working control can still silently do nothing.
+
+## Cross-space drag-and-drop, and the "Moved" group (built 2026-08-17)
+
+Drag a note or folder onto a *different* space's tab in the sidebar footer switcher to move it
+there in one gesture — including a multi-select, which drags as one unit like everywhere else in
+the tree. Hold over an **inactive** tab while dragging (600ms, `SPACE_HOVER_OPEN_MS` in
+`Sidebar.tsx`) and it opens on its own, the same "hover a folder to open it" gesture an OS file
+manager uses, so a subfolder inside that space can be the actual drop target instead of the
+space's root. The active tab never arms a timer (nothing to open); it still accepts a direct drop.
+
+**Cross-space detection is pure path arithmetic, not UI state — on purpose.** `App.tsx`'s
+`spaceFolderOf(path, spaces)` walks the same top-level-folder-is-a-space rule
+`docs/feature-tabs-spaces.md` describes, and `move()` compares the dragged paths' space against the
+*destination* folder's space. It deliberately does **not** ask "which space was active when the
+drag started" — hover-to-open changes the active space **mid-drag**, so that question has no
+stable answer by the time the drop lands. Comparing the actual paths sidesteps it entirely and
+handles a drop on the tab itself, a drop after hover-opening, and a drop into a nested subfolder
+with one rule.
+
+**A cross-space arrival always lands at the very front, `anchor` ignored.** The destination wasn't
+the list the user was looking at when they let go (they were looking at the tab, or the space they
+dragged from) — so alphabetical order, free-arrange mixing, or a precise anchor position would
+bury it. It's stamped `EntryMeta.movedAt` (`shared/workspace.ts`) at the same time.
+
+**The "Moved" grouping is per-level, not a global hoist like Pinned.** `organise/model.ts`'s
+`splitMoved` partitions one list of siblings into moved (most-recent first) and everything else
+(ordinary `sortSiblings`); `TreeView.tsx` calls it once for the top-level tree and again inside
+each expanded folder, gated on `mode === 'tree'` (the same flag that already gates drag-reorder,
+`reorders`). That's what lets the divider show up wherever the drop actually landed — the space's
+root, or a subfolder several levels deep — rather than only ever at the top of the sidebar.
+
+**Clearing `movedAt` is "the user decided what to do with it," not just "moved again."** Three
+places clear it, all in `App.tsx`: an ordinary same-space `move()` (a reorder, or dragging a moved
+item into its final spot — that action **is** the sorting this feature is prompting for), pinning
+it, and archiving it. The last two matter because both hoist the row out of the main tree
+(`pinnedRoots`/`withoutArchived`) — without clearing the flag there, unpinning or restoring from
+the archive later would drop it back into the main tree still flagged, resurfacing under "Moved"
+with a stale timestamp for a decision the user already made. Trashing needs no special case: it
+deletes the whole `EntryMeta` (`main/workspace.ts`'s `trashEntries`), and a restore creates a fresh
+one, so nothing survives a bin round-trip either way.

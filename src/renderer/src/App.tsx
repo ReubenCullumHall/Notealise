@@ -1241,14 +1241,29 @@ export default function App(): React.JSX.Element {
     })
 
   const togglePin = (paths: string[], pinned: boolean): void =>
-    void run(async () => setWorkspace(await window.api.updateEntries(paths, { pinned })))
+    void run(async () =>
+      setWorkspace(
+        await window.api.updateEntries(paths, {
+          pinned,
+          // Same reasoning as `setArchived` just below: pinning a just-arrived
+          // item is a decision about it, so it doesn't resurface under
+          // "Moved" with a stale timestamp if it's later unpinned.
+          ...(pinned ? { movedAt: undefined } : {})
+        })
+      )
+    )
 
   const setArchived = (paths: string[], archived: boolean): void =>
     void run(async () =>
       setWorkspace(
         await window.api.updateEntries(paths, {
           archived,
-          archivedAt: archived ? Date.now() : undefined
+          archivedAt: archived ? Date.now() : undefined,
+          // Archiving is itself a decision about a just-arrived item — the
+          // same "sorted into what's next" signal an ordinary move clears
+          // (see `move`'s comment) — so it doesn't resurface under "Moved"
+          // with a stale timestamp the next time it's restored.
+          ...(archived ? { movedAt: undefined } : {})
         })
       )
     )
