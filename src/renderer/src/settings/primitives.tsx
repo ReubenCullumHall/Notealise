@@ -17,7 +17,11 @@ export function SettingRow({
   children: React.ReactNode
 }): React.JSX.Element {
   return (
-    <div className="flex items-start gap-4 py-3.5">
+    // `relative` so a `Select` in the control slot can anchor its dropdown to
+    // the whole row (see Select below) rather than just its own button —
+    // otherwise nothing stops a future row here from ending up with the same
+    // dropdown/row collision the preset library's "Use on…" menu had.
+    <div className="relative flex items-start gap-4 py-3.5">
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-semibold text-ink-900">{title}</span>
         <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">{desc}</span>
@@ -79,7 +83,11 @@ export function Select({
     : options
 
   return (
-    <span ref={box} className="relative inline-flex">
+    // Not `relative` itself — the popover anchors to the `SettingRow` this
+    // always sits inside (see its own `relative`), so the dropdown's edge
+    // lines up with the row's own edge rather than just this button's, the
+    // same fix applied to the preset library's "Use on…" menu.
+    <span ref={box} className="inline-flex">
       <button
         onClick={() => {
           setOpen((o) => !o)
@@ -100,7 +108,7 @@ export function Select({
       {open && (
         <div
           className={
-            'fade-in absolute top-9 z-40 w-max min-w-[190px] rounded-xl border border-ink-300/25 bg-surface p-1 shadow-float ' +
+            'fade-in absolute top-full z-40 mt-1 w-max min-w-[190px] rounded-xl border border-ink-300/25 bg-surface p-1 shadow-float ' +
             (align === 'right' ? 'right-0' : 'left-0')
           }
         >

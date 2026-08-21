@@ -15,11 +15,28 @@ export function SpacesStep({ onOpenSpace, onReady }: Props): React.JSX.Element {
   const [addingCustom, setAddingCustom] = useState(false)
   const [customValue, setCustomValue] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  // Trying to pick an 11th chip used to just silently do nothing — reads as
+  // broken rather than intentional. Flashes the cap explanation into the
+  // summary line below for a couple of seconds, then reverts to whatever it
+  // would normally show.
+  const [atCap, setAtCap] = useState(false)
+  const capTimer = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (capTimer.current != null) window.clearTimeout(capTimer.current)
+  }, [])
+  const flashAtCap = (): void => {
+    setAtCap(true)
+    if (capTimer.current != null) window.clearTimeout(capTimer.current)
+    capTimer.current = window.setTimeout(() => setAtCap(false), 2200)
+  }
 
   const toggle = (name: string): void => {
     setChosen((c) => {
       if (c.includes(name)) return c.filter((x) => x !== name)
-      if (c.length >= SPACE_CAP) return c
+      if (c.length >= SPACE_CAP) {
+        flashAtCap()
+        return c
+      }
       return [...c, name]
     })
   }
@@ -28,7 +45,11 @@ export function SpacesStep({ onOpenSpace, onReady }: Props): React.JSX.Element {
     const v = customValue.trim()
     setCustomValue('')
     setAddingCustom(false)
-    if (!v || chosen.includes(v) || chosen.length >= SPACE_CAP) return
+    if (!v || chosen.includes(v)) return
+    if (chosen.length >= SPACE_CAP) {
+      flashAtCap()
+      return
+    }
     setChosen((c) => [...c, v])
   }
 
@@ -123,10 +144,12 @@ export function SpacesStep({ onOpenSpace, onReady }: Props): React.JSX.Element {
       </div>
 
       <p className="min-h-[16px] font-mono text-[12px] text-ink-500">
-        {chosen.length > 0 &&
-          `You'll start with ${NUMBER_WORDS[chosen.length] ?? chosen.length} ${
-            chosen.length === 1 ? 'space' : 'spaces'
-          }: ${chosen.join(', ')}.`}
+        {atCap
+          ? `That's as many as you can start with here — ${NUMBER_WORDS[SPACE_CAP] ?? SPACE_CAP}. You can add more later from Settings.`
+          : chosen.length > 0 &&
+            `You'll start with ${NUMBER_WORDS[chosen.length] ?? chosen.length} ${
+              chosen.length === 1 ? 'space' : 'spaces'
+            }: ${chosen.join(', ')}.`}
       </p>
     </div>
   )

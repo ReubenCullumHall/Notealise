@@ -1,9 +1,15 @@
 import { useEffect } from 'react'
 import { FONTS, fontCssValue, type FontOption } from '../../settings/fonts'
+import { ACCENTS } from '../../settings/model'
+import type { ResolvedThemeId } from '../../../../shared/settings'
 import type { OnboardingStepProps } from '../Onboarding'
 
-// The Customisation screen from the 2026-08-17 blueprint, built down to its
-// font half. Accent colour — the blueprint's second control — is NOT here yet.
+// The Customisation screen from the 2026-08-17 blueprint — now built down to
+// both halves: font, and (added 2026-08-20) accent colour, reusing the same
+// `ACCENTS` palette and the "apply to every space" pattern the font half
+// already used (App.tsx's pickOnboardingFont / pickOnboardingAccent). Colour
+// reach (text-only vs. surfaces too) stays a Settings-only control — one
+// decision here, not two.
 //
 // Only the BUNDLED faces are offered, deliberately, and this is the whole
 // reason the screen can exist at all: they ship inside the app (theme.css's
@@ -39,8 +45,11 @@ const ONBOARDING_BLURB: Record<string, string> = {
 }
 
 interface Props extends OnboardingStepProps {
+  theme: ResolvedThemeId
   value: string
   onPick: (id: string) => void
+  accent: string
+  onPickAccent: (id: string) => void
 }
 
 function FontCard({
@@ -82,11 +91,13 @@ function FontCard({
   )
 }
 
-export function FontsStep({ value, onPick, onReady }: Props): React.JSX.Element {
+export function FontsStep({ theme, value, onPick, accent, onPickAccent, onReady }: Props): React.JSX.Element {
   // Never gated: "App default" is a real answer, and it's the one already
   // selected — there is nothing here a person has to do before moving on.
+  // The last step since Walkthrough was cut (2026-08-20) — the button that
+  // used to say "Start writing" on that closing screen says it here now.
   useEffect(() => {
-    onReady({ ready: true })
+    onReady({ ready: true, continueLabel: 'Start writing' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -130,6 +141,36 @@ export function FontsStep({ value, onPick, onReady }: Props): React.JSX.Element 
         any font file of your own — live in{' '}
         <span className="text-ink-500">Settings → Your collection → Fonts</span>.
       </p>
+
+      <div className="flex flex-col items-center gap-2.5 border-t border-ink-300/15 pt-5">
+        <p className="text-[12.5px] font-medium text-ink-700">And a colour, if you want one</p>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {ACCENTS.map((a) => {
+            const on = accent === a.id
+            const bg = a.hue == null ? (theme === 'light' ? '#1a1a1a' : '#e8e8e8') : `hsl(${a.hue} 50% 55%)`
+            return (
+              <button
+                key={a.id}
+                type="button"
+                data-tip={a.label}
+                aria-label={a.label}
+                aria-pressed={on}
+                onClick={() => onPickAccent(a.id)}
+                style={{ background: bg }}
+                className={
+                  'h-7 w-7 shrink-0 rounded-full transition duration-150 ' +
+                  (on
+                    ? 'ring-2 ring-brand-500 ring-offset-2 ring-offset-paper'
+                    : 'ring-1 ring-ink-300/25 hover:ring-ink-400/40')
+                }
+              />
+            )
+          })}
+        </div>
+        <p className="text-[11.5px] text-ink-400">
+          Leave it on Default and the app stays neutral. Every space can have its own later.
+        </p>
+      </div>
     </div>
   )
 }

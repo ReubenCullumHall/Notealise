@@ -7,17 +7,25 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Deleting a space now takes its saved look with it by default, instead of leaving it behind in
+  Settings -> Spaces -> Saved presets as an orphan you'd have to clean up yourself. A prompt next
+  to the delete button — "Save the preset before deleting?" — lets you keep it in one click if you
+  want to reuse that look later. The "Use on…" button on each saved preset is bigger, and its menu
+  no longer renders behind the Theme section below it
 - Drag a note or folder onto a different space, in the switcher at the bottom of the sidebar, to
   move it there — hold over a space while dragging to open it and drop into a specific subfolder,
   and a multi-select moves together. Anything that arrives this way lands at the top of its new
   home, under a small "Moved" divider, instead of getting lost in the usual sorting; drag it into
   its final spot to clear that
-- First-run onboarding: opening the app for the first time now walks you through it in eight
-  screens — the wordmark animation, choosing a vault folder, importing notes you already have,
-  naming the spaces you take notes for, writing your first note, seeing that note as a real .md
-  file on your disk, picking a font to write in, and where to find tutorials, report a bug or
-  request a feature. Everything in it is skippable, nothing is asked twice, and each step leaves
-  something real behind rather than a preview. Settings -> General -> Developer can replay it
+- First-run onboarding: opening the app for the first time now walks you through it — choosing a
+  vault folder, importing notes you already have (skip is one click, no "are you sure"), naming
+  the spaces you take notes for, writing your first note, seeing that note as a real .md file on
+  your disk, then picking a font and an accent colour to write in. Finishing seeds a handful of
+  curated welcome notes (skipped if you imported instead) pointing at tutorials, report-a-bug and
+  request-a-feature, and hands off into the app with a short fade rather than ending on a separate
+  closing screen. Quitting partway through and reopening resumes at the exact step you left.
+  Settings -> General -> Developer can replay it. Picking an 11th space at the Spaces step (the cap
+  is 10) now says so instead of silently doing nothing
 - New setting, Settings -> Spaces or Customisation -> Fonts: pick a typeface for a space's
   interface (sidebar, settings, buttons) and separately for its notes (body, headings, title), plus
   a dyslexia-friendly override for just a note's body text. Four fonts ship with the app (Inter,
@@ -51,6 +59,38 @@ enough for a solo project). History before this file existed lives in the `v*` g
   every frame, including the final one, and were invisible to the animation's own coverage check
 - Fixed a stray mark in the landing page's "Note" typing: a slice of the t's crossbar appeared
   next to "No" a step before the t itself did
+- Paste an image, drag a photo or video in from Finder, or use "Photo or video" in the / menu or
+  a format-bar slot to add it straight into a note — it plays or shows inline as you write, right
+  where you put it. Hover it to reveal a small grip and drag the whole picture or video up or down
+  past other lines to move it elsewhere in the note
+- Click a photo or video's grip to select the whole thing, then Backspace to delete it. It leaves
+  the note and the file goes to the bin, alongside your deleted notes and with the same 7-day
+  recovery net beneath it, so nothing is lost by a mis-hit key. You get asked first — the dialog
+  offers Cancel, which puts the picture straight back exactly where it was, and a pair of ticks,
+  "Always ask" and "Never ask again", so how much checking you want is your call. With the asking
+  off, a delete says "Moved to the bin" with an Undo beside it instead. Settings -> General ->
+  Photos and video turns the asking back on. Enter no longer means Delete in that dialog — it lands
+  on Cancel, so the key you press to make a box go away can't be the one that deletes a file
+- Restoring a photo or video puts it back INTO the note it came out of, at the spot it was — not
+  just back into your vault for you to find and re-add. It works from the bin and from the 7-day
+  recovery list alike, and if the note has changed so much that the spot is gone it lands at the
+  end and says so. Both lists now mark media with a "Media" tag and an information dot explaining
+  this, and restoring anything at all — note, folder or photo — offers a "Navigate" button to go
+  straight to where it landed, so you don't restore something and then have to hunt for it
+- Every row in the bin and in Settings -> Recovery gained a "Show me this file on my computer"
+  button. A deleted file physically waits inside `.mdnotes/`, which is a hidden folder on both Mac
+  and Windows — so "it's in the bin, nothing has left your disk" was true and completely
+  impossible to check for yourself
+- Restoring something onto a name that has been taken since puts it back with a suffix rather than
+  overwriting, which it always did — but it now says which name it actually used, and a restored
+  photo's markdown is re-pointed at that name instead of coming back as a broken picture
+- New eye button in the corner of a note: shows the code behind each photo and video, printed under
+  it, with the rest of the note left formatted. For answering "what file is this actually pointing
+  at" when a picture won't load or a file has been renamed underneath it. Separate from the
+  Markdown pro raw-view switch, and remembered per note
+- Fixed a successful import reporting itself as "Import failed" when the app hit a problem opening
+  the new space afterwards. The notes were already safely on disk, but the message sent you back to
+  the setup screen and invited a retry that would have brought everything in twice
 
 ## [0.8.0] - 2026-08-09
 - Dragging a note out of a folder now works by dropping it on empty space in the sidebar, not just

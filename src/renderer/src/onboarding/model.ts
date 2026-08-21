@@ -8,15 +8,7 @@
 // created, a note written) aren't undone; re-running 'spaces' with the same
 // chip picked again just lands on "<name> (2)" rather than colliding.
 
-export type StepId =
-  | 'welcome'
-  | 'vault'
-  | 'import'
-  | 'spaces'
-  | 'write'
-  | 'diskProof'
-  | 'fonts'
-  | 'walkthrough'
+export type StepId = 'welcome' | 'vault' | 'import' | 'spaces' | 'write' | 'diskProof' | 'fonts'
 
 export const STEPS: readonly StepId[] = [
   'welcome',
@@ -25,8 +17,7 @@ export const STEPS: readonly StepId[] = [
   'spaces',
   'write',
   'diskProof',
-  'fonts',
-  'walkthrough'
+  'fonts'
 ]
 
 export function stepIndex(id: StepId): number {

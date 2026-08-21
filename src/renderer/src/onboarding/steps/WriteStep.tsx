@@ -5,6 +5,9 @@ import type { OnboardingStepProps } from '../Onboarding'
 
 // No note links exist yet at this point in onboarding, and nothing here opens
 // or creates one — the demo box is for the feel of live preview, not linking.
+// `notify` is a no-op for the same reason the rest are: onboarding owns the
+// whole screen, so App's notice strip isn't mounted to report into, and there
+// is nothing in this box that can fail anyway (no attachments, no file writes).
 const NO_LINK_HANDLERS: LinkHandlers = {
   open: () => {},
   create: () => {},
@@ -12,13 +15,20 @@ const NO_LINK_HANDLERS: LinkHandlers = {
   reveal: () => {},
   inspect: () => {},
   dragStart: () => {},
-  dragEnd: () => {}
+  dragEnd: () => {},
+  notify: () => {},
+  // No attachments can exist in the demo box, so nothing can ask to be deleted.
+  confirmMediaDelete: () => {}
 }
 
 interface Props extends OnboardingStepProps {
   spaceFolder: string
   text: string
   onTextChange: (text: string) => void
+  /** the path this step already saved to, if Continue has run once — stepping
+   *  Back into Write and continuing again must UPDATE that note, not leave it
+   *  behind and create a second one (see `commit` below) */
+  savedPath: string | null
   onSaved: (path: string) => void
 }
 
@@ -31,7 +41,14 @@ function titleFromFirstLine(text: string): string {
   return stripped || 'Untitled'
 }
 
-export function WriteStep({ spaceFolder, text, onTextChange, onSaved, onReady }: Props): React.JSX.Element {
+export function WriteStep({
+  spaceFolder,
+  text,
+  onTextChange,
+  savedPath,
+  onSaved,
+  onReady
+}: Props): React.JSX.Element {
   // onReady's `commit` closes over `text`, so it has to be rebuilt whenever
   // `text` changes — a ref alone would go stale the moment they stopped typing.
   useEffect(() => {
@@ -40,14 +57,21 @@ export function WriteStep({ spaceFolder, text, onTextChange, onSaved, onReady }:
       ready: typed,
       commit: typed
         ? async () => {
-            const path = await window.api.createNote(spaceFolder, titleFromFirstLine(text))
+            // Second and later commits write over the note this step already
+            // made. Creating a fresh one each time left the earlier file
+            // sitting in the vault as an orphan the user never asked for —
+            // reachable by going Back into Write, editing, and continuing.
+            // The FILENAME deliberately stays as first saved even if the first
+            // line has since changed: that's how the real app behaves too, a
+            // note is renamed by renaming it, not by editing its heading.
+            const path = savedPath ?? (await window.api.createNote(spaceFolder, titleFromFirstLine(text)))
             await window.api.writeNote(path, text)
             onSaved(path)
           }
         : undefined
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text, spaceFolder])
+  }, [text, spaceFolder, savedPath])
 
   const hasHeading = /^#{1,6}\s+/m.test(text)
   const editorRef = useRef(null)

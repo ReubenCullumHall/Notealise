@@ -447,6 +447,23 @@ every session — see the table in **Folder structure** above for the full list.
   This is what made the settings modal open as an unclickable side panel. **Any full-window overlay
   must `createPortal` to `document.body`** (see `settings/Settings.tsx`). Legacy dodges it by
   rendering `SettingsPanel` at the App root instead — either is fine, in-place is not.
+- **`.fade-in`'s `animation-fill-mode: both` leaves a permanent, invisible `transform` on its
+  element — and any `transform` makes that element a new stacking context.** `.fade-in` animates
+  `opacity` AND `transform: translate3d(...)`, `both`-filled so the element holds its start state
+  before the animation and its end state after. The end state is `translate3d(0,0,0)` — a visual
+  no-op, but the CSS engine doesn't know that; the element permanently qualifies as
+  transform-having, indistinguishable from one that transforms for real. A stacking context traps
+  the z-index of everything positioned inside it: a descendant's `z-index: 40` only wins against
+  siblings *within that same trapped context* — compared against a LATER page section outside it
+  (which has no competing transform of its own), the whole trapped subtree loses regardless of how
+  high the z-index inside it goes, because the trap itself carries no z-index of its own. Found
+  2026-08-21: the preset library's "Use on…" dropdown sat inside the "Saved presets" `Disclosure`'s
+  `.fade-in`-classed content wrapper, and its `z-40` kept losing to the Theme cards section
+  rendered after it — see `docs/feature-tabs-spaces.md`'s presets section for the fix (portal to
+  `document.body`, position from `getBoundingClientRect()`, same pattern as `HoverCard.tsx`).
+  **Any absolutely-positioned dropdown living inside a `.fade-in`-classed ancestor, that needs to
+  visually cover a LATER sibling outside that ancestor, will hit this.** Raising its z-index cannot
+  fix it — only escaping the ancestor (portal) can.
 - **A vault inside OneDrive (or Dropbox/iCloud) breaks a bare `fs.rename`.** The sync client
   briefly holds a handle on the file, so the atomic write's final rename fails with `EPERM`
   (also seen: `EACCES`, `EBUSY`) and the user's edit is lost. Every rename in `vault.ts` and

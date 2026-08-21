@@ -272,10 +272,25 @@ defaults. The library is the fix. `shared/presets.ts` · `main/presets.ts` · `s
   `presets.test.ts` pins that the five groups cover `SpaceLook` **exactly once each** — a field in
   no group could never be copied by any combination of ticks, and a field in two couldn't be
   excluded. Adding a key to `Space` fails that test rather than silently going missing.
-- **Deleting a space offers to take its preset with it** — a tick box that appears only once the
-  two-step delete is armed, and only when there is one, unticked by default. The library outliving a
-  folder is the point of it, so throwing a look away has to be asked for. The preset is removed only
-  after the folder actually went.
+- **Deleting a space takes its preset with it, by default** (reversed 2026-08-21; was the opposite
+  — see below). A prompt appears only once the two-step delete is armed, and only when there is
+  one: **"Save the preset before deleting?"**, one click to opt OUT of the default and keep it in
+  the library. The preset is removed only after the folder actually went.
+  **Why reversed:** the original design (tick a box to ALSO delete the preset, unticked by default)
+  read as "the library outliving a folder is the point of it" — true in the abstract, wrong in
+  practice. Ten test spaces created and deleted for onboarding cap-testing (2026-08-21) left ten
+  stranded, never-reused presets cluttering the library, because deleting without remembering to
+  tick a box is the path of least resistance. Orphaned-by-default was the actual bug; the tick box
+  just made it opt-in-to-avoid instead of opt-in-to-cause.
+- **The "Use on…" menu is portalled to `document.body`**, positioned from the row's own
+  `getBoundingClientRect()` rather than CSS-anchored inside the row (fixed 2026-08-21). The
+  "Saved presets" `Disclosure`'s own content wrapper carries `.fade-in`, whose
+  `animation-fill-mode: both` leaves a permanent (invisible) `transform` on it even after the
+  animation ends — and any `transform` makes its element a stacking context. That trapped the
+  popover's z-index inside the Disclosure's own layer, so it lost to the Theme cards section
+  below regardless of how high the z-index was set from inside. See the general version of this
+  trap in `CLAUDE.md`'s Gotchas — it can recur anywhere an absolutely-positioned dropdown sits
+  behind a `.fade-in` ancestor and needs to cover a LATER sibling outside it.
 - **Presets are shareable files** (`.mdpreset`, JSON inside, `{kind, version, presets: []}`): export
   one from its row, or the whole library, and import by picker **or by dropping the file on the
   library**. One file shape covers both, because it always holds a list — so import never has to

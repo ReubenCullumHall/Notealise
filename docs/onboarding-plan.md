@@ -1,23 +1,32 @@
 # First-run onboarding
 
-> ## Status: BUILT (2026-08-17) — and the spec below is no longer what shipped
+> ## Status: BUILT (2026-08-17), reshaped again 2026-08-20/21 — and the spec below is no longer what shipped
 >
 > **The running code is `src/renderer/src/onboarding/` — read that, not the screen-by-screen
 > section here, for what the flow actually does.** The spec is kept in full because its
-> *reasoning* is still the best record of why each screen exists; four of its rulings were
+> *reasoning* is still the best record of why each screen exists; several of its rulings were
 > deliberately overturned during the build, and it has not been rewritten to match:
 >
 > | The spec says | What shipped | Why |
 > |---|---|---|
-> | Five screens | **Eight**: Welcome → Vault → Import → Spaces → Write → Disk proof → Fonts → Walkthrough (Welcome and Walkthrough are orientation-only, the two deliberate exceptions to "every step leaves an artefact") | 2026-08-17 blueprint round with Reuben |
-> | **Not skippable** | Import's Continue is live from the moment it mounts | Starting fresh with nothing to import is a normal first run, not a step to force someone through |
-> | **No theme picker** (4B.20) — final screen points at Settings | A real **font** picker (the Fonts screen), offering the four bundled faces + App default | Ruling reversed 2026-08-17. Its other half — an accent-colour picker — is **still not built** |
-> | "Start writing" ends the flow on Disk proof | Moved to Walkthrough, now the last screen | Disk proof stopped being the end when two screens were added after it |
+> | Five screens | **Seven**: Welcome → Vault → Import → Spaces → Write → Disk proof → Fonts (Welcome is orientation-only, the one deliberate exception to "every step leaves an artefact") | 2026-08-17 blueprint round with Reuben; the eighth screen, Walkthrough, was cut 2026-08-20 — see below |
+> | **Not skippable** | Import's Continue is live from the moment it mounts; its Skip link advances immediately, with no confirmation screen | Starting fresh with nothing to import is a normal first run, not a step to force someone through, and asking "are you sure you don't want to import" on Skip was friction nobody asked for (removed 2026-08-20) |
+> | **No theme picker** (4B.20) — final screen points at Settings | A real **font** picker AND an **accent-colour picker**, both on the Fonts screen | Font picker shipped 2026-08-17; the accent picker (11 swatches, reusing `ACCENTS`) shipped 2026-08-20, completing the ruling reversal |
+> | "Start writing" ends the flow on Disk proof | **Ends on Fonts** ("Start writing" is that screen's Continue label) — Walkthrough (the closing screen with three bullet points) was cut entirely 2026-08-20 | Its content is now the seeded welcome notes themselves (below), which a screen of prose was always a weaker version of. Finishing now plays a whole-overlay dismiss/hand-off fade (`onboarding-dismiss`, 320ms) so the app shell is already showing its finished state — welcome note open, sidebar populated — by the time the fade reveals it, rather than fading to blank then popping |
+> | Standard 260ms slide between steps | A **crossfade** (`onboarding-fade-in`/`-out`, direction-agnostic) | Simplified 2026-08-21 at Reuben's explicit request after trying the slide live — "no slide" |
 >
-> Also still outstanding from the spec: the **five curated welcome notes** (nothing is seeded yet),
-> the **per-format organise popup** (one generic message is used for every import format), and
-> **resuming at the exact step** after a quit (relaunch restarts at Welcome; Vault auto-skips if a
-> folder was already chosen).
+> **Now built, previously outstanding:** the five curated welcome notes ARE seeded automatically on
+> finish (`onboarding/welcomeNotes.ts`) — only when nothing was imported; an import opens the
+> imported note instead and skips seeding. **Resuming at the exact step** after a quit is built
+> (`onboardingStep` in `userData/config.json`, validated against the current `STEPS` array on boot
+> so a removed step id like the old `'walkthrough'` falls back to `'welcome'` safely).
+>
+> **Still outstanding from the spec:** the **per-format organise popup** (one generic message is
+> used for every import format, not the per-source table in Step 2 below).
+>
+> **Small polish since:** the Spaces step's chip cap (10) now flashes an explanation
+> ("That's as many as you can start with here — ten...") instead of silently doing nothing when
+> you try an 11th (2026-08-21).
 
 Status of the spec text below: **as written 2026-08-14, superseded in the four rows above.** It is
 copied verbatim from
@@ -363,3 +372,45 @@ The download-site install-guide page (explaining Windows/Mac unsigned-app securi
 *before* the app is even installed) is a separate concern by Reuben's explicit call — different
 moments (pre-download marketing site vs. post-launch in-app) with different constraints. Don't
 merge messaging or design work between the two without asking.
+
+## Fixes from the 2026-08-20 review
+
+The flow as built, reviewed end to end. All of it pre-ship, so none reached a user.
+
+**One synchronous lock, not two pieces of React state.** Continue was guarded by `busy` and
+`exiting`; Back checked only `exiting`. Both are state, so both only reach the closure — and the
+button's `disabled` — on the *next* render. Two consequences: a fast double-click on Continue ran
+`commit()` twice from the same stale render (and every commit here is a filesystem write, so that
+is a duplicate note, not a harmless no-op), and a Back click during a slow commit navigated
+immediately only for the still-running `onContinue` to `goTo(next)` over the top of it, throwing
+the user forward again. Both now go through one `navLock` **ref**, taken by `onContinue` and by
+`goTo` (held across the exit animation, released by `swap`). `busy` stays, purely for what it
+renders. **A guard that has to hold within a single tick cannot be state.**
+
+**Write's commit updates its note instead of making another.** Reaching a later step, going Back to
+Write, editing and continuing created a second file and left the first in the vault as an orphan.
+It now writes to the path it already saved to. The FILENAME deliberately stays as first saved even
+if the first line changed — that is how the real app behaves, where a note is renamed by renaming
+it, not by editing its heading.
+
+**"Import failed" for something that was not the import.** `ImportStep` hangs its own
+`createNote`/`writeNote` off `ImportPanel`'s `onOpenSpace`, which ran inside the same try/catch as
+the import itself — so a failure there rewound to the setup screen saying "Import failed", with the
+notes already on disk, inviting a retry that would duplicate them. `ImportPanel` now separates the
+two: the import's own catch, and a second one after `setStage('done')` whose message says plainly
+that the notes are safe. This one is worth remembering because **the import path is shipped** and
+the same shape had been there all along.
+
+**The dev reset hook no longer repoints your real vault.** `resetOnboardingTestVault` called
+`saveVault(dir)` with the throwaway temp folder, overwriting `userData/config.json`'s record of
+which vault to reopen, with no backup. Notes were never at risk; the bookkeeping was. It now calls
+`activateVault` only — which is all the renderer's reload needs, since `App.tsx` boots from the
+in-process `getVault()` rather than from config.
+
+**Two races at the onboarding→app handoff.** `syncSpaces`' identity depended on `hasOnboarded`,
+while the boot effect depended on `syncSpaces` *and* was what called `setHasOnboarded` — so
+answering the flag re-ran the entire boot sequence mid-flight, loading tree, workspace and settings
+twice, with the second run's session restore free to overwrite a note opened in the gap. It reads
+`hasOnboardedRef` now, set eagerly in the boot effect because `syncSpaces` is called later in that
+same pass. Separately, `finishOnboarding` switched to the imported note's space without checking
+`settings.spaces` had reconciled it — the guard `openLink` already had, now shared as `enterSpace`.

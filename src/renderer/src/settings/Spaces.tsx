@@ -12,6 +12,7 @@ import {
 import { ACCENT_MODES, ACCENTS, DENSITIES, EDITOR_WIDTHS, resolveTheme, TEXT_TONES, THEMES } from './model'
 import { Icon } from '../icons'
 import { SettingRow, ToggleRow } from './primitives'
+import { useArmed } from './useArmed'
 import { ActionGrid, SlotFace } from '../editor/SlotPicker'
 import { SpaceForm } from './SpaceForm'
 import type { FontLibrary } from './useInstalledFonts'
@@ -173,7 +174,7 @@ export function Spaces({
     (p) => p.name === space.folder && !!vault && p.origin === vaultName(vault)
   )
 
-  const deleteSpace = async (alsoPreset: boolean): Promise<void> => {
+  const deleteSpace = async (keepPreset: boolean): Promise<void> => {
     if (!space.folder) return
     setBusy(true)
     try {
@@ -184,8 +185,9 @@ export function Spaces({
       if (ok) {
         onChange(withoutSpace(settings, space.folder))
         // Only after the folder actually went: a refused delete must not take
-        // the saved look with it.
-        if (alsoPreset && ownPreset) presetActions.onDelete(ownPreset.id)
+        // the saved look with it. Deleted by default — see DeleteSpace below
+        // for why keepPreset exists to opt OUT of that.
+        if (!keepPreset && ownPreset) presetActions.onDelete(ownPreset.id)
       }
     } finally {
       setBusy(false)
@@ -348,7 +350,7 @@ export function Spaces({
           <p className="flex-1 text-[11.5px] leading-relaxed text-ink-400">
             Deleting a space sends its folder — and every note in it — to your computer&apos;s
             Recycle Bin, not this app&apos;s own bin. Recover it from there if you need to.
-            {ownPreset && ' Its saved look is kept unless you say otherwise.'}
+            {ownPreset && ' Its saved look goes with it, unless you save it first.'}
           </p>
           <DeleteSpace
             disabled={busy}
@@ -483,13 +485,19 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
 }
 
 /** Two-step rather than a confirm dialog: there's no confirm primitive in the
- *  app, and window.confirm blocks the Electron renderer and looks foreign.
+ *  app, and window.confirm blocks the Electron renderer and looks foreign. The
+ *  arm/disarm timer itself is `useArmed` in primitives.tsx, shared with
+ *  Recovery.tsx's own destructive button — it used to be the same 5000ms
+ *  written out in both files.
  *
- *  The "and its saved look" tick appears only once armed, and only when there IS
- *  one — a permanently visible checkbox would put a second decision in front of
- *  a button most people press without wanting either. Unticked by default: the
- *  library outliving a folder is the whole point of it, so throwing a look away
- *  has to be the thing you asked for. */
+ *  A space's saved look goes with it by default — leaving it behind is what
+ *  produced ten stranded presets in the library after ten test spaces were
+ *  created and deleted for onboarding testing (2026-08-21). "Save the preset
+ *  before deleting?" is the one chance to opt OUT of that, and it only shows
+ *  once armed and only when there IS a look to lose — a permanently visible
+ *  prompt would put a second decision in front of a button most people press
+ *  without wanting either. It is the caller-owned extra state `useArmed`'s
+ *  `reset` exists for, so a disarm clears it too. */
 function DeleteSpace({
   disabled,
   hasPreset,
@@ -497,43 +505,42 @@ function DeleteSpace({
 }: {
   disabled?: boolean
   hasPreset: boolean
-  onDelete: (alsoPreset: boolean) => void
+  onDelete: (keepPreset: boolean) => void
 }): React.JSX.Element {
-  const [armed, setArmed] = useState(false)
-  const [alsoPreset, setAlsoPreset] = useState(false)
-  useEffect(() => {
-    if (!armed) return
-    const t = setTimeout(() => {
-      setArmed(false)
-      setAlsoPreset(false)
-    }, 5000)
-    return () => clearTimeout(t)
-  }, [armed])
+  const [keepPreset, setKeepPreset] = useState(false)
+  const { armed, press } = useArmed(() => setKeepPreset(false))
   return (
     <span className="flex shrink-0 items-center gap-2">
       {armed && hasPreset && (
         <button
-          role="checkbox"
-          aria-checked={alsoPreset}
-          onClick={() => setAlsoPreset((v) => !v)}
-          className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[11.5px] text-ink-500 outline-none transition duration-150 hover:bg-brand-500/8 focus-visible:ring-2 focus-visible:ring-brand-300"
+          type="button"
+          disabled={keepPreset}
+          onClick={() => setKeepPreset(true)}
+          className={
+            'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-[11.5px] outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+            (keepPreset
+              ? 'text-brand-600'
+              : 'text-ink-500 hover:bg-brand-500/8 hover:text-ink-700')
+          }
         >
-          <span
-            aria-hidden="true"
-            className={
-              'flex h-3.5 w-3.5 items-center justify-center rounded-[4px] border ' +
-              (alsoPreset ? 'border-brand-400 bg-brand-500/25 text-brand-600' : 'border-ink-300/50')
-            }
-          >
-            {alsoPreset && <Icon name="check" className="h-3 w-3" />}
-          </span>
-          and its saved look
+          {keepPreset ? (
+            <>
+              <Icon name="check" className="h-3.5 w-3.5" />
+              Will be kept
+            </>
+          ) : (
+            'Save the preset before deleting?'
+          )}
         </button>
       )}
       <button
         disabled={disabled}
         className={'mini shrink-0' + (armed ? ' danger' : '')}
-        onClick={() => (armed ? onDelete(alsoPreset) : setArmed(true))}
+        onClick={() => {
+          // Read the flag BEFORE press(), which disarms and so clears it.
+          const keep = keepPreset
+          if (press()) onDelete(keep)
+        }}
       >
         {armed ? 'Click again to delete' : 'Delete space'}
       </button>
