@@ -75,12 +75,19 @@ interface Props {
   onOpenSpace: (folder: string) => Promise<void>
   /** Close the Settings window, so the imported space is actually on screen. */
   onClose: () => void
+  /** 'settings': this panel's own "Import complete" screen (with "Show me the
+   *  notes" / "Import something else") is the end of the story.
+   *  'onboarding': ImportStep re-narrates that outcome itself the instant
+   *  `onOpenSpace` resolves, so this panel's own version of that screen would
+   *  only ever flash past unread — see the 'done' stage below. */
+  variant: 'settings' | 'onboarding'
 }
 
-/** Lands in Settings — see Settings.tsx's "import" section. A format dropdown,
+/** Lands in Settings — see Settings.tsx's "import" section — or embedded in
+ *  onboarding's Import step (`variant` tells it which). A format dropdown,
  *  a source picker, an output-folder name, and an Import button; every run
  *  lands in one new space, never merged into existing notes. */
-export function ImportPanel({ onOpenSpace, onClose }: Props): React.JSX.Element {
+export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX.Element {
   const [format, setFormat] = useState<ImportFormat>('notion')
   const [paths, setPaths] = useState<string[]>([])
   const [spaceName, setSpaceName] = useState(FORMATS[0].defaultSpaceName)
@@ -89,6 +96,10 @@ export function ImportPanel({ onOpenSpace, onClose }: Props): React.JSX.Element 
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [error, setError] = useState('')
+  // Separate from `error` on purpose: this one is shown on the "Import
+  // complete" screen and never rewinds the stage, because it can only ever
+  // describe something that went wrong AFTER the notes were safely written.
+  const [afterNotice, setAfterNotice] = useState('')
   // Stopping is a request, not an instant: the run halts at the next note.
   const [stopping, setStopping] = useState(false)
 
@@ -135,21 +146,39 @@ export function ImportPanel({ onOpenSpace, onClose }: Props): React.JSX.Element 
   const run = async (): Promise<void> => {
     setStage('running')
     setError('')
+    setAfterNotice('')
     setStopping(false)
     const unsubscribe = window.api.onImportProgress(setProgress)
+    let imported: ImportResult
     try {
-      const r = await window.api.importRun(format, paths, spaceName.trim() || current.defaultSpaceName)
-      setResult(r)
-      setStage('done')
-      // Show what was just imported. Everything the importer wrote is
-      // echo-guarded, so the sidebar has no idea any of it happened until the
-      // tree is reloaded and the new folder registered as a space.
-      await onOpenSpace(r.spaceFolder)
+      imported = await window.api.importRun(format, paths, spaceName.trim() || current.defaultSpaceName)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Import failed')
       setStage('setup')
+      return
     } finally {
       unsubscribe()
+    }
+    setResult(imported)
+    setStage('done')
+
+    // Deliberately OUTSIDE the try above, with its own message. Everything past
+    // this line runs after the notes are already written to disk, so a failure
+    // here is not an import failure — and reporting it as one (which is what
+    // happened while this sat inside the same catch) pushes the user back to
+    // the setup screen and invites a retry that duplicates content that already
+    // landed. Onboarding's ImportStep hangs its own createNote/writeNote off
+    // this same callback, so it is covered by this too.
+    try {
+      // Show what was just imported. Everything the importer wrote is
+      // echo-guarded, so the sidebar has no idea any of it happened until the
+      // tree is reloaded and the new folder registered as a space.
+      await onOpenSpace(imported.spaceFolder)
+    } catch (e) {
+      console.error('import finished but opening the new space failed', e)
+      setAfterNotice(
+        'Your notes were imported and are safely on disk. Opening the new space didn’t work — restart the app and it’ll be there.'
+      )
     }
   }
 
@@ -160,9 +189,39 @@ export function ImportPanel({ onOpenSpace, onClose }: Props): React.JSX.Element 
     setResult(null)
     setProgress(null)
     setError('')
+    setAfterNotice('')
   }
 
   if (stage === 'done' && result) {
+    // Onboarding: held here only for however long `onOpenSpace` (passed in
+    // from ImportStep, which also seeds the organise note through it) takes
+    // to resolve — ImportStep swaps to its own "Notes brought in" screen the
+    // instant that finishes. Rendering the settings-variant screen below in
+    // the meantime used to flash it, and its two buttons, past the user
+    // unclickably before that swap could happen. `afterNotice` is the one
+    // exception: if the hand-off itself failed, that swap never happens, so
+    // this has to show the recovery message rather than spin forever — the
+    // user can still move on with the shared Continue button regardless,
+    // since ImportStep's readiness was never gated on this succeeding.
+    if (variant === 'onboarding') {
+      if (afterNotice) {
+        return (
+          <>
+            <h3 className="font-display text-[15px] font-semibold text-ink-900">Import complete</h3>
+            <p className="mt-2 text-[13px] leading-relaxed text-[#e5484d]">{afterNotice}</p>
+          </>
+        )
+      }
+      return (
+        <>
+          <h3 className="font-display text-[15px] font-semibold text-ink-900">Importing…</h3>
+          <p className="mt-2 text-[13px] text-ink-600">Finishing up…</p>
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-brand-500/12">
+            <div className="h-full w-full bg-brand-500" />
+          </div>
+        </>
+      )
+    }
     return (
       <>
         <h3 className="font-display text-[15px] font-semibold text-ink-900">
@@ -179,6 +238,7 @@ export function ImportPanel({ onOpenSpace, onClose }: Props): React.JSX.Element 
             the Import Report note in that space for details.
           </p>
         )}
+        {afterNotice && <p className="mt-2 text-[12px] leading-relaxed text-[#e5484d]">{afterNotice}</p>}
         <div className="mt-4 flex items-center gap-2">
           <button className="mini" onClick={onClose}>
             Show me the notes

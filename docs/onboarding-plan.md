@@ -26,7 +26,10 @@
 >
 > **Small polish since:** the Spaces step's chip cap (10) now flashes an explanation
 > ("That's as many as you can start with here — ten...") instead of silently doing nothing when
-> you try an 11th (2026-08-21).
+> you try an 11th (2026-08-21). The Vault step's button now reads "Pick a folder for your notes"
+> instead of "Choose a folder" (2026-08-22). The Fonts screen no longer repeats a "Thursday…" text
+> sample below the font cards — each card's own one-word preview was judged enough on its own
+> (2026-08-22). Import's screen-flash bug is fixed — see "Fixes from the 2026-08-22 review" below.
 
 Status of the spec text below: **as written 2026-08-14, superseded in the four rows above.** It is
 copied verbatim from
@@ -414,3 +417,24 @@ twice, with the second run's session restore free to overwrite a note opened in 
 `hasOnboardedRef` now, set eagerly in the boot effect because `syncSpaces` is called later in that
 same pass. Separately, `finishOnboarding` switched to the imported note's space without checking
 `settings.spaces` had reconciled it — the guard `openLink` already had, now shared as `enterSpace`.
+
+## Fixes from the 2026-08-22 review
+
+**Import's own "complete" screen used to flash past unread.** `ImportPanel` is shared between
+Settings (a standalone modal) and onboarding's Import step — but only Settings actually needs
+`ImportPanel`'s own "Import complete" screen (with "Show me the notes" / "Import something else")
+as the end of the story. In onboarding, `ImportStep` ALSO reacts to the same completion signal
+(`onOpenSpace` resolving) by swapping its own content to a "Notes brought in" screen — so
+`ImportPanel`'s "Import complete" screen rendered for a moment, then got yanked out from under the
+user the instant `onOpenSpace` resolved, before there was any real chance to read it or click
+either of its buttons. Fixed with a `variant: 'settings' | 'onboarding'` prop: in the onboarding
+variant, the 'done' stage renders a "Finishing up…" progress state instead (covering the same
+brief gap with nothing to click prematurely), except when the hand-off itself failed
+(`afterNotice` set), where it shows the recovery message instead of spinning forever — the user
+can still move on via the shared Continue button regardless, since `ImportStep`'s readiness was
+never gated on this succeeding in the first place.
+**The lesson:** a component embedded in two places, each of which reacts independently to the same
+completion event, can have its own terminal-state UI raced out from under it by the OUTER
+context's reaction to that same event — worth checking for whenever a component built for one
+embedding (a modal that only closes on explicit user action) gets reused inside another that
+auto-advances on its own.

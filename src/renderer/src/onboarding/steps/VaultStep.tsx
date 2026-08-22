@@ -81,7 +81,7 @@ export function VaultStep({ vault, onPickVault, onReady }: Props): React.JSX.Ele
             onClick={() => void choose()}
             className="rounded-full bg-brand-600 px-5 py-2 text-[13px] font-medium text-paper transition duration-150 hover:bg-brand-700 disabled:opacity-50"
           >
-            {picking ? 'Choosing…' : 'Choose a folder'}
+            {picking ? 'Choosing…' : 'Pick a folder for your notes'}
           </button>
         )}
       </div>

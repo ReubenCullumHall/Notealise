@@ -25,7 +25,10 @@ enough for a solo project). History before this file existed lives in the `v*` g
   request-a-feature, and hands off into the app with a short fade rather than ending on a separate
   closing screen. Quitting partway through and reopening resumes at the exact step you left.
   Settings -> General -> Developer can replay it. Picking an 11th space at the Spaces step (the cap
-  is 10) now says so instead of silently doing nothing
+  is 10) now says so instead of silently doing nothing. The Import step no longer flashes its own
+  "Import complete" screen before auto-advancing to "Notes brought in" — that screen and its
+  buttons used to disappear before there was any real chance to read or click them. The font-picker
+  screen no longer repeats a text sample under the cards; each card's own preview is enough
 - New setting, Settings -> Spaces or Customisation -> Fonts: pick a typeface for a space's
   interface (sidebar, settings, buttons) and separately for its notes (body, headings, title), plus
   a dyslexia-friendly override for just a note's body text. Four fonts ship with the app (Inter,
@@ -77,6 +80,14 @@ enough for a solo project). History before this file existed lives in the `v*` g
   end and says so. Both lists now mark media with a "Media" tag and an information dot explaining
   this, and restoring anything at all — note, folder or photo — offers a "Navigate" button to go
   straight to where it landed, so you don't restore something and then have to hunt for it
+- The app can no longer show you a blank white window. A crash anywhere in the interface used to
+  unmount everything, leaving an empty window with no message and no way back — now it says what
+  broke, says plainly that your notes are safe files on your disk, and offers a Reload button
+- The app now keeps track of which notes hold which photos and videos, rather than only knowing
+  what one note's text happened to say. The first thing it buys: deleting a photo that a second
+  note also shows now says so — "It's also in Packing list, which will lose its picture" — instead
+  of quietly breaking the other note. It's built from the same scan the backlinks already use, so
+  it costs no extra reading of your vault, and it updates as you type
 - Every row in the bin and in Settings -> Recovery gained a "Show me this file on my computer"
   button. A deleted file physically waits inside `.mdnotes/`, which is a hidden folder on both Mac
   and Windows — so "it's in the bin, nothing has left your disk" was true and completely

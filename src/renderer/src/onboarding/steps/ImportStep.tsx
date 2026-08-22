@@ -74,6 +74,7 @@ export function ImportStep({ onOpenSpace, onImported, onReady, onAdvance }: Prop
             setImportedFolder(folder)
           }}
           onClose={() => {}}
+          variant="onboarding"
         />
       </div>
       <button

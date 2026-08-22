@@ -101,9 +101,6 @@ export function FontsStep({ theme, value, onPick, accent, onPickAccent, onReady 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const picked = CHOICES.find((f) => f.id === value) ?? null
-  const specimen = picked ? { fontFamily: fontCssValue(picked) } : undefined
-
   return (
     <div className="flex flex-col items-center gap-6 text-center">
       <div>
@@ -122,18 +119,6 @@ export function FontsStep({ theme, value, onPick, accent, onPickAccent, onReady 
         {CHOICES.map((f) => (
           <FontCard key={f.id} font={f} on={value === f.id} onClick={() => onPick(f.id)} />
         ))}
-      </div>
-
-      {/* Rendered in the picked face rather than described in it — the card
-          preview is one word, which isn't enough to judge a font to read in. */}
-      <div className="w-full max-w-[460px] rounded-xl bg-surface/60 px-5 py-4 text-left ring-1 ring-ink-300/20">
-        <p className="text-[15px] font-semibold text-ink-800" style={specimen}>
-          Thursday
-        </p>
-        <p className="mt-1 text-[13.5px] leading-relaxed text-ink-600" style={specimen}>
-          Handwriting is slower than typing, and that turns out to be the point — you can only write
-          down what you have already understood.
-        </p>
       </div>
 
       <p className="max-w-[420px] text-[12px] leading-relaxed text-ink-400">
