@@ -135,6 +135,31 @@ function findTables(state: EditorState): FoundTable[] {
   return out
 }
 
+/** The six-dot grip glyph used on every drag handle in the editor — the
+ *  column handle below, and (imported from here) the image/video move handle
+ *  in attachMove.ts. Kept in one place so both draw the same dots. */
+export function gripIcon(): SVGSVGElement {
+  const NS = 'http://www.w3.org/2000/svg'
+  const svg = document.createElementNS(NS, 'svg')
+  svg.setAttribute('viewBox', '0 0 24 24')
+  svg.setAttribute('width', '11')
+  svg.setAttribute('height', '11')
+  const g = document.createElementNS(NS, 'g')
+  g.setAttribute('fill', 'currentColor')
+  for (const [cx, cy] of [
+    [9, 6], [9, 12], [9, 18],
+    [15, 6], [15, 12], [15, 18]
+  ] as const) {
+    const c = document.createElementNS(NS, 'circle')
+    c.setAttribute('cx', String(cx))
+    c.setAttribute('cy', String(cy))
+    c.setAttribute('r', '1.6')
+    g.appendChild(c)
+  }
+  svg.appendChild(g)
+  return svg
+}
+
 class TableWidget extends WidgetType {
   /** Set inside `toDOM`; disconnects the `ResizeObserver` that keeps the
    *  column-handle/alignment overlays lined up with their header cells. */
@@ -481,27 +506,6 @@ class TableWidget extends WidgetType {
       }
     }
 
-    const gripIcon = (): SVGSVGElement => {
-      const NS = 'http://www.w3.org/2000/svg'
-      const svg = document.createElementNS(NS, 'svg')
-      svg.setAttribute('viewBox', '0 0 24 24')
-      svg.setAttribute('width', '11')
-      svg.setAttribute('height', '11')
-      const g = document.createElementNS(NS, 'g')
-      g.setAttribute('fill', 'currentColor')
-      for (const [cx, cy] of [
-        [9, 6], [9, 12], [9, 18],
-        [15, 6], [15, 12], [15, 18]
-      ] as const) {
-        const c = document.createElementNS(NS, 'circle')
-        c.setAttribute('cx', String(cx))
-        c.setAttribute('cy', String(cy))
-        c.setAttribute('r', '1.6')
-        g.appendChild(c)
-      }
-      svg.appendChild(g)
-      return svg
-    }
 
     const columnHandle = (i: number): HTMLElement => {
       const btn = document.createElement('button')

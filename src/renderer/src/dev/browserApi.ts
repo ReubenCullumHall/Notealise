@@ -16,6 +16,7 @@
  */
 import type { TreeNode, VaultApi, VaultChange } from '../../../shared/types'
 import { indexLinks, stripMd } from '../../../shared/links'
+import { indexEmbeds } from '../../../shared/attachments'
 import { normalizeSettings, type AppSettings } from '../../../shared/settings'
 import { findFont, type InstalledFont } from '../../../shared/fonts'
 import {
@@ -169,6 +170,14 @@ const api: VaultApi = {
   readAsset: async () => {
     throw new Error('No file access in browser preview')
   },
+  // Same honest answer as readAsset: paste/drop/attach have nowhere to write
+  // outside Electron, so the preview can't demonstrate this feature at all.
+  writeAsset: async () => {
+    throw new Error('No file access in browser preview')
+  },
+  pickAttachment: async () => {
+    throw new Error('No file access in browser preview')
+  },
   writeNote: async (path, content) => {
     store.files[path] = content
     save()
@@ -181,7 +190,11 @@ const api: VaultApi = {
   },
   scanLinks: async (paths) => {
     const list = paths ? paths.filter((p) => p in store.files) : Object.keys(store.files)
-    return list.map((path) => ({ path, links: indexLinks(store.files[path]) }))
+    return list.map((path) => ({
+      path,
+      links: indexLinks(store.files[path]),
+      embeds: indexEmbeds(store.files[path])
+    }))
   },
   createFolder: async (dirPath, name) => {
     const path = unique(dirPath, name || 'New folder')
@@ -278,7 +291,7 @@ const api: VaultApi = {
     save()
     return store.workspace
   },
-  trashEntries: async (paths) => {
+  trashEntries: async (paths, origins) => {
     const trash: TrashItem[] = [...store.workspace.trash]
     for (const path of paths) {
       const id = Math.random().toString(36).slice(2, 10)
@@ -296,7 +309,10 @@ const api: VaultApi = {
         name: nameOf(path),
         from: path,
         type: held.dirs.includes(path) ? 'dir' : 'file',
-        deletedAt: Date.now()
+        deletedAt: Date.now(),
+        // Mirrors main exactly (main/workspace.ts) — the preview has to carry
+        // this or the restore-into-the-note behaviour can't be looked at here.
+        ...(origins?.[path] ? { media: origins[path] } : {})
       })
     }
     store.workspace = { ...store.workspace, trash }
@@ -305,9 +321,12 @@ const api: VaultApi = {
     return store.workspace
   },
   restoreEntries: async (ids) => {
+    const landing: [string, string][] = []
     for (const id of ids) {
       const held = store.trashed[id]
       if (!held) continue
+      const from = store.workspace.trash.find((t) => t.id === id)?.from
+      if (from) landing.push([id, from])
       Object.assign(store.files, held.files)
       store.dirs.push(...held.dirs)
       delete store.trashed[id]
@@ -315,7 +334,10 @@ const api: VaultApi = {
     store.workspace = { ...store.workspace, trash: store.workspace.trash.filter((t) => !ids.includes(t.id)) }
     save()
     announce([])
-    return store.workspace
+    // The preview never collides on a name (a restore here writes straight back
+    // over the key), so `landed` is always the promised path. Main is the one
+    // that can suffix — see workspace.ts.
+    return { workspace: store.workspace, landed: Object.fromEntries(landing) }
   },
   purgeEntries: async (ids) => {
     const gone = ids ?? store.workspace.trash.map((t) => t.id)
@@ -327,7 +349,14 @@ const api: VaultApi = {
         store.recovered[item.id] = held
         delete store.trashed[item.id]
       }
-      recovery.unshift({ id: item.id, from: item.from, name: item.name, type: item.type, purgedAt: Date.now() })
+      recovery.unshift({
+        id: item.id,
+        from: item.from,
+        name: item.name,
+        type: item.type,
+        ...(item.media ? { media: item.media } : {}),
+        purgedAt: Date.now()
+      })
     }
     store.workspace = {
       ...store.workspace,
@@ -338,9 +367,12 @@ const api: VaultApi = {
     return store.workspace
   },
   restoreRecoveryEntries: async (ids) => {
+    const landing: [string, string][] = []
     for (const id of ids) {
       const held = store.recovered[id]
       if (!held) continue
+      const from = store.workspace.recovery.find((r) => r.id === id)?.from
+      if (from) landing.push([id, from])
       Object.assign(store.files, held.files)
       store.dirs.push(...held.dirs)
       delete store.recovered[id]
@@ -351,7 +383,7 @@ const api: VaultApi = {
     }
     save()
     announce([])
-    return store.workspace
+    return { workspace: store.workspace, landed: Object.fromEntries(landing) }
   },
   purgeRecoveryEntries: async (ids) => {
     const gone = ids ?? store.workspace.recovery.map((r) => r.id)
@@ -391,7 +423,12 @@ const api: VaultApi = {
   // (which needs both) is never worth showing here — always "already done".
   getOnboarded: async () => true,
   setOnboarded: async () => {},
+  getOnboardingStep: async () => null,
+  setOnboardingStep: async () => {},
   revealInFolder: async () => {},
+  // The preview IS the current build by definition — there is no second process
+  // to be out of step with.
+  bootInfo: async () => ({ startedAt: Date.now(), version: 'browser-preview' }),
   resetOnboardingTestVault: async () => 'browser-preview',
   importFormats: async () => [],
   importPickSource: async () => null,

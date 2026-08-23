@@ -100,6 +100,20 @@ button.primary:hover {
   background: rgb(var(--brand-700));
   border-color: rgb(var(--brand-700));
 }
+/* A full-size destructive button, for a confirm dialog's committing action.
+   The literal is the same #e5484d .menu-item.danger and .mini.danger already
+   use — one red for "this destroys something", wherever it appears. */
+button.danger {
+  background: #e5484d;
+  border-color: #e5484d;
+  color: #fff;
+  font-weight: 500;
+}
+button.danger:hover:not(:disabled) {
+  background: #cf3b40;
+  border-color: #cf3b40;
+}
+
 button.icon {
   padding: 2px 8px;
   line-height: 1;
@@ -276,25 +290,47 @@ button.icon:hover {
 .tree-row.drop-before::before { top: -1px; }
 .tree-row.drop-after::after { bottom: -1px; }
 
-/* onboarding step transitions — horizontal slide, matching the dots'
-   direction (docs/onboarding-plan.md's shared skeleton). Only the incoming
-   step animates in: each transition mounts a fresh step component rather
-   than keeping the outgoing one around to slide away too, so there's nothing
-   to key an "out" animation off. Onboarding.tsx skips the class entirely
-   when `animationsEnabled` is off, same switch every other transition here
-   already respects. */
-@keyframes onboarding-in-fwd {
-  from { opacity: 0; transform: translateX(28px); }
-  to { opacity: 1; transform: none; }
+/* onboarding step transitions — a plain crossfade (2026-08-21: replaced an
+   earlier horizontal slide, at Reuben's explicit request for something other
+   than the generic directional slide). Onboarding.tsx runs the two step-
+   change classes as two phases on the SAME wrapper element: the current
+   step gets `onboarding-fade-out` first (still the same mounted instance —
+   just a class swap, so it fades away exactly as it last looked, not a
+   remounted blank clone), then after that finishes the step swaps and
+   `onboarding-fade-in` plays for the new one. No direction to track any
+   more — a fade looks the same going forward or back, which is also why
+   this dropped the old fwd/back split entirely.
+   `onboarding-dismiss` is a separate, longer fade for a different moment:
+   the WHOLE overlay closing when onboarding finishes, so the hand-off into
+   the real app reads as one continuous reveal rather than a hard cut —
+   Onboarding.tsx does the actual finishing work (seeding the welcome notes,
+   opening one) BEFORE starting this fade, so what's revealed underneath is
+   already in its finished state, not a blank pane that pops a moment later.
+   All skipped when `animationsEnabled` is off, same switch every other
+   transition here already respects. */
+@keyframes onboarding-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-@keyframes onboarding-in-back {
-  from { opacity: 0; transform: translateX(-28px); }
-  to { opacity: 1; transform: none; }
+@keyframes onboarding-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
-.onboarding-in-fwd { animation: onboarding-in-fwd 260ms cubic-bezier(0.4, 0, 0.2, 1); }
-.onboarding-in-back { animation: onboarding-in-back 260ms cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes onboarding-dismiss {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+.onboarding-fade-in { animation: onboarding-fade-in 260ms ease-out; }
+/* 150ms, matching Onboarding.tsx's EXIT_MS — `forwards` holds the faded-out
+   end state for that whole window instead of snapping back to visible the
+   instant the animation completes, which is right before the swap to the
+   next step's fade-in class takes over. */
+.onboarding-fade-out { animation: onboarding-fade-out 150ms ease-in forwards; }
+/* Longer than a between-step fade on purpose — this is the one moment that
+   ends the whole flow, not one screen replacing another. */
+.onboarding-dismiss { animation: onboarding-dismiss 320ms ease-in forwards; }
 @media (prefers-reduced-motion: reduce) {
-  .onboarding-in-fwd, .onboarding-in-back { animation: none; }
+  .onboarding-fade-in, .onboarding-fade-out, .onboarding-dismiss { animation: none; }
 }
 
 /* --- entry colour ----------------------------------------------------------
@@ -1139,6 +1175,9 @@ button.icon:hover {
   left: 50%;
   bottom: 20px;
   transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
   max-width: 80%;
   padding: 8px 14px;
   border-radius: 8px;
@@ -1147,6 +1186,25 @@ button.icon:hover {
   color: rgb(var(--paper));
   box-shadow: var(--shadow-float);
   z-index: 200;
+}
+/* The way back out of something that happened without being asked about — see
+   Notice.action in App.tsx. Underlined text rather than a bordered button on
+   purpose: it sits INSIDE a solid coloured strip, where the base button's own
+   border and fill would read as a second surface floating on the first. */
+.notice-action {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.notice-action:hover {
+  background: none;
+  opacity: 0.82;
 }
 
 /* --- settings panel --- */
@@ -1194,6 +1252,90 @@ button.icon:hover {
 .genie-backdrop.closing { animation: fade-op-out 220ms cubic-bezier(0.5, 0, 1, 0.5) both; }
 @keyframes fade-op { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fade-op-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* --- the confirm dialog (Delete media?) -----------------------------------
+   Same motion FAMILY as the settings genie — its exact easing curves and the
+   same fade-op backdrop — but a gentler scale. The genie squashes from
+   scale(0.16, 0.28) because it is flying out of the gear icon it was opened
+   from; this dialog has no anchor to fly from, and that much squash on a box
+   this size reads as a glitch rather than a gesture. It needs no `animationsEnabled`
+   check of its own: `:root[data-motion='off']` below collapses every animation
+   in the app, and the near-zero duration it uses keeps `animationend` firing,
+   which is what unmounts this on close. */
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgb(var(--paper) / 0.5);
+  backdrop-filter: blur(5px);
+  animation: fade-op 200ms cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+.confirm-backdrop.closing {
+  animation: fade-op-out 140ms cubic-bezier(0.5, 0, 1, 0.5) both;
+}
+/* .prompt already sets transform: translate(-50%, -50%), so every keyframe here
+   has to restate it — a transform in a keyframe replaces the static one whole. */
+/* Wider than the base .prompt's 320. Two full-width buttons side by side need
+   the room to stop reading as cramped, and the body line then sits as a
+   sentence instead of wrapping mid-clause. Scoped to .confirm, so the rename
+   prompt — one input and two small right-aligned buttons — keeps the narrower
+   box that suits it. */
+.confirm {
+  width: 366px;
+  animation: confirm-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.confirm.closing {
+  animation: confirm-out 140ms cubic-bezier(0.5, 0, 0.85, 0.35) both;
+}
+@keyframes confirm-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 6px)) scale(0.94); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes confirm-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
+}
+/* Full-width actions, scoped to .confirm — NOT to .prompt-actions generally,
+   which the rename prompt also uses and where right-aligned Cancel/OK is right.
+   Here the two buttons ARE the question, so they get equal weight and the whole
+   width: a bigger target for a decision you are being asked to make, and the
+   pair reads as two answers rather than one action with an escape hatch.
+   Radius 10px sits between the base button's 8 and the dialog's own 12. */
+/* "this photo is in another note too". A warning, not an error — the delete is
+   still allowed and still recoverable — so it borrows the danger hue at low
+   strength rather than the solid red the Delete button wears. */
+.confirm-warn {
+  margin-top: 10px;
+  padding: 8px 11px;
+  border-radius: 8px;
+  background: rgb(229 72 77 / 0.1);
+  color: rgb(var(--ink-700));
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.confirm .prompt-actions {
+  gap: 10px;
+}
+.confirm .prompt-actions button {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+/* Cancel is focused the moment this opens (App.tsx: it has to be, or keystrokes
+   reach the note behind the backdrop) — which means the browser's own blue ring
+   is on screen every single time unless the app draws its own. The same
+   brand-300 ring the colour picker's handles use, not a second scheme. */
+.confirm .prompt-actions button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--surface)), 0 0 0 4px rgb(var(--brand-300));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm { animation: fade-op 160ms ease both; }
+  .confirm.closing { animation: fade-op-out 120ms ease both; }
+}
 
 /* a movement this big is exactly what motion sensitivity flags, so drop to a fade */
 @media (prefers-reduced-motion: reduce) {
@@ -1462,6 +1604,14 @@ button.icon:hover {
   background: #e5484d;
   color: #fff;
 }
+/* "Use on…" is the primary action on a preset row — the one you actually came
+   here to click, next to two icon-only utility buttons (export, delete) that
+   don't need the same visual weight. */
+.mini.use-on {
+  padding: 5px 13px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
 .mini svg {
   width: 13px;
   height: 13px;
@@ -1579,8 +1729,30 @@ button.icon:hover {
    Colours are tokens, never hex (rule 5). Both widgets replace their markdown
    off the cursor line and hand it back when you select into them. */
 .cm-image {
+  position: relative; /* containing block for .cm-attach-grip */
   display: inline-block;
   max-width: 100%;
+}
+
+/* The eye's read-out: the exact source line under the picture it produced
+   (editor/mediaSource.ts). Monospace and dimmed because it is CODE and it is
+   NOT the note — it must never be mistaken for a caption somebody wrote. It
+   scrolls inside itself rather than wrapping, so a long path can't push a
+   picture's block taller and shift everything under it. */
+.cm-attach-source {
+  display: block;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 3px 7px;
+  overflow-x: auto;
+  white-space: pre;
+  border-radius: 6px;
+  background: rgb(var(--wash) / 0.05);
+  color: rgb(var(--ink-500));
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  user-select: text;
 }
 .cm-image-img {
   display: block;
@@ -1602,6 +1774,119 @@ button.icon:hover {
   padding: 0.35em 0.5em;
   font-size: 11.5px;
   color: rgb(var(--ink-400));
+}
+
+/* --- inline video (videoPass) — same shape as .cm-image above --- */
+.cm-video {
+  position: relative; /* containing block for .cm-attach-grip */
+  display: inline-block;
+  max-width: 100%;
+}
+.cm-video-el {
+  display: block;
+  max-width: 100%;
+  border-radius: 8px;
+  min-height: 1.2em;
+}
+.cm-video-missing .cm-video-el {
+  min-width: 8rem;
+  min-height: 4rem;
+  border: 1px dashed rgb(var(--ink-300) / 0.6);
+  background: rgb(var(--wash) / 0.06);
+}
+.cm-video-missing::after {
+  content: 'Video not found';
+  display: block;
+  padding: 0.35em 0.5em;
+  font-size: 11.5px;
+  color: rgb(var(--ink-400));
+}
+
+/* --- moving an image/video (attachMove.ts) — same six-dot handle as the
+   table's column grip (.cm-table-col-handle above), reused via gripIcon().
+   Unlike the table's chrome, this one CAN live as a plain descendant of the
+   wrap it belongs to: the table-cell-height-doubling bug documented above is
+   specific to `<th>`/`<td>`, not an ordinary `<span>`, so there's no need for
+   the JS-positioned-overlay trick here. */
+.cm-attach-grip {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  /* Overlaying arbitrary photo/video content, not the app's own surface, so
+     this leans on --wash (the token for "reads on top of anything") rather
+     than an ink-* step — those are calibrated for text against paper. Kept
+     deliberately light: a low-opacity pill with a soft icon, matching the
+     table's own resting grip (rgb(var(--wash) / 0.14)) rather than the
+     heavier, more saturated version this started as. */
+  background: rgb(var(--wash) / 0.28);
+  color: rgb(var(--wash) / 0.85);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.cm-image:hover .cm-attach-grip,
+.cm-video:hover .cm-attach-grip {
+  opacity: 1;
+}
+/* Same hover pair the table's own grip uses (.cm-table-col-handle above) —
+   "matching the theme" means matching THAT, not inventing a second scheme. */
+.cm-attach-grip:hover { background: rgb(var(--brand-500) / 0.4); color: rgb(var(--brand-50)); }
+.cm-attach-grip:active { cursor: grabbing; }
+
+/* A photo/video selected as ONE object (clicking its grip), rather than a text
+   selection that happens to cross it. The passes keep rendering the picture in
+   this state instead of falling back to raw markdown — you can't confirm the
+   deletion of something you can't see. Uses the same brand ring the rest of the
+   app marks a chosen thing with; the outline sits OUTSIDE the box so it never
+   reflows the line. */
+.cm-attach-selected {
+  outline: 2px solid rgb(var(--brand-500) / 0.85);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* CodeMirror also paints its own selection layer across the range. Over a
+   picture that reads as a wash of colour on top of the thing being looked at —
+   plus a full-height caret beside it — so both are hidden while an embed is the
+   selection, and the ring above carries the state on its own.
+   `drawSelection` renders into `.cm-selectionLayer`, a SIBLING of `.cm-content`,
+   so this has to hang off a class on the EDITOR (attachSelect's
+   `embedSelectionAttr`); scoping it to the widget cannot reach the rectangle
+   drawn across the widget. `!important` because the base rule above carries one.
+   `::selection` is kept for the native selection inside the widget, which is a
+   separate mechanism and shows through on a click-drag. */
+.cm-embed-picked .cm-selectionBackground,
+.cm-embed-picked.cm-focused .cm-selectionBackground {
+  background: transparent !important;
+}
+.cm-embed-picked .cm-cursor,
+.cm-embed-picked .cm-cursorLayer { display: none; }
+.cm-attach-selected ::selection { background: transparent; }
+
+/* The insertion line shown while dragging, moved by JS to whichever visible
+   line boundary the pointer is nearest (attachMove.ts). Fixed + appended to
+   `document.body`, not relative to the editor: the target line can be
+   anywhere in the viewport, not scoped to one small widget the way the
+   table's own drop line is scoped to `.cm-table-grid`. Thinner and a step
+   lighter on the ramp (brand-400, not -500) than a first pass — the table's
+   own drop line gets away with full saturation because it's a slim 3px
+   vertical strip inside a small control; a horizontal bar spanning the whole
+   editor reads as much heavier at the same weight. */
+.cm-attach-drop-marker {
+  position: fixed;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 999px;
+  background: rgb(var(--brand-400) / 0.85);
+  pointer-events: none;
+  z-index: 50;
 }
 
 .cm-table {

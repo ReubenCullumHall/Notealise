@@ -5,13 +5,15 @@ import { drawSelection, EditorView, keymap } from '@codemirror/view'
 import { editorStyling } from './highlight'
 import { livePreview } from './livePreview'
 import { imageClick } from './imagePass'
+import { attachInput } from './attachInput'
+import { attachDeleteKeys, embedSelectionAttr } from './attachSelect'
 import { webLinkGestures } from './webLinkPass'
 import { taskClick } from './taskPass'
 import { blockMath } from './blockMath'
 import { blockTable } from './blockTable'
 import { applyColor } from './colorCommands'
 import { completionExtension } from './completions'
-import { linkEnv, type LinkHandlersRef } from './linkEnv'
+import { linkEnv, linkHandlersFacet, type LinkHandlersRef } from './linkEnv'
 import { linkGestures } from './linkGestures'
 import { bold, insertMath, italic, strike, underline } from './formatCommands'
 import { DEFAULT_HL } from './palette'
@@ -24,10 +26,17 @@ import { DEFAULT_HL } from './palette'
 export function baseExtensions(links?: LinkHandlersRef): Extension[] {
   return [
     linkEnv,
-    ...(links ? [linkGestures(links)] : []),
+    // The facet as well as the closure: linkGestures captures the ref directly,
+    // but attachInput/attachFiles reach it through the state instead — see
+    // `linkHandlersFacet`. Both read the same box, so they can't disagree.
+    ...(links ? [linkHandlersFacet.of(links), linkGestures(links)] : []),
     history(),
     // Our formatting bindings come first so they win over any defaults.
     keymap.of([
+      // Ahead of defaultKeymap's own Backspace/Delete: these decline (return
+      // false) for every selection that isn't a whole embed, so ordinary
+      // deleting is untouched.
+      ...attachDeleteKeys,
       { key: 'Mod-b', run: (v) => { bold(v); return true } },
       { key: 'Mod-i', run: (v) => { italic(v); return true } },
       { key: 'Mod-u', run: (v) => { underline(v); return true } },
@@ -40,8 +49,12 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     markdown({ base: markdownLanguage }),
     EditorView.lineWrapping,
     drawSelection(),
+    // Must come after drawSelection: it marks the editor so the selection that
+    // extension paints can be suppressed over a picked embed.
+    embedSelectionAttr,
     livePreview,
     imageClick,
+    attachInput,
     webLinkGestures,
     taskClick,
     blockMath,

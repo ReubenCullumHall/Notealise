@@ -3,7 +3,7 @@
 
 import type { AppSettings } from './settings'
 import type { PresetDraft, PresetImportResult, SpacePreset } from './presets'
-import type { EntryMeta, Workspace } from './workspace'
+import type { EntryMeta, MediaOrigin, RestoreResult, Workspace } from './workspace'
 import type { LinkRow } from './links'
 import type { UpdatePrefs, UpdateStatus } from './update'
 import type { ImportFormat, ImportPreview, ImportProgress, ImportResult } from './notesImport'
@@ -47,6 +47,13 @@ export interface VaultApi {
   readNote(path: string): Promise<string>
   /** Raw bytes of a vault file, for rendering an image inline in the editor. */
   readAsset(path: string): Promise<Uint8Array>
+  /** Write bytes already in the renderer's hand (a pasted or dropped file)
+   *  into `dirPath`, named after `filename` and de-duplicated. ALWAYS use the
+   *  returned vault-relative path, never the one asked for. */
+  writeAsset(dirPath: string, filename: string, data: Uint8Array): Promise<string>
+  /** Open a native picker filtered to images/video, read and write each
+   *  chosen file into `dirPath` in one round trip. Null if cancelled. */
+  pickAttachment(dirPath: string): Promise<{ path: string; kind: 'image' | 'video' }[] | null>
   writeNote(path: string, content: string): Promise<void>
   /** Create `<dirPath>/<name>.md` ("" = vault root, name defaults to "Untitled"),
    *  or "<name> (2).md" etc. if that name's taken. The name is sanitised, so
@@ -124,15 +131,21 @@ export interface VaultApi {
    *  folders share one sequence per parent. */
   reorderEntries(paths: string[]): Promise<Workspace>
   /** Move entries into the recoverable bin (<vault>/.mdnotes/trash/). */
-  trashEntries(paths: string[]): Promise<Workspace>
+  /** `origins` is vault path → where inside a note that photo/video sat, so a
+   *  later Restore can put the note back and not only the file. Only the
+   *  editor's grip-delete has one to give; everything else omits it. */
+  trashEntries(paths: string[], origins?: Record<string, MediaOrigin>): Promise<Workspace>
   /** Put binned items back where they came from, by trash id. */
-  restoreEntries(ids: string[]): Promise<Workspace>
+  /** Returns where each one actually landed as well as the new workspace — a
+   *  name taken since is suffixed, not overwritten, so `from` is a promise the
+   *  restore may not have been able to keep. */
+  restoreEntries(ids: string[]): Promise<RestoreResult>
   /** Move binned items into the 7-day recovery safety net — nothing is
    *  actually deleted yet. Pass no ids to empty the bin entirely. */
   purgeEntries(ids?: string[]): Promise<Workspace>
   /** Put an item from the recovery safety net back where it came from. Not
    *  surfaced in the normal bin UI — reachable only from Settings. */
-  restoreRecoveryEntries(ids: string[]): Promise<Workspace>
+  restoreRecoveryEntries(ids: string[]): Promise<RestoreResult>
   /** Force-delete recovery items right now instead of waiting out the 7-day
    *  window — for content sensitive enough that even that's too long. No ids
    *  clears the whole safety net. This IS the permanent, unrecoverable delete. */
@@ -165,8 +178,16 @@ export interface VaultApi {
   getOnboarded(): Promise<boolean>
   /** Set or clear it — clearing is the dev "replay onboarding" hook. */
   setOnboarded(value: boolean): Promise<void>
+  /** Which step to resume onboarding at if the app quit mid-flow. Null means
+   *  none saved — start at 'welcome'. */
+  getOnboardingStep(): Promise<string | null>
+  /** Persist the current step, or clear it with null. */
+  setOnboardingStep(step: string | null): Promise<void>
   /** Reveal a vault-relative path in the OS file explorer, selected. */
   revealInFolder(path: string): Promise<void>
+  /** When the MAIN process started, and the app version. Used only to notice
+   *  that this window is newer than the process behind it — see boot.ts. */
+  bootInfo(): Promise<{ startedAt: number; version: string }>
   /** Dev-only. Wipes the disposable onboarding-test vault, switches to it,
    *  and clears `hasOnboarded`. Returns the new vault path. Never touches
    *  the real vault. */

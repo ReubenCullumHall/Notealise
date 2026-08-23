@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit --composite false -p tsconfig.node.json && tsc --noEmit --composite false -p tsconfig.web.json",
     "lint": "oxlint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sync:mac": "sh tools/sync-mac.sh"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

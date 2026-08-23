@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import 'katex/dist/katex.min.css'
 import App from './App'
+import { ErrorBoundary } from './ErrorBoundary'
 import './theme.css'
 import './app.css'
 
@@ -16,7 +17,11 @@ async function boot(): Promise<void> {
   }
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <App />
+      {/* Outside App, so it survives App itself throwing — which is the case
+          that produced a blank window. See ErrorBoundary.tsx. */}
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
     </StrictMode>
   )
 }

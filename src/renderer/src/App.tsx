@@ -3,7 +3,10 @@ import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import type { EditorView } from '@codemirror/view'
 import { ContextMenu, type MenuItem } from './ContextMenu'
-import { clearImageCache } from './editor/imageAssets'
+import { clearAssetCaches } from './editor/assetCache'
+import { checkMainIsCurrent } from './boot'
+import { encodeTarget } from '../../shared/attachments'
+import { mediaUsage, otherNotesUsing } from './media/usage'
 import type { SectionId } from './settings/Settings'
 import { FormatToolbar } from './editor/FormatToolbar'
 import { NotePane, ROW_CLASS, type Drag } from './tabs/NotePane'
@@ -36,9 +39,20 @@ import { PathBar } from './PathBar'
 import { Tooltip } from './Tooltip'
 import { StartupSplash } from './StartupSplash'
 import { Onboarding } from './onboarding/Onboarding'
+import { seedWelcomeNotes } from './onboarding/welcomeNotes'
+import { STEPS, type StepId } from './onboarding/model'
 import { LinkInspector, type Inspect } from './links/LinkInspector'
 import { indexLinks, rewriteLinks, titleOf, type LinkRow } from '../../shared/links'
-import type { LinkEnv, LinkHandlers, OpenHow } from './editor/linkEnv'
+import type { LinkEnv, LinkHandlers, MediaDelete, OpenHow } from './editor/linkEnv'
+import {
+  type MediaLanding,
+  asRestoreResult,
+  isWorkspace,
+  spliceMediaBack,
+  type MediaOrigin,
+  type RecoveryItem,
+  type TrashItem
+} from '../../shared/workspace'
 import {
   activeSpace,
   DEFAULT_SETTINGS,
@@ -111,6 +125,60 @@ const folderDistance = (a: string, b: string): number => {
 
 const EMPTY_WS: Workspace = { entries: {}, trash: [], recovery: [] }
 
+/** A line on the bottom strip. `action` is the one-click way back out of
+ *  something that happened WITHOUT asking — currently only a media delete with
+ *  the confirmation turned off, which is the single thing in the app that can
+ *  remove a file with no dialog in front of it. A notice carrying one is given
+ *  longer on screen, since it now has to be read AND acted on. */
+interface Notice {
+  text: string
+  action?: { label: string; run: () => void }
+}
+
+/** A tick and a label as one clickable row.
+ *
+ *  `role="checkbox"` on a <button> rather than a real <input>, because every
+ *  other control in these dialogs is a button and inherits the same focus ring
+ *  — at the cost of having to undo the base `button` styling (border-none,
+ *  bg-transparent) or the row renders as a grey pill. Sized to its own content,
+ *  not the dialog: a full-width row with a hover fill reads as a wide flat
+ *  button sitting where a button shouldn't be. */
+function TickRow({
+  on,
+  onClick,
+  label
+}: {
+  on: boolean
+  onClick: () => void
+  label: string
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={on}
+      onClick={onClick}
+      className={
+        'flex items-center gap-2 rounded-lg border-none bg-transparent px-1.5 py-1.5 text-left ' +
+        'text-[12.5px] outline-none transition duration-150 hover:bg-brand-500/10 ' +
+        'hover:text-ink-700 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+        (on ? 'text-ink-700' : 'text-ink-500')
+      }
+    >
+      <span
+        aria-hidden="true"
+        className={
+          'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ' +
+          (on ? 'border-brand-400 bg-brand-500/25 text-brand-600' : 'border-ink-300/50')
+        }
+      >
+        {on && <Icon name="check" className="h-3 w-3" />}
+      </span>
+      {label}
+    </button>
+  )
+}
+
 /** The placeholder command row has no editor behind it; its buttons are inert
  *  and it is only there to hold the space open. */
 const NO_VIEW: React.RefObject<EditorView | null> = { current: null }
@@ -135,6 +203,20 @@ export default function App(): React.JSX.Element {
   // an already-onboarded user whose vault folder went missing still gets the
   // plain recovery picker below, never the full first-run flow again.
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null)
+  // syncSpaces reads the flag through THIS, never the state value beside it,
+  // and the reason is a boot loop rather than staleness: the boot effect
+  // depends on `syncSpaces` and is also what calls `setHasOnboarded`, so if
+  // `hasOnboarded` were in syncSpaces' dependency list, answering it would
+  // change syncSpaces' identity and re-run the whole boot sequence mid-flight —
+  // tree, workspace and settings all loaded a second time, with the second
+  // run's `restoreSession` free to overwrite a note the user had already opened
+  // in the gap. Same `xRef.current = x` idiom as layoutRef/settingsRef below.
+  const hasOnboardedRef = useRef<boolean | null>(null)
+  hasOnboardedRef.current = hasOnboarded
+  // Which step to mount Onboarding on — fetched once at boot alongside
+  // hasOnboarded, so a quit mid-flow resumes instead of always restarting at
+  // 'welcome'. Only ever read; Onboarding.tsx itself persists further changes.
+  const [onboardingResumeStep, setOnboardingResumeStep] = useState<StepId>('welcome')
   // Set once, the moment a vault becomes active from a cold boot or a first-run
   // folder pick (never from a mid-session "Switch folder") — see the two call
   // sites below. StartupSplash reads `settings.playStartupAnimation` itself at
@@ -149,7 +231,23 @@ export default function App(): React.JSX.Element {
   const [tree, setTree] = useState<TreeNode[]>([])
   const treeRef = useRef(tree)
   treeRef.current = tree
-  const [workspace, setWorkspace] = useState<Workspace>(EMPTY_WS)
+  const [workspace, setWorkspaceRaw] = useState<Workspace>(EMPTY_WS)
+  /** Every workspace that arrives from main goes through here, and a malformed
+   *  one is refused rather than stored.
+   *
+   *  Roughly fifteen call sites hand this whatever an IPC call returned, so one
+   *  reply of the wrong shape used to reach React state and blow up on the next
+   *  render — taking the entire window with it (ErrorBoundary.tsx exists
+   *  because of exactly that). Keeping the last good value is always better
+   *  than storing a broken one: the sidebar goes stale, which is visible and
+   *  survivable, instead of the app disappearing. */
+  const setWorkspace = (next: Workspace): void => {
+    if (!isWorkspace(next)) {
+      console.error('refusing a malformed workspace from main', next)
+      return
+    }
+    setWorkspaceRaw(next)
+  }
   // Which notes are open as tabs, and which of them each pane shows. All the
   // arithmetic (what a pane falls back to, where a dropped tab lands) is in
   // tabs/model.ts; App only holds the result and the documents behind it.
@@ -228,13 +326,16 @@ export default function App(): React.JSX.Element {
   // In-app updates. `unsupported` covers a dev build and unsigned macOS; the
   // banner and Settings both read it, so it lives here and flows down.
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' })
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const flash = useCallback((msg: string): void => {
-    setNotice(msg)
+  const showNotice = useCallback((n: Notice): void => {
+    setNotice(n)
     if (noticeTimer.current) clearTimeout(noticeTimer.current)
-    noticeTimer.current = setTimeout(() => setNotice(null), 4000)
+    noticeTimer.current = setTimeout(() => setNotice(null), n.action ? 9000 : 4000)
   }, [])
+  /** Say one line and let it fade. The plain form — everything that is only
+   *  telling you something, which is everything but the undo above. */
+  const flash = useCallback((msg: string): void => showNotice({ text: msg }), [showNotice])
 
   // in-app prompt (window.prompt is unreliable in Electron)
   const [prompt, setPrompt] = useState<{ title: string; value: string } | null>(null)
@@ -291,7 +392,10 @@ export default function App(): React.JSX.Element {
       // across every open note.
       const targets = indexLinks(text)
         .map((l) => l.target + '#' + (l.heading ?? ''))
-        .join(' ')
+        // A literal NUL here made grep and ripgrep treat this whole file as
+        // BINARY and silently skip it, so a search for anything in App.tsx
+        // found nothing. Same separator, written as an escape.
+        .join('\u0000')
       if (openTargetsRef.current.get(path) !== targets) {
         openTargetsRef.current.set(path, targets)
         setOpenLinkVersion((v) => v + 1)
@@ -479,7 +583,10 @@ export default function App(): React.JSX.Element {
       // zero bound spaces for the length of onboarding is expected, not the
       // "switcher hides, new notes land at the root" problem this guards
       // against for the plain (already-onboarded, no-Onboarding-UI) picker.
-      if (!hasOnboarded) {
+      // Read through the ref (see hasOnboardedRef's own note) — `null`, meaning
+      // main hasn't answered yet, counts as "not onboarded" here, which is the
+      // safe direction: it defers creating a folder until the answer is in.
+      if (!hasOnboardedRef.current) {
         if (reconciled) await changeSettings(reconciled)
         return
       }
@@ -492,7 +599,7 @@ export default function App(): React.JSX.Element {
         if (reconciled) await changeSettings(reconciled)
       }
     },
-    [changeSettings, loadTree, flash, hasOnboarded]
+    [changeSettings, loadTree, flash]
   )
 
   /** Kept pointing at the live `colorExistingFolders` below — see the note on
@@ -616,6 +723,23 @@ export default function App(): React.JSX.Element {
     [changeSettings, applyLayout]
   )
 
+  /** switchSpace, but only for a folder `settings.spaces` has actually
+   *  reconciled as a space. That check is not optional and is why this exists:
+   *  switching to an unregistered folder sets `activeSpaceFolder` to one with no
+   *  tab layout of its own, so whatever is opened next lands in what looks like
+   *  a blank pane. Every "take me to this note's space" caller goes through
+   *  here — following a link, revealing a folder from the path bar, and the
+   *  hand-off at the end of onboarding, where the folder in question may be one
+   *  an import created seconds ago and syncSpaces hasn't caught up with yet. */
+  const enterSpace = useCallback(
+    async (folder: string): Promise<void> => {
+      if (!folder || folder === settingsRef.current.activeSpaceFolder) return
+      if (!settingsRef.current.spaces.some((sp) => sp.folder === folder)) return
+      await switchSpace(folder)
+    },
+    [switchSpace]
+  )
+
   // --- links ------------------------------------------------------------------
   /** Show a folder from the path bar. The sidebar does the opening and closing;
    *  what App has to add is the space, because the sidebar only ever renders one
@@ -623,15 +747,13 @@ export default function App(): React.JSX.Element {
    *  switch to it first, or the reveal would silently do nothing. */
   const reveal = useCallback(
     async (folder: string): Promise<void> => {
-      const wanted = folder.split('/')[0]
-      const isSpace = settingsRef.current.spaces.some((sp) => sp.folder === wanted)
-      if (isSpace && wanted !== settingsRef.current.activeSpaceFolder) await switchSpace(wanted)
+      await enterSpace(folder.split('/')[0])
       // The space's own crumb has no row of its own — the sidebar is already
       // showing its contents — so revealing it means closing everything else,
       // which an empty ancestor chain does anyway.
       revealRef.current?.(folder)
     },
-    [switchSpace]
+    [enterSpace]
   )
 
 
@@ -652,15 +774,12 @@ export default function App(): React.JSX.Element {
       // A note belongs to its space. Following a link into another one takes you
       // there rather than dragging the note across — otherwise the tab strip
       // would show a note the sidebar beside it can't.
-      const owner = spaceOf(p)
-      if (owner && owner !== settingsRef.current.activeSpaceFolder) {
-        if (settingsRef.current.spaces.some((sp) => sp.folder === owner)) await switchSpace(owner)
-      }
+      await enterSpace(spaceOf(p))
       if (heading) setPendingHeading({ path: p, heading })
       if (how === 'split') await openBeside(p)
       else await openNote(p, how === 'tab')
     },
-    [openBeside, openNote, switchSpace]
+    [openBeside, openNote, enterSpace]
   )
 
   /** Clicking a `[[link]]` to a note nobody has written yet: make it, beside the
@@ -720,10 +839,155 @@ export default function App(): React.JSX.Element {
       reveal: (folder) => void reveal(folder),
       inspect: (at) => setInspect(at as Inspect | null),
       dragStart: (p) => setDrag({ kind: 'tab', path: p }),
-      dragEnd: () => setDrag(null)
+      dragEnd: () => setDrag(null),
+      // The editor has no notice strip of its own, so it borrows this one —
+      // the same line "Couldn't make that note" already appears on.
+      notify: (message) => flash(message),
+      confirmMediaDelete: (req) => {
+        // Read from the ref, not a captured value: this callback outlives the
+        // render it was built in. Asked never to be asked, the file is binned
+        // there and then and the notice carries the way back — that route
+        // matters more now that the FILE goes, not just the text.
+        if (!settingsRef.current.confirmMediaDelete) {
+          deleteMediaNowRef.current(req)
+          return
+        }
+        // Always ticked on open: the dialog is only here BECAUSE asking is on.
+        setKeepAsking(true)
+        setConfirmClosing(false)
+        setMediaConfirm(req)
+      }
     }),
-    [openLink, createFromLink, reveal]
+    [openLink, createFromLink, reveal, flash]
   )
+
+  // Delete-then-confirm for a photo or video pulled out of a note. The editor
+  // has ALREADY removed it by the time this opens, which is the point: you
+  // confirm something you can see rather than predict. `restore` is the whole
+  // of Cancel — it puts the exact text back at the exact offset, and the embed
+  // renders again from it because the text is what it was.
+  const [mediaConfirm, setMediaConfirm] = useState<MediaDelete | null>(null)
+  // The exit animation needs the dialog to outlive the decision, so closing is a
+  // state of its own and `animationend` is what actually unmounts — the same
+  // pattern the settings genie uses for its close.
+  const [confirmClosing, setConfirmClosing] = useState(false)
+  /** The dialog's two ticks are one switch wearing two boxes, so what is held is
+   *  the ANSWER rather than a boolean per box — they cannot drift into both-on
+   *  or both-off, and "which is ticked" has exactly one source. */
+  const [keepAsking, setKeepAsking] = useState(true)
+  /** Read by the window-level shortcut handler further down, which listens in
+   *  the CAPTURE phase and so fires no matter what has focus. Ctrl+Tab or Cmd+W
+   *  with this dialog open would switch or close the note behind it, and Cancel
+   *  restores by document OFFSET — it would put the photo into whatever note
+   *  ended up on screen. A ref, not the state, because that handler is an effect
+   *  with its own dependency list and must not be torn down and rebuilt every
+   *  time a dialog opens. */
+  const mediaConfirmRef = useRef(false)
+  mediaConfirmRef.current = mediaConfirm !== null
+
+  /** Put the file an embed pointed at into the bin, and hand back its bin id.
+   *
+   *  Taking a photo out of a note takes it out of the vault too — but into
+   *  `.mdnotes/trash`, the same bin a deleted note goes to, with the same 7-day
+   *  recovery net beneath it. Nothing here reaches the OS trash.
+   *
+   *  Null when the move didn't happen (trashEntries logs and skips a file it
+   *  can't move). That is what tells an undo there is only text to put back —
+   *  correctly, because in that case the file never left. */
+  const binMedia = async (file: string, origin: MediaOrigin | null): Promise<string | null> => {
+    const ws = await window.api.trashEntries([file], origin ? { [file]: origin } : undefined)
+    setWorkspace(ws)
+    await loadTree()
+    // Newest first (trashEntries unshifts), so a file binned, restored and
+    // binned again still finds the record this call just made.
+    const id = ws.trash.find((t) => t.from === file)?.id ?? null
+    // No row means main couldn't move it (it logs and skips — see workspace.ts's
+    // trashEntries). The file is still sitting in the vault, and until this said
+    // so the only symptom was a photo that left the note and turned up nowhere:
+    // not in the bin, not in recovery, still in the folder. Exactly the silent
+    // failure the notice channel exists for.
+    if (!id) flash(`Couldn't move ${file.split('/').pop()} to the bin — it's still in your vault`)
+    return id
+  }
+
+  /** The Undo half of a silent delete: the TEXT is put back by the editor
+   *  (`req.restore()`), this puts the file back. Split that way because the
+   *  editor owns the document and only main can move a file.
+   *
+   *  A name taken since would land it somewhere else, leaving the restored
+   *  markdown pointing at nothing. Seconds after the delete that is close to
+   *  impossible — but silent if it happened, so it says so instead. */
+  const unbinMedia = (id: string, from: string): void =>
+    void run(async () => {
+      const res = asRestoreResult(await window.api.restoreEntries([id]))
+      if (!res) return void flash("Couldn't put the file back — restart the app and try again")
+      setWorkspace(res.workspace)
+      await loadTree()
+      const at = res.landed[id]
+      if (at && at !== from) flash(`Put the file back as ${at.split('/').pop()} — that name was taken`)
+    })
+
+  /** The no-dialog path, taken when the confirmation has been switched off.
+   *
+   *  Held in a ref because `linkHandlers` above is memoised and this is not —
+   *  the same reason `settingsRef` sits beside it. The notice is not a courtesy:
+   *  it is the only thing standing between a stray Backspace and a file leaving
+   *  the note with nothing said about it. */
+  const deleteMediaNowRef = useRef<(req: MediaDelete) => void>(() => {})
+  deleteMediaNowRef.current = (req) => {
+    void run(async () => {
+      const id = req.file ? await binMedia(req.file, req.origin) : null
+      showNotice({
+        text: id ? 'Moved to the bin.' : 'Removed from the note.',
+        action: {
+          label: 'Undo',
+          run: () => {
+            req.restore()
+            if (id && req.file) unbinMedia(id, req.file)
+          }
+        }
+      })
+    })
+  }
+
+  /** Commit the decision immediately (so a restored embed reappears behind the
+   *  dialog rather than after it), then play the dialog out.
+   *
+   *  The ticks only bite on Delete. Cancel means "forget I did any of this", and
+   *  quietly switching off a safety net while someone backs out of using it is
+   *  exactly the kind of thing that safety net exists to prevent. */
+  const closeMediaConfirm = (restore: boolean): void => {
+    if (confirmClosing) return
+    const file = mediaConfirm?.file
+    if (restore) mediaConfirm?.restore()
+    else {
+      if (!keepAsking) void changeSettings({ confirmMediaDelete: false })
+      // No undo offered here — they were asked, and Cancel was the way out.
+      const origin = mediaConfirm?.origin ?? null
+      if (file) void run(async () => void (await binMedia(file, origin)))
+    }
+    setConfirmClosing(true)
+  }
+  useEffect(() => {
+    if (!mediaConfirm || confirmClosing) return
+    const onKey = (e: KeyboardEvent): void => {
+      // Escape is Cancel, not dismiss: leaving the media deleted because
+      // someone pressed Escape would be the dialog answering for them.
+      //
+      // Enter is deliberately NOT bound. It used to mean Delete, which put the
+      // most destructive answer on the key people hit to make a dialog go away
+      // — and it now bins a file, not just some text. Focus starts on Cancel
+      // (below), so Enter still does something sensible; it just does the safe
+      // thing, and Delete has to be aimed at.
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeMediaConfirm(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaConfirm, confirmClosing, keepAsking])
 
   /** The index as it stands now: what main read from disk, with the open buffers
    *  laid over it. `openLinkVersion` is what re-runs this — deliberately not
@@ -733,6 +997,15 @@ export default function App(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [linkRows, openLinkVersion, layout.tabs]
   )
+
+  /** Which notes hold which photos, off the same scan — see media/usage.ts.
+   *  This is the app KNOWING a picture is in a note, rather than trusting a
+   *  breadcrumb written when one was deleted. */
+  const mediaUsage_ = useMemo(() => mediaUsage(linkIndex), [linkIndex])
+  /** Other notes that will lose their picture if this delete goes through.
+   *  Plain, not memoised: a map lookup and a filter over at most a handful of
+   *  paths, recomputed only while a dialog is actually open. */
+  const alsoUsedBy = otherNotesUsing(mediaUsage_, mediaConfirm?.file ?? null, mediaConfirm?.origin?.note)
 
   const rescanLinks = useCallback(async (paths?: string[]): Promise<void> => {
     try {
@@ -854,9 +1127,25 @@ export default function App(): React.JSX.Element {
   // initial load: open the saved vault, or fall through to the picker.
   useEffect(() => {
     void (async () => {
-      const [v, onboarded] = await Promise.all([window.api.getVault(), window.api.getOnboarded()])
+      const [v, onboarded, resumeStep] = await Promise.all([
+        window.api.getVault(),
+        window.api.getOnboarded(),
+        window.api.getOnboardingStep()
+      ])
       setVault(v)
       setHasOnboarded(onboarded)
+      // Eagerly, not waiting for the re-render the setState above schedules:
+      // syncSpaces is called further down IN THIS SAME PASS and reads the ref,
+      // so leaving it at `null` until React re-renders would make the very
+      // first sync of an already-onboarded vault skip the "no real spaces —
+      // make one" fallback it exists for.
+      hasOnboardedRef.current = onboarded
+      // Validated against the current STEPS list rather than trusted as-is —
+      // a step name from a build that no longer has it (e.g. the removed
+      // 'walkthrough') would otherwise render nothing at all.
+      if (resumeStep && (STEPS as readonly string[]).includes(resumeStep)) {
+        setOnboardingResumeStep(resumeStep as StepId)
+      }
       // Three independent reads (tree walk, workspace.json, settings.json) —
       // run concurrently rather than summing their latencies, which matters on
       // a large or slow-syncing vault (see MAX_MS in StartupSplash.tsx).
@@ -1127,14 +1416,20 @@ export default function App(): React.JSX.Element {
       setLinkRows([])
       openTargetsRef.current.clear()
       spaceTabs.current.clear() // a different vault's spaces are different spaces
-      // Image blobs are keyed by vault-RELATIVE path, so the same
+      // Image AND video blobs are keyed by vault-RELATIVE path, so the same
       // "Import/photo.png" names a different file in a different vault — a kept
       // cache would show the previous vault's picture. Also frees the blobs.
-      clearImageCache()
+      // One call for both: this used to clear only the images, so a switch
+      // between two vaults sharing a relative path played the old vault's video.
+      clearAssetCaches()
       // Three independent reads, run concurrently rather than summed — see the
       // identical pattern (and why) in the boot effect above.
       const [t, , s] = await Promise.all([loadTree(), loadWorkspace(), loadSettings(v)])
-      if (firstRun && s.playStartupAnimation && hasOnboarded) setSplashActive(true)
+      // Via the ref, not the render closure: this line runs after an await, and
+      // the last onboarding step's vault pick lands right beside the settings
+      // write that flips the flag — reading a value captured before the await
+      // could show or hide the splash on the losing side of that race.
+      if (firstRun && s.playStartupAnimation && hasOnboardedRef.current) setSplashActive(true)
       // The watcher only reports CHANGES from here on (ignoreInitial: true), so
       // a vault's pre-existing top-level folders never self-announce as spaces
       // otherwise — nothing would reconcile them until some later fs event.
@@ -1149,9 +1444,58 @@ export default function App(): React.JSX.Element {
     }
   }
 
-  const finishOnboarding = async (): Promise<void> => {
+  /** Runs once, ever, when onboarding finishes — called as Onboarding.tsx's
+   *  `onFinished`, and awaited BEFORE it plays its own closing fade (see that
+   *  file's `closing`/onDismissed split, added 2026-08-21). That ordering is
+   *  why this does NOT flip `hasOnboarded` itself any more: the app shell
+   *  underneath is already mounted the whole time onboarding is up, so doing
+   *  all the real work here — while the overlay is still fully visible —
+   *  means the shell has already updated (welcome note open, sidebar
+   *  populated) by the time the fade reveals it. Flipping `hasOnboarded` here
+   *  instead would unmount the overlay immediately, before that fade ever
+   *  gets to play, and reveal a still-blank pane a beat before the note pops
+   *  in. `onDismissed` (wired below, alongside `hasOnboardedRef`'s eager
+   *  update) is what actually flips it, once the fade has finished.
+   *
+   *  Two jobs otherwise: seed the curated welcome notes into whatever space
+   *  is active right now (the "main" space Spaces created — imports always
+   *  land in their OWN space, so the two never clash), then decide which
+   *  note the real workspace opens on.
+   *
+   *  `importNotePath` is set only when a real import ran during onboarding
+   *  (Onboarding.tsx's ImportStep) — its "how this import is organised" note
+   *  lives in the imported space, which by now is very likely no longer
+   *  active (SpacesStep switches to the first space it creates). That one
+   *  takes priority: switch back to it and open it, the same "a note takes
+   *  you to its own space" rule `openLink` follows for any other cross-space
+   *  note. Nothing imported (or Import was skipped) means importNotePath is
+   *  null, and the welcome note just seeded is what opens instead — this
+   *  used to be a plain empty landing, and before that, a "Three things worth
+   *  knowing" screen (Walkthrough, cut 2026-08-20) whose links (Tutorials,
+   *  Report a bug, Request a feature) now live in that note's own text. */
+  const finishOnboarding = async (importNotePath: string | null): Promise<void> => {
+    const homeSpaceFolder = settingsRef.current.activeSpaceFolder
+    let welcomeNotePath: string | null = null
+    try {
+      welcomeNotePath = await seedWelcomeNotes(homeSpaceFolder)
+      await loadTree()
+    } catch (e) {
+      // A first-run nicety, not a load-bearing feature — a failure here must
+      // not strand the user mid-onboarding with no way into their own app.
+      flash(`Couldn't set up the welcome notes: ${(e as Error).message}`)
+    }
     await window.api.setOnboarded(true)
-    setHasOnboarded(true)
+    await window.api.setOnboardingStep(null)
+    if (importNotePath) {
+      // enterSpace, not switchSpace: if the imported folder isn't a registered
+      // space yet, switching to it would leave the note opening into a pane
+      // with no layout behind it. Staying put and opening the note is the
+      // honest fallback — same rule openLink follows.
+      await enterSpace(spaceOf(importNotePath))
+      await openNote(importNotePath)
+    } else if (welcomeNotePath) {
+      await openNote(welcomeNotePath)
+    }
   }
 
   /** Onboarding's Fonts step, applied to EVERY space rather than just the
@@ -1164,6 +1508,14 @@ export default function App(): React.JSX.Element {
   const pickOnboardingFont = (id: string): void => {
     const current = settingsRef.current
     void changeSettings({ spaces: current.spaces.map((sp) => ({ ...sp, font: id })) })
+  }
+
+  /** Same reasoning as pickOnboardingFont, for the accent swatch added to
+   *  onboarding's Fonts step 2026-08-20 — applied to every space, not just
+   *  the active one. */
+  const pickOnboardingAccent = (id: string): void => {
+    const current = settingsRef.current
+    void changeSettings({ spaces: current.spaces.map((sp) => ({ ...sp, accent: id })) })
   }
 
   const run = async (fn: () => Promise<void>): Promise<void> => {
@@ -1193,20 +1545,34 @@ export default function App(): React.JSX.Element {
   const move = (paths: string[], toDir: string, anchor: string | null, after: boolean): void =>
     void run(async () => {
       const toSpace = spaceFolderOf(toDir, settings.spaces)
-      const crossSpace = paths.some((p) => spaceFolderOf(p, settings.spaces) !== toSpace)
 
       const landed: string[] = []
+      // Which of the landed entries genuinely arrived from ANOTHER space,
+      // tracked per item rather than as one flag for the whole batch. A mixed
+      // multi-select — one note already living in the destination folder,
+      // dragged alongside one really coming from elsewhere — used to mark the
+      // whole batch cross-space, so the resident note was stamped `movedAt` and
+      // turned up under the sidebar's "Moved" divider without having moved
+      // anywhere.
+      const arrived: string[] = []
       for (const from of paths) {
         if (toDir === from || toDir.startsWith(from + '/')) continue // into self/descendant
+        const crossed = spaceFolderOf(from, settings.spaces) !== toSpace
         const dest = joinPath(toDir, nameOf(from))
         if (dest === from) {
-          landed.push(from) // already in this folder — a pure reorder
+          landed.push(from) // already in this folder — a pure reorder, never crossed
           continue
         }
         const actual = await window.api.renameEntry(from, dest)
         remapOpen(from, actual)
         landed.push(actual)
+        if (crossed) arrived.push(actual)
       }
+      // The blind-drop positioning below is still decided for the drag as a
+      // whole: if any of it crossed a space boundary, the destination isn't the
+      // list the user was looking at, and the group belongs together at the
+      // front. Only the `movedAt` stamp is per item.
+      const crossSpace = arrived.length > 0
       const fresh = await window.api.listTree()
       setTree(fresh)
 
@@ -1229,14 +1595,18 @@ export default function App(): React.JSX.Element {
       const next = [...rest.slice(0, at), ...landed.filter((p) => ordered.includes(p)), ...rest.slice(at)]
       let nextWs = await window.api.reorderEntries(next)
 
-      if (crossSpace) {
-        nextWs = await window.api.updateEntries(landed, { movedAt: Date.now() })
-      } else {
-        // Merging an explicit `undefined` drops the field (see `setColor`
-        // below) — the same way un-archiving clears `archivedAt`.
-        const stale = landed.filter((p) => ws.entries[p]?.movedAt !== undefined)
-        if (stale.length) nextWs = await window.api.updateEntries(stale, { movedAt: undefined })
+      if (arrived.length) {
+        nextWs = await window.api.updateEntries(arrived, { movedAt: Date.now() })
       }
+      // Everything else in the batch is an ordinary move within this space,
+      // which CLEARS a stale flag — that action IS the user filing it. Both
+      // halves run for a mixed drag, which is the whole point of splitting them.
+      // Merging an explicit `undefined` drops the field (see `setColor` below)
+      // — the same way un-archiving clears `archivedAt`.
+      const settled = landed.filter(
+        (p) => !arrived.includes(p) && ws.entries[p]?.movedAt !== undefined
+      )
+      if (settled.length) nextWs = await window.api.updateEntries(settled, { movedAt: undefined })
       setWorkspace(nextWs)
     })
 
@@ -1276,10 +1646,120 @@ export default function App(): React.JSX.Element {
       forgetIfInside(paths)
     })
 
+  /** Put a restored photo's markdown back into the note it came out of.
+   *
+   *  Reports which of three things happened, because the notice has to say it.
+   *  Someone who restores a picture and then can't find it in the note is worse
+   *  off than someone who is told where it went — and the note is allowed to
+   *  have changed completely in the seven days this can sit in recovery.
+   *
+   *  Aims at the exact line and column it was cut from, and re-inserts the exact
+   *  text, so a photo that sat mid-sentence goes back mid-sentence. If the note
+   *  has shrunk past that point the text goes on the end instead, which is the
+   *  one place it is certain not to land inside something else. */
+  const putMediaBack = async (
+    m: MediaOrigin,
+    /** where the file REALLY came back to — see RestoreResult.landed */
+    landed: string
+  ): Promise<MediaLanding | 'missing'> => {
+    // Unsaved keystrokes have to reach disk first: this reads the note and
+    // writes it back, so anything still sitting in the buffer would be erased.
+    await flush()
+    let doc: string
+    try {
+      doc = await window.api.readNote(m.note)
+    } catch {
+      return 'missing'
+    }
+    const { doc: next, how } = spliceMediaBack(doc, { ...m, text: retarget(m, landed) })
+    await window.api.writeNote(m.note, next)
+    // Re-seed whichever pane is showing it; a no-op when it isn't open.
+    await loadDoc(m.note)
+    return how
+  }
+
+  /** Point a restored embed at the file that now exists.
+   *
+   *  `from` is a promise restore can't always keep: if something has taken that
+   *  name since, main suffixes rather than overwrites. Putting the original text
+   *  back then gives the note a picture pointing at a file that isn't there —
+   *  the failure looks like "restore is broken" and says nothing. Same encoding
+   *  as attachInput writes, from the same function, so the two can't disagree. */
+  const retarget = (m: MediaOrigin, landed: string): string => {
+    const promised = m.text
+    const dir = m.note.includes('/') ? m.note.slice(0, m.note.lastIndexOf('/')) : ''
+    const rel = dir && landed.startsWith(dir + '/') ? landed.slice(dir.length + 1) : landed
+    const target = encodeTarget(rel)
+    return promised
+      .replace(/(!\[[^\]\n]*\]\()[^)\n]*(\))/, `$1${target}$2`)
+      .replace(/(\bsrc=["'])[^"']*(["'])/i, `$1${target}$2`)
+  }
+
+  /** Go and look at something that has just come back. A note opens; a folder is
+   *  revealed in the sidebar; a photo opens the NOTE it went back into, which is
+   *  the only place looking at it means anything. */
+  const navigateToRestored = (item: TrashItem | RecoveryItem): void => {
+    if (item.media) void openLink(item.media.note, 'replace')
+    else if (item.type === 'dir') void reveal(item.from)
+    else if (item.from.toLowerCase().endsWith('.md')) void openLink(item.from, 'replace')
+    else void reveal(item.from.includes('/') ? item.from.slice(0, item.from.lastIndexOf('/')) : '')
+  }
+
+  /** Shared by the bin's Restore and Settings → Recovery's, because "where did
+   *  that go?" is the same question at both stages. The items are read BEFORE
+   *  the restore, since the call is what removes them from the list. */
+  const afterRestore = async (
+    items: (TrashItem | RecoveryItem)[],
+    landed: Record<string, string>
+  ): Promise<void> => {
+    const back = items.filter(Boolean)
+    if (!back.length) return
+    // Every photo goes back into its note, but the strip describes — and
+    // navigates to — ONE of them. The same one, deliberately: a bulk restore
+    // that reads out the last item and then jumps to the first is a small lie
+    // that costs someone a hunt through the wrong note.
+    let said: { text: string; item: TrashItem | RecoveryItem } | null = null
+    for (const item of back) {
+      if (!item.media) continue
+      const how = await putMediaBack(item.media, landed[item.id] ?? item.from)
+      if (said) continue
+      const title = titleOf(item.media.note)
+      said = {
+        item,
+        // Each of these is a claim about where a picture now is, and someone
+        // reads it INSTEAD of going to look. "Where it was" used to be printed
+        // for every landing including a stale-coordinate guess, which is how a
+        // photo ended up above the note's heading under a notice saying it
+        // hadn't moved. Only `anchored` earns that sentence now.
+        text:
+          how === 'missing'
+            ? `${title} no longer exists, so only the file came back`
+            : how === 'appended'
+              ? `Added to the end of ${title} — the note changed too much to place it`
+              : how === 'aimed'
+                ? `Back in ${title}, near where it was — the note changed since`
+                : `Back in ${title}, where it was`
+      }
+    }
+    const target = said?.item ?? back[0]
+    showNotice({
+      text:
+        said?.text ??
+        (back.length > 1 ? `${back.length} items restored` : `${back[0].name} restored`),
+      // Not a question in a box: restoring isn't destructive and a modal after
+      // every single one — including a bulk restore — would wear thin fast.
+      action: { label: 'Navigate', run: () => navigateToRestored(target) }
+    })
+  }
+
   const restoreFromBin = (ids: string[]): void =>
     void run(async () => {
-      setWorkspace(await window.api.restoreEntries(ids))
+      const items = ids.map((id) => workspace.trash.find((t) => t.id === id)).filter((t): t is TrashItem => !!t)
+      const res = asRestoreResult(await window.api.restoreEntries(ids))
+      if (!res) return void flash("Couldn't put that back — restart the app and try again")
+      setWorkspace(res.workspace)
       await loadTree()
+      await afterRestore(items, res.landed)
     })
 
   const purge = (ids?: string[]): void =>
@@ -1289,8 +1769,14 @@ export default function App(): React.JSX.Element {
   // (see shared/workspace.ts's RecoveryItem / RECOVERY_TTL_MS).
   const restoreRecovery = (ids: string[]): void =>
     void run(async () => {
-      setWorkspace(await window.api.restoreRecoveryEntries(ids))
+      const items = ids
+        .map((id) => workspace.recovery.find((r) => r.id === id))
+        .filter((r): r is RecoveryItem => !!r)
+      const res = asRestoreResult(await window.api.restoreRecoveryEntries(ids))
+      if (!res) return void flash("Couldn't put that back — restart the app and try again")
+      setWorkspace(res.workspace)
       await loadTree()
+      await afterRestore(items, res.landed)
     })
 
   const purgeRecovery = (ids?: string[]): void =>
@@ -1434,7 +1920,9 @@ export default function App(): React.JSX.Element {
   // Capture phase, so a keystroke is decided here before CodeMirror sees it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (splashActiveRef.current) return
+      // Nothing may move the note out from under a delete that is waiting to be
+      // confirmed — see mediaConfirmRef.
+      if (splashActiveRef.current || mediaConfirmRef.current) return
       const mod = e.metaKey || e.ctrlKey
       if (e.key === 'Tab' && e.ctrlKey) {
         e.preventDefault()
@@ -1461,6 +1949,13 @@ export default function App(): React.JSX.Element {
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [closeNote, applyLayout])
+
+  // Dev only, and once: does the process behind this window understand it? See
+  // boot.ts — this is the check that would have named the blank-window bug in
+  // one glance instead of two rounds of debugging.
+  useEffect(() => {
+    void checkMainIsCurrent(flash)
+  }, [flash])
 
   // Update state: seed once, then follow the pushes from main.
   useEffect(() => {
@@ -1651,11 +2146,17 @@ export default function App(): React.JSX.Element {
           theme={resolveTheme(space.theme)}
           animationsEnabled={settings.animationsEnabled}
           noteFont={space.font}
+          accent={space.accent}
+          initialStep={onboardingResumeStep}
           onPickVault={pick}
           onOpenSpace={(folder) => openSpaceRef.current(folder)}
           onPickNoteFont={pickOnboardingFont}
-          onOpenSettingsSection={(id) => setSettingsJumpTo(id)}
-          onFinished={() => void finishOnboarding()}
+          onPickAccent={pickOnboardingAccent}
+          onFinished={(path) => finishOnboarding(path)}
+          onDismissed={() => {
+            setHasOnboarded(true)
+            hasOnboardedRef.current = true // same eager update as the boot effect's
+          }}
         />
       )}
       {splashActive && (
@@ -1788,6 +2289,19 @@ export default function App(): React.JSX.Element {
                       )
                     )
                   }
+                  // Beside `rawView` in the same sidecar, for the same reasons
+                  // — and separate from it, because the two are usefully on at
+                  // the same time (shared/workspace.ts's EntryMeta).
+                  mediaSource={!!workspace.entries[p]?.mediaSource}
+                  onToggleMediaSource={() =>
+                    void run(async () =>
+                      setWorkspace(
+                        await window.api.updateEntry(p, {
+                          mediaSource: !workspace.entries[p]?.mediaSource
+                        })
+                      )
+                    )
+                  }
                   onFollowLink={(target, how, heading) => void openLink(target, how, heading)}
                   onCreateLink={(dir, title, how) => void createFromLink(dir, title, how)}
                   onDragLink={(target) => setDrag(target ? { kind: 'tab', path: target } : null)}
@@ -1912,7 +2426,96 @@ export default function App(): React.JSX.Element {
         />
       )}
 
-      {notice && <div className="notice">{notice}</div>}
+      {notice && (
+        <div className="notice">
+          <span>{notice.text}</span>
+          {notice.action && (
+            <button
+              type="button"
+              className="notice-action"
+              onClick={() => {
+                notice.action?.run()
+                setNotice(null)
+              }}
+            >
+              {notice.action.label}
+            </button>
+          )}
+        </div>
+      )}
+
+      {mediaConfirm && (
+        <div
+          className={'confirm-backdrop' + (confirmClosing ? ' closing' : '')}
+          onClick={() => closeMediaConfirm(true)}
+        >
+          <div
+            className={'prompt confirm' + (confirmClosing ? ' closing' : '')}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Delete media?"
+            onClick={(e) => e.stopPropagation()}
+            onAnimationEnd={() => {
+              // Fires for the entrance too, hence the guard.
+              if (!confirmClosing) return
+              setMediaConfirm(null)
+              setConfirmClosing(false)
+              setKeepAsking(true)
+            }}
+          >
+            <div className="prompt-title">Delete media?</div>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-500">
+              {mediaConfirm.file
+                ? 'It goes to the bin, so you can still get it back.'
+                : 'It comes out of this note. Nothing on your computer changes.'}
+            </p>
+            {/* The one thing the dialog could not say until the app kept an
+                index of which notes hold which photos: this file is somebody
+                else's picture too, and deleting it here breaks it there. It
+                doesn't block the delete — the bin is right there — but it must
+                not happen silently. */}
+            {alsoUsedBy.length > 0 && (
+              <p className="confirm-warn">
+                {alsoUsedBy.length === 1
+                  ? `It's also in ${titleOf(alsoUsedBy[0])}, which will lose its picture.`
+                  : `It's also in ${alsoUsedBy.length} other notes, which will lose their picture.`}
+              </p>
+            )}
+            {/* Same tick as Settings -> Spaces -> Delete space -> "and its saved
+                look": an extra choice hanging off a destructive action, rather
+                than the pill Switch, which is this app's vocabulary for a
+                standing setting on a settings row.
+                TWO of them, on one switch, because "never ask again" alone only
+                shows the way OUT of being asked — the state you are actually in
+                is left to be inferred from an empty box. Spelling out both sides
+                is what makes it a choice rather than an opt-out. */}
+            <div className="mt-3 flex flex-col items-start gap-0.5">
+              <TickRow on={keepAsking} onClick={() => setKeepAsking(true)} label="Always ask" />
+              <TickRow
+                on={!keepAsking}
+                onClick={() => setKeepAsking(false)}
+                label="Never ask again"
+              />
+            </div>
+            <div className="prompt-actions">
+              {/* Focused on open, and the FIRST thing focused, for two reasons.
+                  The editor still has focus at this point (selectEmbed called
+                  view.focus()), and the backdrop only stops the mouse — so
+                  without this, typing while the dialog is up lands in the note
+                  behind it and moves the very offset Cancel restores to. And a
+                  dialog that has to be answered should be answerable from the
+                  keyboard, safe side first. */}
+              {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+              <button autoFocus onClick={() => closeMediaConfirm(true)}>
+                Cancel
+              </button>
+              <button className="danger" onClick={() => closeMediaConfirm(false)}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {prompt && (
         <div className="menu-backdrop" onClick={() => closePrompt(null)}>

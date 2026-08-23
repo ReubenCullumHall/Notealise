@@ -5,7 +5,9 @@ import { baseExtensions } from './extensions'
 import { applyColor, clearColor } from './colorCommands'
 import { SelectionToolbar } from './SelectionToolbar'
 import { setLinkEnv, type LinkEnv, type LinkHandlers } from './linkEnv'
+import { selectionIsEmbed } from './attachSelect'
 import { rawViewOf } from './rawView'
+import { mediaSourceOf } from './mediaSource'
 import type { Layer } from './palette'
 
 interface Props {
@@ -25,6 +27,9 @@ interface Props {
   /** scroll to this heading once the document has landed, then forget it —
    *  what `[[Note#Heading]]` does after the note opens */
   revealHeading?: string | null
+  /** the eye button: print each photo/video's own source under it, leaving the
+   *  rest of the note formatted. Independent of `raw` — see mediaSource.ts. */
+  mediaSource?: boolean
   /** Markdown pro: show this note as raw Markdown — every syntax mark visible,
    *  tables and maths as their source. Styling is untouched either way. */
   raw?: boolean
@@ -61,7 +66,8 @@ export function CodeEditor({
   env,
   linkHandlers,
   revealHeading,
-  raw
+  raw,
+  mediaSource
 }: Props): React.JSX.Element {
   const container = useRef<HTMLDivElement>(null)
   const host = useRef<HTMLDivElement>(null)
@@ -73,6 +79,8 @@ export function CodeEditor({
   // Read once, at construction. The effect below owns every change after that.
   const rawRef = useRef(raw)
   rawRef.current = raw
+  const mediaSourceRef = useRef(mediaSource)
+  mediaSourceRef.current = mediaSource
   // Same reason as onChangeRef above: the view is built once, so the handlers it
   // captures must be a stable box whose contents we keep current, not the
   // functions themselves (which are new on every App render).
@@ -89,7 +97,10 @@ export function CodeEditor({
   const refreshToolbar = useCallback((view: EditorView): void => {
     const sel = view.state.selection.main
     const box = container.current
-    if (sel.empty || !box) {
+    // A selected EMBED is not selected text: the grip selects a photo or video
+    // as one object (attachSelect), and offering to bold or highlight it makes
+    // no sense. Its own affordance is the ring plus Backspace.
+    if (sel.empty || !box || selectionIsEmbed(view.state)) {
       setTb(null)
       return
     }
@@ -115,6 +126,7 @@ export function CodeEditor({
   // extension in an existing state, and reconfiguring produces a transaction the
   // decoration builders can see — which is how they know to redraw.
   const rawBox = useRef(new Compartment())
+  const mediaSourceBox = useRef(new Compartment())
 
   useEffect(() => {
     const view = new EditorView({
@@ -124,6 +136,7 @@ export function CodeEditor({
         extensions: [
           ...baseExtensions(linksRef),
           rawBox.current.of(rawViewOf(!!rawRef.current)),
+          mediaSourceBox.current.of(mediaSourceOf(!!mediaSourceRef.current)),
           EditorView.updateListener.of((u) => {
             if (u.docChanged && !programmatic.current) onChangeRef.current(u.state.doc.toString())
             if (u.selectionSet || u.docChanged || u.geometryChanged) refreshToolbar(u.view)
@@ -160,6 +173,16 @@ export function CodeEditor({
     if (!view) return
     view.dispatch({ effects: rawBox.current.reconfigure(rawViewOf(!!raw)) })
   }, [raw])
+
+  // Same again for the eye. Two compartments rather than one holding both, so
+  // flipping either can't force the other's decorations to rebuild.
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    view.dispatch({
+      effects: mediaSourceBox.current.reconfigure(mediaSourceOf(!!mediaSource))
+    })
+  }, [mediaSource])
 
   useEffect(() => {
     const view = viewRef.current

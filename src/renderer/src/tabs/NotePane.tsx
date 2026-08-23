@@ -66,6 +66,9 @@ interface Props {
   /** this note is currently showing its raw Markdown */
   raw: boolean
   onToggleRaw: () => void
+  /** this note is showing the code behind each photo and video */
+  mediaSource: boolean
+  onToggleMediaSource: () => void
   /** the pane the keyboard acts on */
   focused: boolean
   /** true while more than one pane is on screen */
@@ -143,6 +146,8 @@ export function NotePane({
   markdownPro,
   raw,
   onToggleRaw,
+  mediaSource,
+  onToggleMediaSource,
   focused,
   split,
   slots,
@@ -427,7 +432,37 @@ export function NotePane({
               linkHandlers={linkHandlers}
               revealHeading={revealHeading}
               raw={raw}
+              mediaSource={mediaSource}
             />
+            {/* The eye. Sits above the Markdown pro switch in the same corner
+                stack, and unlike that one it is always here: "what is this
+                picture actually pointing at" is an ordinary question, not a
+                Markdown person's question. Shown only when the note HAS a photo
+                or video would be better still, but that means asking the editor
+                what it contains on every render — the button is 8px of chrome,
+                and a fixed-height row that never appears or disappears is worth
+                more than hiding it (CLAUDE.md: nothing may shift the text). */}
+            <button
+              onClick={onToggleMediaSource}
+              aria-pressed={mediaSource}
+              data-tip={
+                mediaSource
+                  ? 'Showing the code behind each photo and video — click to hide it'
+                  : 'Show the code behind each photo and video'
+              }
+              aria-label={
+                mediaSource
+                  ? 'Hide the code behind each photo and video'
+                  : 'Show the code behind each photo and video'
+              }
+              className={
+                'btn-edge absolute right-3 z-20 flex h-8 w-8 items-center justify-center rounded-lg border border-ink-300/30 p-0 shadow-card outline-none backdrop-blur transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+                (markdownPro ? 'bottom-[52px] ' : 'bottom-3 ') +
+                (mediaSource ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500 hover:text-brand-600')
+              }
+            >
+              <Icon name="eye" className="h-4 w-4" />
+            </button>
             {/* Markdown pro's switch. Absolutely positioned inside `.edit-layer`
                 (which is already `position: absolute`), so it costs no layout at
                 all — the editor chrome is fixed-height rows and nothing may

@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
 import { Icon } from '../icons'
+import { MediaTag } from '../MediaBadge'
+import { mediaIcon } from '../mediaKind'
+import { useArmed } from './useArmed'
 import { onDate } from '../organise/model'
-import { RECOVERY_TTL_MS, type RecoveryItem } from '../../../shared/workspace'
+import { heldPath, RECOVERY_DIR, RECOVERY_TTL_MS, type RecoveryItem } from '../../../shared/workspace'
 
 // Settings → Recovery. The second-stage safety net beneath the bin: see the
 // "recovery" block in main/vault.ts and shared/workspace.ts's RecoveryItem.
@@ -76,20 +78,33 @@ function RecoveryRow({
   onPurge: () => void
 }): React.JSX.Element {
   const left = daysLeft(item.purgedAt)
+  // Same treatment as the sidebar's bin, deliberately: this is the same item one
+  // stage further down, and a photo's restore does the same unusual thing here.
+  const media = item.type === 'file' ? mediaIcon(item.name) : null
   return (
     <div className="flex items-center gap-2 rounded-xl px-3 py-2.5 ring-1 ring-ink-300/20">
       <span className="shrink-0 text-ink-300">
-        <Icon name={item.type === 'dir' ? 'folder' : 'doc'} className="h-4 w-4" />
+        <Icon name={media ?? (item.type === 'dir' ? 'folder' : 'doc')} className="h-4 w-4" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13px] font-medium text-ink-900">
-          {item.name.replace(/\.md$/i, '')}
+          {media ? item.name : item.name.replace(/\.md$/i, '')}
         </span>
         <span className="block truncate text-[11.5px] text-ink-400">
           From {item.from || '(vault root)'} · deleted {onDate(item.purgedAt)} ·{' '}
           {left === 0 ? 'gone within a day' : `${left} day${left === 1 ? '' : 's'} left`}
         </span>
       </span>
+      {media && <MediaTag hasOrigin={!!item.media} />}
+      {/* Same reasoning as the bin's copy: `.mdnotes/recovery/` is inside a
+          hidden dot-folder, so this is the only way to actually see the file. */}
+      <button
+        onClick={() => void window.api.revealInFolder(heldPath(RECOVERY_DIR, item.id, item.name))}
+        data-tip="Show me this file on my computer"
+        className="shrink-0 rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600"
+      >
+        <Icon name="folder" className="h-4 w-4" />
+      </button>
       <button
         onClick={onRestore}
         data-tip="Put back"
@@ -107,11 +122,11 @@ function RecoveryRow({
   )
 }
 
-/** Same idiom as Spaces.tsx's DeleteSpace: no confirm dialog (there isn't one
- *  in the app, and window.confirm blocks the renderer and looks foreign) — a
- *  click arms the button, a second click within 5s commits, and it disarms
- *  itself if left alone. This IS the real, unrecoverable delete, so unlike
- *  the bin's own per-item purge, arming is required every time. */
+/** The arm-then-confirm behaviour is `useArmed` in primitives.tsx, shared with
+ *  Spaces.tsx's DeleteSpace — the two used to be the same timer written twice.
+ *  What stays here is this button's own two shapes (a text pill, or the
+ *  icon-only trash button a row shows). This IS the real, unrecoverable delete,
+ *  so unlike the bin's own per-item purge, arming is required every time. */
 function TwoStepButton({
   label,
   armedLabel,
@@ -124,17 +139,15 @@ function TwoStepButton({
   /** render as an icon-only trash button (row context) instead of a text pill */
   icon?: boolean
 }): React.JSX.Element {
-  const [armed, setArmed] = useState(false)
-  useEffect(() => {
-    if (!armed) return
-    const t = setTimeout(() => setArmed(false), 5000)
-    return () => clearTimeout(t)
-  }, [armed])
+  const { armed, press } = useArmed()
+  const onClick = (): void => {
+    if (press()) onConfirm()
+  }
 
   if (icon) {
     return (
       <button
-        onClick={() => (armed ? (setArmed(false), onConfirm()) : setArmed(true))}
+        onClick={onClick}
         data-tip={armed ? armedLabel : label}
         className={
           'shrink-0 rounded-lg border-none bg-transparent p-1.5 outline-none transition duration-200 ' +
@@ -149,10 +162,7 @@ function TwoStepButton({
   }
 
   return (
-    <button
-      className={'mini' + (armed ? ' danger' : '')}
-      onClick={() => (armed ? (setArmed(false), onConfirm()) : setArmed(true))}
-    >
+    <button className={'mini' + (armed ? ' danger' : '')} onClick={onClick}>
       {armed ? armedLabel : label}
     </button>
   )

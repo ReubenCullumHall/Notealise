@@ -1,6 +1,13 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { CH } from '../shared/channels'
-import { freshOnboardingTestVault, getHasOnboarded, saveVault, setHasOnboarded } from './config'
+import {
+  freshOnboardingTestVault,
+  getHasOnboarded,
+  getOnboardingStep,
+  saveVault,
+  setHasOnboarded,
+  setOnboardingStep
+} from './config'
 import { ensureMdnotes } from './mdnotes'
 import { getSettings, readThemeCacheSync, setSettings } from './settings'
 import {
@@ -35,6 +42,12 @@ import {
   setBetaChannel
 } from './updater'
 import { getUpdatePrefs } from './config'
+
+/** When this main process started. `npm run dev` hot-reloads the renderer and
+ *  leaves main running, so a window can end up minutes newer than the process
+ *  it is talking to — which is how an IPC contract change becomes a crash that
+ *  looks like a bug in the feature. This is what makes that visible. */
+const MAIN_STARTED_AT = Date.now()
 import { startWatching } from './watcher'
 import { sendBugReport, sendFeatureRequest } from './support'
 import { openAllowedExternal } from './externalLinks'
@@ -54,7 +67,15 @@ import { wordImporter } from './importers/word/run'
 import type { ImportFormat } from '../shared/notesImport'
 import type { AppSettings } from '../shared/settings'
 import type { PresetDraft } from '../shared/presets'
-import type { EntryMeta } from '../shared/workspace'
+import type { EntryMeta, MediaOrigin } from '../shared/workspace'
+import {
+  IMAGE_EXTS,
+  VIDEO_EXTS,
+  kindForFilename,
+  type AttachmentKind
+} from '../shared/attachments'
+import { promises as fsp } from 'node:fs'
+import path from 'node:path'
 import {
   createFolder,
   createNote,
@@ -66,6 +87,7 @@ import {
   revealInFolder,
   scanLinks,
   setVaultRoot,
+  writeAssetUnique,
   writeNote
 } from './vault'
 
@@ -86,6 +108,13 @@ if (__MAC_BUILD__ && process.platform === 'darwin') {
     registerImporter('appleNotes', appleNotesImporter)
   })
 }
+
+// The "Attach…" picker's filters and the check applied to what comes back (a
+// file dialog's OS-level type filter is advisory on some platforms). The lists
+// themselves live in shared/attachments.ts, which the renderer's paste/drop
+// path reads too — see that file's header for why one catalogue rather than a
+// list here and a MIME table over there.
+const attachmentKind = (abs: string): AttachmentKind | null => kindForFilename(path.basename(abs))
 
 let win: BrowserWindow | null = null
 
@@ -122,6 +151,42 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.listTree, () => listTree())
   ipcMain.handle(CH.readNote, (_e, p: string) => readNote(p))
   ipcMain.handle(CH.readAsset, (_e, p: string) => readAsset(p))
+  // Validated the same way `pickAttachment` below validates its own results —
+  // this channel used to write whatever filename and bytes the renderer handed
+  // it, which is the one attachment path with no type check at all. It also
+  // closes the `.png` case: a name that is nothing but a dotted suffix has no
+  // extension by `path.parse`'s reading, so it would otherwise land in the
+  // vault as a hidden, extensionless file nothing can open.
+  ipcMain.handle(CH.writeAsset, (_e, dir: string, filename: string, data: Uint8Array) => {
+    if (!kindForFilename(filename)) throw new Error(`Not a photo or video: ${filename}`)
+    return writeAssetUnique(dir, filename, Buffer.from(data))
+  })
+  ipcMain.handle(CH.pickAttachment, async (_e, dir: string) => {
+    const res = await dialog.showOpenDialog(window, {
+      title: 'Attach a photo or video',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Photos & videos', extensions: [...IMAGE_EXTS, ...VIDEO_EXTS] },
+        { name: 'Photos', extensions: [...IMAGE_EXTS] },
+        { name: 'Videos', extensions: [...VIDEO_EXTS] }
+      ]
+    })
+    if (res.canceled || res.filePaths.length === 0) return null
+    const out: { path: string; kind: 'image' | 'video' }[] = []
+    for (const abs of res.filePaths) {
+      const kind = attachmentKind(abs)
+      if (!kind) continue // filter dialogs are advisory on some OSes; skip anything else picked
+      try {
+        const data = await fsp.readFile(abs)
+        const relPath = await writeAssetUnique(dir, path.basename(abs), data)
+        out.push({ path: relPath, kind })
+      } catch {
+        // One unreadable file (permissions, a vanished path) must not lose
+        // every other file the user picked alongside it.
+      }
+    }
+    return out
+  })
   ipcMain.handle(CH.writeNote, (_e, p: string, content: string) => writeNote(p, content))
   ipcMain.handle(CH.createNote, (_e, dir: string, name?: string) => createNote(dir, name))
   ipcMain.handle(CH.createFolder, (_e, dir: string, name?: string) => createFolder(dir, name))
@@ -158,7 +223,9 @@ export function registerIpc(window: BrowserWindow): void {
     updateEntries(paths, partial)
   )
   ipcMain.handle(CH.reorderEntries, (_e, paths: string[]) => reorderEntries(paths))
-  ipcMain.handle(CH.trashEntries, (_e, paths: string[]) => trashEntries(paths))
+  ipcMain.handle(CH.trashEntries, (_e, paths: string[], origins?: Record<string, MediaOrigin>) =>
+    trashEntries(paths, origins)
+  )
   ipcMain.handle(CH.restoreEntries, (_e, ids: string[]) => restoreEntries(ids))
   ipcMain.handle(CH.purgeEntries, (_e, ids?: string[]) => purgeEntries(ids))
   ipcMain.handle(CH.restoreRecoveryEntries, (_e, ids: string[]) => restoreRecoveryEntries(ids))
@@ -184,14 +251,30 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.openExternal, (_e, url: string) => openAllowedExternal(url))
   ipcMain.handle(CH.getOnboarded, () => getHasOnboarded())
   ipcMain.handle(CH.setOnboarded, (_e, value: boolean) => setHasOnboarded(value))
+  ipcMain.handle(CH.getOnboardingStep, () => getOnboardingStep())
+  ipcMain.handle(CH.setOnboardingStep, (_e, step: string | null) => setOnboardingStep(step))
   ipcMain.handle(CH.resetOnboardingTestVault, async () => {
     const dir = await freshOnboardingTestVault()
-    await saveVault(dir)
+    // activateVault ONLY — deliberately not saveVault. This points the running
+    // process at the throwaway folder, which is all the renderer's reload needs
+    // (App.tsx boots from getVault(), the in-process root, not from config).
+    // Persisting it would overwrite `vaultPath` — the record of which vault to
+    // reopen — with a temp directory, so a dev who used this hook and then quit
+    // would find the app reopening the throwaway folder instead of their real
+    // vault, with no backup of the path it replaced. Their notes were never at
+    // risk; the bookkeeping was.
     activateVault(dir)
     await setHasOnboarded(false)
+    // A genuinely blank slate — without this, a Reset mid-way through a
+    // previous test run would resume onboarding at wherever that run left
+    // off instead of starting fresh at Welcome.
+    await setOnboardingStep(null)
     return dir
   })
   ipcMain.handle(CH.revealInFolder, (_e, p: string) => revealInFolder(p))
+  // MAIN_STARTED_AT is module-level, so it is the moment this process booted —
+  // not the moment the window asked.
+  ipcMain.handle(CH.bootInfo, () => ({ startedAt: MAIN_STARTED_AT, version: app.getVersion() }))
 
   // One entry per format rather than an isNotion ternary — the ternary only
   // held two formats, and a third would have silently inherited HTML's filter.

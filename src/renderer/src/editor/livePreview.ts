@@ -7,6 +7,7 @@ import { mathPass } from './mathPass'
 import { setLinkEnv } from './linkEnv'
 import { wikiPass } from './wikiPass'
 import { imagePass } from './imagePass'
+import { videoPass } from './videoPass'
 import { inlineHtmlPass } from './inlineHtmlPass'
 import { webLinkPass } from './webLinkPass'
 import { taskPass } from './taskPass'
@@ -313,6 +314,7 @@ export const PASSES: Pass[] = [
   // Tables are NOT here: they span line breaks, which needs a block
   // decoration, which a ViewPlugin may not provide — see blockTable.ts.
   imagePass,
+  videoPass,
   inlineHtmlPass,
   taskPass,
   webLinkPass,

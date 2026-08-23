@@ -7,6 +7,9 @@ import { activeSpace, type AppSettings, type Space } from '../../shared/settings
 import type { UpdateStatus } from '../../shared/update'
 import { UpdateBanner } from './update/UpdateBanner'
 import { ArchiveIcon, BinIcon, Icon } from './icons'
+import { MediaTag } from './MediaBadge'
+import { heldPath, TRASH_DIR } from '../../shared/workspace'
+import { mediaIcon } from './mediaKind'
 import { SettingsButton, type SectionId } from './settings/Settings'
 import type { SpaceActions } from './settings/Spaces'
 import type { PresetActions } from './settings/Presets'
@@ -182,6 +185,22 @@ const SECTION_HEAD = 'px-3 pb-1 pt-1 ' + SECTION_TEXT
  *  Long enough that passing over a tab on the way to the bin/archive doesn't
  *  switch spaces by accident; short enough not to feel unresponsive. */
 const SPACE_HOVER_OPEN_MS = 600
+
+/** True only when the pointer has genuinely left `currentTarget`, rather than
+ *  merely crossed onto something nested inside it.
+ *
+ *  `dragenter`/`dragleave` bubble exactly the way `mouseover`/`mouseout` do, so
+ *  any drop target containing a child element fires a spurious "leave" the
+ *  instant the pointer touches that child. That is what broke hold-to-open on a
+ *  space tab with no custom emoji: its numbered fallback badge is a nested
+ *  `<span>`, so crossing onto it cancelled the arming timer before it could
+ *  elapse — while a tab WITH an emoji renders as bare text, has nothing to
+ *  cross onto, and worked fine. An inconsistency down purely to which spaces
+ *  happened to have an emoji set. */
+function stillInside(e: React.DragEvent<HTMLElement>): boolean {
+  const to = e.relatedTarget
+  return to instanceof Node && e.currentTarget.contains(to)
+}
 
 export function Sidebar({
   vaultName,
@@ -532,23 +551,42 @@ export function Sidebar({
                 <p className={SECTION_HEAD}>
                   Bin · {workspace.trash.length} item{workspace.trash.length === 1 ? '' : 's'}
                 </p>
-                {workspace.trash.map((item) => (
+                {workspace.trash.map((item) => {
+                  // A photo in here is not a note, and restoring it doesn't do
+                  // what restoring a note does — see MediaBadge.tsx.
+                  const media = item.type === 'file' ? mediaIcon(item.name) : null
+                  return (
                   <div
                     key={item.id}
                     className="tree-row group flex items-center pr-1.5 text-left hover:bg-surface/70"
                     style={{ paddingLeft: 'var(--row-pad0)' }}
                   >
                     <span className="shrink-0 text-ink-300">
-                      <Icon name={item.type === 'dir' ? 'folder' : 'doc'} />
+                      <Icon name={media ?? (item.type === 'dir' ? 'folder' : 'doc')} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="tree-title truncate font-medium text-ink-900">
-                        {item.name.replace(/\.md$/i, '')}
+                        {media ? item.name : item.name.replace(/\.md$/i, '')}
                       </span>
                       <span className="tree-sub truncate text-ink-500">
                         Deleted {onDate(item.deletedAt)} · from {item.from}
                       </span>
                     </span>
+                    {media && <MediaTag hasOrigin={!!item.media} />}
+                    {/* A binned file physically lives in `.mdnotes/trash/`, and
+                        `.mdnotes` is a DOT-folder — Finder and File Explorer
+                        both hide it. Without this, "it's in the bin, safe" is
+                        true and completely unverifiable: you cannot go and look
+                        at your own photo. */}
+                    <button
+                      onClick={() =>
+                        void window.api.revealInFolder(heldPath(TRASH_DIR, item.id, item.name))
+                      }
+                      data-tip="Show me this file on my computer"
+                      className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-300 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
+                    >
+                      <Icon name="folder" />
+                    </button>
                     <button
                       onClick={() => actions.onRestoreFromBin([item.id])}
                       data-tip="Put back"
@@ -564,7 +602,8 @@ export function Sidebar({
                       <Icon name="trash" />
                     </button>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             ) : (
               <div className="fade-in px-4 py-10 text-center">
@@ -735,7 +774,8 @@ export function Sidebar({
                       onSwitchSpace(s.folder)
                     }, SPACE_HOVER_OPEN_MS)
                   }}
-                  onDragLeave={() => {
+                  onDragLeave={(e) => {
+                    if (stillInside(e)) return // crossed onto the numbered badge, not out
                     if (armingSpace === s.folder) clearSpaceHover()
                   }}
                   onDrop={(e) => {
@@ -760,7 +800,10 @@ export function Sidebar({
                         : 'btn-edge border-ink-300/25 bg-transparent text-ink-500 hover:bg-brand-500/10 hover:text-brand-600')
                   }
                 >
-                  {s.emoji || <span className="text-[12px] font-semibold">{i + 1}</span>}
+                  {/* pointer-events-none as well as the stillInside() guard: the
+                      badge has no interaction of its own, so the cheapest fix is
+                      for it never to be a drag target in the first place. */}
+                  {s.emoji || <span className="pointer-events-none text-[12px] font-semibold">{i + 1}</span>}
                 </button>
               )
             })}
@@ -808,7 +851,10 @@ export function Sidebar({
             e.preventDefault()
             setDropZone('trash')
           }}
-          onDragLeave={() => setDropZone((z) => (z === 'trash' ? null : z))}
+          onDragLeave={(e) => {
+            if (stillInside(e)) return // the lid icon / count badge, not a real leave
+            setDropZone((z) => (z === 'trash' ? null : z))
+          }}
           onDrop={(e) => {
             e.preventDefault()
             if (dragging) {
@@ -844,7 +890,10 @@ export function Sidebar({
             e.preventDefault()
             setDropZone('archive')
           }}
-          onDragLeave={() => setDropZone((z) => (z === 'archive' ? null : z))}
+          onDragLeave={(e) => {
+            if (stillInside(e)) return // same nested-child bubble as the bin above
+            setDropZone((z) => (z === 'archive' ? null : z))
+          }}
           onDrop={(e) => {
             e.preventDefault()
             if (dragging) {

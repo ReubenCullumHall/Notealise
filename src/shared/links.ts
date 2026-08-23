@@ -69,6 +69,19 @@ export type Resolution =
 export interface LinkRow {
   path: string
   links: IndexedLink[]
+  /** every photo/video this note embeds, as written (`shared/attachments.ts`'s
+   *  `indexEmbeds`). Rides on the link scan rather than getting a pass of its
+   *  own: both answer "what does this note refer to", and one read of the vault
+   *  is enough to answer both. It is what lets the app know a picture is IN a
+   *  note — before this, the only record of that was a breadcrumb written at
+   *  delete time, and one stale process was enough to lose the connection.
+   *
+   *  Optional because it is additive to a shape that already existed and that
+   *  plenty of link tests construct by hand: a row without it means "nothing
+   *  known about this note's pictures", not "this note has none", and every
+   *  reader treats an absent list as empty. Both real producers — main's
+   *  `scanLinks` and `liveIndex` — always fill it. */
+  embeds?: string[]
 }
 
 /** A link as the index remembers it: enough to resolve it later, plus the line it

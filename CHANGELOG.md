@@ -7,6 +7,33 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Development: `src/main/workspace.test.ts` runs the bin, the recovery net and restore against a
+  real temporary vault. It exists because a bug hid in the one place nothing covered — both halves
+  either side of it were tested, so a bin record that reached disk without the note position on it
+  looked like the restore was broken. Also `src/shared/media.ts`: the groundwork for giving every
+  attachment an identity that survives being renamed, matched only when exactly one missing file and
+  one new file agree on size and kind, so a note is never repointed at the wrong picture. Nothing
+  is wired to it yet
+- Selecting a photo or video by its grip no longer paints a grey selection block over it or parks a
+  full-height cursor beside it — the ring around the picture says it is selected, which was always
+  the intent. There was a rule meant to do this already, but it targeted the browser's own
+  `::selection` while the editor draws its own selection layer, so it read correctly and had never
+  applied. Ordinary text selection is untouched
+- Restoring a photo or video from the bin now puts it back in the right place even if you have
+  been editing the note since. It used to remember a line and column, which describe the note as it
+  was at the moment you deleted — type two paragraphs at the top and every line below moves, so the
+  picture came back somewhere else entirely while the message still said "back where it was". It
+  now remembers the text either side of the picture instead, and finds that again on the way back.
+  Where the note has been rewritten around the spot, the picture goes on the end and says so rather
+  than guessing — and "back where it was" is now only said when it is true
+- Development: `npm run sync:mac` copies the source into the Mac run copy at `~/notes-app-mac`,
+  verifies the two trees came out identical, and stops any dev server left running (the main
+  process never hot-reloads, so a live one would serve old main against new renderer). It replaces
+  `~/notes-app-mac/run-mac.sh`, which lived in the disposable copy and had gone missing — the
+  documented sync step was silently doing nothing, and the two trees drifted two days apart. That
+  drift, not the restore logic, was behind the blank-white-window and the photos that came back to
+  the vault but not into their note: the copy being tested had no error boundary and did not record
+  where in a note a photo came from
 - Deleting a space now takes its saved look with it by default, instead of leaving it behind in
   Settings -> Spaces -> Saved presets as an orphan you'd have to clean up yourself. A prompt next
   to the delete button — "Save the preset before deleting?" — lets you keep it in one click if you
@@ -80,6 +107,11 @@ enough for a solo project). History before this file existed lives in the `v*` g
   end and says so. Both lists now mark media with a "Media" tag and an information dot explaining
   this, and restoring anything at all — note, folder or photo — offers a "Navigate" button to go
   straight to where it landed, so you don't restore something and then have to hunt for it
+- Deleting one photo no longer turns the one next to it into code. Drag three files in at once and
+  they sit on consecutive lines; deleting one put the cursor onto its neighbour's line, which is
+  what makes an embed show its raw source, so the survivor flipped from a picture into
+  `<video controls src="...">`. The cursor now lands on the line ABOVE, and a cursor merely
+  touching the edge of a photo no longer counts as being inside it
 - The app can no longer show you a blank white window. A crash anywhere in the interface used to
   unmount everything, leaving an empty window with no message and no way back — now it says what
   broke, says plainly that your notes are safe files on your disk, and offers a Reload button

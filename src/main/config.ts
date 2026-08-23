@@ -27,6 +27,11 @@ interface AppConfig {
   /** Has this install ever finished the onboarding flow? App-level, not
    *  per-vault, like vaultPath — triggers once ever, not "no vault open". */
   hasOnboarded?: boolean
+  /** Which step to resume at if the app quit mid-onboarding. Absent/undefined
+   *  means start (or restart) at 'welcome' — cleared once onboarding finishes,
+   *  and by the dev "replay"/reset hooks, so a completed or freshly-reset
+   *  install never resumes into a stale mid-flow step. */
+  onboardingStep?: string
 }
 
 async function read(): Promise<AppConfig> {
@@ -82,6 +87,23 @@ export async function getHasOnboarded(): Promise<boolean> {
  *  without reinstalling or hand-editing config.json. */
 export async function setHasOnboarded(value: boolean): Promise<void> {
   await update({ hasOnboarded: value })
+}
+
+/** The step to resume onboarding at, if the app quit mid-flow. Null (not
+ *  undefined) when there's nothing saved — Onboarding.tsx's caller falls back
+ *  to 'welcome' either way, but null reads more honestly as "no answer" than
+ *  reusing undefined for both "not fetched yet" and "fetched, nothing there". */
+export async function getOnboardingStep(): Promise<string | null> {
+  return (await read()).onboardingStep ?? null
+}
+
+/** Persist the current step on every advance/back, or clear it (`null`) once
+ *  onboarding finishes or a dev hook resets the flow — `update`'s merge drops
+ *  an `undefined` value from the written JSON entirely (JSON.stringify's own
+ *  behaviour), so `null` here really does erase the key rather than storing
+ *  the string `"null"`. */
+export async function setOnboardingStep(step: string | null): Promise<void> {
+  await update({ onboardingStep: step ?? undefined })
 }
 
 /** A disposable vault for repeatedly testing onboarding — one fixed path

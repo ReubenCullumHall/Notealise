@@ -273,6 +273,13 @@ export interface AppSettings {
    *  from `playStartupAnimation`, which is one specific clip; this is every
    *  transition everywhere. */
   animationsEnabled: boolean
+  /** ask before removing a photo or video from a note (the confirmation the
+   *  "Delete media?" dialog raises). Global rather than per-space for the same
+   *  reason `animationsEnabled` is: it is about how this person wants to be
+   *  interrupted, not about how any set of notes looks. Turning it off is what
+   *  the dialog's own "Never ask again" does — Settings -> General turns it
+   *  back on, so that button is never a one-way door. */
+  confirmMediaDelete: boolean
 }
 
 export const DEFAULT_SPACE: Space = {
@@ -328,7 +335,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   numberFormat: 'default',
   timezone: 'system',
   playStartupAnimation: true,
-  animationsEnabled: true
+  animationsEnabled: true,
+  confirmMediaDelete: true
 }
 
 /** A brand-new space, defaults throughout. Every array on DEFAULT_SPACE is
@@ -536,7 +544,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
     playStartupAnimation:
       typeof s.playStartupAnimation === 'boolean' ? s.playStartupAnimation : DEFAULT_SETTINGS.playStartupAnimation,
     animationsEnabled:
-      typeof s.animationsEnabled === 'boolean' ? s.animationsEnabled : DEFAULT_SETTINGS.animationsEnabled
+      typeof s.animationsEnabled === 'boolean' ? s.animationsEnabled : DEFAULT_SETTINGS.animationsEnabled,
+    confirmMediaDelete:
+      typeof s.confirmMediaDelete === 'boolean' ? s.confirmMediaDelete : DEFAULT_SETTINGS.confirmMediaDelete
   }
 }
 

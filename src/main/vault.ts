@@ -5,6 +5,8 @@ import { randomBytes } from 'node:crypto'
 import type { TreeNode } from '../shared/types'
 import { indexLinks, stripMd, type LinkRow } from '../shared/links'
 import { sanitizeFilename } from './filenames'
+import { indexEmbeds } from '../shared/attachments'
+import { heldPath, RECOVERY_DIR, TRASH_DIR } from '../shared/workspace'
 
 // ---------------------------------------------------------------------------
 // Vault state. This module is the ONLY place in the app that touches `fs`.
@@ -309,7 +311,7 @@ export async function scanLinks(paths?: string[]): Promise<LinkRow[]> {
   for (const abs of files) {
     const text = await fs.readFile(abs, 'utf8').catch(() => null)
     if (text === null) continue // deleted between the watcher event and here, or unreadable
-    rows.push({ path: toRel(abs), links: indexLinks(text) })
+    rows.push({ path: toRel(abs), links: indexLinks(text), embeds: indexEmbeds(text) })
   }
   return rows
 }
@@ -377,6 +379,25 @@ export async function writeAsset(relPath: string, data: Buffer): Promise<void> {
     await fs.unlink(tmp).catch(() => {})
     throw e
   }
+}
+
+/** Write attachment bytes (pasted, dropped, or picked from the renderer) into
+ *  `dirPath`, giving them a collision-safe name derived from `filename`. Same
+ *  shape as createNote/createFolder: the name is sanitised and de-duplicated,
+ *  so the caller MUST use the returned vault-relative path, never the one it
+ *  asked for. */
+export async function writeAssetUnique(
+  dirPath: string,
+  filename: string,
+  data: Buffer
+): Promise<string> {
+  const dirAbs = resolveInVault(dirPath)
+  const safe = sanitizeFilename(filename).name
+  const { name: stem, ext } = path.parse(safe)
+  const fname = await uniqueName(dirAbs, stem, ext)
+  const relPath = dirPath ? `${dirPath}/${fname}` : fname
+  await writeAsset(relPath, data)
+  return relPath
 }
 
 /** Stamp a note with the time it was really written.
@@ -513,12 +534,13 @@ export async function renameEntry(fromPath: string, toPath: string): Promise<str
 // one item from it) does NOT reach the OS trash — see the recovery block
 // below, which is where that now goes instead.
 // ---------------------------------------------------------------------------
-const TRASH_DIR = '.mdnotes/trash'
+// The layout itself is shared (shared/workspace.ts) so the renderer can point
+// at a held file without re-deriving where main put it.
 
 /** Absolute path of a binned entry. The id prefix keeps two notes of the same
  *  name from colliding in the flat trash folder. */
 function trashAbs(id: string, name: string): string {
-  return resolveInVault(`${TRASH_DIR}/${id}-${name}`)
+  return resolveInVault(heldPath(TRASH_DIR, id, name))
 }
 
 /** Move an entry into the bin. Returns the id needed to restore it. */
@@ -535,12 +557,16 @@ export async function trashEntry(relPath: string): Promise<{ id: string; type: '
   return { id, type: stat.isDirectory() ? 'dir' : 'file' }
 }
 
-/** Put a binned entry back at `to`. Its original parent may have been deleted or
- *  renamed since, so the folder is recreated; a name collision is resolved by
- *  suffixing rather than failing, so Restore always succeeds. Returns the actual
- *  rel path it landed at. */
-export async function restoreEntry(id: string, name: string, to: string): Promise<string> {
-  const src = trashAbs(id, name)
+/** Move a held-aside entry back to `to`, wherever it was being held. Its
+ *  original parent may have been deleted or renamed since, so the folder is
+ *  recreated; a name collision is resolved by suffixing rather than failing, so
+ *  Restore always succeeds. Returns the actual rel path it landed at.
+ *
+ *  Shared by both restore paths — out of the bin, and out of the recovery net
+ *  one step later — because they are the same operation from a different
+ *  holding folder. The collision handling and the Windows path-length check are
+ *  both cross-platform-sensitive, so they get exactly one home. */
+async function restoreHeldEntry(src: string, name: string, to: string): Promise<string> {
   const destRaw = resolveInVault(to)
   const dir = path.dirname(destRaw)
   await fs.mkdir(dir, { recursive: true })
@@ -556,9 +582,23 @@ export async function restoreEntry(id: string, name: string, to: string): Promis
   return toRel(candidate)
 }
 
+/** Put a binned entry back at `to`. */
+export async function restoreEntry(id: string, name: string, to: string): Promise<string> {
+  return restoreHeldEntry(trashAbs(id, name), name, to)
+}
+
 /** Move a binned entry out of the bin and into the recovery safety net,
- *  rather than handing it to the OS trash — see the recovery block below. */
-export async function purgeTrashItem(id: string, name: string): Promise<void> {
+ *  rather than handing it to the OS trash — see the recovery block below.
+ *
+ *  Returns **false** when there was nothing to move: already gone (bin emptied
+ *  outside the app, or a failed earlier move), so the caller drops the record
+ *  and the bin doesn't keep a dead row. Every OTHER failure — a permission
+ *  error, a locked file, a full disk — **throws**, because the file is still
+ *  sitting in `trash/` and writing a recovery record for it would put a live
+ *  7-day countdown in Settings against something that can never be restored.
+ *  Distinguishing the two is the whole point of the boolean: swallowing both
+ *  alike is what made the UI promise a recoverability that wasn't real. */
+export async function purgeTrashItem(id: string, name: string): Promise<boolean> {
   const src = trashAbs(id, name)
   const dest = recoveryAbs(id, name)
   await fs.mkdir(path.dirname(dest), { recursive: true })
@@ -566,10 +606,13 @@ export async function purgeTrashItem(id: string, name: string): Promise<void> {
   markWrite(dest)
   try {
     await renameWithRetry(src, dest)
-  } catch {
-    // Already gone (bin emptied outside the app, or a failed earlier move) —
-    // the caller still drops the record, so the bin doesn't keep a dead row.
+  } catch (e) {
+    // dest's parent was just created, so ENOENT here can only mean the source
+    // is missing — the one case that is genuinely nothing to worry about.
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw e
   }
+  return true
 }
 
 /** Send a LIVE entry straight to the OS trash, bypassing `.mdnotes/trash`
@@ -608,29 +651,14 @@ export async function revealInFolder(relPath: string): Promise<void> {
 // reachable only from Settings, since arriving here means delete was already
 // confirmed twice.
 // ---------------------------------------------------------------------------
-const RECOVERY_DIR = '.mdnotes/recovery'
-
 function recoveryAbs(id: string, name: string): string {
-  return resolveInVault(`${RECOVERY_DIR}/${id}-${name}`)
+  return resolveInVault(heldPath(RECOVERY_DIR, id, name))
 }
 
-/** Put a recovery item back where it came from. Same collision/missing-parent
- *  handling as restoreEntry, since it's the same situation one step later. */
+/** Put a recovery item back where it came from — restoreEntry's situation one
+ *  step later, so it goes through the same restoreHeldEntry. */
 export async function restoreFromRecovery(id: string, name: string, to: string): Promise<string> {
-  const src = recoveryAbs(id, name)
-  const destRaw = resolveInVault(to)
-  const dir = path.dirname(destRaw)
-  await fs.mkdir(dir, { recursive: true })
-
-  const ext = path.extname(name)
-  const stem = ext ? name.slice(0, -ext.length) : name
-  const candidate = path.join(dir, await uniqueName(dir, stem, ext))
-  assertInVault(candidate)
-  assertPathLength(candidate)
-  markWrite(src)
-  markWrite(candidate)
-  await renameWithRetry(src, candidate)
-  return toRel(candidate)
+  return restoreHeldEntry(recoveryAbs(id, name), name, to)
 }
 
 /** The real, permanent delete — called by the 7-day sweep, or by a manual

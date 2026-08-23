@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { isSelfOrDescendant, normalizeWorkspace, remapPath } from './workspace'
+import {
+  asRestoreResult,
+  isSelfOrDescendant,
+  isWorkspace,
+  normalizeWorkspace,
+  remapPath,
+  spliceMediaBack,
+  type MediaOrigin
+} from './workspace'
 
 // workspace.json is a sidecar the user can edit, sync, or corrupt. The contract
 // is that it NEVER stops the vault opening (rule 1: files are the source of
@@ -138,5 +146,182 @@ describe('remapPath', () => {
   it('leaves unrelated paths alone, including prefix look-alikes', () => {
     expect(remapPath('older/x.md', 'old', 'new')).toBe('older/x.md')
     expect(remapPath('other.md', 'old', 'new')).toBe('other.md')
+  })
+})
+
+// --- putting a restored photo back into its note ---------------------------
+// The one part of Restore that can produce a plausible-looking WRONG note
+// rather than an obvious failure, so it is pinned down here rather than left
+// to the click-through.
+describe('spliceMediaBack', () => {
+  // No anchors: an older bin record, written before they existed. These keep
+  // the legacy coordinate path honest.
+  const origin = (over: Partial<MediaOrigin> = {}): MediaOrigin => ({
+    note: 'Space/Note.md',
+    text: '![](photo.png)\n',
+    line: 3,
+    col: 0,
+    ...over
+  })
+
+  describe('older records, with only a line and column', () => {
+    it('puts a whole-line embed back on its own line', () => {
+      const out = spliceMediaBack('One\n\nThree\n', origin())
+      expect(out.how).toBe('aimed')
+      expect(out.doc).toBe('One\n\n![](photo.png)\nThree\n')
+    })
+
+    it('puts a mid-sentence embed back mid-sentence', () => {
+      const out = spliceMediaBack('One\n\nBefore  after\n', origin({ text: '![](photo.png)', line: 3, col: 7 }))
+      expect(out.how).toBe('aimed')
+      expect(out.doc).toBe('One\n\nBefore ![](photo.png) after\n')
+    })
+
+    it('appends when the note has lost that line', () => {
+      const out = spliceMediaBack('Only one line\n', origin({ line: 9 }))
+      expect(out.how).toBe('appended')
+      expect(out.doc).toBe('Only one line\n\n![](photo.png)\n')
+    })
+
+    it('appends when the line survives but is too short for the column', () => {
+      const out = spliceMediaBack('One\n\nHi\n', origin({ text: '![](p.png)', line: 3, col: 40 }))
+      expect(out.how).toBe('appended')
+      expect(out.doc).toBe('One\n\nHi\n\n![](p.png)\n')
+    })
+
+    it('restores a last-line embed cut with its LEADING newline', () => {
+      const out = spliceMediaBack('One\nTwo', origin({ text: '\n![](photo.png)', line: 2, col: 3 }))
+      expect(out.how).toBe('aimed')
+      expect(out.doc).toBe('One\nTwo\n![](photo.png)')
+    })
+  })
+
+  // The anchored path. `before`/`after` are what the note looked like either
+  // side of the cut, so a restore is a search rather than a coordinate.
+  describe('anchored to the text around it', () => {
+    const anchored = (over: Partial<MediaOrigin> = {}): MediaOrigin =>
+      origin({ before: 'One\n\n', after: 'Three\n', ...over })
+
+    it('lands on the seam between the two neighbours', () => {
+      const out = spliceMediaBack('One\n\nThree\n', anchored())
+      expect(out.how).toBe('anchored')
+      expect(out.doc).toBe('One\n\n![](photo.png)\nThree\n')
+    })
+
+    // The bug this whole mechanism exists for: two paragraphs typed at the top
+    // moved every line below, and the coordinate then aimed at the heading.
+    it('is unmoved by an edit ABOVE it that shifts every line', () => {
+      const doc = 'New para.\n\nAnother.\n\nOne\n\nThree\n'
+      const out = spliceMediaBack(doc, anchored())
+      expect(out.how).toBe('anchored')
+      expect(out.doc).toBe('New para.\n\nAnother.\n\nOne\n\n![](photo.png)\nThree\n')
+    })
+
+    it('is unmoved by an edit BELOW it', () => {
+      const out = spliceMediaBack('One\n\nThree\nand more\n', anchored())
+      expect(out.how).toBe('anchored')
+      expect(out.doc).toBe('One\n\n![](photo.png)\nThree\nand more\n')
+    })
+
+    it('still finds the spot when the far end of a neighbour was edited', () => {
+      // The opening of `before` is gone, but its last 14 characters — the ones
+      // actually touching the picture — are still there, so the short rung
+      // catches what the full-length one misses.
+      const m = anchored({ before: 'Some long preamble here\n\n', after: 'Three\n' })
+      const out = spliceMediaBack('Rewritten. A preamble here\n\nThree\n', m)
+      expect(out.how).toBe('anchored')
+      expect(out.doc).toBe('Rewritten. A preamble here\n\n![](photo.png)\nThree\n')
+    })
+
+    it('uses the recorded line to choose between identical anchors', () => {
+      // The same seam three times over; line 7 names the middle one.
+      const doc = 'One\n\nThree\nOne\n\nThree\nOne\n\nThree\n'
+      const out = spliceMediaBack(doc, anchored({ line: 5 }))
+      expect(out.how).toBe('anchored')
+      expect(out.doc).toBe('One\n\nThree\nOne\n\n![](photo.png)\nThree\nOne\n\nThree\n')
+    })
+
+    it('appends rather than guessing when the note was rewritten around it', () => {
+      // Neither neighbour survives. The old code would have aimed at line 3 and
+      // reported success; a wrong position stated confidently is the failure
+      // this replaces.
+      const out = spliceMediaBack('Completely\n\ndifferent\n', anchored())
+      expect(out.how).toBe('appended')
+      expect(out.doc).toBe('Completely\n\ndifferent\n\n![](photo.png)\n')
+    })
+
+    it('matches on one side when the picture was at the very top', () => {
+      const out = spliceMediaBack('Rest of it\n', anchored({ before: '', after: 'Rest of it\n' }))
+      expect(out.how).toBe('aimed')
+      expect(out.doc).toBe('![](photo.png)\nRest of it\n')
+    })
+
+    it('matches on one side when the picture was at the very bottom', () => {
+      const out = spliceMediaBack('All of it\n', anchored({ before: 'All of it\n', after: '' }))
+      expect(out.how).toBe('aimed')
+      expect(out.doc).toBe('All of it\n![](photo.png)\n')
+    })
+
+    it('a one-sided anchor that occurs twice is too weak — appends instead', () => {
+      const out = spliceMediaBack('Rest of it\nRest of it\n', anchored({ before: '', after: 'Rest of it\n' }))
+      expect(out.how).toBe('appended')
+    })
+  })
+
+  it('appending twice does not stack blank lines', () => {
+    const once = spliceMediaBack('Text\n', origin({ line: 99 }))
+    const twice = spliceMediaBack(once.doc, origin({ text: '![](b.png)\n', line: 99 }))
+    expect(twice.doc).toBe('Text\n\n![](photo.png)\n\n![](b.png)\n')
+  })
+
+  it('handles an empty note', () => {
+    const out = spliceMediaBack('', origin({ line: 5 }))
+    expect(out.doc).toBe('![](photo.png)\n')
+  })
+})
+
+// --- refusing a bad reply from main ----------------------------------------
+// One IPC reply of the wrong shape reached React state and blanked the entire
+// window: React unmounts the whole tree on a render error, and there was no
+// boundary. These two guards are what stops that at the door.
+describe('isWorkspace', () => {
+  const good = { entries: {}, trash: [], recovery: [] }
+
+  it('accepts a real one', () => {
+    expect(isWorkspace(good)).toBe(true)
+  })
+
+  it('refuses everything a broken IPC call can hand back', () => {
+    for (const bad of [undefined, null, 0, '', 'workspace', [], {}, { entries: {} }, { entries: {}, trash: [] }, { entries: null, trash: [], recovery: [] }, { entries: {}, trash: {}, recovery: [] }]) {
+      expect(isWorkspace(bad)).toBe(false)
+    }
+  })
+})
+
+describe('asRestoreResult', () => {
+  const ws = { entries: {}, trash: [], recovery: [] }
+
+  it('takes the new shape as it is', () => {
+    expect(asRestoreResult({ workspace: ws, landed: { a: 'A.md' } })).toEqual({
+      workspace: ws,
+      landed: { a: 'A.md' }
+    })
+  })
+
+  // The real failure: in dev the renderer hot-reloads and main does not, so a
+  // renderer on the new contract talks to a main still on the old one.
+  it('accepts a bare Workspace from a main process that has not reloaded', () => {
+    expect(asRestoreResult(ws)).toEqual({ workspace: ws, landed: {} })
+  })
+
+  it('tolerates a missing or malformed landed map', () => {
+    expect(asRestoreResult({ workspace: ws })).toEqual({ workspace: ws, landed: {} })
+    expect(asRestoreResult({ workspace: ws, landed: 'nope' })).toEqual({ workspace: ws, landed: {} })
+  })
+
+  it('returns null rather than something unusable', () => {
+    for (const bad of [undefined, null, {}, { workspace: null }, { workspace: { entries: {} } }]) {
+      expect(asRestoreResult(bad)).toBeNull()
+    }
   })
 })

@@ -477,12 +477,24 @@ every session — see the table in **Folder structure** above for the full list.
   OneDrive syncs that to the Windows machine, and `npm run dev` breaks over there until it is
   reinstalled — every platform switch, in both directions. So the Mac builds from
   **`~/notes-app-mac`**, a copy with its own macOS `node_modules`, and the OneDrive copy stays the
-  source of truth for editing and committing. `~/notes-app-mac/run-mac.sh` rsyncs the source across
-  (excluding `node_modules`/`out`/`release`/`.git`) and starts the app; **run it again after any
-  change**, because the dev server is watching the copy, not the original. Node itself is a
+  source of truth for editing and committing. **`npm run sync:mac`** (`tools/sync-mac.sh`) rsyncs
+  the source across, checks the two trees came out identical, and stops any running dev server;
+  **run it after any change**, because the dev server is watching the copy, not the original.
+  It lives in `tools/` deliberately: the previous script lived at `~/notes-app-mac/run-mac.sh`,
+  i.e. in the disposable copy, and at some point it was simply *gone* — so the documented sync step
+  became a no-op that nothing complained about, and the trees drifted two days apart without a
+  word (2026-08-23; see the "verify against the tree he RUNS" gotcha below). Node itself is a
   no-admin tarball at `~/.local/opt/node` and is not on `PATH` — the script prepends it. Verified
   2026-08-06: typecheck clean, 340 tests pass, `src/` lints clean (the oxlint warnings are all in
   read-only `legacy/`).
+- **Verify against the tree Reuben RUNS, not the one you edit.** `ps ax -o pid,etime,command |
+  grep electron-vite` names the tree AND how long it has been up; a multi-day `etime` means the
+  main process predates nearly everything, since electron-vite reloads the renderer and never main.
+  A symptom that is *impossible* given the code in front of you is evidence about which build is
+  running, not about the logic: on 2026-08-23 a blank white window was read as a crash mystery when
+  it simply meant `ErrorBoundary.tsx` did not exist in that copy, and bin rows missing their `media`
+  origin were read as a restore bug when that code was equally absent. Check the artefacts on disk
+  first — `.mdnotes/workspace.json`, the mtime of `out/main/index.js` — then theorise.
 - **Agent sessions only:** the harness sets `ELECTRON_RUN_AS_NODE=1`, which makes the Electron
   binary run as plain Node (symptom: `electron.app` is undefined, `process.version` is the
   system Node). Clear it before launching: `Remove-Item Env:ELECTRON_RUN_AS_NODE`. A normal user

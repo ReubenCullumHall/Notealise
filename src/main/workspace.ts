@@ -18,7 +18,9 @@ import {
   remapPath,
   RECOVERY_TTL_MS,
   type EntryMeta,
+  type MediaOrigin,
   type RecoveryItem,
+  type RestoreResult,
   type TrashItem,
   type Workspace
 } from '../shared/workspace'
@@ -168,7 +170,16 @@ export async function migrateKey(from: string, to: string): Promise<Workspace> {
  *  that actually moved get a trash record, so a failed move can't leave a bin
  *  row pointing at nothing. Their metadata is dropped — a restored note comes
  *  back unpinned and unarchived, which is what localhost does too. */
-export async function trashEntries(paths: string[]): Promise<Workspace> {
+export async function trashEntries(
+  paths: string[],
+  /** vault path → where inside a note that photo/video was embedded. Only the
+   *  editor's grip-delete supplies this, and only for the one file it deleted;
+   *  a sidebar delete of notes and folders passes nothing. Keyed by path rather
+   *  than passed as a second positional argument so the batch API keeps ONE
+   *  shape — a caller that has origins for some paths and not others can't get
+   *  them out of step with the list. */
+  origins?: Record<string, MediaOrigin>
+): Promise<Workspace> {
   await flushNow()
   const ws = await ensureLoaded()
   const entries = { ...ws.entries }
@@ -194,7 +205,10 @@ export async function trashEntries(paths: string[]): Promise<Workspace> {
       from: p,
       name: p.split('/').pop() ?? p,
       type: moved.type,
-      deletedAt: Date.now()
+      deletedAt: Date.now(),
+      // Only after the move actually succeeded, so a bin row never promises to
+      // put a note back for a file that never left.
+      ...(origins?.[p] ? { media: origins[p] } : {})
     })
     for (const key of Object.keys(entries)) {
       if (isSelfOrDescendant(key, p)) delete entries[key]
@@ -207,18 +221,23 @@ export async function trashEntries(paths: string[]): Promise<Workspace> {
 }
 
 /** Put binned items back where they came from. */
-export async function restoreEntries(ids: string[]): Promise<Workspace> {
+export async function restoreEntries(ids: string[]): Promise<RestoreResult> {
   await flushNow()
   const ws = await ensureLoaded()
   const wanted = new Set(ids)
   const kept: TrashItem[] = []
+  // Where each one ACTUALLY landed — restoreEntry suffixes rather than
+  // overwrites when the name has been taken since, and a caller that assumes
+  // `from` would put a photo's markdown back pointing at a file that isn't
+  // there. The one thing about restore that can fail invisibly.
+  const landed: Record<string, string> = {}
   for (const item of ws.trash) {
     if (!wanted.has(item.id)) {
       kept.push(item)
       continue
     }
     try {
-      await restoreEntry(item.id, item.name, item.from)
+      landed[item.id] = await restoreEntry(item.id, item.name, item.from)
     } catch (e) {
       console.error(`could not restore ${item.name}`, e)
       kept.push(item) // leave it in the bin rather than losing the record
@@ -227,16 +246,18 @@ export async function restoreEntries(ids: string[]): Promise<Workspace> {
   const next = { entries: ws.entries, trash: kept, recovery: ws.recovery }
   latest = next
   await flushNow()
-  return next
+  return { workspace: next, landed }
 }
 
-/** Move binned items into the 7-day recovery safety net (no ids = empty the
- *  bin). Nothing is actually deleted here — see restoreRecoveryEntries,
+/** Move binned items into the 7-day recovery safety net (**no ids at all** =
+ *  empty the bin; an explicit empty array is "these zero items", a no-op).
+ *  Nothing is actually deleted here — see restoreRecoveryEntries,
  *  purgeRecoveryEntries and the sweep below for what happens to them next. */
 export async function purgeEntries(ids?: string[]): Promise<Workspace> {
   await flushNow()
   const ws = await ensureLoaded()
-  const wanted = ids && ids.length ? new Set(ids) : null
+  if (ids && !ids.length) return ws
+  const wanted = ids ? new Set(ids) : null
   const kept: TrashItem[] = []
   const recovery: RecoveryItem[] = [...ws.recovery]
   for (const item of ws.trash) {
@@ -244,8 +265,32 @@ export async function purgeEntries(ids?: string[]): Promise<Workspace> {
       kept.push(item)
       continue
     }
-    await purgeTrashItem(item.id, item.name)
-    recovery.unshift({ id: item.id, from: item.from, name: item.name, type: item.type, purgedAt: Date.now() })
+    let moved: boolean
+    try {
+      moved = await purgeTrashItem(item.id, item.name)
+    } catch (e) {
+      // The file is still in trash/ (locked, permission denied, disk full), so
+      // keep the bin row rather than inventing a recovery record with a 7-day
+      // countdown against a file that never moved. Same idiom as restore above:
+      // leave the item where it demonstrably still is, and let the user retry.
+      console.error(`could not move ${item.name} into recovery`, e)
+      kept.push(item)
+      continue
+    }
+    // `false` = the file was already gone, so there's nothing to recover; drop
+    // the bin row without adding a recovery row that points at nothing.
+    if (moved) {
+      recovery.unshift({
+        id: item.id,
+        from: item.from,
+        name: item.name,
+        type: item.type,
+        // Follows the file down the second stage: restoring from Settings seven
+        // days later must put the note back exactly as the bin would have.
+        ...(item.media ? { media: item.media } : {}),
+        purgedAt: Date.now()
+      })
+    }
   }
   const next = { entries: ws.entries, trash: kept, recovery }
   latest = next
@@ -255,18 +300,20 @@ export async function purgeEntries(ids?: string[]): Promise<Workspace> {
 
 /** Put recovery items back where they came from — the same restore as the
  *  bin does, just one step later. */
-export async function restoreRecoveryEntries(ids: string[]): Promise<Workspace> {
+export async function restoreRecoveryEntries(ids: string[]): Promise<RestoreResult> {
   await flushNow()
   const ws = await ensureLoaded()
   const wanted = new Set(ids)
   const kept: RecoveryItem[] = []
+  // Same as restoreEntries one stage earlier, and for the same reason.
+  const landed: Record<string, string> = {}
   for (const item of ws.recovery) {
     if (!wanted.has(item.id)) {
       kept.push(item)
       continue
     }
     try {
-      await restoreFromRecovery(item.id, item.name, item.from)
+      landed[item.id] = await restoreFromRecovery(item.id, item.name, item.from)
     } catch (e) {
       console.error(`could not restore ${item.name} from recovery`, e)
       kept.push(item) // leave it in the safety net rather than losing the record
@@ -275,16 +322,23 @@ export async function restoreRecoveryEntries(ids: string[]): Promise<Workspace> 
   const next = { entries: ws.entries, trash: ws.trash, recovery: kept }
   latest = next
   await flushNow()
-  return next
+  return { workspace: next, landed }
 }
 
-/** Permanently and immediately delete recovery items (no ids = clear the
- *  whole safety net), rather than waiting out the 7-day window — for
- *  genuinely sensitive content the user wants gone sooner. */
+/** Permanently and immediately delete recovery items (**no ids at all** =
+ *  clear the whole safety net), rather than waiting out the 7-day window — for
+ *  genuinely sensitive content the user wants gone sooner.
+ *
+ *  An explicit empty array means "delete these zero items" and is a no-op. It
+ *  must NEVER fall through to "delete everything": this is the one operation in
+ *  the feature that is genuinely irreversible, and a "delete selected forever"
+ *  click whose selection happens to be empty (a stale closure, a clear racing
+ *  the click) would otherwise wipe the entire safety net. */
 export async function purgeRecoveryEntries(ids?: string[]): Promise<Workspace> {
   await flushNow()
   const ws = await ensureLoaded()
-  const wanted = ids && ids.length ? new Set(ids) : null
+  if (ids && !ids.length) return ws
+  const wanted = ids ? new Set(ids) : null
   const kept: RecoveryItem[] = []
   for (const item of ws.recovery) {
     if (wanted && !wanted.has(item.id)) {

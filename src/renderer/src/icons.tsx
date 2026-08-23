@@ -45,6 +45,9 @@ export type IconName =
   | 'table'
   | 'import'
   | 'export'
+  | 'image'
+  | 'video'
+  | 'info'
 
 // Each entry is the inner SVG for a 24×24 viewBox. Stroke icons inherit the
 // wrapper's stroke; filled marks set their own fill and clear the stroke.
@@ -283,6 +286,30 @@ const PATHS: Record<IconName, React.JSX.Element> = {
       <path d="M12 21V9" />
       <path d="M7 14l5-5 5 5" />
       <path d="M4 5h16" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="M21 15l-5-5-9 9" />
+    </>
+  ),
+  /** A play triangle in a frame — the video counterpart of `image`, sharing its
+   *  rounded 18x18 frame so the two read as a pair in a list. */
+  video: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M10 8.5l6 3.5-6 3.5z" />
+    </>
+  ),
+  /** Lower-case i in a circle. Marks a thing that explains itself on hover —
+   *  the only icon here that is never an action. */
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <path d="M12 7.75v.5" />
     </>
   )
 }

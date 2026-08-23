@@ -11,6 +11,12 @@ export const CH = {
   renameEntry: 'vault:renameEntry',
   /** renderer -> main: raw bytes of a vault file, for showing an image inline */
   readAsset: 'vault:readAsset',
+  /** renderer -> main: bytes already in hand (paste/drop) to write beside a
+   *  note, collision-safe-named. Returns the actual vault-relative path. */
+  writeAsset: 'vault:writeAsset',
+  /** renderer -> main: native picker filtered to images/video; each picked
+   *  file is read and written beside the note in one round trip. */
+  pickAttachment: 'vault:pickAttachment',
   /** renderer -> main: the [[wiki links]] of every note (or just the given ones) */
   scanLinks: 'vault:scanLinks',
   /** renderer -> main: read/write appearance settings (.mdnotes/settings.json) */
@@ -62,9 +68,18 @@ export const CH = {
   getOnboarded: 'app:getOnboarded',
   /** renderer -> main: mark onboarding finished for good */
   setOnboarded: 'app:setOnboarded',
+  /** renderer -> main: which step to resume onboarding at, if the app quit
+   *  mid-flow. Null means none saved — start at 'welcome'. */
+  getOnboardingStep: 'app:getOnboardingStep',
+  /** renderer -> main: persist the current step (or clear it with null) */
+  setOnboardingStep: 'app:setOnboardingStep',
   /** renderer -> main: reveal a vault-relative path in the OS file explorer,
    *  boundary-checked the same way every other vault path is */
   revealInFolder: 'vault:revealInFolder',
+  // Deliberately a NEW channel rather than a field on an existing one: a main
+  // process that predates this fix does not answer it at all, which is exactly
+  // how the renderer detects that it is talking to a stale one. See boot.ts.
+  bootInfo: 'app:bootInfo',
   /** renderer -> main: dev-only. Wipe the disposable onboarding-test vault,
    *  switch to it, and clear hasOnboarded — one click, never the real vault */
   resetOnboardingTestVault: 'app:resetOnboardingTestVault',

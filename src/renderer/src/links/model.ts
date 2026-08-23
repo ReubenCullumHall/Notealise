@@ -1,4 +1,5 @@
 import type { TreeNode } from '../../../shared/types'
+import { indexEmbeds } from '../../../shared/attachments'
 import {
   backlinksFor,
   dirName,
@@ -147,7 +148,7 @@ export function liveIndex(disk: LinkRow[], open: Map<string, string>): LinkRow[]
   const rows = disk.filter((r) => !open.has(r.path))
   for (const [path, text] of open) {
     if (!path) continue // the blank column has no note behind it
-    rows.push({ path, links: indexLinks(text) })
+    rows.push({ path, links: indexLinks(text), embeds: indexEmbeds(text) })
   }
   return rows
 }
