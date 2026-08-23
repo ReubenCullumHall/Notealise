@@ -41,8 +41,15 @@ fi
 # process, so a running dev server would keep serving the old main against the
 # new renderer — the exact mismatch src/renderer/src/boot.ts now warns about.
 # Killing it means the next launch is honest.
+# Both halves, and in this order. Killing only the supervisor leaves the Electron
+# app ORPHANED and still running the old main in memory — which looks exactly
+# like a restart that did not take, and cost an afternoon on 2026-08-23.
 if pkill -f "electron-vite dev" 2>/dev/null; then
-  echo "Stopped the running dev server (main does not hot-reload)."
+  echo "Stopped the dev server (main does not hot-reload)."
+fi
+if pkill -f "$DEST/node_modules/electron/dist" 2>/dev/null; then
+  sleep 1
+  echo "Stopped the app itself — killing the supervisor alone orphans it."
 fi
 echo
 echo "Now run:  cd $DEST && npm run dev"
