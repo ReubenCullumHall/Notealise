@@ -38,6 +38,8 @@ type ShellProps = Props & {
   recovery: RecoveryItem[]
   onRestoreRecovery: (ids: string[]) => void
   onPurgeRecovery: (ids?: string[]) => void
+  /** held file path, and the note it came out of (null if it wasn't in one) */
+  onRevealHeld: (path: string, note: string | null) => void
 }
 
 export type SectionId =
@@ -269,6 +271,7 @@ export function SettingsButton({
   recovery,
   onRestoreRecovery,
   onPurgeRecovery,
+  onRevealHeld,
   jumpToSection,
   onJumpHandled
 }: ShellProps & {
@@ -422,6 +425,7 @@ export function SettingsButton({
               recovery={recovery}
               onRestoreRecovery={onRestoreRecovery}
               onPurgeRecovery={onPurgeRecovery}
+              onRevealHeld={onRevealHeld}
               initialSection={initialSection}
               onClose={close}
               armed={armed}
@@ -452,6 +456,7 @@ function SettingsWindow({
   recovery,
   onRestoreRecovery,
   onPurgeRecovery,
+  onRevealHeld,
   initialSection,
   onClose,
   armed,
@@ -614,7 +619,12 @@ function SettingsWindow({
           )}
           {section === 'sourceFolder' && <SourceFolder vault={vault} onPickVault={onPickVault} />}
           {section === 'recovery' && (
-            <Recovery items={recovery} onRestore={onRestoreRecovery} onPurge={onPurgeRecovery} />
+            <Recovery
+              items={recovery}
+              onRestore={onRestoreRecovery}
+              onPurge={onPurgeRecovery}
+              onRevealHeld={onRevealHeld}
+            />
           )}
           {section === 'import' && (
             <ImportPanel onOpenSpace={spaceActions.onOpenSpace} onClose={onClose} variant="settings" />

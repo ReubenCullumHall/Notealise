@@ -3,10 +3,13 @@ import {
   asRestoreResult,
   isSelfOrDescendant,
   isWorkspace,
+  mediaRestoreOrder,
   normalizeWorkspace,
   remapPath,
   spliceMediaBack,
-  type MediaOrigin
+  type MediaOrigin,
+  type RecoveryItem,
+  type TrashItem
 } from './workspace'
 
 // workspace.json is a sidecar the user can edit, sync, or corrupt. The contract
@@ -277,6 +280,57 @@ describe('spliceMediaBack', () => {
   it('handles an empty note', () => {
     const out = spliceMediaBack('', origin({ line: 5 }))
     expect(out.doc).toBe('![](photo.png)\n')
+  })
+})
+
+// Two photos cut from the same part of a note, then restored together. Each
+// item's anchors describe the note as it stood when THAT one was cut, so the
+// order they go back in is load-bearing, not cosmetic.
+describe('mediaRestoreOrder', () => {
+  const item = (id: string, deletedAt: number, media = true): TrashItem => ({
+    id,
+    from: `S/${id}.png`,
+    name: `${id}.png`,
+    type: 'file',
+    deletedAt,
+    ...(media
+      ? { media: { note: 'S/N.md', text: `![](${id}.png)\n`, line: 1, col: 0, before: '', after: '' } }
+      : {})
+  })
+
+  it('puts the most recently deleted back first', () => {
+    const out = mediaRestoreOrder([item('a', 100), item('b', 200)])
+    expect(out.map((i) => i.id)).toEqual(['b', 'a'])
+  })
+
+  it('leaves the input array alone', () => {
+    const input = [item('a', 100), item('b', 200)]
+    mediaRestoreOrder(input)
+    expect(input.map((i) => i.id)).toEqual(['a', 'b'])
+  })
+
+  it('keeps the existing order when the stamps tie', () => {
+    const out = mediaRestoreOrder([item('a', 100), item('b', 100)])
+    expect(out.map((i) => i.id)).toEqual(['a', 'b'])
+  })
+
+  it('reads purgedAt for a recovery item', () => {
+    const rec = (id: string, purgedAt: number): RecoveryItem => ({
+      id,
+      from: `S/${id}.png`,
+      name: `${id}.png`,
+      type: 'file',
+      purgedAt,
+      media: { note: 'S/N.md', text: `![](${id}.png)\n`, line: 1, col: 0, before: '', after: '' }
+    })
+    expect(mediaRestoreOrder([rec('a', 1), rec('b', 9)]).map((i) => i.id)).toEqual(['b', 'a'])
+  })
+
+  it('does not reorder items that splice nothing into a note', () => {
+    // Notes and folders put no text back, so their order cannot matter — and
+    // reordering them would shuffle the bulk-restore notice for no reason.
+    const out = mediaRestoreOrder([item('a', 100, false), item('b', 200, false)])
+    expect(out.map((i) => i.id)).toEqual(['a', 'b'])
   })
 })
 

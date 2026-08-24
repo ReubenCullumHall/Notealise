@@ -88,6 +88,8 @@ interface Props {
     onNewFolder: () => void
     onArchive: (paths: string[], archived: boolean) => void
     onRestoreFromBin: (ids: string[]) => void
+    /** held file path, and the note it came out of (null if it wasn't in one) */
+    onRevealHeld: (path: string, note: string | null) => void
     onPurge: (ids?: string[]) => void
     onPickVault: () => void
   }
@@ -237,6 +239,19 @@ export function Sidebar({
   actions
 }: Props): React.JSX.Element {
   const [view, setView] = useState<View>('notes')
+  /** Emptying the bin one row at a time should end the same way the "Empty
+   *  recycle bin" button does: back on your notes. Restoring or deleting the
+   *  last item otherwise leaves you staring at an empty shelf, having to find
+   *  the way out yourself. Driven off the count rather than the two handlers
+   *  because either of them can be the one that empties it, and the workspace
+   *  only comes back from main a tick later. */
+  const trashCount = workspace.trash.length
+  const hadTrash = useRef(trashCount)
+  useEffect(() => {
+    const before = hadTrash.current
+    hadTrash.current = trashCount
+    if (view === 'bin' && before > 0 && trashCount === 0) setView('notes')
+  }, [trashCount, view])
   const [selection, setSelection] = useState<Selection>({ paths: new Set() })
   const [dragging, setDragging] = useState<string[] | null>(null)
   // Which folders are open. ONE set for all four TreeViews (archive, pinned,
@@ -580,7 +595,10 @@ export function Sidebar({
                         at your own photo. */}
                     <button
                       onClick={() =>
-                        void window.api.revealInFolder(heldPath(TRASH_DIR, item.id, item.name))
+                        actions.onRevealHeld(
+                          heldPath(TRASH_DIR, item.id, item.name),
+                          item.media?.note ?? null
+                        )
                       }
                       data-tip="Show me this file on my computer"
                       className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-300 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
@@ -837,6 +855,7 @@ export function Sidebar({
             recovery={workspace.recovery}
             onRestoreRecovery={onRestoreRecovery}
             onPurgeRecovery={onPurgeRecovery}
+            onRevealHeld={actions.onRevealHeld}
             jumpToSection={settingsJumpToSection}
             onJumpHandled={onSettingsJumpHandled}
           />

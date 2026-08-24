@@ -197,6 +197,11 @@ export function spliceMediaBack(doc: string, m: MediaOrigin): { doc: string; how
  *  and skipping past each match would hide some of it. */
 function allIndexesOf(hay: string, needle: string): number[] {
   const out: number[] = []
+  // An empty needle makes `indexOf` return a position forever and the loop
+  // below never terminates — a hung renderer, not an error. No caller can pass
+  // one today (both are guarded on non-empty anchors); this is here so that
+  // stays true if a third caller appears.
+  if (!needle) return out
   for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + 1)) out.push(i)
   return out
 }
@@ -232,6 +237,35 @@ function lineAt(doc: string, at: number): number {
   let n = 1
   for (let i = 0; i < at; i++) if (doc[i] === '\n') n++
   return n
+}
+
+/** Held media in the order it has to be put back: most recently deleted FIRST.
+ *
+ *  Not a detail. Each item's anchors describe the note as it stood at the
+ *  moment THAT item was cut, so the only document a given anchor is guaranteed
+ *  to match is the one produced by undoing every later deletion first.
+ *
+ *  Two photos on consecutive lines make it concrete. Delete A, then B. A's
+ *  `after` anchor still contains B's markdown — because B was there when A was
+ *  cut — so A's anchor cannot match a document that no longer holds B. Restore
+ *  A first and it fails every rung and lands on the end of the note. Restore B
+ *  first and the document becomes exactly what A was recorded against.
+ *
+ *  Non-media items are left where they are: they don't splice anything into a
+ *  note, so their order cannot matter.
+ *
+ *  The stamp is `deletedAt` in the bin, which is exact. In recovery it is
+ *  `purgedAt`, which is when the item left the bin — emptying the bin stamps
+ *  everything at once, so two photos purged together tie and keep their
+ *  existing relative order. The cost of a tie landing the wrong way round is
+ *  one picture appended to the end with the notice saying so, which is the
+ *  honest failure this whole path is built to give. */
+export function mediaRestoreOrder<T extends { media?: MediaOrigin; deletedAt?: number; purgedAt?: number }>(
+  items: T[]
+): T[] {
+  const stamp = (i: T): number => i.deletedAt ?? i.purgedAt ?? 0
+  // A stable sort (guaranteed since ES2019) is what preserves the tie order.
+  return [...items].sort((a, b) => (a.media && b.media ? stamp(b) - stamp(a) : 0))
 }
 
 /** One item sitting in the recoverable bin. The file really has been moved to

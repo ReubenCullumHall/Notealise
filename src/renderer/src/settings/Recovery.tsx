@@ -17,6 +17,8 @@ interface Props {
   items: RecoveryItem[]
   onRestore: (ids: string[]) => void
   onPurge: (ids?: string[]) => void
+  /** held file path, and the note it came out of (null if it wasn't in one) */
+  onRevealHeld: (path: string, note: string | null) => void
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -25,7 +27,7 @@ function daysLeft(purgedAt: number): number {
   return Math.max(0, Math.ceil((purgedAt + RECOVERY_TTL_MS - Date.now()) / DAY_MS))
 }
 
-export function Recovery({ items, onRestore, onPurge }: Props): React.JSX.Element {
+export function Recovery({ items, onRestore, onPurge, onRevealHeld }: Props): React.JSX.Element {
   return (
     <>
       <h3 className="font-display text-[15px] font-semibold text-ink-900">Recovery</h3>
@@ -55,6 +57,7 @@ export function Recovery({ items, onRestore, onPurge }: Props): React.JSX.Elemen
                 item={item}
                 onRestore={() => onRestore([item.id])}
                 onPurge={() => onPurge([item.id])}
+                onRevealHeld={onRevealHeld}
               />
             ))}
           </div>
@@ -71,11 +74,13 @@ export function Recovery({ items, onRestore, onPurge }: Props): React.JSX.Elemen
 function RecoveryRow({
   item,
   onRestore,
-  onPurge
+  onPurge,
+  onRevealHeld
 }: {
   item: RecoveryItem
   onRestore: () => void
   onPurge: () => void
+  onRevealHeld: (path: string, note: string | null) => void
 }): React.JSX.Element {
   const left = daysLeft(item.purgedAt)
   // Same treatment as the sidebar's bin, deliberately: this is the same item one
@@ -99,7 +104,9 @@ function RecoveryRow({
       {/* Same reasoning as the bin's copy: `.mdnotes/recovery/` is inside a
           hidden dot-folder, so this is the only way to actually see the file. */}
       <button
-        onClick={() => void window.api.revealInFolder(heldPath(RECOVERY_DIR, item.id, item.name))}
+        onClick={() =>
+          onRevealHeld(heldPath(RECOVERY_DIR, item.id, item.name), item.media?.note ?? null)
+        }
         data-tip="Show me this file on my computer"
         className="shrink-0 rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600"
       >

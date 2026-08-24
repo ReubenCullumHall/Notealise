@@ -47,6 +47,7 @@ import type { LinkEnv, LinkHandlers, MediaDelete, OpenHow } from './editor/linkE
 import {
   type MediaLanding,
   asRestoreResult,
+  mediaRestoreOrder,
   isWorkspace,
   spliceMediaBack,
   type MediaOrigin,
@@ -867,6 +868,18 @@ export default function App(): React.JSX.Element {
   // of Cancel — it puts the exact text back at the exact offset, and the embed
   // renders again from it because the text is what it was.
   const [mediaConfirm, setMediaConfirm] = useState<MediaDelete | null>(null)
+  /** "Show me this file on my computer", on a bin or recovery row.
+   *
+   *  Asked rather than done, because the folder it opens is a holding pen, not
+   *  a place to work. Two things go wrong quietly if nobody says so: moving or
+   *  renaming the file there leaves Restore with nothing to find, and editing
+   *  the note it came out of erodes the text either side of where the picture
+   *  sat — which is exactly what the restore aims at (see MediaOrigin). Neither
+   *  is destructive and neither is blocked; both are worth a sentence first. */
+  const [revealAsk, setRevealAsk] = useState<{ path: string; note: string | null } | null>(null)
+  const askReveal = useCallback((path: string, note: string | null): void => {
+    setRevealAsk({ path, note })
+  }, [])
   // The exit animation needs the dialog to outlive the decision, so closing is a
   // state of its own and `animationend` is what actually unmounts — the same
   // pattern the settings genie uses for its close.
@@ -1712,7 +1725,11 @@ export default function App(): React.JSX.Element {
     items: (TrashItem | RecoveryItem)[],
     landed: Record<string, string>
   ): Promise<void> => {
-    const back = items.filter(Boolean)
+    // Newest deletion first — see `mediaRestoreOrder`. Restoring two photos that
+    // were cut from the same part of a note in the other order puts the first
+    // one on the end, because its anchors describe a note that still contained
+    // the second.
+    const back = mediaRestoreOrder(items.filter(Boolean))
     if (!back.length) return
     // Every photo goes back into its note, but the strip describes — and
     // navigates to — ONE of them. The same one, deliberately: a bulk restore
@@ -2211,6 +2228,7 @@ export default function App(): React.JSX.Element {
           onNewFolder: () => void newFolder(''),
           onArchive: setArchived,
           onRestoreFromBin: restoreFromBin,
+          onRevealHeld: askReveal,
           onPurge: purge,
           onPickVault: () => void pick()
         }}
@@ -2511,6 +2529,53 @@ export default function App(): React.JSX.Element {
               </button>
               <button className="danger" onClick={() => closeMediaConfirm(false)}>
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Explains the holding pen before opening it. Not a warning dialog with a
+          scary verb: nothing here is destructive, and the answer is almost
+          always yes — it is a sentence of context attached to the one gesture
+          that takes somebody out of the app and into a folder where the wrong
+          instinct (tidy it up, drag it somewhere sensible) quietly breaks the
+          restore. */}
+      {revealAsk && (
+        <div className="prompt-backdrop" onClick={() => setRevealAsk(null)}>
+          <div
+            className="prompt confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Leave it where it is"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="prompt-title">Leave it where it is</div>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-500">
+              This opens a hidden <span className="font-mono">.mdnotes</span> folder the app keeps
+              its deleted files in. Have a look, but don&rsquo;t move or rename it there —
+              Restore goes looking for it by name.
+            </p>
+            {revealAsk.note && (
+              <p className="confirm-warn">
+                Try not to edit {titleOf(revealAsk.note)} until you&rsquo;ve put this back. Restore
+                finds the spot by the words either side of where it sat, so rewriting that part
+                lands it at the end of the note instead.
+              </p>
+            )}
+            <div className="prompt-actions">
+              {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+              <button autoFocus onClick={() => setRevealAsk(null)}>
+                Cancel
+              </button>
+              <button
+                className="primary"
+                onClick={() => {
+                  void window.api.revealInFolder(revealAsk.path)
+                  setRevealAsk(null)
+                }}
+              >
+                Show me the file
               </button>
             </div>
           </div>

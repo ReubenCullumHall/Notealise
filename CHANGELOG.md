@@ -7,6 +7,17 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- "Show me this file on my computer", on a bin or recovery row, now explains itself first: the
+  folder it opens is a holding pen inside a hidden `.mdnotes`, and moving or renaming the file there
+  leaves Restore with nothing to find. For a photo it also names the note it came out of and asks
+  you not to edit that note until it is back, because restore aims at the words either side of where
+  the picture sat
+- Restoring or deleting the last thing in the bin now takes you back to your notes, the same way
+  "Empty recycle bin" already did — rather than leaving you on an empty shelf to find the way out
+- Fixed: restoring two photos at once that were deleted from the same part of a note put the first
+  one at the end. Each one remembers the text around it as it stood when THAT one was cut, so the
+  earlier photo's memory still mentioned the later one; they now go back most-recently-deleted
+  first, which rebuilds the note each one was recorded against
 - Development: `src/main/workspace.test.ts` runs the bin, the recovery net and restore against a
   real temporary vault. It exists because a bug hid in the one place nothing covered — both halves
   either side of it were tested, so a bin record that reached disk without the note position on it
