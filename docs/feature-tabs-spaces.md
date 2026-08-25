@@ -316,6 +316,52 @@ defaults. The library is the fix. `shared/presets.ts` · `main/presets.ts` · `s
   not a raw `JSON.stringify`, or a key-order difference between a look rebuilt on read and one built
   in the renderer rewrites the whole library on every sync.
 
+## Resizing the columns (built 2026-08-24)
+
+Drag the seam between two panes; double-click resets to even; the divider is a real
+`role="separator"` so Tab reaches it and the arrow keys nudge it 24px.
+
+**Widths live in `TabLayout.sizes`, and that placement is the whole design.** Because they sit on
+the layout rather than beside it, they ride `spaceTabs` per space for free and persist through
+`settings.session` with the tabs — no second store to keep in step. It is `sizes?: number[]`,
+optional and **losable** (rule 2): absent, the wrong length, or carrying a hand-edited `NaN` all
+read as equal columns. `paneSizes` is the ONLY legitimate reader, and it falls back **whole**
+rather than per-entry, because a half-repaired array is a layout nobody chose.
+
+Invariant 4 joins the three in `tabs/model.ts`: `sizes`, when present, has exactly one entry per
+pane. It is asserted in the test file's shared `invariants` helper, so all ~490 existing cases
+check it too — an operation that changes the pane count and forgets `sizes` fails whichever test
+already exercises it, rather than waiting for someone to write a width test for that path.
+
+**Even columns carry NO array.** `simplify` drops one that has become even however it got there, so
+"never dragged", "dragged back to even" and "became even when a column closed" are the same value.
+Without it a plain split writes `[0.5, 0.5]` into settings.json for a layout nobody touched, and
+`equalisePanes` has two different evens to be a no-op against. Caught by its own test, not by
+review.
+
+**`movePane` carries a width with its column; `swapPanes` does not.** A swap is two notes trading
+columns, so the columns — and the sizes you dragged them to — stay put. That is what keeps
+"nothing else on screen moves" literally true.
+
+**The drag writes `flex-grow` straight to the DOM and commits to React once, on release.** Going
+through state on every `pointermove` would re-render App and every open CodeMirror sixty times a
+second to move a line two pixels. `PaneDivider` finds the two elements it resizes as its own DOM
+siblings, which is also why no ref list has to be threaded down and kept in step with the pane array.
+
+**`MIN_PANE_PX` is enforced in pixels at the drag, never as a CSS `min-width`.** A hard CSS minimum
+overflows the row in a window too narrow to give every pane one, and an overflow you cannot scroll
+is worse than a cramped column.
+
+**The divider takes no net width** — an 11px box with -5.5px margins either side — so the panes'
+fractions still describe the whole row while the element keeps a real hit area and bounding box. It
+was genuinely 0-wide first; everything worked by hand, but a 0x0 `role="separator"` is invisible to
+anything that measures before it acts, which is how the automation caught it.
+
+**The motion is deliberately split three ways.** The drag itself is NOT animated — a seam that eases
+toward the pointer reads as lag. `body.pane-resizing` suppresses the column transition for its
+duration. Everything else glides: hover, reset, and columns rebalancing when one opens or closes. A
+keyboard nudge deliberately keeps its glide, because 24px arriving instantly reads as a glitch.
+
 ## Tabs belong to a space
 
 Each space keeps its own tab strip and split. Switching space stashes the current layout under the

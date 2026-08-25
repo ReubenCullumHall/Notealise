@@ -316,6 +316,11 @@ export default function App(): React.JSX.Element {
   // `[[Note#Heading]]`: the note opens, and the heading is looked for once its
   // text has landed in the pane.
   const [pendingHeading, setPendingHeading] = useState<{ path: string; heading: string } | null>(null)
+  /** "Take me to where that picture is" — the note to open and the file to find
+   *  in it. Same shape and same job as `pendingHeading` beside it: App decides
+   *  WHICH note, the pane decides WHERE in it, because only the pane has the
+   *  text (see CodeEditor's `revealEmbed` effect). */
+  const [pendingEmbed, setPendingEmbed] = useState<{ path: string; file: string } | null>(null)
   // The sidebar's "open this folder, close the rest", handed up so the path bar
   // can drive it. Imperative on purpose — see Sidebar's `revealRef` prop.
   const revealRef = useRef<((folder: string) => void) | null>(null)
@@ -909,7 +914,20 @@ export default function App(): React.JSX.Element {
               others.length === 1
                 ? 'Removed from this note. The file stays — 1 other note still uses it.'
                 : `Removed from this note. The file stays — ${others.length} other notes still use it.`,
-            action: { label: 'Undo', run: () => req.restore() }
+            // The escape hatch, and the ONLY route to binning a file that other
+            // notes are using. Deliberately a second, aimed action rather than
+            // the default: the safe thing has already happened by the time this
+            // is offered, so choosing it is an explicit decision to break the
+            // other notes — which is exactly the moment the dialog's list of
+            // them earns its place.
+            action: {
+              label: 'Delete the file anyway',
+              run: () => {
+                setKeepAsking(true)
+                setConfirmClosing(false)
+                setMediaConfirm(req)
+              }
+            }
           })
           return
         }
@@ -1037,6 +1055,27 @@ export default function App(): React.JSX.Element {
    *  The ticks only bite on Delete. Cancel means "forget I did any of this", and
    *  quietly switching off a safety net while someone backs out of using it is
    *  exactly the kind of thing that safety net exists to prevent. */
+  /** Go and look at a note that also holds this picture, from the dialog.
+   *
+   *  A plain click CANCELS first — the picture goes back where it was and the
+   *  dialog closes, so nothing is left half-deleted while you are off reading
+   *  something else. You come back and delete once you have seen enough.
+   *
+   *  Cmd/Ctrl-click opens it in a tab and leaves the dialog standing, which is
+   *  what makes the modifier worth having: queue up two or three notes to
+   *  inspect and still answer the dialog afterwards. */
+  const goToUse = (note: string, newTab: boolean): void => {
+    const file = mediaConfirm?.file
+    if (!file) return
+    setPendingEmbed({ path: note, file })
+    if (newTab) {
+      void openLink(note, 'tab')
+      return
+    }
+    closeMediaConfirm(true)
+    void openLink(note, 'replace')
+  }
+
   const closeMediaConfirm = (restore: boolean): void => {
     if (confirmClosing) return
     const file = mediaConfirm?.file
@@ -2418,6 +2457,7 @@ export default function App(): React.JSX.Element {
                   onDragLink={(target) => setDrag(target ? { kind: 'tab', path: target } : null)}
                   onInspect={setInspect}
                   revealHeading={pendingHeading?.path === p ? pendingHeading.heading : null}
+                  revealEmbed={pendingEmbed?.path === p ? pendingEmbed.file : null}
                   focused={i === layout.focus}
                   split={layout.panes.length > 1}
                   slots={space.toolbarSlots}
@@ -2587,11 +2627,27 @@ export default function App(): React.JSX.Element {
                 doesn't block the delete — the bin is right there — but it must
                 not happen silently. */}
             {alsoUsedBy.length > 0 && (
-              <p className="confirm-warn">
+              <div className="confirm-warn">
+                {/* Named, never counted. "3 other notes" tells you the size of
+                    the problem and nothing about which notes have it — and you
+                    cannot click what has not been named. */}
                 {alsoUsedBy.length === 1
-                  ? `It's also in ${titleOf(alsoUsedBy[0])}, which will lose its picture.`
-                  : `It's also in ${alsoUsedBy.length} other notes, which will lose their picture.`}
-              </p>
+                  ? 'It is also in this note, which will lose its picture:'
+                  : `It is also in these ${alsoUsedBy.length} notes, which will lose their picture:`}
+                <ul className="confirm-notes">
+                  {alsoUsedBy.map((note) => (
+                    <li key={note}>
+                      <button
+                        type="button"
+                        data-tip="Go and look · Cmd/Ctrl-click to open in a new tab"
+                        onClick={(e) => goToUse(note, e.metaKey || e.ctrlKey)}
+                      >
+                        {titleOf(note)}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {/* Same tick as Settings -> Spaces -> Delete space -> "and its saved
                 look": an extra choice hanging off a destructive action, rather

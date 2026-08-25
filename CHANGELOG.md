@@ -7,6 +7,34 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Drag the line between two side-by-side notes to give one of them more room. Double-click it to
+  put them back to even, or use the arrow keys once it has focus. Each space remembers how you left
+  its columns, and a column will not shrink below the width where text stops reading as a column
+- Fixed: selecting several lines drew a ragged block, with a notch out of the top-left corner and a
+  small tab hanging off the bottom-left. Most visible on an empty note, where there is nothing else
+  in the selection to distract from it. The editor's 28px margin was on the wrong element, so
+  CodeMirror worked out where the text began from the wrong edge and drew the full-width part of a
+  selection 28px wider than the first and last lines. Nothing about the note's layout changes
+- A grip now appears beside whichever paragraph you are working on, matching the one on a photo and
+  the one on a note in the sidebar. Drag it to move that paragraph up or down the note. A code block
+  or a table moves whole, blank lines inside it included; select several lines first and it moves
+  exactly those
+- Drag a paragraph or a picture from one side of a split view into the other to move it between
+  notes. Hold Alt to leave the original where it is. A picture's link is re-pointed as it lands, so
+  it still shows in its new note without a second copy of the file appearing in the vault
+- With the eye on, clicking the code under a picture now copies that link. Paste it into another
+  note and both notes show the same picture from one file, instead of the vault filling up with
+  duplicates
+- Deleting a picture from a note no longer deletes the file when other notes are still using it.
+  The text goes, the file stays, and a line says which notes still hold it. The file is only moved
+  to the bin when the last note stops using it — before this, removing a picture from a note you had
+  pasted it into silently took it out of the note you pasted it from
+- The confirmation for deleting a shared picture now names every note that would lose it, and each
+  one is a link: click to go and look at exactly where it sits in that note, or Cmd/Ctrl-click to
+  open it in a tab and keep deciding
+- Fixed: the six-dot handle for reordering a table's columns was cut off along its top edge. A
+  table clips anything overhanging its box, and the room reserved above it was 8px short of what
+  the handle needed
 - Fixed: adding a photo to a note and then switching away made that note invisible to the app. The
   index lays open notes over the last scan of the vault, so a note's edits counted only while it was
   open — the moment it left the tab strip the app fell back to what the scan had said at startup,

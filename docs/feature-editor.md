@@ -430,3 +430,113 @@ told. Covered by `linkEnv.test.ts`.
   the cursor one character in — that gesture means "let me at the markdown", so it should be
   unambiguous. Video has no equivalent: `VideoWidget.ignoreEvent` returns true, so a click on a
   player never placed a cursor in the first place.
+
+## The 28px gutter, and the ragged selection it caused (fixed 2026-08-25)
+
+**The editor's horizontal margin MUST live on `.cm-line`, not on `.cm-content`.** It was the other
+way round in `highlight.ts` until 2026-08-25, and that is what made every multi-line selection
+ragged — a notch out of the top-left corner of the block and a small tab hanging off the
+bottom-left.
+
+CodeMirror works out where the text starts by reading the LINE's padding
+(`rectanglesForRange`, `@codemirror/view`):
+
+```js
+leftSide  = contentRect.left  + parseInt(lineStyle.paddingLeft)
+rightSide = contentRect.right - parseInt(lineStyle.paddingRight)
+```
+
+With the padding on `.cm-content` that reads `0`, so `leftSide` came out as the content's BORDER
+box — 28px left of anywhere text can be. The full-line pieces of a selection were drawn to that
+edge, while the first and last partial lines used `coordsAtPos`, which knows the truth. Two
+different left edges, 28px apart, on one selection.
+
+Moving it changes no layout: `.cm-content` is border-box, so the text still starts 28px inside
+`--editor-max-width` and the column is the same width (the caret does not move; measured).
+
+**The lesson worth keeping is about diagnosis, not CSS.** The first report came with a screenshot of
+a selection over a photo, and the photo was a red herring — two real but unrelated bugs got found
+and fixed chasing it. What actually located this was reproducing the user's exact steps (new note,
+Enter down the page, select upward) and then measuring `.cm-selectionBackground`'s rects against
+the line boxes. **Measure the rectangles; do not reason about the stylesheet.** An empty note is the
+best case to reproduce a selection defect on, because there is nothing else in the block to
+distract from its shape.
+
+## Moving a block: one drag engine, three grips (built 2026-08-24/25)
+
+`attachMove.ts` was the photo's drag. It now takes a `DragSource` — `rangeAt`, `onClick`,
+`className`, `label` — and everything else about the gesture (4px threshold, boundary marker,
+edge-scroll, one transaction on drop) is shared. The three callers:
+
+- **the photo/video grip** (`EMBED_SOURCE`): one line; a click selects the embed as one object;
+- **the line grip** (`lineMove.ts`): `blockRange(state)`; a click selects the block;
+- (the table's column handle is separate — it moves columns, not lines.)
+
+**`blockMove.ts` decides what a grip picks up, and it is pure.** Three rules in order: a selection
+wins (the only way to move part of a paragraph); then a fenced code block moves whole; then the
+paragraph. A table needs no rule of its own because Markdown tables cannot contain a blank line, so
+the paragraph rule already takes one whole — asserted, so it stays true if the rules are edited.
+**The fence is the one case the paragraph rule cannot do**: a fence may legally contain blank
+lines, so walking outwards from the cursor stops halfway through somebody's code. It is asked of
+the syntax tree, not counted by hand.
+
+**The grip is ONE element, not a decoration per line.** A `Decoration.line` on the active line
+would rebuild decorations on every cursor move and put a button inside CodeMirror's content DOM.
+`lineMove.ts` parks one button over `.cm-editor` and moves it, which costs nothing and cannot
+interfere with the passes. It sits in the `.cm-line` gutter above, so it never shifts a character —
+and it aligns to the FIRST line of the block, not the block's midpoint, because it is meant to read
+as belonging to where the cursor is.
+
+## Dragging between panes (built 2026-08-25)
+
+The same grips now cross into another split pane. `viewRegistry.ts` is a Set of live views that
+register themselves as an extension — **the one place in `editor/` that looks sideways**, kept
+deliberately narrow rather than threading a pane list through everything.
+
+**A picture's link must be re-pointed as it lands.** An embed's target is relative to the note
+holding it, so text arriving from another folder points at nothing. `relativeTarget` and
+`retargetEmbeds` (shared/attachments.ts) do it — same file on disk, new way of naming it, which is
+what keeps this a re-point and not a duplicate. Tested with a round-trip property
+(`resolveVaultPath(relativeTarget(f, n), n) === f`), which is the check a hand-written expectation
+can get wrong twice in the same direction.
+
+`retargetEmbeds` returns the text unchanged when both notes share a folder, so a same-folder drag
+produces byte-identical text and no spurious diff in the vault.
+
+**Alt copies; a plain drag moves.** Read at DROP, not at mousedown, so the decision is made while
+you can see where it would land. Alt inside ONE pane is left as a plain move — a duplicate a few
+lines from its original is not something anybody drags to achieve.
+
+## Shared media: the file only leaves when the last note stops using it (2026-08-25)
+
+Deleting a picture from ANY note used to bin the file. With shared media that is the accident
+waiting to happen: paste a picture into a second note, change your mind, remove it there, and the
+note you pasted it FROM silently loses its picture — with nothing to warn you, because the warning
+was on the dialog and the dialog was about the note you were in.
+
+Now `otherNotesUsing` is consulted FIRST. While anything else holds the file it is not a delete at
+all: the text goes, the file stays, and a notice says so. No dialog — nothing destructive is
+happening, and `req.restore()` still undoes the text.
+
+The destructive path is reached only by the notice's **"Delete the file anyway"** action. That is
+where the confirmation now NAMES every other note, each one clickable: a plain click cancels
+(restoring the picture) and jumps you to the line the picture sits on in that note; Cmd/Ctrl-click
+opens it in a tab and leaves the dialog standing so you can inspect several and still answer.
+Named rather than counted, because you cannot click what has not been named.
+
+`lineOfEmbed` (shared/attachments.ts) is what "take me to where it is" needs — App decides WHICH
+note, the pane decides WHERE in it (`revealEmbed`, mirroring `revealHeading`), because only the
+pane has the text.
+
+**The embed regex now lives in ONE place** (`embedPattern()` in shared/attachments.ts). Three
+readers — the index, the re-pointer and the jump — had to agree character for character, which is
+three chances to drift.
+
+## Anything overhanging a table's box is clipped (fixed 2026-08-25)
+
+`.cm-table` uses `overflow-x: auto`, and per spec that makes `overflow-y` compute to `auto` too, so
+anything positioned outside the box is **silently cut away** — nothing overflows visibly, it is
+just gone. The padding is what buys room for the chrome, and the top had 10px while
+`positionChrome` puts the column handle at `cellTop - 18px`. Exactly 8px of every column grip was
+sliced off. Any future control that overhangs an edge has to be measured against those four
+padding numbers.

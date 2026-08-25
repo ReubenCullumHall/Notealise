@@ -13,6 +13,7 @@ import { taskClick } from './taskPass'
 import { blockMath } from './blockMath'
 import { blockTable } from './blockTable'
 import { lineMove } from './lineMove'
+import { registerView } from './viewRegistry'
 import { applyColor } from './colorCommands'
 import { completionExtension } from './completions'
 import { linkEnv, linkHandlersFacet, type LinkHandlersRef } from './linkEnv'
@@ -65,6 +66,9 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // The six-dot grip beside the active line (lineMove.ts). After the passes,
     // so it never competes with a widget for the same gesture.
     lineMove,
+    // Makes this view findable by a drag that starts in another pane
+    // (viewRegistry.ts) — the one place in editor/ that looks sideways.
+    registerView,
     editorStyling,
     completionExtension()
   ]

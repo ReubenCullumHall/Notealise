@@ -536,6 +536,24 @@ every session — see the table in **Folder structure** above for the full list.
   `npm run dev:legacy` / `build:legacy` + `serve:legacy` (Vite on localhost:5173). See
   `legacy/README.md`.
 
+- **A packaged build is not a secure context, so half the modern web APIs are missing there and
+  present in dev.** `main/index.ts` uses `loadURL(ELECTRON_RENDERER_URL)` in dev — `http://localhost`,
+  which Chromium trusts — and `loadFile(...)` when packaged, i.e. `file://`, which it does not.
+  Anything gated on a secure context (`navigator.clipboard`, `crypto.subtle`, geolocation, service
+  workers) therefore **works every single time you test it and never once for a user**, which is the
+  worst shape a bug can have: there is nothing to notice. Found 2026-08-25 building click-to-copy on
+  the media caption. Always pair such an API with a fallback that has no such gate
+  (`document.execCommand('copy')` over a selection, for that one) and **verify the fallback by
+  deleting the modern API** — `Object.defineProperty(navigator, 'clipboard', {get: () => undefined})`
+  in an init script reproduces the packaged environment exactly.
+- **When a fix changes nothing, check that it FIRED before changing it again.** The same session's
+  first attempt at a re-measure hook attached `img.addEventListener('load', …)` — correct, except a
+  cached or `data:` URI image is already `complete` before that line runs, so `load` had been and
+  gone and the listener waited forever. The measurement was identical before and after, which read
+  as "the fix doesn't work" when it meant "the fix never ran". Re-measure the exact number that
+  showed the bug, and treat an unchanged number as a question about the harness, not only about the
+  logic.
+
 ### Tooltips are `data-tip`, never `title`
 
 Every hover label in the renderer uses a `data-tip` attribute, picked up by the single `<Tooltip/>`

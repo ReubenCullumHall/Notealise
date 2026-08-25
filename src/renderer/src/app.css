@@ -1313,6 +1313,39 @@ button.icon:hover {
   font-size: 12.5px;
   line-height: 1.5;
 }
+/* The notes that would lose their picture, each one a way in.
+   Rendered as buttons rather than anchors: nothing here navigates by URL, and a
+   button is what a screen reader should announce for something that changes
+   what is on screen. Styled to read as links because that is what they behave
+   like — the app has no other "text you can click" vocabulary to borrow. */
+.confirm-notes {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.confirm-notes button {
+  padding: 1px 0;
+  border: none;
+  background: none;
+  color: rgb(var(--brand-600));
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  outline: none;
+  border-radius: 4px;
+}
+.confirm-notes button:hover {
+  color: rgb(var(--brand-500));
+}
+.confirm-notes button:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--brand-300));
+}
 
 .confirm .prompt-actions {
   gap: 10px;
@@ -1907,9 +1940,17 @@ button.icon:hover {
   overflow-x: auto;
   /* Each negative margin cancels the padding on its own side, so the table sits
      exactly where it did before the chrome existed — the 0.4em above and below
-     is the real spacing, and the rest is only room for controls to overhang. */
-  padding: 10px 20px 20px 10px;
-  margin: calc(0.4em - 10px) -20px calc(0.4em - 20px) -10px;
+     is the real spacing, and the rest is only room for controls to overhang.
+
+     THE TOP MUST CLEAR THE COLUMN HANDLE. `positionChrome` puts it at
+     `cellTop - 18px` and it is 14px tall, so it needs 18px of room above the
+     grid; the 10px this used to have clipped exactly 8px off the top of every
+     column grip (reported 2026-08-25 — the pill rendered as a half-pill). It is
+     a silent kind of bug because of the `overflow-x` note above: nothing
+     overflows visibly, it is just quietly cut away. Any future control that
+     overhangs an edge has to be measured against these four numbers. */
+  padding: 20px 20px 20px 10px;
+  margin: calc(0.4em - 20px) -20px calc(0.4em - 20px) -10px;
 }
 .cm-table table {
   border-collapse: collapse;

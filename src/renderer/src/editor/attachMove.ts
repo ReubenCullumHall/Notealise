@@ -3,6 +3,8 @@ import { gripIcon } from './blockTable'
 import { embedSpanAt, selectEmbed } from './attachSelect'
 import { createEdgeScroller } from '../edgeScroll'
 import type { BlockRange } from './blockMove'
+import { notePathOf, viewAtPoint } from './viewRegistry'
+import { retargetEmbeds } from '../../../shared/attachments'
 
 // Dragging an image/video embed to a different line in the note — the same
 // grip-and-drag interaction blockTable.ts's column handle already uses
@@ -117,28 +119,47 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
     // boundaries inside a table's raw markdown — exactly the position
     // blockTable.ts warns about — which corrupts the table on the next parse.
     // `viewportLineBlocks` only ever names positions between blocks.
+    // WHICH editor the pointer is over. Starts as the one the drag began in and
+    // follows the pointer into another pane, which is what makes this a
+    // transfer between notes rather than only a reorder inside one.
+    let dropView = view
+
     let boundaries: { y: number; pos: number }[] = []
     // Measured lazily and re-measured whenever the view has scrolled: a wheel
     // scroll or an edge-autoscroll mid-drag moves the lines under the cursor,
     // and boundaries captured once at mousedown would silently desync from
-    // what's on screen.
+    // what's on screen. `measuredView` joins them for the same reason — cross
+    // into another pane and every boundary belongs to a different document.
     let measuredScroll = Number.NaN
     let measuredViewport = -1
+    let measuredView: EditorView | null = null
     const measure = (): void => {
-      if (view.state.doc !== doc) return // see the abort in onUp
-      const scroll = view.scrollDOM.scrollTop
-      if (boundaries.length && scroll === measuredScroll && view.viewport.from === measuredViewport) return
+      const v = dropView
+      // The source doc changing under us aborts the whole gesture (see onUp).
+      // A DIFFERENT view's document is not ours to police.
+      if (v === view && view.state.doc !== doc) return
+      const scroll = v.scrollDOM.scrollTop
+      if (
+        boundaries.length &&
+        v === measuredView &&
+        scroll === measuredScroll &&
+        v.viewport.from === measuredViewport
+      ) {
+        return
+      }
+      measuredView = v
       measuredScroll = scroll
-      measuredViewport = view.viewport.from
-      const docTop = view.documentTop
-      const blocks = view.viewportLineBlocks
+      measuredViewport = v.viewport.from
+      const vDoc = v.state.doc
+      const docTop = v.documentTop
+      const blocks = v.viewportLineBlocks
       boundaries = blocks.map((b) => ({ y: b.top + docTop, pos: b.from }))
       const last = blocks[blocks.length - 1]
       if (last) {
-        const lastLine = doc.lineAt(Math.min(last.to, doc.length))
+        const lastLine = vDoc.lineAt(Math.min(last.to, vDoc.length))
         boundaries.push({
           y: last.bottom + docTop,
-          pos: lastLine.number < doc.lines ? doc.line(lastLine.number + 1).from : doc.length
+          pos: lastLine.number < vDoc.lines ? vDoc.line(lastLine.number + 1).from : vDoc.length
         })
       }
     }
@@ -192,7 +213,7 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       for (const b of boundaries) if (Math.abs(b.y - y) < Math.abs(best.y - y)) best = b
       target = best.pos
       if (marker) {
-        const rect = view.dom.getBoundingClientRect()
+        const rect = dropView.dom.getBoundingClientRect()
         marker.style.top = `${best.y}px`
         marker.style.left = `${rect.left}px`
         marker.style.width = `${rect.width}px`
@@ -207,14 +228,25 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
         marker.className = 'cm-attach-drop-marker'
         document.body.appendChild(marker)
       }
+      // A pane with no note in it (the blank column) is not a place text can go,
+      // so the pointer being over one leaves the target where it was rather than
+      // offering a drop that would have nowhere to land.
+      const over = viewAtPoint(m.clientX, m.clientY)
+      if (over && over !== dropView && (over === view || notePathOf(over))) dropView = over
       lastY = m.clientY
+      // Edge-scrolling always belongs to the pane being pointed at.
+      scroller.retarget(dropView.scrollDOM)
       scroller.track(m.clientY)
       place(m.clientY)
     }
 
-    const onUp = (): void => {
+    const onUp = (up: MouseEvent): void => {
       const wasMoved = moved
       const dropAt = target
+      const into = dropView
+      // Read at DROP, not at mousedown: you decide whether this is a move or a
+      // copy while you are carrying it and can see where it would land.
+      const copying = up.altKey
       cleanup()
       // A press with no drag is a CLICK, and what that means belongs to the
       // caller: for an embed it selects the picture as one object (which is
@@ -235,6 +267,39 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       // anyway either scrambles the note or throws a RangeError nothing
       // catches. Abandoning the move is the only honest answer.
       if (view.state.doc !== doc) return
+
+      // --- into ANOTHER pane: two documents, one gesture ---------------------
+      if (into !== view) {
+        const to = notePathOf(into)
+        const from = notePathOf(view)
+        if (!to) return // the blank column has no note to write into
+        const raw = doc.sliceString(firstLine.from, lastLine.to)
+        // A picture's target is written relative to the note holding it, so text
+        // arriving from another folder has to be re-pointed or the picture
+        // silently stops loading. Same file on disk, new way of naming it —
+        // which is the whole reason this is a re-point and not a copy.
+        const text = retargetEmbeds(raw, from, to)
+        const intoDoc = into.state.doc
+        const at = Math.min(dropAt, intoDoc.length)
+        const atEnd = at === intoDoc.length && at > 0
+        into.dispatch({
+          changes: { from: at, to: at, insert: atEnd ? '\n' + text : text + '\n' },
+          // Land the cursor on what just arrived: the pane you dropped into is
+          // where your attention is, and it is the only feedback that says the
+          // transfer went where you meant.
+          selection: { anchor: atEnd ? at + 1 : at },
+          scrollIntoView: true
+        })
+        // Alt keeps the original. Otherwise this is a transfer, and the source
+        // gives it up — one dispatch per document, because they are separate
+        // documents with separate undo histories.
+        if (!copying) view.dispatch({ changes: { from: removeFrom, to: removeTo, insert: '' } })
+        into.focus()
+        return
+      }
+
+      // Alt inside ONE pane would be a duplicate a few lines from its original,
+      // which is not something anybody drags to achieve. Left as a plain move.
 
       // A drop landing strictly inside the span being cut isn't a position in
       // the resulting document at all. The two no-op checks above catch every

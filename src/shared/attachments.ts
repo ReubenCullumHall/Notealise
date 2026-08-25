@@ -127,16 +127,103 @@ export function resolveVaultPath(target: string, notePath: string): string | nul
  *  over-matches inside fenced code blocks, which is the safe direction — a photo
  *  reported as used by one note too many is a warning you can dismiss; one
  *  reported as used by none is a file deleted out from under a note. */
+/** THE pattern for an embed, in both forms this app writes.
+ *
+ *  One constant because three things now read it — the index, the re-pointer
+ *  and the "where is this picture" jump — and three regexes that must agree
+ *  character for character is three chances to drift. Built fresh on each use
+ *  rather than shared as a `g`-flagged object, since `lastIndex` is per-regex
+ *  state and a shared one silently skips matches on its second caller.
+ *
+ *  It over-matches inside fenced code blocks, which is the safe direction: a
+ *  photo reported as used by one note too many is a warning you can dismiss;
+ *  one reported as used by none is a file deleted out from under a note. */
+const embedPattern = (): RegExp =>
+  /!\[[^\]\n]*\]\(([^)\n]*)\)|<video\b[^>\n]*\bsrc=["']([^"']*)["'][^>\n]*>/gi
+
+/** The target out of one regex match, unwrapped from `<…>` and stripped of a
+ *  trailing `"title"`. */
+const targetOf = (m: RegExpExecArray | RegExpMatchArray): string => {
+  const raw = (m[1] ?? m[2] ?? '').trim()
+  const inner = /^<(.*)>$/.exec(raw)
+  return inner ? inner[1] : raw.split(/\s+/)[0]
+}
+
 export function indexEmbeds(text: string): string[] {
   const out: string[] = []
-  const scan = /!\[[^\]\n]*\]\(([^)\n]*)\)|<video\b[^>\n]*\bsrc=["']([^"']*)["'][^>\n]*>/gi
+  const scan = embedPattern()
   for (let m = scan.exec(text); m; m = scan.exec(text)) {
-    const raw = (m[1] ?? m[2] ?? '').trim()
-    const inner = /^<(.*)>$/.exec(raw)
-    const target = inner ? inner[1] : raw.split(/\s+/)[0]
+    const target = targetOf(m)
     if (target) out.push(target)
   }
   return out
+}
+
+/** Which line of `text` holds the first embed pointing at `file`, 1-based, or 0.
+ *
+ *  What "take me to where this picture is" needs. Line rather than offset
+ *  because that is the unit the editor scrolls to and the unit a person means
+ *  by "where" — and because it survives the note being edited between the index
+ *  being built and the jump being made slightly better than an offset would. */
+export function lineOfEmbed(text: string, notePath: string, file: string): number {
+  const lines = text.split('\n')
+  for (let i = 0; i < lines.length; i++) {
+    const scan = embedPattern()
+    for (let m = scan.exec(lines[i]); m; m = scan.exec(lines[i])) {
+      const target = targetOf(m)
+      if (target && resolveVaultPath(target, notePath) === file) return i + 1
+    }
+  }
+  return 0
+}
+
+/** Write `file` (a vault path) as a target relative to the note at `notePath`,
+ *  percent-encoded the way `encodeTarget` writes one.
+ *
+ *  The exact inverse of `resolveVaultPath`, and the piece that lets a picture
+ *  survive being dragged into a note in a different folder: the target it was
+ *  written with is relative to the note it CAME from, so re-pointing it is the
+ *  only way one file can serve both notes. Climbing with `..` is deliberate and
+ *  is what `resolveVaultPath` already understands.
+ *
+ *  `..` passes through `encodeTarget` untouched (`encodeURIComponent` leaves
+ *  dots alone), so the segments can all go through one map without a special
+ *  case that would then need its own test. */
+export function relativeTarget(file: string, notePath: string): string {
+  const fromDir = notePath.includes('/') ? notePath.slice(0, notePath.lastIndexOf('/')).split('/') : []
+  const to = file.split('/')
+  let same = 0
+  while (same < fromDir.length && same < to.length - 1 && fromDir[same] === to[same]) same++
+  const up = Array.from({ length: fromDir.length - same }, () => '..')
+  return [...up, ...to.slice(same)].map(encodeTarget).join('/')
+}
+
+/** Re-point every embed in `text` so it still resolves to the same file once
+ *  the text is living in `toNote` instead of `fromNote`.
+ *
+ *  Used when a block or a picture is dragged from one pane into another. Only
+ *  targets that resolve to a real in-vault file are touched: a remote URL, a
+ *  `data:` URI or a path climbing out of the vault has no file to re-point at,
+ *  and rewriting it would break something that was working.
+ *
+ *  Same regex as `indexEmbeds` on purpose — the two must agree about what an
+ *  embed IS, and two patterns would drift. It over-matches inside fenced code
+ *  blocks in exactly the same way, which stays the safe direction here too: the
+ *  worst case is a path in a code sample being rewritten to point at the same
+ *  file from a new location, not a broken picture.
+ *
+ *  Returns `text` unchanged when the two notes sit in the same folder, which is
+ *  the common case and means a same-folder drag produces byte-identical text. */
+export function retargetEmbeds(text: string, fromNote: string, toNote: string): string {
+  const dir = (p: string): string => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
+  if (dir(fromNote) === dir(toNote)) return text
+  return text.replace(embedPattern(), (whole, imgTarget?: string, vidTarget?: string) => {
+    const target = targetOf([whole, imgTarget, vidTarget] as unknown as RegExpMatchArray)
+    if (!target) return whole
+    const file = resolveVaultPath(target, fromNote)
+    if (!file) return whole // remote, data:, or outside the vault — leave alone
+    return whole.replace(target, relativeTarget(file, toNote))
+  })
 }
 
 /** image/video/neither, from a filename.

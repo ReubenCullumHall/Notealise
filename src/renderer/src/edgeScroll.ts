@@ -23,6 +23,14 @@ const MAX_SPEED = 15
 export interface EdgeScroller {
   /** Call on every pointer move with the pointer's viewport Y. */
   track(clientY: number): void
+  /** Point it at a different container mid-gesture.
+   *
+   *  A drag that crosses from one split pane into another is still one gesture,
+   *  but the thing that should scroll is now the pane being aimed at — the
+   *  header comment's "a pane is not the page", taken one step further. Any
+   *  scroll already in flight is cancelled, so the pane being left behind does
+   *  not keep coasting after the pointer has gone. */
+  retarget(next: HTMLElement): void
   /** Call when the drag ends, from every path that can end it. */
   stop(): void
 }
@@ -33,7 +41,8 @@ export interface EdgeScroller {
  *                against the document can be put back under the pointer — the
  *                pointer is not moving, so nothing else would update it.
  */
-export function createEdgeScroller(el: HTMLElement, onStep?: () => void): EdgeScroller {
+export function createEdgeScroller(container: HTMLElement, onStep?: () => void): EdgeScroller {
+  let el = container
   let frame = 0
   let speed = 0
 
@@ -66,6 +75,13 @@ export function createEdgeScroller(el: HTMLElement, onStep?: () => void): EdgeSc
       } else if (!frame) {
         frame = requestAnimationFrame(step)
       }
+    },
+    retarget(next) {
+      if (next === el) return
+      if (frame) cancelAnimationFrame(frame)
+      frame = 0
+      speed = 0
+      el = next
     },
     stop() {
       if (frame) cancelAnimationFrame(frame)

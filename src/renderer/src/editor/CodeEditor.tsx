@@ -1,3 +1,4 @@
+import { lineOfEmbed } from '../../../shared/attachments'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
@@ -27,6 +28,9 @@ interface Props {
   /** scroll to this heading once the document has landed, then forget it —
    *  what `[[Note#Heading]]` does after the note opens */
   revealHeading?: string | null
+  /** vault path of a photo/video: scroll to the line embedding it. The
+   *  delete dialog's "go and look at that note" jump. */
+  revealEmbed?: string | null
   /** the eye button: print each photo/video's own source under it, leaving the
    *  rest of the note formatted. Independent of `raw` — see mediaSource.ts. */
   mediaSource?: boolean
@@ -66,6 +70,7 @@ export function CodeEditor({
   env,
   linkHandlers,
   revealHeading,
+  revealEmbed,
   raw,
   mediaSource
 }: Props): React.JSX.Element {
@@ -238,6 +243,22 @@ export function CodeEditor({
     // where it would have been anyway. Silently landing at the start beats an
     // error about a heading the user can simply see isn't there.
   }, [revealHeading, path, version])
+
+  // "Show me where this picture is." Same shape as the heading jump above,
+  // including the `version` key: the document lands in its own effect, and
+  // searching before it arrives finds nothing.
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view || !revealEmbed) return
+    const n = lineOfEmbed(view.state.doc.toString(), path, revealEmbed)
+    if (!n) return // not in this note (any more) — leave the cursor where it is
+    const line = view.state.doc.line(n)
+    view.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 24 })
+    })
+    view.focus()
+  }, [revealEmbed, path, version])
 
   // Escape dismisses the toolbar (selection stays; reselecting shows it again).
   useEffect(() => {
