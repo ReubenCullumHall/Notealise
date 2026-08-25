@@ -63,6 +63,8 @@ export const CH = {
   setAutoUpdate: 'update:setAuto',
   setBetaChannel: 'update:setBeta',
   openReleases: 'update:openReleases',
+  /** macOS only: show the downloaded .dmg in Finder (it cannot self-install) */
+  revealUpdate: 'update:reveal',
   getAppVersion: 'app:version',
   /** renderer -> main: has this install ever finished onboarding? */
   getOnboarded: 'app:getOnboarded',

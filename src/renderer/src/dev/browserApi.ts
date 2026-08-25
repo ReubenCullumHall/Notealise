@@ -413,6 +413,7 @@ const api: VaultApi = {
   checkForUpdate: async () => ({ state: 'unsupported', reason: 'Browser preview' }),
   downloadUpdate: async () => ({ state: 'unsupported', reason: 'Browser preview' }),
   installUpdate: () => {},
+  revealUpdate: async () => {},
   setAutoUpdate: async () => ({ state: 'unsupported', reason: 'Browser preview' }),
   setBetaChannel: async () => ({ state: 'unsupported', reason: 'Browser preview' }),
   openReleases: () => {},

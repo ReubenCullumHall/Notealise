@@ -41,6 +41,26 @@ export function UpdateBanner({ status, canSelfUpdate }: Props): React.JSX.Elemen
   }
 
   if (status.state === 'ready') {
+    // macOS splits here. `ready` means "staged, restart to apply" on Windows
+    // and "the .dmg is sitting in your Downloads" on a Mac — the same word for
+    // two different promises, so the copy has to say which one it is. Offering
+    // "Restart now" on a Mac would restart into the SAME version, which reads
+    // as the update having silently failed.
+    if (status.manual) {
+      return (
+        <div className="fade-in mb-2 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] leading-snug text-brand-600">
+          <span className="flex-1">
+            {status.version ? `${status.version} downloaded` : 'Downloaded'}
+          </span>
+          <button
+            onClick={() => void window.api.revealUpdate()}
+            className="rounded border-none bg-transparent px-1.5 py-0.5 font-medium text-brand-600 outline-none transition-colors hover:bg-transparent hover:underline"
+          >
+            Show me
+          </button>
+        </div>
+      )
+    }
     return (
       <div className="fade-in mb-2 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] leading-snug text-brand-600">
         <span className="flex-1">Update ready</span>
@@ -54,16 +74,25 @@ export function UpdateBanner({ status, canSelfUpdate }: Props): React.JSX.Elemen
     )
   }
 
-  // available, but not downloading — either auto-download is off, or this
-  // platform can't self-update and the only route is the releases page.
+  // available, but not downloading. Three cases, not two: Windows can fetch and
+  // stage it; a Mac can fetch it but not apply it; anything else falls back to
+  // the releases page. Naming the version is the point of the whole feature —
+  // "Update available" with no number is what a stale build already looks like.
+  const macManual = status.manual === true
   return (
     <div className="fade-in mb-2 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] leading-snug text-brand-600">
-      <span className="flex-1">Update available</span>
+      <span className="flex-1">
+        {status.version ? `${status.version} is out` : 'Update available'}
+      </span>
       <button
-        onClick={() => (canSelfUpdate ? void window.api.downloadUpdate() : window.api.openReleases())}
+        onClick={() =>
+          canSelfUpdate || macManual
+            ? void window.api.downloadUpdate()
+            : window.api.openReleases()
+        }
         className="rounded border-none bg-transparent px-1.5 py-0.5 font-medium text-brand-600 outline-none transition-colors hover:bg-transparent hover:underline"
       >
-        {canSelfUpdate ? 'Download' : 'Get it'}
+        {canSelfUpdate || macManual ? 'Download' : 'Get it'}
       </button>
     </div>
   )

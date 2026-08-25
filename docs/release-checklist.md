@@ -187,11 +187,33 @@ resumes normally on the release after that, once `appId` is stable again.
 
 ## Known gaps
 
-- **macOS cannot auto-update.** `electron-builder.yml` sets `identity: null`, and Squirrel.Mac
-  *refuses to apply an unsigned update* — a signature check, not a dismissible warning. There is
-  also no `latest-mac.yml` and no `.zip` (mac updates need a zip; `dmg: writeUpdateInfo: false`).
-  Mac users always download manually. Fixing it needs an Apple Developer ID (~$99/yr) +
-  notarization — deferred by decision, revisit at marketing time. Until then the Mac build shows
-  the same UI, but the update button opens the releases page and Settings says why.
+- **macOS cannot auto-*apply* an update — but as of 2026-08-25 it does tell you and fetch it.**
+  `electron-builder.yml` sets `identity: null`, and Squirrel.Mac *refuses to apply an unsigned
+  update* — a signature check, not a dismissible warning. There is also no `latest-mac.yml` and no
+  `.zip` (mac updates need a zip; `dmg: writeUpdateInfo: false`). Fixing that properly needs an
+  Apple Developer ID (**$99/yr ≈ £80**, not the £220 that gets quoted) + notarization — deferred by
+  decision, revisit at marketing time.
+
+  **What was wrong until 2026-08-25, and is worth understanding before touching this again:** the
+  macOS guard fired *before* the feed was ever read (`updater.ts`'s `unsupportedReason()` returned
+  early inside both `initUpdater` and `checkNow`). So a Mac user was not merely unable to
+  auto-update — they were never told an update existed at all. The sidebar showed nothing, and
+  "Check for updates" answered "needs a signed macOS build" rather than "0.9.1 is out". They sat on
+  a stale build believing they were current, which is the silent version of the problem and the
+  one nobody reports.
+
+  `main/macUpdate.ts` now does everything up to the part macOS forbids: reads the public releases
+  API through Electron's own `net` (no new dependency, and it inherits the system proxy), picks the
+  newest release that actually carries a `.dmg`, downloads it to `~/Downloads` via a `.part` file,
+  and reveals it in Finder. The user drags it across themselves. The parse and the version
+  comparison live in `shared/update.ts` because they are pure, and are tested against a **real
+  captured payload** (`shared/releases.fixture.json`) — the response shape is what would break this
+  quietly, and a hand-written fixture would only prove the parser agrees with whoever wrote it.
+
+  Two rules that release process must now keep: **every release needs its `.dmg` asset**, or Mac
+  users are silently skipped (a release with no dmg is deliberately not offered, rather than
+  offered and broken); and the **asset host allow-list** in `shared/update.ts` is closed — if
+  GitHub ever serves assets from a new hostname, downloads fail closed and that list is where to
+  look.
 - **Windows is unsigned**, so SmartScreen warns on first install ("More info" → "Run anyway").
 - **No automated UI tests.** Everything in gate 1's smoke list is manual.

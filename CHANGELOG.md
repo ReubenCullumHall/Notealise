@@ -7,6 +7,13 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- On a Mac the app now tells you when a new version is out, and fetches it for you. It could not
+  before — and not just "could not update itself": it never even asked, so the sidebar stayed quiet
+  and Check for updates answered with a technical excuse rather than the version number. You could
+  sit on a months-old build with nothing to suggest it. Now the strip says which version is waiting,
+  Download puts the .dmg in your Downloads folder with a progress bar, and Show me opens it in
+  Finder. The last step is still yours — macOS does not let an app that isn't signed replace itself,
+  which is a rule of the operating system rather than something the app can ask nicely about
 
 ## [0.9.0] - 2026-08-25
 - The editor no longer switches off your computer's spell check. It had been turning it off for

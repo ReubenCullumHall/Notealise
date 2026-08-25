@@ -161,11 +161,16 @@ export interface VaultApi {
   getUpdateState(): Promise<{ version: string; status: UpdateStatus; prefs: UpdatePrefs }>
   /** Ask the GitHub feed whether a newer version exists. */
   checkForUpdate(): Promise<UpdateStatus>
-  /** Download an offered update (used when auto-download is off). On a platform
-   *  that can't self-update this opens the releases page instead. */
+  /** Download an offered update (used when auto-download is off). On macOS this
+   *  fetches the .dmg into Downloads instead of staging it — nothing there can
+   *  self-install, so the download is as far as the app can take it. */
   downloadUpdate(): Promise<UpdateStatus>
-  /** Apply a staged update: flushes, quits, runs the installer, relaunches. */
+  /** Apply a staged update: flushes, quits, runs the installer, relaunches.
+   *  Windows only; on macOS the equivalent is `revealUpdate`. */
   installUpdate(): void
+  /** macOS: show the downloaded .dmg in Finder. Replacing a running app is the
+   *  user's job there, and the Finder window is where that job starts. */
+  revealUpdate(): Promise<void>
   /** Turn background auto-update on/off; persisted in userData. */
   setAutoUpdate(on: boolean): Promise<UpdateStatus>
   /** Opt in/out of prerelease (beta) builds; persisted in userData. Checks the

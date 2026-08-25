@@ -848,18 +848,31 @@ function UpdatesSection(): React.JSX.Element {
   const busy = status.state === 'checking' || status.state === 'downloading'
   const isBeta = isPrereleaseVersion(version)
 
+  // macOS reaches every state below EXCEPT that it can never apply anything —
+  // Squirrel.Mac refuses an unsigned update. So the words change, not the
+  // states: "ready" is a file in Downloads rather than something staged, and
+  // "up to date" carries the doubt when the check could not run at all.
+  const manual = status.manual === true
+
   const line = ((): string => {
     switch (status.state) {
       case 'checking':
         return 'Checking…'
       case 'none':
-        return "You're up to date."
+        return manual && status.message ? status.message : "You're up to date."
       case 'available':
-        return 'An update is available.'
+        return status.version
+          ? `Version ${status.version} is out.`
+          : 'An update is available.'
       case 'downloading':
-        return `Downloading update… ${status.percent ?? 0}%`
+        return `Downloading… ${status.percent ?? 0}%`
       case 'ready':
-        return 'An update is ready — restart to apply.'
+        return manual
+          ? `Version ${status.version ?? ''} is in your Downloads folder. Open it and drag Notealise across to replace this copy.`.replace(
+              '  ',
+              ' '
+            )
+          : 'An update is ready — restart to apply.'
       case 'error':
         return `Couldn't check: ${status.message ?? 'unknown error'}`
       case 'unsupported':
@@ -895,7 +908,9 @@ function UpdatesSection(): React.JSX.Element {
           <span className="s">
             {blocked
               ? 'Not available on this build'
-              : 'Downloads new versions quietly and applies them when you quit.'}
+              : manual
+                ? 'Checks quietly and downloads a new version for you. On a Mac the last step is yours — an unsigned app is not allowed to replace itself.'
+                : 'Downloads new versions quietly and applies them when you quit.'}
           </span>
         </button>
       </div>

@@ -4,7 +4,14 @@ import path from 'node:path'
 import electronUpdater from 'electron-updater'
 import { CH } from '../shared/channels'
 import { getUpdatePrefs, saveUpdatePrefs } from './config'
-import { BETA_CHANNEL, RELEASES_URL, shouldFollowBeta, type UpdateStatus } from '../shared/update'
+import {
+  BETA_CHANNEL,
+  RELEASES_URL,
+  shouldFollowBeta,
+  type FeedRelease,
+  type UpdateStatus
+} from '../shared/update'
+import { checkMacUpdate, downloadMacDmg } from './macUpdate'
 
 // The only file that imports electron-updater. It reads the `latest.yml` that
 // electron-builder already publishes beside Notes-Setup.exe on every GitHub
@@ -49,6 +56,12 @@ const devTest = process.env.NOTES_TEST_UPDATER === '1'
 function unsupportedReason(): string | null {
   if (!app.isPackaged && !devTest) return 'Updates are disabled in development builds.'
   if (process.platform === 'darwin') {
+    // Still true, and still why nothing here can install itself. What changed
+    // on 2026-08-25 is that this no longer ends the story: `macUpdate.ts` reads
+    // the releases feed and fetches the .dmg, so a Mac user is at least TOLD.
+    // Callers that can do the manual flow check `isMac` first and never reach
+    // this; the ones that genuinely cannot (electron-updater's own paths) still
+    // get an honest reason.
     return 'Automatic updates need a signed macOS build. Download the new version instead.'
   }
   // `npm run package:dir` (gate 1) produces a genuinely packaged app — isPackaged
@@ -123,9 +136,81 @@ function applyChannel(pref: boolean): void {
   au.allowPrerelease = beta
 }
 
+/** True when this build should use the manual macOS flow: read the feed, fetch
+ *  the .dmg, hand it over. A dev run is excluded — it has nothing to update. */
+const isMac = (): boolean => process.platform === 'darwin' && (app.isPackaged || devTest)
+
+/** The release the manual flow last found, so `downloadUpdate` knows what to
+ *  fetch without asking GitHub a second time. */
+let macFound: FeedRelease | null = null
+
+/** macOS: ask the feed directly. electron-updater is never touched — it cannot
+ *  help here — so this is a plain read of the same information Windows gets. */
+async function checkMac(): Promise<UpdateStatus> {
+  setStatus({ state: 'checking', manual: true })
+  const { betaChannel } = await getUpdatePrefs()
+  const found = await checkMacUpdate(shouldFollowBeta(betaChannel, app.getVersion()))
+  macFound = found
+  if (!found) {
+    // Also the offline answer. Saying "you are up to date" when the check
+    // never happened would be a lie, so the message carries the doubt rather
+    // than the state pretending to certainty.
+    setStatus({
+      state: 'none',
+      manual: true,
+      message: 'No newer version found. If you are offline, this only means the check could not run.'
+    })
+  } else {
+    setStatus({ state: 'available', version: found.version, manual: true })
+  }
+  return status
+}
+
+/** macOS: fetch the .dmg into Downloads, then report where it landed. */
+async function downloadMac(): Promise<UpdateStatus> {
+  const target = macFound
+  if (!target) {
+    await checkMac()
+    if (!macFound) return status
+    return downloadMac()
+  }
+  setStatus({ state: 'downloading', version: target.version, percent: 0, manual: true })
+  try {
+    const filePath = await downloadMacDmg(target, (percent) => {
+      // Only while this download is still the current one — a status that has
+      // moved on (an error, or the user checking again) must not be dragged
+      // back to `downloading` by a late progress event.
+      if (status.state === 'downloading') {
+        setStatus({ state: 'downloading', version: target.version, percent, manual: true })
+      }
+    })
+    setStatus({ state: 'ready', version: target.version, manual: true, filePath })
+  } catch (e) {
+    setStatus({ state: 'error', manual: true, message: (e as Error).message })
+  }
+  return status
+}
+
+/** macOS `ready`: show the finished .dmg in Finder. The app cannot open it for
+ *  them — replacing a running application is the user's job on macOS, and the
+ *  Finder window is where that job starts. */
+export async function revealUpdate(): Promise<void> {
+  if (status.state !== 'ready' || !status.filePath) return
+  shell.showItemInFolder(status.filePath)
+}
+
 /** Prepare the updater and, if auto-update is on, start the background schedule.
- *  Safe to call in dev and on macOS — it just parks in `unsupported`. */
+ *  Safe to call in dev; on macOS it takes the manual route instead. */
 export async function initUpdater(): Promise<void> {
+  if (isMac()) {
+    const { autoUpdate } = await getUpdatePrefs()
+    if (!autoUpdate) return
+    // Same cadence as Windows: late enough not to compete with first paint,
+    // then every six hours for a window left open.
+    setTimeout(() => void checkMac(), 10_000).unref()
+    setInterval(() => void checkMac(), 6 * 60 * 60 * 1000).unref()
+    return
+  }
   const reason = unsupportedReason()
   if (reason) {
     setStatus({ state: 'unsupported', message: reason })
@@ -146,6 +231,7 @@ export async function initUpdater(): Promise<void> {
 /** Manual "Check now". Reports errors as status rather than throwing, so the
  *  button can never take the renderer down with it. */
 export async function checkNow(): Promise<UpdateStatus> {
+  if (isMac()) return checkMac()
   const reason = unsupportedReason()
   if (reason) {
     setStatus({ state: 'unsupported', message: reason })
@@ -162,6 +248,7 @@ export async function checkNow(): Promise<UpdateStatus> {
 
 /** Explicit download, for when auto-download is off and the user opts in. */
 export async function downloadUpdate(): Promise<UpdateStatus> {
+  if (isMac()) return downloadMac()
   if (unsupportedReason()) {
     await shell.openExternal(RELEASES_URL)
     return status
@@ -201,6 +288,10 @@ export function installNow(): void {
 export async function setAutoUpdate(on: boolean): Promise<UpdateStatus> {
   const prefs = await getUpdatePrefs()
   await saveUpdatePrefs({ ...prefs, autoUpdate: on })
+  if (isMac()) {
+    if (on) void checkMac()
+    return status
+  }
   if (!unsupportedReason()) {
     wire()
     updater().autoDownload = on
@@ -220,6 +311,10 @@ export async function setBetaChannel(on: boolean): Promise<UpdateStatus> {
   const next = shouldFollowBeta(on, app.getVersion())
   const prefs = await getUpdatePrefs()
   await saveUpdatePrefs({ ...prefs, betaChannel: next })
+  if (isMac()) {
+    void checkMac()
+    return status
+  }
   if (!unsupportedReason()) {
     wire()
     applyChannel(next)
