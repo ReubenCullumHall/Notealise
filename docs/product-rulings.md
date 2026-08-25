@@ -53,12 +53,62 @@ behaviour on one vault, and what happens when a file is edited outside the app w
 
 ## Parity gaps ruled pre-launch
 
-From Reuben's own scoring rubric, chosen over the interview answers: **spell check** (one line —
-`EditorView.contentAttributes.of({ spellcheck: 'true' })`), **find & replace**
+From Reuben's own scoring rubric, chosen over the interview answers: **spell check** (built
+2026-08-25, and narrowed on the way in — see the ruling below), **find & replace**
 (`@codemirror/search` — needs asking before adding, per the dependency rule), **export to PDF + HTML**
 (`marked` + `dompurify` + `webContents.printToPDF()`, all already owned), **paste/drag images**, and
 **the on-disk tag format** — decided before real users have real notes even if no UI ships, because
 retrofitting means rewriting their `.md` files.
+
+### Spell check is the machine's job, not the app's (2026-08-25)
+
+**Ruled by Reuben: this app ships no dictionary, no bundled spell checker, and no spell-check
+setting.** If someone wants their writing checked, their operating system already does that, and a
+second checker that disagrees with the first is worse than none — it argues with the user about
+their own machine's dictionary, and it is one more thing to keep, ship and support.
+
+What was actually built is the opposite of a feature: the **removal of a block**. CodeMirror
+hardcodes `spellcheck: "false"` onto its editable element, so the app had been switching the OS
+checker *off* for every note — a user with spell check on everywhere else got nothing here and had
+no way to change that. `editor/extensions.ts` now adds
+`EditorView.contentAttributes.of({ spellcheck: 'true' })`, which merges into CodeMirror's own
+defaults and lets the system's dictionary through. Chromium supplies the underline and the
+right-click suggestions from the OS.
+
+**`autocorrect` and `autocapitalize` stay off, deliberately.** Underlining a word is advice;
+rewriting it is damage — and in Markdown the damage is specific: straight quotes turned curly
+inside a fenced code block, a lowercase list item capitalised. Do not "finish the job" by turning
+those on too.
+
+There is no settings row for this, on purpose. The control lives in System Settings (macOS) or
+Windows' typing settings, which is where a user already looks for it.
+
+**Measured on macOS, and it does NOT yet mark words — do not assume this shipped working
+(2026-08-25).** The attribute change is verified: `.cm-content` carried `spellcheck="false"` before
+and carries `"true"` after, checked by reading the live DOM either side of the edit. What could not
+be produced is a single red underline inside the editor. The control experiment is what makes that
+a real finding rather than a bad harness: a bare `contenteditable` with `spellcheck="true"`, in the
+same Electron build on the same machine, **does** underline `teh misspeled wrd` — so the machine,
+the dictionary (`en-GB`, initialised) and the capture method all work. The editor was then driven
+three ways — bulk `execCommand`, per-character `execCommand`, and real `sendInputEvent` key events
+at ~70ms/char, in a focused on-screen window — and stayed clean every time.
+
+Two things learned on the way, both of which will waste an hour if forgotten:
+
+- **macOS only paints the underline in the field that currently has focus, and only on text typed
+  into it.** Pre-existing text in an unfocused box is never marked. A four-box comparison on one
+  page is therefore worthless — only the last box focused can show anything. One box per window.
+- **`params.misspelledWord` on the `context-menu` event is always empty here**, even on the bare
+  control box that visibly underlines. That is the Hunspell path (Windows/Linux); macOS goes
+  through the native checker. Do not use it as the oracle on a Mac — use pixels.
+
+The likely cause is CodeMirror rewriting the line DOM out from under Chromium's spelling markers,
+which is presumably why CodeMirror ships `spellcheck: "false"` in the first place. **Chasing that is
+out of scope by this same ruling** — engineering around CodeMirror's DOM to deliver spell checking
+is exactly the app-native effort Reuben ruled out. The line stays because it can only help: without
+it there is no possibility of a check at all. Windows uses a different engine (Hunspell, not
+NSSpellChecker) and is untested — it may simply work there. Both platforms are on the tester
+checklist.
 
 ## Unchanged and confirmed
 

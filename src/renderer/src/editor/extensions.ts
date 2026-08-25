@@ -51,6 +51,29 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     ]),
     markdown({ base: markdownLanguage }),
     EditorView.lineWrapping,
+    // Stop switching the machine's OWN spell checker off. CodeMirror hardcodes
+    // `spellcheck: "false"` onto its editable element (view/index.js's
+    // updateAttrs), so until this line the OS dictionary was told not to mark a
+    // misspelling in a note even where the user had it on everywhere else —
+    // "off by default" here was CodeMirror's decision, not ours. This app
+    // deliberately ships NO dictionary and NO spell-check setting of its own
+    // (docs/product-rulings.md): a machine already has one, and a second one
+    // that disagrees with it is worse than none. The facet merges into those
+    // defaults rather than fighting them, so this wins over the "false" above.
+    //
+    // VERIFIED that the attribute flips; NOT verified that macOS then marks
+    // anything — measured 2026-08-25, and it did not, while a bare
+    // contenteditable on the same machine did. Read the ruling before assuming
+    // this feature works, and before "fixing" it: engineering around
+    // CodeMirror's DOM to make spell checking happen is explicitly out of
+    // scope. This line stays because without it there is no chance at all.
+    //
+    // `autocorrect` and `autocapitalize` stay off, and that is not an
+    // oversight: they REWRITE what was typed. In Markdown that means straight
+    // quotes becoming curly ones inside a fenced code block, and a lowercase
+    // list item silently capitalised. Underlining a word is advice; changing
+    // it is damage.
+    EditorView.contentAttributes.of({ spellcheck: 'true' }),
     drawSelection(),
     // Must come after drawSelection: it marks the editor so the selection that
     // extension paints can be suppressed over a picked embed.

@@ -7,6 +7,14 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- The editor no longer switches off your computer's spell check. It had been turning it off for
+  every note, so a machine set to check your spelling everywhere else was told not to bother here,
+  and there was nothing you could do about it. The app still ships no dictionary of its own — if
+  your writing gets checked it is your system doing it, with the words you have already taught it.
+  Autocorrect stays off on purpose: underlining a word is advice, rewriting it is not, and in
+  Markdown that rewriting means curly quotes turning up inside a code block. **Not yet confirmed to
+  mark words on macOS** — see docs/product-rulings.md; the block is definitely gone, whether the
+  underline arrives is what testers need to tell us
 - Drag the line between two side-by-side notes to give one of them more room. Double-click it to
   put them back to even, or use the arrow keys once it has focus. Each space remembers how you left
   its columns, and a column will not shrink below the width where text stops reading as a column
