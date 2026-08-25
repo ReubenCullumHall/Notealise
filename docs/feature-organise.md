@@ -134,3 +134,59 @@ the archive later would drop it back into the main tree still flagged, resurfaci
 with a stale timestamp for a decision the user already made. Trashing needs no special case: it
 deletes the whole `EntryMeta` (`main/workspace.ts`'s `trashEntries`), and a restore creates a fresh
 one, so nothing survives a bin round-trip either way.
+
+## Recovery-net and cross-space-drag fixes (2026-08-20)
+
+From a review of the whole 7-day recovery feature and the cross-space drag above. Neither had
+shipped, so no user met these — but the first two are the kind that only ever surface as lost data.
+
+**A swallowed error and a promise the UI can't keep.** `purgeTrashItem` caught *everything* from
+the physical move into `recovery/`, on the reasoning that "already gone" is harmless. It is — but a
+permission error, a locked file or a full disk is not, and the caller wrote the recovery record
+regardless. The result was a live 7-day countdown in Settings against a file still sitting in
+`trash/`, which Restore could never find. It now returns `false` for ENOENT only (the genuinely
+harmless case, where the record is dropped with no recovery row) and **throws** for anything else,
+with `purgeEntries` keeping the bin row so the item stays visible and retryable. The general
+shape: **a catch-all that exists for one benign case will silently absorb the dangerous ones too —
+name the benign case and rethrow the rest.**
+
+**An empty array is not "no argument".** `purgeRecoveryEntries(ids?)` read `ids && ids.length` as
+its "did the caller name anything" test, so an explicit `[]` fell through to the no-ids branch,
+which means *delete the entire safety net* — the one irreversible operation in the feature. A
+"delete selected forever" whose selection was empty at click time would have wiped everything.
+Both purge functions now treat `undefined` (no argument) and `[]` (these zero items) as different
+things. Worth checking anywhere else an optional array means "all".
+
+**`movedAt` is per item, not per drag.** A multi-select that mixed one note already living in the
+destination folder with one genuinely arriving from another space marked the *whole batch*
+cross-space, so the resident note was stamped and appeared under the "Moved" divider having not
+moved. `move()` now tracks which entries actually crossed a space boundary. The blind-drop
+positioning stays a decision for the drag as a whole — if any of it crossed, the group belongs
+together at the front — but only real arrivals get the flag, and the rest have a stale one cleared.
+
+**Duplication removed, three places.** `restoreEntry`/`restoreFromRecovery` were the same function
+with a different source folder (now one `restoreHeldEntry`, which matters because the collision
+handling and the Windows path-length check are both cross-platform-sensitive);
+`normalizeTrashItem`/`normalizeRecoveryItem` differed only in `deletedAt` vs `purgedAt` (now
+`normalizeHeldItem`); and Recovery's and Spaces' arm-then-confirm buttons each kept their own
+5000ms timer (now `settings/useArmed.ts`, in its own file rather than `primitives.tsx` because a
+module exporting components *and* a hook trips fast refresh — same reason `useInstalledFonts.ts`
+sits apart).
+
+- **The blank-window class of failure (fixed 2026-08-22).** React unmounts the WHOLE tree when a
+  render throws, so one bad value reaching state took the entire interface out — an empty window,
+  no message, nothing but a dev console the user had no reason to have open. It happened for real:
+  `restoreEntries` changed shape from `Workspace` to `{ workspace, landed }`, the renderer
+  hot-reloaded and the main process did not, so `setWorkspace(undefined)` landed and the next
+  render read `workspace.entries`. Three defences now, at three different depths:
+  - `ErrorBoundary.tsx` wraps `<App />` in main.tsx. Styled with inline styles off the CSS custom
+    properties rather than Tailwind, deliberately: it renders precisely when something is already
+    broken and must not depend on anything that might be part of what broke.
+  - `isWorkspace` guards App's `setWorkspace`, which ~15 call sites feed straight from IPC. A
+    malformed reply is refused and the last good value kept — a stale sidebar is visible and
+    survivable; a vanished app is not.
+  - `asRestoreResult` accepts BOTH shapes. Renderer-hot-reloads-but-main-doesn't is a normal
+    condition of `npm run dev` on this project, so an IPC contract change has to degrade (losing
+    only the landed-path detail) rather than explode. Verified by simulating a stale main against
+    the browser preview: before, an empty body and `Cannot read properties of undefined`; after,
+    the restore completes, the photo goes back into the note, and nothing is thrown.

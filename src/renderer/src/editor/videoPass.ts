@@ -4,7 +4,7 @@ import { linkEnv } from './linkEnv'
 import { cachedVideoUrl, loadVideo, resolveVaultPath } from './videoAssets'
 import { type Pass } from './livePreview'
 import { attachDragHandle } from './attachMove'
-import { insideEmbed, selectionCovers } from './attachSelect'
+import { insideEmbed, selectionCovers, selectionSwallows, remeasureWhenSized } from './attachSelect'
 import { isMediaSource, sourceCaption } from './mediaSource'
 
 // Inline video. `<video controls src="path"></video>` is not an invented
@@ -64,15 +64,26 @@ class VideoWidget extends WidgetType {
       else {
         void loadVideo(this.rel).then((url) => {
           if (url) video.src = url
-          else wrap.classList.add('cm-video-missing')
+          else {
+            wrap.classList.add('cm-video-missing')
+            view.requestMeasure()
+          }
         })
       }
     } else {
       video.src = this.src // remote URL — let <video> fetch it directly
     }
-    video.onerror = (): void => wrap.classList.add('cm-video-missing')
+    video.onerror = (): void => {
+      wrap.classList.add('cm-video-missing')
+      view.requestMeasure()
+    }
+    // `loadedmetadata`, not `load` — a <video> never fires `load`, and metadata
+    // is the first moment its intrinsic size (and therefore its line's height)
+    // is known. Same stale-height-map problem as the image; see
+    // `remeasureWhenSized`.
+    remeasureWhenSized(view, video, ['loadedmetadata'])
     wrap.appendChild(video)
-    if (this.source) wrap.appendChild(sourceCaption(this.source))
+    if (this.source) wrap.appendChild(sourceCaption(this.source, view))
     return wrap
   }
 
@@ -112,8 +123,13 @@ export const videoPass: Pass = (view, _active, push) => {
         // Same reveal contract as every other widget pass: off the cursor
         // line it's a picture (here: a player); on it, the raw HTML shows.
         // See imagePass's copy: an exact cover is "selected", not reveal-to-edit.
+        // Same rule as the image pass: a selection dragged ACROSS a player
+        // keeps it a player. Swapping in raw `<video …>` source mid-drag would
+        // collapse the line under the pointer — and for a video it also tears
+        // down the element, losing playback position. See `selectionSwallows`.
         const picked = selectionCovers(view, open.from, node.to)
-        if (!picked && insideEmbed(view, open.from, node.to)) return
+        const spanned = picked || selectionSwallows(view, open.from, node.to)
+        if (!spanned && insideEmbed(view, open.from, node.to)) return
 
         const rel = resolveVaultPath(open.src, notePath)
         push(

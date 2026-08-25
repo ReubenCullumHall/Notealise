@@ -150,6 +150,12 @@ describe('a "/" invocation', () => {
     for (const c of EDITOR_COMMANDS) {
       const { view, read } = harness('', 0)
       expect(() => c.run(view), c.id).not.toThrow()
+      // A `deferred` command (e.g. "attach", which waits on a native file
+      // picker) has nothing to insert yet the instant it runs — that's not
+      // the "silently declined to act" bug this test exists to catch, it's
+      // the whole point of being deferred. Every other command inserts text
+      // immediately, and still must.
+      if (c.deferred) continue
       expect(read().length, `${c.id} produced no text on an empty note`).toBeGreaterThan(0)
     }
   })

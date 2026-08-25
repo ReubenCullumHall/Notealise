@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import type { EditorView } from '@codemirror/view'
@@ -10,6 +10,7 @@ import { mediaUsage, otherNotesUsing } from './media/usage'
 import type { SectionId } from './settings/Settings'
 import { FormatToolbar } from './editor/FormatToolbar'
 import { NotePane, ROW_CLASS, type Drag } from './tabs/NotePane'
+import { PaneDivider } from './tabs/PaneDivider'
 import { TabStrip } from './tabs/TabStrip'
 import {
   activePath,
@@ -18,11 +19,14 @@ import {
   closeUnder,
   cycle,
   EMPTY_LAYOUT,
+  equalisePanes,
   MAX_PANES,
   moveTab,
   BLANK,
   movePane,
   openTab,
+  paneSizes,
+  resizePanes,
   renamePath,
   replaceActive,
   restoreLayout,
@@ -34,7 +38,7 @@ import {
   type TabLayout
 } from './tabs/model'
 import { applySettings, resolveTheme } from './settings/model'
-import { liveIndex, noteRefs } from './links/model'
+import { indexFingerprint, liveIndex, noteRefs } from './links/model'
 import { PathBar } from './PathBar'
 import { Tooltip } from './Tooltip'
 import { StartupSplash } from './StartupSplash'
@@ -42,7 +46,7 @@ import { Onboarding } from './onboarding/Onboarding'
 import { seedWelcomeNotes } from './onboarding/welcomeNotes'
 import { STEPS, type StepId } from './onboarding/model'
 import { LinkInspector, type Inspect } from './links/LinkInspector'
-import { indexLinks, rewriteLinks, titleOf, type LinkRow } from '../../shared/links'
+import { rewriteLinks, titleOf, type LinkRow } from '../../shared/links'
 import type { LinkEnv, LinkHandlers, MediaDelete, OpenHow } from './editor/linkEnv'
 import {
   type MediaLanding,
@@ -112,6 +116,11 @@ const spaceFolderOf = (path: string, spaces: Space[]): string => {
 const baseName = (osPath: string): string => osPath.split(/[\\/]/).filter(Boolean).pop() ?? osPath
 const stripMd = (s: string): string => (s.toLowerCase().endsWith('.md') ? s.slice(0, -3) : s)
 const countWords = (t: string): number => (t.trim().match(/\S+/g) ?? []).length
+/** What to call a column out loud — the pane divider's `aria-label` names the two
+ *  it sits between, so "Resize Meeting notes and Ideas" tells a screen reader
+ *  which seam it has landed on. Matches the name `NotePane` puts on its own
+ *  `<section>`, including the blank column's standing question. */
+const paneLabel = (p: string): string => (p === BLANK ? 'Select a note' : stripMd(nameOf(p)))
 
 // Steps up to the nearest shared ancestor folder, then back down — 0 for two
 // notes in the same folder, 1 for parent/child, etc. Used to bias search
@@ -388,15 +397,19 @@ export default function App(): React.JSX.Element {
       docsRef.current.set(path, text)
       const words = countWords(text)
       setWordCounts((c) => (c[path] === words ? c : { ...c, [path]: words }))
-      // Re-derive the links block only when the LINKS changed, not on every
-      // keystroke: typing inside a paragraph must not cost a backlink rebuild
-      // across every open note.
-      const targets = indexLinks(text)
-        .map((l) => l.target + '#' + (l.heading ?? ''))
-        // A literal NUL here made grep and ripgrep treat this whole file as
-        // BINARY and silently skip it, so a search for anything in App.tsx
-        // found nothing. Same separator, written as an escape.
-        .join('\u0000')
+      // Re-derive the index only when the links or the EMBEDS changed, not on
+      // every keystroke: typing inside a paragraph must not cost a backlink
+      // rebuild across every open note.
+      //
+      // Embeds belong in this fingerprint even though the block being rebuilt
+      // is about links, because the same index answers "which notes hold this
+      // photo" — and that is what the delete dialog reads to warn you that
+      // another note is about to lose its picture. Watching links alone meant
+      // an embed pasted as TEXT (the only way to make two notes share one file)
+      // never reached the index: no warning was shown, the delete went through,
+      // and the other note only revealed the damage on the next restart, once
+      // the blob cache that had been masking it was empty.
+      const targets = indexFingerprint(text)
       if (openTargetsRef.current.get(path) !== targets) {
         openTargetsRef.current.set(path, targets)
         setOpenLinkVersion((v) => v + 1)
@@ -473,6 +486,23 @@ export default function App(): React.JSX.Element {
     }
   }, [])
 
+  const rescanLinks = useCallback(async (paths?: string[]): Promise<void> => {
+    try {
+      const rows = await window.api.scanLinks(paths)
+      setLinkRows((prev) => {
+        if (!paths) return rows
+        // A partial rescan replaces only what it looked at. A path that came back
+        // with nothing is a note whose links are gone — or a note that is gone —
+        // and either way its old row must not survive.
+        const touched = new Set(paths)
+        return [...prev.filter((r) => !touched.has(r.path)), ...rows]
+      })
+    } catch {
+      // No vault open yet, or it went away mid-scan. The block shows nothing,
+      // which is honest — the alternative is showing a stale set of backlinks.
+    }
+  }, [])
+
   /** Let go of a note that has just left the strip: write anything unsaved (a
    *  tab closing is not a way to discard edits, and the 400ms autosave may not
    *  have fired), then drop its loaded copy. */
@@ -480,15 +510,30 @@ export default function App(): React.JSX.Element {
     (path: string): void => {
       if (path === BLANK) return // the "+" tab never had a file
       const pending = dirtyRef.current.get(path)
+      let written: Promise<unknown> = Promise.resolve()
       if (pending !== undefined) {
         dirtyRef.current.delete(path)
-        void window.api
+        written = window.api
           .writeNote(path, pending)
           .catch((e: Error) => flash(`Save failed: ${e.message}`))
       }
       docsRef.current.delete(path)
+      // And re-read what it says, because until now nothing did.
+      //
+      // `liveIndex` lays open buffers over the last vault scan, so while a note
+      // is open its edits are in the index for free — and the moment the buffer
+      // is dropped the index silently reverts to whatever the scan said, which
+      // for a note edited since startup is wrong. That is not cosmetic: the
+      // same index answers "which other notes hold this photo", so adding a
+      // picture to a note and then switching away made the note invisible to
+      // the shared-photo warning. Deleting the photo elsewhere then took it
+      // with no warning at all, and the damage only showed on the next restart
+      // once the blob cache stopped masking it.
+      //
+      // After the write, not before: rescanning first would read the old file.
+      void written.then(() => rescanLinks([path]))
     },
-    [flash]
+    [flash, rescanLinks]
   )
 
   /** The single way the layout changes. Everything that opens, closes, splits,
@@ -845,6 +890,29 @@ export default function App(): React.JSX.Element {
       // the same line "Couldn't make that note" already appears on.
       notify: (message) => flash(message),
       confirmMediaDelete: (req) => {
+        // THE FILE ONLY EVER LEAVES WHEN THE LAST NOTE STOPS USING IT.
+        //
+        // Before this, deleting a picture from ANY note binned the file — which
+        // with shared media is the accident waiting to happen: paste a picture
+        // into a second note, change your mind, remove it there, and the note
+        // you pasted it FROM silently loses its picture. Nothing warned you,
+        // because the warning was on the dialog and the dialog was about the
+        // note you were in.
+        //
+        // So while anything else still holds the file, this is not a delete at
+        // all: the text goes, the file stays, and it says so. `req.restore()`
+        // still puts the text back, so Undo needs nothing extra.
+        const others = otherNotesUsing(mediaUsageRef.current, req.file, req.origin?.note)
+        if (req.file && others.length > 0) {
+          showNotice({
+            text:
+              others.length === 1
+                ? 'Removed from this note. The file stays — 1 other note still uses it.'
+                : `Removed from this note. The file stays — ${others.length} other notes still use it.`,
+            action: { label: 'Undo', run: () => req.restore() }
+          })
+          return
+        }
         // Read from the ref, not a captured value: this callback outlives the
         // render it was built in. Asked never to be asked, the file is binned
         // there and then and the notice carries the way back — that route
@@ -859,7 +927,7 @@ export default function App(): React.JSX.Element {
         setMediaConfirm(req)
       }
     }),
-    [openLink, createFromLink, reveal, flash]
+    [openLink, createFromLink, reveal, flash, showNotice]
   )
 
   // Delete-then-confirm for a photo or video pulled out of a note. The editor
@@ -1015,27 +1083,16 @@ export default function App(): React.JSX.Element {
    *  This is the app KNOWING a picture is in a note, rather than trusting a
    *  breadcrumb written when one was deleted. */
   const mediaUsage_ = useMemo(() => mediaUsage(linkIndex), [linkIndex])
+  /** The same map, reachable from `linkHandlers` — which is memoised, so it
+   *  cannot close over `mediaUsage_` and see anything but the first render's
+   *  answer. Same reason `settingsRef` exists beside it. */
+  const mediaUsageRef = useRef(mediaUsage_)
+  mediaUsageRef.current = mediaUsage_
   /** Other notes that will lose their picture if this delete goes through.
    *  Plain, not memoised: a map lookup and a filter over at most a handful of
    *  paths, recomputed only while a dialog is actually open. */
   const alsoUsedBy = otherNotesUsing(mediaUsage_, mediaConfirm?.file ?? null, mediaConfirm?.origin?.note)
 
-  const rescanLinks = useCallback(async (paths?: string[]): Promise<void> => {
-    try {
-      const rows = await window.api.scanLinks(paths)
-      setLinkRows((prev) => {
-        if (!paths) return rows
-        // A partial rescan replaces only what it looked at. A path that came back
-        // with nothing is a note whose links are gone — or a note that is gone —
-        // and either way its old row must not survive.
-        const touched = new Set(paths)
-        return [...prev.filter((r) => !touched.has(r.path)), ...rows]
-      })
-    } catch {
-      // No vault open yet, or it went away mid-scan. The block shows nothing,
-      // which is honest — the alternative is showing a stale set of backlinks.
-    }
-  }, [])
 
   /**
    * A note was renamed — point every `[[link]]` that meant it at its new name.
@@ -1201,7 +1258,15 @@ export default function App(): React.JSX.Element {
     if (!vault || !sessionReady.current) return
     const t = setTimeout(() => {
       void window.api.setSettings({
-        session: { tabs: layout.tabs, panes: layout.panes, focus: layout.focus }
+        // `sizes` is written straight through, undefined and all: an even split
+        // carries none, so a layout nobody has dragged persists exactly as it
+        // did before this feature existed.
+        session: {
+          tabs: layout.tabs,
+          panes: layout.panes,
+          focus: layout.focus,
+          sizes: layout.sizes
+        }
       })
     }, 400)
     return () => clearTimeout(t)
@@ -2100,6 +2165,22 @@ export default function App(): React.JSX.Element {
   // The new column arrives empty and asks what goes in it, so the only thing
   // that can stop it is the cap — no second note required.
   const canSplit = layout.panes.length < MAX_PANES
+  // One fraction per pane, always — `paneSizes` is the only reader of `sizes`
+  // and hands back equal columns for anything it can't trust (invariant 4).
+  const paneWidths = paneSizes(layout)
+
+  // Both go through `layoutRef.current` rather than `layout`: a drag commits on
+  // release and a nudge repeats on key-repeat, and either can fire again before
+  // React has re-rendered with the previous result.
+  const onPaneResize = useCallback(
+    (at: number, left: number, right: number): void => {
+      applyLayout(resizePanes(layoutRef.current, at, left, right))
+    },
+    [applyLayout]
+  )
+  const onPaneResetSizes = useCallback((): void => {
+    applyLayout(equalisePanes(layoutRef.current))
+  }, [applyLayout])
 
   const openSearchResult = (h: SearchHit, newTab = false): void => {
     void (async () => {
@@ -2268,12 +2349,24 @@ export default function App(): React.JSX.Element {
           <>
             <div className="flex min-h-0 flex-1">
               {layout.panes.map((p, i) => (
-                <NotePane
-                  // Keyed by position, not path: switching the note in a pane
-                  // must NOT remount CodeMirror (it swaps the document in place,
-                  // which is what keeps the cursor and undo history).
-                  key={i}
+                // Keyed by position, not path: switching the note in a pane
+                // must NOT remount CodeMirror (it swaps the document in place,
+                // which is what keeps the cursor and undo history).
+                <Fragment key={i}>
+                  {/* Between the columns it resizes, so it can find them as its
+                      own DOM siblings. Zero width, so inserting it changes none
+                      of the fractions above. */}
+                  {i > 0 && (
+                    <PaneDivider
+                      at={i}
+                      onResize={onPaneResize}
+                      onReset={onPaneResetSizes}
+                      label={`Resize ${paneLabel(layout.panes[i - 1])} and ${paneLabel(p)}`}
+                    />
+                  )}
+                  <NotePane
                   path={p}
+                  size={paneWidths[i]}
                   doc={docsRef.current.get(p) ?? ''}
                   version={versions[p] ?? 0}
                   wordCount={wordCounts[p] ?? 0}
@@ -2374,7 +2467,8 @@ export default function App(): React.JSX.Element {
                         : splitAt(l, d.path, zone === 'left' ? i : i + 1)
                     )
                   }}
-                />
+                  />
+                </Fragment>
               ))}
             </div>
           </>

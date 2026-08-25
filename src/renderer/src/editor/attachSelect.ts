@@ -79,6 +79,28 @@ export function selectionCovers(view: EditorView, from: number, to: number): boo
   return !r.empty && r.from === from && r.to === to
 }
 
+/** Whether the selection swallows this embed WHOLE — the exact-cover case above
+ *  plus every selection that runs across it and out the other side.
+ *
+ *  This is the difference between "the user is editing this embed's source" and
+ *  "the user has dragged a selection over it on the way past", and getting it
+ *  wrong is not cosmetic. Until 2026-08-24 only an EXACT cover kept the picture
+ *  on screen, so selecting a photo plus one word of text tore the picture out
+ *  and put its raw markdown back — **collapsing a 420px line to 27px while the
+ *  pointer was still moving.** Everything below jumped up by the difference, the
+ *  drag carried on against content that was no longer under the cursor, and the
+ *  selection you ended up with was not the one you drew. It arrived looking like
+ *  a selection that had come apart into steps, which is exactly what it was.
+ *
+ *  Reveal-to-edit is still right for a selection that lands genuinely INSIDE the
+ *  markdown (dragging across part of the URL) — that one really is asking to
+ *  work with the text, and it moves nothing, because the picture was already
+ *  raw for the cursor that started it. */
+export function selectionSwallows(view: EditorView, from: number, to: number): boolean {
+  const r = view.state.selection.main
+  return !r.empty && r.from <= from && r.to >= to
+}
+
 /** Whether the selection is genuinely INSIDE this embed, rather than merely
  *  touching its edge.
  *
@@ -103,6 +125,42 @@ export function insideEmbed(view: EditorView, from: number, to: number): boolean
     if (r.empty ? r.from > from && r.from < to : r.from < to && r.to > from) return true
   }
   return false
+}
+
+/** Tell CodeMirror to re-measure once an embed's real size is known.
+ *
+ *  A picture or a video enters the DOM with no dimensions and grows its line
+ *  when the bytes land. **CodeMirror caches line geometry in a height map and
+ *  has no way to notice that happening** — the map still describes the
+ *  collapsed line, so everything computed against it is drawn against a layout
+ *  that no longer exists. The most visible casualty is `drawSelection`: its
+ *  rectangles tile perfectly against each OTHER while sitting tens or hundreds
+ *  of pixels away from the text they claim to cover, which reads as a selection
+ *  that has come apart into steps. (Reported 2026-08-24 as "why is this
+ *  selection like it is". Measured with a 300px image: the line box correctly
+ *  grew to 308px, and the selection still covered 265px of a 366px range.)
+ *
+ *  This is NOT only a selection bug — the same stale map is what
+ *  `posAtCoords`, `coordsAtPos` and scroll-into-view all read, so a click
+ *  under a picture lands on the wrong line for the same reason. Selection is
+ *  just where it is visible.
+ *
+ *  `requestMeasure` is the supported way to say "my DOM changed size": it folds
+ *  into CodeMirror's own measure cycle instead of forcing a synchronous reflow
+ *  per image, which matters when a note opens with a dozen of them. */
+export function remeasureWhenSized(view: EditorView, el: HTMLElement, events: string[]): void {
+  const measure = (): void => view.requestMeasure()
+  // `once` — a still image fires `load` exactly once, and leaving the listener
+  // attached would keep a view reference alive after the widget is torn down.
+  for (const name of events) el.addEventListener(name, measure, { once: true })
+  // An image whose bytes are ALREADY in the browser's cache is `complete`
+  // before this line runs, and `load` has therefore been and gone — the
+  // listener above would wait forever. Costs one redundant measure in the rare
+  // case the size is genuinely known at zero height; `requestMeasure` coalesces
+  // that away. Found the hard way: the first version of this fix changed
+  // nothing at all when tested against a `data:` URI, because that is exactly
+  // the already-complete case.
+  if (el instanceof HTMLImageElement && el.complete) measure()
 }
 
 /** Marks the whole editor while the selection is exactly one embed, so the CSS

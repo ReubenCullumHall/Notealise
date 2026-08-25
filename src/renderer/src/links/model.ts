@@ -144,6 +144,31 @@ function dirWithin(path: string, space: string): string {
  * `[[link]]` you just typed in one column should appear as a backlink in the
  * other before the 400ms autosave, not after it.
  */
+/** A fingerprint of everything in a note that the INDEX cares about.
+ *
+ *  Typing must not cost a rebuild of every open note's backlinks, so the index
+ *  is only re-derived when this string changes rather than on each keystroke.
+ *  Which makes what it covers load-bearing, and it used to cover links alone.
+ *
+ *  Embeds belong here because the same index answers "which notes hold this
+ *  photo", and that is what the delete dialog reads before warning you that
+ *  another note is about to lose its picture. With embeds outside the
+ *  fingerprint, pasting `![](beach.png)` into a second note — the only way to
+ *  make two notes share one file — never reached the index. No warning was
+ *  shown, the delete went through, and the other note only revealed the damage
+ *  after a restart, once the blob cache that had been masking it was empty.
+ *
+ *  The two kinds are prefixed so a link and an embed naming the same string
+ *  cannot swap places without the fingerprint noticing. */
+export function indexFingerprint(text: string): string {
+  return [
+    ...indexLinks(text).map((l) => 'l:' + l.target + '#' + (l.heading ?? '')),
+    ...indexEmbeds(text).map((t) => 'e:' + t)
+    // A literal NUL in App.tsx once made grep and ripgrep treat the whole file
+    // as BINARY and silently skip it. Same separator, written as an escape.
+  ].join('\u0000')
+}
+
 export function liveIndex(disk: LinkRow[], open: Map<string, string>): LinkRow[] {
   const rows = disk.filter((r) => !open.has(r.path))
   for (const [path, text] of open) {

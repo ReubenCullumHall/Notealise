@@ -1,6 +1,8 @@
 import { EditorView } from '@codemirror/view'
 import { gripIcon } from './blockTable'
 import { embedSpanAt, selectEmbed } from './attachSelect'
+import { createEdgeScroller } from '../edgeScroll'
+import type { BlockRange } from './blockMove'
 
 // Dragging an image/video embed to a different line in the note — the same
 // grip-and-drag interaction blockTable.ts's column handle already uses
@@ -17,16 +19,54 @@ import { embedSpanAt, selectEmbed } from './attachSelect'
 // `docChanged || selectionSet || viewportChanged`, and this drag causes none
 // of those until the very last `dispatch`.
 
+/** What a grip picks up, and what a press with no drag means.
+ *
+ *  The gesture below — threshold, boundary marker, edge-scroll, one transaction
+ *  on drop — is identical whether the thing being moved is a photo's line or a
+ *  four-line paragraph. Only these two answers differ, so they are the only
+ *  thing a caller supplies. */
+export interface DragSource {
+  /** the lines to move, resolved at mousedown from the grip's own position.
+   *  Null abandons the gesture before it starts. */
+  rangeAt: (view: EditorView, pos: number) => BlockRange | null
+  /** a press that never became a drag */
+  onClick?: (view: EditorView, pos: number, range: BlockRange) => void
+  /** class on the button, so the two grips can be positioned differently */
+  className: string
+  /** for screen readers — the only thing that says what the six dots do */
+  label: string
+}
+
+/** The media grip: one line, and a click selects the embed on it as one object.
+ *  Exactly the behaviour this file had before it took a `DragSource` at all. */
+const EMBED_SOURCE: DragSource = {
+  rangeAt: (view, pos) => {
+    const line = view.state.doc.lineAt(pos)
+    return { from: line.from, to: line.to }
+  },
+  onClick: (view, pos) => {
+    const span = embedSpanAt(view.state, pos)
+    if (span) selectEmbed(view, span)
+  },
+  className: 'cm-attach-grip',
+  label: 'Drag to move up or down in the note'
+}
+
 /** Builds the small grip button an image/video widget shows on hover. It takes
  *  no position: the line it acts on is resolved from the button's own DOM node
  *  at mousedown, which is both always current AND what frees ImageWidget /
  *  VideoWidget from rebuilding every time their line shifts. */
-export function attachDragHandle(view: EditorView): HTMLElement {
+export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SOURCE): HTMLElement {
   const btn = document.createElement('button')
   btn.type = 'button'
-  btn.className = 'cm-attach-grip'
-  btn.setAttribute('aria-label', 'Drag to move up or down in the note')
-  btn.dataset.tip = 'Drag to move'
+  btn.className = source.className
+  // aria-label but deliberately NO `data-tip`. Six dots in a grid is already
+  // the universal "pick this up" handle, and the tooltip is bare text with no
+  // panel behind it (Tooltip.tsx) — so floating over a note it inherited the
+  // NOTE's typeface rather than the interface's, and read as stray serif text
+  // sitting on the picture. The label stays for screen readers, which have no
+  // other way to know what the button does.
+  btn.setAttribute('aria-label', source.label)
   btn.appendChild(gripIcon())
 
   btn.addEventListener('mousedown', (start) => {
@@ -43,22 +83,25 @@ export function attachDragHandle(view: EditorView): HTMLElement {
     // position on every keystroke. `imageClick` already reads position this way.
     const doc = view.state.doc
     const startPos = Math.min(view.posAtDOM(btn), doc.length)
-    // Captured here rather than at mouseup: a click selects THIS embed, and by
-    // mouseup the button may no longer be the thing under the pointer.
-    const span = embedSpanAt(view.state, startPos)
-    const line = doc.lineAt(startPos)
-    const isLast = line.number === doc.lines
+    // Captured here rather than at mouseup: by then the button may no longer be
+    // the thing under the pointer, and for the line grip the SELECTION this is
+    // derived from may have moved on.
+    const range = source.rangeAt(view, startPos)
+    if (!range) return
+    const firstLine = doc.lineAt(range.from)
+    const lastLine = doc.lineAt(range.to)
+    const isLast = lastLine.number === doc.lines
 
-    // The embed's own line, for the "dropped back where it started" check.
-    const ownFrom = line.from
-    const ownTo = isLast ? line.to : doc.line(line.number + 1).from
+    // The block's own extent, for the "dropped back where it started" check.
+    const ownFrom = firstLine.from
+    const ownTo = isLast ? lastLine.to : doc.line(lastLine.number + 1).from
 
-    // What actually gets cut. Normally the line plus the newline that follows
-    // it. On the LAST line there is no trailing newline to take, so the one
+    // What actually gets cut. Normally the lines plus the newline that follows
+    // them. On the LAST line there is no trailing newline to take, so the one
     // that separated it from the line above is taken instead — cutting just
-    // `line.from`–`line.to` left that newline dangling, so every move off the
-    // last line added an empty line to the end of the note.
-    const removeFrom = isLast && line.number > 1 ? doc.line(line.number - 1).to : ownFrom
+    // `from`–`to` left that newline dangling, so every move off the last line
+    // added an empty line to the end of the note.
+    const removeFrom = isLast && firstLine.number > 1 ? doc.line(firstLine.number - 1).to : ownFrom
     const removeTo = ownTo
 
     // One boundary at the top of every VISIBLE rendered block (dropping there
@@ -107,6 +150,15 @@ export function attachDragHandle(view: EditorView): HTMLElement {
     let marker: HTMLElement | null = null
     let finished = false
 
+    // Holding near the top or bottom of the editor scrolls it — the only way to
+    // move a picture further than one screenful on a trackpad, where the
+    // fingers that would scroll are the ones holding the drag. Declared above
+    // `cleanup` because `cleanup` stops it, and a const referenced before its
+    // own initialiser is a temporal-dead-zone throw waiting for the one path
+    // that tears the drag down early.
+    let lastY = start.clientY
+    const scroller = createEdgeScroller(view.scrollDOM, () => place(lastY))
+
     // ONE teardown, called from every way this gesture can end. It used to live
     // only inside the mouseup handler, so a button released outside the window
     // (an alt-tab, a modal stealing focus) left both listeners attached for
@@ -119,12 +171,32 @@ export function attachDragHandle(view: EditorView): HTMLElement {
       window.removeEventListener('mouseup', onUp)
       window.removeEventListener('blur', cleanup)
       window.removeEventListener('keydown', onKey)
+      scroller.stop()
       marker?.remove()
       marker = null
     }
 
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') cleanup() // abandon the drag, change nothing
+    }
+
+    /** Put the drop marker on the boundary nearest `y`. Split out of `onMove`
+     *  because the edge-scroller has to call it too: while the pointer is held
+     *  still in the scroll zone the document keeps moving under it, and nothing
+     *  else would re-run this — the marker would sit on a line that had
+     *  scrolled away. */
+    const place = (y: number): void => {
+      measure()
+      if (!boundaries.length) return
+      let best = boundaries[0]
+      for (const b of boundaries) if (Math.abs(b.y - y) < Math.abs(best.y - y)) best = b
+      target = best.pos
+      if (marker) {
+        const rect = view.dom.getBoundingClientRect()
+        marker.style.top = `${best.y}px`
+        marker.style.left = `${rect.left}px`
+        marker.style.width = `${rect.width}px`
+      }
     }
 
     const onMove = (m: MouseEvent): void => {
@@ -135,28 +207,21 @@ export function attachDragHandle(view: EditorView): HTMLElement {
         marker.className = 'cm-attach-drop-marker'
         document.body.appendChild(marker)
       }
-      measure()
-      if (!boundaries.length) return
-      let best = boundaries[0]
-      for (const b of boundaries) if (Math.abs(b.y - m.clientY) < Math.abs(best.y - m.clientY)) best = b
-      target = best.pos
-      if (marker) {
-        const rect = view.dom.getBoundingClientRect()
-        marker.style.top = `${best.y}px`
-        marker.style.left = `${rect.left}px`
-        marker.style.width = `${rect.width}px`
-      }
+      lastY = m.clientY
+      scroller.track(m.clientY)
+      place(m.clientY)
     }
 
     const onUp = (): void => {
       const wasMoved = moved
       const dropAt = target
       cleanup()
-      // A press with no drag is a CLICK, and a click selects the embed as one
-      // object — which is what lets Backspace remove the whole thing rather
-      // than one character of its source (see attachSelect).
+      // A press with no drag is a CLICK, and what that means belongs to the
+      // caller: for an embed it selects the picture as one object (which is
+      // what lets Backspace remove the whole thing rather than one character of
+      // its source — see attachSelect); for a line it selects the block.
       if (!wasMoved) {
-        if (span) selectEmbed(view, span)
+        source.onClick?.(view, startPos, range)
         return
       }
       // Dropping on either edge of the embed's own current line is not a
@@ -176,7 +241,7 @@ export function attachDragHandle(view: EditorView): HTMLElement {
       // real case; this is the belt-and-braces one.
       if (dropAt > removeFrom && dropAt < removeTo) return
 
-      const content = doc.sliceString(line.from, line.to)
+      const content = doc.sliceString(firstLine.from, lastLine.to)
       const atEnd = dropAt === doc.length && removeTo !== doc.length
       const insert = atEnd ? '\n' + content : content + '\n'
       // Two changes, both expressed against the ORIGINAL document — CM6

@@ -38,8 +38,28 @@ export function createAssetCache(): AssetCache {
       const already = inFlight.get(relPath)
       if (already) return already
 
-      const p = window.api
-        .readAsset(relPath)
+      // One retry, then give up.
+      //
+      // A big video pasted in is still being written when the widget that shows
+      // it first asks for its bytes, so the read fails, `null` is cached as the
+      // answer, and the note shows "Video not found" for a file that arrived a
+      // moment later. Reported 2026-08-24 as "not a file size problem, a
+      // loading time problem", which is exactly right: pasting the same clip
+      // again without switching notes worked.
+      //
+      // Deliberately one retry and a fixed pause, not a growing backoff: the
+      // only failure this is meant to cover is a write finishing a beat late,
+      // and a file that genuinely is not there should reach its "not found"
+      // state promptly rather than after several silent waits.
+      const read = async (): Promise<Uint8Array> => {
+        try {
+          return await window.api.readAsset(relPath)
+        } catch {
+          await new Promise((r) => setTimeout(r, 400))
+          return window.api.readAsset(relPath)
+        }
+      }
+      const p = read()
         .then((bytes) => {
           // `new Blob([bytes])` with no type is enough for both <img> and
           // <video>: the browser sniffs the format, so we don't need a

@@ -19,6 +19,10 @@ import {
   splitAt,
   splitBlank,
   swapPanes,
+  equalisePanes,
+  MIN_PANE_PX,
+  paneSizes,
+  resizePanes,
   type TabLayout
 } from './model'
 
@@ -34,7 +38,30 @@ const invariants = (l: TabLayout): void => {
   if (l.panes.length) expect(l.focus).toBeLessThan(l.panes.length)
   // 3: a blank tab only exists while a pane is showing it
   if (l.tabs.includes(BLANK)) expect(l.panes).toContain(BLANK)
+  // 4: sizes, when present, describe exactly these panes. Asserted HERE rather
+  // than only in the resizing block so every operation in this file — including
+  // the ones written long before widths existed — proves it maintains them. An
+  // operation that changes the pane count and forgets `sizes` fails whichever
+  // test exercises it, instead of waiting for someone to write a width test for
+  // that specific path.
+  if (l.sizes !== undefined) expect(l.sizes).toHaveLength(l.panes.length)
+  // and what the UI actually renders is always one usable fraction per pane
+  const rendered = paneSizes(l)
+  expect(rendered).toHaveLength(l.panes.length)
+  if (rendered.length) expect(rendered.reduce((a, b) => a + b, 0)).toBeCloseTo(1)
 }
+
+/** Two columns, a.md | b.md. `opened` leaves only the LAST note in a pane, so
+ *  the second column comes from splitting in a tab that is open but off screen —
+ *  splitting in one already visible MOVES its column instead of adding one. */
+const twoCols = (): TabLayout => splitAt(opened('a.md', 'b.md'), 'a.md', 0)
+
+/** Three columns, a.md | b.md | c.md, by the same route. */
+const threeCols = (): TabLayout =>
+  splitAt(splitAt(opened('a.md', 'b.md', 'c.md'), 'b.md', 0), 'a.md', 0)
+
+/** A two-column layout dragged to `left`:`right`, as the divider would. */
+const dragged = (left: number, right: number): TabLayout => resizePanes(twoCols(), 1, left, right)
 
 describe('opening', () => {
   it('adds a tab and shows it in the focused pane', () => {
@@ -392,5 +419,127 @@ describe('following the vault', () => {
     const l = closeTab(opened('a.md'), 'a.md')
     expect(l).toEqual(EMPTY_LAYOUT)
     expect(activePath(l)).toBeNull()
+  })
+})
+
+
+
+describe('column widths', () => {
+  it('starts a split even, and says so by carrying no sizes at all', () => {
+    const l = twoCols()
+    // Not [0.5, 0.5]: "never dragged" and "dragged back to even" render the
+    // same, so they must BE the same value — otherwise every plain split writes
+    // an array into settings.json for a layout nobody touched.
+    expect(l.sizes).toBeUndefined()
+    expect(paneSizes(l)).toEqual([0.5, 0.5])
+    invariants(l)
+  })
+
+  it('divides only the pair a divider sits between, leaving the third alone', () => {
+    // The predictability the whole gesture rests on: in a three-way split,
+    // dragging one seam must not shuffle the column at the far end.
+    const l = threeCols()
+    expect(l.panes).toEqual(['a.md', 'b.md', 'c.md'])
+    const before = paneSizes(l)
+    const after = paneSizes(resizePanes(l, 1, 3, 1))
+    expect(after[2]).toBeCloseTo(before[2])
+    expect(after[0] + after[1]).toBeCloseTo(before[0] + before[1])
+    expect(after[0] / after[1]).toBeCloseTo(3)
+    invariants(l)
+  })
+
+  it('keeps the survivors in proportion when a column closes', () => {
+    // The "absorb the difference" rule: close the narrow one of a 3:1 pair and
+    // the other takes the room rather than the split snapping back to even.
+    const l = dragged(3, 1)
+    expect(paneSizes(l)).toEqual([0.75, 0.25])
+    const closed = closePane(l, 1)
+    expect(paneSizes(closed)).toEqual([1])
+    invariants(closed)
+  })
+
+  it('preserves the RATIO of the columns that remain, not just their order', () => {
+    const sized = { ...threeCols(), sizes: [0.5, 0.2, 0.3] }
+    const closed = closePane(sized, 1) // drop the middle
+    const after = paneSizes(closed)
+    expect(after[0] / after[1]).toBeCloseTo(0.5 / 0.3) // 5:3, as it was
+    invariants(closed)
+  })
+
+  it('gives a newly opened column an even share and shrinks the rest to fit', () => {
+    const wide = { ...threeCols(), panes: ['a.md', 'b.md'], focus: 0, sizes: [0.75, 0.25] }
+    const added = splitAt(wide, 'c.md', 2)
+    const after = paneSizes(added)
+    expect(after[2]).toBeCloseTo(1 / 3) // the new one
+    expect(after[0] / after[1]).toBeCloseTo(3) // the other two, still 3:1
+    invariants(added)
+  })
+
+  it('moves a width WITH its column, but leaves widths put on a swap', () => {
+    const l = { ...threeCols(), sizes: [0.5, 0.2, 0.3] }
+    // movePane: the column itself travels, so its 0.5 travels with it.
+    const moved = movePane(l, 0, 3)
+    expect(moved.panes).toEqual(['b.md', 'c.md', 'a.md'])
+    expect(paneSizes(moved)).toEqual([0.2, 0.3, 0.5])
+    invariants(moved)
+    // swapPanes: two NOTES trade columns and the columns stay where they are,
+    // which is what makes "nothing else on screen moves" literally true.
+    const swapped = swapPanes(l, 0, 2)
+    expect(swapped.panes).toEqual(['c.md', 'b.md', 'a.md'])
+    expect(paneSizes(swapped)).toEqual([0.5, 0.2, 0.3])
+    invariants(swapped)
+  })
+
+  it('resets to even by dropping the array, so a reset layout equals a fresh one', () => {
+    const l = dragged(3, 1)
+    const reset = equalisePanes(l)
+    expect(reset.sizes).toBeUndefined()
+    // and it is a no-op on a layout that was already even — nothing to persist,
+    // and no pointless re-render from a new object identity.
+    expect(equalisePanes(reset)).toBe(reset)
+    invariants(reset)
+    // dragging a two-way split back to dead centre records as the same reset
+    expect(dragged(1, 1).sizes).toBeUndefined()
+  })
+
+  it('falls back to even for anything it cannot trust, WHOLE rather than per-entry', () => {
+    const l = twoCols()
+    // A half-repaired array is a layout nobody chose; even is always defensible.
+    expect(paneSizes({ ...l, sizes: [1] })).toEqual([0.5, 0.5]) // wrong length
+    expect(paneSizes({ ...l, sizes: [0.5, 0] })).toEqual([0.5, 0.5]) // a zero column
+    expect(paneSizes({ ...l, sizes: [NaN, 1] })).toEqual([0.5, 0.5])
+    expect(paneSizes({ ...l, sizes: [-1, 2] })).toEqual([0.5, 0.5])
+    // unnormalised but usable is normalised, not rejected
+    expect(paneSizes({ ...l, sizes: [30, 10] })).toEqual([0.75, 0.25])
+  })
+
+  it('refuses a resize it cannot make sense of instead of producing a broken split', () => {
+    const l = dragged(3, 1)
+    expect(resizePanes(l, 0, 1, 1)).toBe(l) // pane 0 has no divider before it
+    expect(resizePanes(l, 2, 1, 1)).toBe(l) // past the last pane
+    expect(resizePanes(l, 1, 0, 1)).toBe(l) // a zero-width column
+    expect(resizePanes(l, 1, NaN, 1)).toBe(l)
+  })
+
+  it('reopens a session even when any of its notes did not come back', () => {
+    // Drop one note and every index after it describes a different column than
+    // the one that was measured. Rather than guess which width belonged to which
+    // survivor, the split reopens even — a losable sidecar losing well.
+    const saved = { tabs: ['a.md', 'b.md'], panes: ['a.md', 'b.md'], focus: 0, sizes: [0.8, 0.2] }
+    const both = restoreLayout(saved, () => true)
+    expect(both.sizes).toEqual([0.8, 0.2])
+    invariants(both)
+
+    const one = restoreLayout(saved, (p) => p === 'a.md')
+    expect(one.panes).toEqual(['a.md'])
+    expect(one.sizes).toBeUndefined()
+    invariants(one)
+  })
+
+  it('exports a minimum wide enough to still be a text column', () => {
+    // The clamp itself lives at the drag (only the caller knows how wide a pixel
+    // is), but the NUMBER is the model's — it rests on the same judgement
+    // MAX_PANES does, and a divider that let a pane below it would undo that cap.
+    expect(MIN_PANE_PX).toBeGreaterThanOrEqual(300)
   })
 })

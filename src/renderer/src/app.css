@@ -1753,6 +1753,13 @@ button.icon:hover {
   font-size: 11.5px;
   line-height: 1.5;
   user-select: text;
+  /* It copies itself on click, so it has to read as something you can press.
+     Text cursor would have been right when it was only a read-out. */
+  cursor: pointer;
+}
+.cm-attach-source:hover {
+  background: rgb(var(--wash) / 0.09);
+  color: rgb(var(--ink-600));
 }
 .cm-image-img {
   display: block;
@@ -2195,3 +2202,165 @@ button.icon:hover {
   transform: rotate(45deg);
 }
 
+
+/* ---------------------------------------------------------------------------
+   Split-view column resizing (built 2026-08-24)
+
+   Three separate pieces of motion, and keeping them apart is the whole design:
+
+   1. THE DRAG ITSELF IS NOT ANIMATED. `body.pane-resizing` kills the column
+      transition for the duration, so the seam tracks the pointer exactly. An
+      eased resize handle reads as lag, never as smoothness — this is the one
+      place in the app where instant IS the polished answer.
+   2. THE COLUMNS GLIDE when the number changes for any OTHER reason: a column
+      opening, closing, being reordered, or a double-click putting them back to
+      even. Same 0.22/1/0.36/1 curve and roughly the same duration as the
+      sidebar's own movement, so a rebalancing split reads as part of the app.
+   3. THE SEAM WAKES on hover and while dragging — a brand-tinted line growing
+      out of the hairline border that is already there at rest.
+
+   All three collapse to nothing under `[data-motion='off']` and
+   `prefers-reduced-motion` via the global rule above; none of it needs its own
+   opt-out, and the RESIZE still works with every transition disabled, because
+   the resize was never a transition in the first place. */
+.pane-col {
+  transition: flex-grow 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+body.pane-resizing .pane-col {
+  transition: none;
+}
+
+/* A REAL 11px box that takes no net width: the negative margins give back
+   exactly what the width costs, so the panes' fractions still describe the whole
+   row while the element keeps a hit area, a focus target and a bounding box that
+   assistive tech and automation can find. (It was genuinely 0-wide first, with
+   the hit area painted on by a `::before`. Everything worked by hand — pointer
+   hit-testing goes through the pseudo-element — but a 0x0 `role="separator"` is
+   invisible to anything that measures before it acts.)
+   11px is the smallest that reliably catches a pointer without the target
+   creeping into the text of the column beside it. Its centre lands exactly on
+   NotePane's own `border-l`, which stays the resting appearance. */
+.pane-divider {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+  width: 11px;
+  margin: 0 -5.5px;
+  align-self: stretch;
+  cursor: col-resize;
+  outline: none;
+}
+.pane-divider-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: rgb(var(--brand-400));
+  opacity: 0;
+  /* Grows out of the hairline rather than fading in on top of it: scaling from a
+     half-width line means the border appears to thicken, which is the same
+     gesture the sidebar rows use to acknowledge a hover. */
+  transform: scaleX(0.5);
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pane-divider:hover .pane-divider-line,
+.pane-divider:focus-visible .pane-divider-line {
+  opacity: 0.7;
+  transform: scaleX(1);
+}
+.pane-divider:focus-visible .pane-divider-line {
+  opacity: 0.85;
+}
+.pane-divider.dragging .pane-divider-line {
+  opacity: 0.95;
+  transform: scaleX(1.5);
+}
+
+/* Pointer capture keeps the events arriving at the divider, but the pointer is
+   out over a CodeMirror instance — so the I-beam and the text selection have to
+   be suppressed at the window level, not on the divider. */
+body.pane-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+body.pane-resizing * {
+  cursor: col-resize !important;
+}
+
+/* The note's scrollbar, hidden until the pointer comes near it
+   (editor/scrollbarReveal.ts adds `.cm-near-scrollbar`).
+
+   Only ever present when a note is longer than the window, so this costs
+   nothing when there is nothing to scroll. The reason it is worth hiding: in a
+   split view the left pane's bar runs down the MIDDLE of the window, right
+   between the two notes, and reads as a divider rather than as a control.
+
+   The thumb is painted, never the track — a visible groove is furniture whether
+   or not anything is in it. `background-clip: content-box` with a transparent
+   border is what insets the thumb from the edge without a wrapper. */
+.cm-scroller::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+.cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cm-scroller::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 99px;
+}
+.cm-scroller.cm-near-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--ink-300) / 0.55);
+}
+.cm-scroller.cm-near-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--ink-400) / 0.75);
+}
+
+/* The active line's drag grip (editor/lineMove.ts). One element, parked over
+   `.cm-editor` and moved to whichever line the cursor is on.
+
+   Deliberately quieter than `.cm-attach-grip`: that one overlays arbitrary
+   photo content and has to hold its own against it, while this sits on the
+   page's own background beside text, where the same weight would read as a
+   blemish on every line you touch. Same six dots, same grab cursor, same
+   150ms — the gesture is the thing being made recognisable, not the colour. */
+.cm-line-grip {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgb(var(--ink-400) / 0.55);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+/* Faint by default so the line you are typing on is marked without the mark
+   competing with the words; full strength once the pointer finds it. */
+.cm-editor.cm-focused .cm-line-grip {
+  opacity: 0.45;
+}
+.cm-editor.cm-focused .cm-line-grip:hover,
+.cm-line-grip:focus-visible {
+  opacity: 1;
+  background: rgb(var(--brand-500) / 0.12);
+  color: rgb(var(--brand-600));
+}
+.cm-line-grip:active {
+  cursor: grabbing;
+}
+:root[data-motion='off'] .cm-line-grip {
+  transition: none;
+}

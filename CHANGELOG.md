@@ -7,6 +7,37 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Fixed: adding a photo to a note and then switching away made that note invisible to the app. The
+  index lays open notes over the last scan of the vault, so a note's edits counted only while it was
+  open — the moment it left the tab strip the app fell back to what the scan had said at startup,
+  and nothing ever rescanned it. That is why deleting a photo two notes shared gave no warning: the
+  second note was not, as far as the app knew, using it. The other note then lost its picture, and
+  because the loaded copy was still in memory the damage only showed after a restart. A note is now
+  re-read the moment its buffer is let go, and a change to the EMBEDS counts as a change worth
+  re-indexing, not just a change to the links
+- With the eye on, clicking the code under a picture now selects the whole line, ready to copy.
+  It used to put the cursor on the picture instead — which collapsed the selection, ringed the
+  picture and jumped the view back, so the one thing that read-out exists for could not be done
+- A note's scrollbar is now hidden until you move the pointer near it. In a split view the left
+  pane's bar runs down the middle of the window between the two notes and reads as a divider; it
+  only ever appears when a note is longer than the window, and it stays grabbable the moment it
+  shows
+- Hold a drag near the top or bottom of a note, or of the sidebar, and it scrolls — the bottom and
+  top sixth of whichever pane you are over, at a speed that ramps up the closer you get to the edge.
+  On a trackpad the fingers that would scroll are the ones holding the drag, so moving a photo or a
+  note further than one screenful was simply not possible before
+- Hover labels no longer run off the edge of the window. The vertical position assumed every label
+  was a single line 28px tall; the eye's label wraps to two, and the eye sits in the bottom-right
+  corner, so its label was pinned to the window edge with the rest hanging off the bottom. Labels
+  are now measured after they are laid out, flip above the control when there is no room below, and
+  are clamped into the window on both axes at any size
+- The six-dot handle on a photo or video no longer pops up a "Drag to move" label. Hover labels are
+  drawn as bare text with no panel behind them, so floating over a note it picked up the note's
+  typeface instead of the interface's and read as stray serif text lying on the picture. The dots
+  already say what they are
+- Pasting a big video and switching notes before it finishes now says "try again", and the picture
+  loader retries once before giving up — a large file was still being written when the note asked
+  for it, so it showed "Video not found" for a file that arrived a moment later
 - "Show me this file on my computer", on a bin or recovery row, now explains itself first: the
   folder it opens is a holding pen inside a hidden `.mdnotes`, and moving or renaming the file there
   leaves Restore with nothing to find. For a photo it also names the note it came out of and asks

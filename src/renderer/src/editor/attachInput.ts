@@ -174,7 +174,7 @@ async function insertFiles(
         // another one) — say both halves, because the file really is there and
         // a silent nothing reads as a broken paste.
         if (!insertAtTarget(view, id, kind, name, notePath)) {
-          notifyUser(view.state, `Saved ${name}, but couldn't add it to the note.`)
+          notifyUser(view.state, `Saved ${name}, but couldn't add it to the note — try again.`)
         }
       } catch (e) {
         // One bad file must not lose the ones before or after it, so the loop
@@ -257,7 +257,7 @@ export function attachFiles(view: EditorView): void {
       for (const { path: relPath, kind } of picked) {
         const name = relPath.slice(relPath.lastIndexOf('/') + 1)
         if (!insertAtTarget(view, id, kind, name, notePath)) {
-          notifyUser(view.state, `Saved ${name}, but couldn't add it to the note.`)
+          notifyUser(view.state, `Saved ${name}, but couldn't add it to the note — try again.`)
         }
       }
     } catch (e) {

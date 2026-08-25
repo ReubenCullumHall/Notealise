@@ -551,6 +551,14 @@ reported as bugs by the user on 2026-08-02:
 3. **It is a box the app can't style.** `Tooltip.tsx` renders plain text with a paper-coloured
    text-shadow instead — no border, background or panel.
 
+**Inside the note, think twice before adding one at all.** Because `Tooltip.tsx` draws bare text
+with no panel, it inherits whatever typeface it is floating over — and inside the editor that is the
+*note's* font, not the interface's. The attachment grip carried "Drag to move" until 2026-08-24,
+where it read as stray serif text sitting on top of the picture. It was removed rather than
+restyled: a 3x2 grid of dots is already the universal "pick this up" handle, and the `aria-label`
+stayed for screen readers. A control whose icon says what it is does not need the label; a control
+inside the note whose icon does not say what it is probably belongs on the chrome instead.
+
 The tooltip re-reads `data-tip` off the DOM on every hover *and* after a click, which is what fixes
 (1). A component that takes a `title` **prop** (`TB`, `RowBtn`) keeps the prop name and emits
 `data-tip` on its own button; `SettingRow`'s `title` is a heading, not a tooltip. Keep `aria-label`

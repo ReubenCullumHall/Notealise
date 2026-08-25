@@ -15,6 +15,7 @@ import {
   horizontalRule,
   wikiLink
 } from './formatCommands'
+import { attachFiles } from './attachInput'
 
 // ---------------------------------------------------------------------------
 // THE editor command registry. One list, three surfaces:
@@ -62,6 +63,12 @@ export interface EditorCommand {
    *  exists so a button-only command has somewhere to say so, rather than
    *  someone starting a parallel list again. */
   slash?: boolean
+  /** true for a command whose effect waits on something outside the document
+   *  — a native file picker, say — so it can't insert anything synchronously.
+   *  Every other command inserts text the instant it runs; `commands.test.ts`
+   *  checks that on an empty note for everything EXCEPT a `deferred` one,
+   *  which by nature has nothing to show yet. */
+  deferred?: boolean
 }
 
 /** Delete the `/query` that summoned a command, so it acts on the line the user
@@ -221,6 +228,16 @@ export const EDITOR_COMMANDS: EditorCommand[] = [
     glyph: iconFace('link'),
     terms: ['link', 'url', 'web', 'href', 'external'],
     run: insert(link)
+  },
+  {
+    id: 'attach',
+    label: 'Photo or video',
+    hint: 'Attach a photo or video from your files',
+    group: 'Insert',
+    glyph: iconFace('image'),
+    terms: ['image', 'photo', 'picture', 'video', 'attach', 'embed', 'file'],
+    run: insert(attachFiles),
+    deferred: true
   },
   {
     id: 'table',

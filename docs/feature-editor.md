@@ -311,6 +311,18 @@ the raw-view toggle.
     record of that relationship was `MediaOrigin` — a breadcrumb written at delete time — so a
     photo shared by two notes could be deleted from one and silently break the other, and anything
     that lost the breadcrumb lost the connection completely.
+  - **A buffer overlay is not a substitute for rescanning, and this cost a real photo.**
+    `liveIndex` lays open notes over the last vault scan, which makes a picture dragged in two
+    seconds ago instantly visible to the index — and hides the fact that nothing ever writes that
+    knowledge back. The moment a note's buffer is dropped (`dropDoc`, when its tab is replaced) the
+    index silently reverts to whatever the scan said, which for a note edited since startup is
+    wrong. So: add a photo to note B, switch away, delete that photo from note A — no warning, B
+    loses its picture, and because B's loaded copy is still in memory the damage only appears after
+    a restart. `dropDoc` now rescans the note it is letting go of, after its pending write settles.
+    The second half of the same bug: only `[[links]]` counted as a change worth re-indexing, so an
+    embed pasted as TEXT — the only way to make two notes share one file — never triggered one at
+    all. `indexFingerprint` (links/model.ts) covers both kinds now and is tested for it, because
+    the failure is invisible until someone has already lost a picture.
   - **`otherNotesUsing` excludes the note being deleted from, deliberately.** The delete has already
     happened when the dialog opens and the index has not necessarily caught up, so counting rows
     would be wrong half the time; excluding the one note in question is right either way.

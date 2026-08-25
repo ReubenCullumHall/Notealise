@@ -3,7 +3,7 @@ import { syntaxTree } from '@codemirror/language'
 import { linkEnv } from './linkEnv'
 import { cachedUrl, loadImage, resolveVaultPath } from './imageAssets'
 import { type Pass } from './livePreview'
-import { insideEmbed, selectionCovers, embedSpanAt } from './attachSelect'
+import { insideEmbed, selectionCovers, selectionSwallows, embedSpanAt, remeasureWhenSized } from './attachSelect'
 import { attachDragHandle } from './attachMove'
 import { isMediaSource, sourceCaption } from './mediaSource'
 
@@ -73,15 +73,26 @@ class ImageWidget extends WidgetType {
       else {
         void loadImage(this.rel).then((url) => {
           if (url) img.src = url
-          else wrap.classList.add('cm-image-missing')
+          else {
+            wrap.classList.add('cm-image-missing')
+            view.requestMeasure()
+          }
         })
       }
     } else {
       img.src = this.src // remote URL — let the <img> fetch it
     }
-    img.onerror = (): void => wrap.classList.add('cm-image-missing')
+    img.onerror = (): void => {
+      wrap.classList.add('cm-image-missing')
+      view.requestMeasure() // the missing-state placeholder is a different size again
+    }
+    // The line this sits on grows when the bytes land, and CodeMirror's height
+    // map does not find out on its own — see `remeasureWhenSized`. Registered
+    // for BOTH paths above: a cached URL still decodes asynchronously, so even
+    // the fast path arrives with no height.
+    remeasureWhenSized(view, img, ['load'])
     wrap.appendChild(img)
-    if (this.source) wrap.appendChild(sourceCaption(this.source))
+    if (this.source) wrap.appendChild(sourceCaption(this.source, view))
     return wrap
   }
 
@@ -92,8 +103,11 @@ class ImageWidget extends WidgetType {
    *  image — is an editor DOM handler, which returning true here would stop
    *  from ever firing. The native-drag difference that made these three look
    *  inconsistent is handled where it actually lives, on the <img> above. */
-  ignoreEvent(): boolean {
-    return false
+  ignoreEvent(event: Event): boolean {
+    // True only for the source caption, so CodeMirror leaves selecting and
+    // copying it alone. Everything else still reaches `imageClick` below, which
+    // is the ONLY way back to the markdown behind a rendered picture.
+    return !!(event.target as HTMLElement | null)?.closest?.('.cm-attach-source')
   }
 }
 
@@ -112,8 +126,13 @@ export const imagePass: Pass = (view, _active, push) => {
         // An exact cover means "selected" and is handled below. `insideEmbed`
         // rather than `overlapsSelection` because a bare cursor at the edge is
         // adjacent, not inside — see its own note.
+        // `picked` rings it (the grip selected exactly this); `spanned` merely
+        // keeps it a picture. A selection dragged over a photo must not swap it
+        // for raw markdown — that resizes the line mid-drag. See
+        // `selectionSwallows`.
         const picked = selectionCovers(view, node.from, node.to)
-        if (!picked && insideEmbed(view, node.from, node.to)) return
+        const spanned = picked || selectionSwallows(view, node.from, node.to)
+        if (!spanned && insideEmbed(view, node.from, node.to)) return
 
         let url = ''
         for (let c = node.node.firstChild; c; c = c.nextSibling) {
@@ -146,6 +165,9 @@ export const imageClick = EditorView.domEventHandlers({
   mousedown: (event, view) => {
     const target = event.target as HTMLElement
     if (!target.closest('.cm-image')) return false
+    // The eye's read-out is not the picture. Clicking it is a request to copy a
+    // path, and moving the document cursor here is what made that impossible.
+    if (target.closest('.cm-attach-source')) return false
     const pos = view.posAtDOM(target)
     // Strictly INSIDE the embed, not at its edge. `posAtDOM` lands on the
     // widget's own start, and since `insideEmbed` stopped treating an edge as

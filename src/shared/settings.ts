@@ -234,6 +234,12 @@ export interface SessionLayout {
   panes: string[]
   /** index into `panes` */
   focus: number
+  /** how wide each pane was dragged, as fractions of the row — one per pane,
+   *  left to right. Optional: absent means the columns were even, which is what
+   *  every session before this feature existed was, so an old settings.json
+   *  needs no migration. Shape only here, as above — that the fractions describe
+   *  the panes that actually came back is `restoreLayout`'s call. */
+  sizes?: number[]
 }
 
 export const EMPTY_SESSION: SessionLayout = { tabs: [], panes: [], focus: 0 }
@@ -564,7 +570,16 @@ function normalizeSession(raw: unknown): SessionLayout {
   const paths = (v: unknown): string[] =>
     (Array.isArray(v) ? v : []).filter((p): p is string => typeof p === 'string' && !!p)
   const focus = typeof raw.focus === 'number' && Number.isInteger(raw.focus) ? raw.focus : 0
-  return { tabs: paths(raw.tabs), panes: paths(raw.panes), focus: Math.max(0, focus) }
+  // Widths are dropped WHOLE if any entry is unusable, rather than repaired
+  // entry by entry: a part-mended array is a layout nobody chose, and the
+  // fallback (even columns) is always a defensible one. `restoreLayout` applies
+  // the same all-or-nothing rule against the notes that still exist.
+  const s = raw.sizes
+  const sizes =
+    Array.isArray(s) && s.length > 0 && s.every((v) => typeof v === 'number' && Number.isFinite(v) && v > 0)
+      ? (s as number[])
+      : undefined
+  return { tabs: paths(raw.tabs), panes: paths(raw.panes), focus: Math.max(0, focus), sizes }
 }
 
 /** Always exactly TOOLBAR_SLOTS strings — a short, long, or junk-filled array

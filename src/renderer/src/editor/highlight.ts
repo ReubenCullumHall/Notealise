@@ -39,8 +39,29 @@ const editorTheme = EditorView.theme({
   // reads the --editor-max-width set per-space by settings/model.ts's
   // applySettings (theme.css's `[data-editor-width]` block) — Settings →
   // Customisation/Spaces → Appearance → Editor width.
-  '.cm-content': { maxWidth: 'var(--editor-max-width, 46rem)', margin: '0 auto', padding: '0 28px' },
-  '.cm-line': { padding: '0' },
+  // The 28px gutter MUST live on `.cm-line`, not on `.cm-content` — it was the
+  // other way round until 2026-08-24 and that is what made a multi-line
+  // selection ragged (reported as "why is this selection like it is": a notch
+  // at the top-left of the block and a small tab hanging off the bottom-left).
+  //
+  // CodeMirror works out where the text starts by reading the LINE's padding,
+  // not the content's (`rectanglesForRange`, @codemirror/view):
+  //
+  //     leftSide  = contentRect.left  + parseInt(lineStyle.paddingLeft)
+  //     rightSide = contentRect.right - parseInt(lineStyle.paddingRight)
+  //
+  // With the padding on `.cm-content` that reads 0, so `leftSide` came out as
+  // the content's BORDER box — 28px left of any possible text. The full-line
+  // pieces of a selection were drawn to that edge while the first and last
+  // partial lines used `coordsAtPos`, which knows the truth. Two different left
+  // edges, 28px apart, on the same selection.
+  //
+  // Moving it changes no layout whatsoever: `.cm-content` is border-box, so the
+  // text still starts 28px inside `--editor-max-width` and is still the same
+  // width (verified — the caret does not move, the text column stays 680px at
+  // the 46rem default). Only the rectangles change, and they become correct.
+  '.cm-content': { maxWidth: 'var(--editor-max-width, 46rem)', margin: '0 auto', padding: '0' },
+  '.cm-line': { padding: '0 28px' },
   '.cm-bullet': { color: 'var(--ed-bullet)', paddingRight: '0.4em' },
   // slash-command / completion popup — ported from legacy/src/livePreview.js's
   // editorTheme, which restyles @codemirror/autocomplete's own plain

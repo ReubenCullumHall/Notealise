@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TreeNode } from '../../../shared/types'
 import type { LinkRow, NoteRef } from '../../../shared/links'
-import { ancestorsOf, crumbsFor, incomingLinks, liveIndex, noteRefs, outgoingLinks, linkChoices, type SpaceMark } from './model'
+import { ancestorsOf, crumbsFor, incomingLinks, indexFingerprint, linkChoices, liveIndex, noteRefs, outgoingLinks, type SpaceMark } from './model'
 
 const dir = (path: string, children: TreeNode[]): TreeNode => ({
   name: path.slice(path.lastIndexOf('/') + 1),
@@ -254,5 +254,44 @@ describe('ancestorsOf', () => {
   it('is the set that has to stay open for a folder to be visible', () => {
     expect([...ancestorsOf('Physics/Term 3')]).toEqual(['Physics', 'Physics/Term 3'])
     expect([...ancestorsOf('Physics')]).toEqual(['Physics'])
+  })
+})
+
+
+// The index is only re-derived when this string changes, so anything missing
+// from it is a change the app is blind to. Embeds were missing, and the cost
+// was a photo shared by two notes being deleted with no warning — see
+// `indexFingerprint` for the full account.
+describe('indexFingerprint', () => {
+  it('changes when a link is added', () => {
+    expect(indexFingerprint('hello')).not.toBe(indexFingerprint('hello [[Other]]'))
+  })
+
+  // The regression that mattered.
+  it('changes when an EMBED is added', () => {
+    expect(indexFingerprint('hello')).not.toBe(indexFingerprint('hello\n\n![](beach.png)'))
+  })
+
+  it('changes when an embed is removed', () => {
+    expect(indexFingerprint('a\n\n![](beach.png)')).not.toBe(indexFingerprint('a\n'))
+  })
+
+  it('changes when an embed is repointed at another file', () => {
+    expect(indexFingerprint('![](a.png)')).not.toBe(indexFingerprint('![](b.png)'))
+  })
+
+  it('notices a video embed too, not just an image', () => {
+    const none = indexFingerprint('text')
+    expect(indexFingerprint('text\n<video controls src="clip.mp4"></video>')).not.toBe(none)
+  })
+
+  // The reason it costs anything: rebuilding every open note's backlinks on
+  // each keystroke is what this is avoiding.
+  it('does NOT change when only prose is edited', () => {
+    expect(indexFingerprint('one [[X]] ![](a.png)')).toBe(indexFingerprint('one more [[X]] ![](a.png)'))
+  })
+
+  it('keeps a link and an embed of the same name apart', () => {
+    expect(indexFingerprint('[[a.png]]')).not.toBe(indexFingerprint('![](a.png)'))
   })
 })

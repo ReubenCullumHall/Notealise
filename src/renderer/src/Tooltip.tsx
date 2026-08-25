@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 // The app's own tooltips. Mounted once, from App; every control opts in with a
@@ -27,6 +27,7 @@ const EDGE = 8
 interface Tip {
   text: string
   left: number
+  right: number
   top: number
   bottom: number
   /** true when the anchor is in the right-hand third — the text is then aligned
@@ -36,6 +37,38 @@ interface Tip {
 
 export function Tooltip(): React.JSX.Element | null {
   const [tip, setTip] = useState<Tip | null>(null)
+  const box = useRef<HTMLDivElement | null>(null)
+  /** Where the text actually goes, worked out AFTER it has been laid out — and
+   *  stamped with the tip it belongs to, so a stale position from the previous
+   *  one is never painted for a moment. */
+  const [at, setAt] = useState<{ x: number; y: number; of: Tip } | null>(null)
+
+  // The position has to be measured, not assumed. It used to be assumed: the
+  // vertical clamp was `min(bottom + GAP, innerHeight - 28)`, i.e. "a tooltip is
+  // 28px tall". A one-line tip is; a wrapped one is not, and the eye's
+  // "Showing the code behind each photo and video — click to hide it" wraps to
+  // three lines in the BOTTOM-RIGHT corner of the window, which is the worst
+  // case for both axes at once. The clamp pinned its top just inside the window
+  // and let the rest fall off the bottom.
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!tip || !el) return
+    const r = el.getBoundingClientRect()
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    // Horizontal: align to whichever edge of the anchor keeps it in view, then
+    // clamp. `Math.max(EDGE, …)` on the upper bound as well, so a window
+    // narrower than the tooltip still starts it on screen rather than off the
+    // left.
+    let x = tip.fromRight ? tip.right - r.width : tip.left
+    x = Math.min(Math.max(EDGE, x), Math.max(EDGE, vw - r.width - EDGE))
+    // Vertical: under the control if it fits, above it if not — flipping beats
+    // clamping, which would slide the text over the very thing it describes.
+    let y = tip.bottom + GAP
+    if (y + r.height > vh - EDGE) y = tip.top - GAP - r.height
+    y = Math.min(Math.max(EDGE, y), Math.max(EDGE, vh - r.height - EDGE))
+    setAt({ x, y, of: tip })
+  }, [tip])
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -57,6 +90,7 @@ export function Tooltip(): React.JSX.Element | null {
       return {
         text,
         left: r.left,
+        right: r.right,
         top: r.top,
         bottom: r.bottom,
         fromRight: r.left > window.innerWidth * 0.62
@@ -102,19 +136,25 @@ export function Tooltip(): React.JSX.Element | null {
   }, [])
 
   if (!tip) return null
+  const placed = at?.of === tip
   return createPortal(
     <div
+      ref={box}
       style={{
         position: 'fixed',
-        top: Math.min(tip.bottom + GAP, window.innerHeight - 28),
-        ...(tip.fromRight
-          ? { right: Math.max(EDGE, window.innerWidth - tip.left - 160) }
-          : { left: Math.max(EDGE, tip.left) })
+        // Laid out at the origin for one frame so it can be measured, and kept
+        // invisible until it has been — `visibility`, not `display`, because
+        // `display: none` has no box to measure in the first place.
+        top: placed ? at.y : 0,
+        left: placed ? at.x : 0,
+        visibility: placed ? 'visible' : 'hidden',
+        // Never wider than the window, whatever the 16rem cap says.
+        maxWidth: 'min(16rem, calc(100vw - 16px))'
       }}
       // Text, not a panel: no border, no background, no shadow. The drop-shadow
       // is the only concession — it is what keeps a light tip legible where it
       // happens to fall over the note's own text.
-      className="pointer-events-none z-[90] max-w-[16rem] text-[11.5px] font-medium leading-snug text-ink-600 [text-shadow:0_1px_0_rgb(var(--paper)),0_0_6px_rgb(var(--paper))]"
+      className="pointer-events-none z-[90] text-[11.5px] font-medium leading-snug text-ink-600 [text-shadow:0_1px_0_rgb(var(--paper)),0_0_6px_rgb(var(--paper))]"
       role="tooltip"
     >
       {tip.text}

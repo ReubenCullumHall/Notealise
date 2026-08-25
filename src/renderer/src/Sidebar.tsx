@@ -9,6 +9,7 @@ import { UpdateBanner } from './update/UpdateBanner'
 import { ArchiveIcon, BinIcon, Icon } from './icons'
 import { MediaTag } from './MediaBadge'
 import { heldPath, TRASH_DIR } from '../../shared/workspace'
+import { createEdgeScroller } from './edgeScroll'
 import { mediaIcon } from './mediaKind'
 import { SettingsButton, type SectionId } from './settings/Settings'
 import type { SpaceActions } from './settings/Spaces'
@@ -245,6 +246,34 @@ export function Sidebar({
    *  the way out yourself. Driven off the count rather than the two handlers
    *  because either of them can be the one that empties it, and the workspace
    *  only comes back from main a tick later. */
+  /** The scrolling list. Dragging a note to a folder off the bottom of a long
+   *  sidebar needs the same edge-scroll the editor has, and for the same
+   *  reason: on a trackpad the fingers that would scroll are holding the drag.
+   *
+   *  Native listeners in an effect rather than an `onDragOver` prop, and in the
+   *  CAPTURE phase: rows and TreeViews have drag handlers of their own, and one
+   *  of them calling `stopPropagation` would otherwise make the pointer
+   *  invisible to this exactly where it matters most — over the rows. */
+  const listRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const scroller = createEdgeScroller(el)
+    const over = (e: DragEvent): void => scroller.track(e.clientY)
+    const end = (): void => scroller.stop()
+    el.addEventListener('dragover', over, true)
+    // On window, because a drag can end anywhere — including outside it, which
+    // fires `dragend` on the source and nothing on this element at all.
+    window.addEventListener('drop', end, true)
+    window.addEventListener('dragend', end, true)
+    return () => {
+      scroller.stop()
+      el.removeEventListener('dragover', over, true)
+      window.removeEventListener('drop', end, true)
+      window.removeEventListener('dragend', end, true)
+    }
+  }, [])
+
   const trashCount = workspace.trash.length
   const hadTrash = useRef(trashCount)
   useEffect(() => {
@@ -515,6 +544,7 @@ export function Sidebar({
       {/* ---- the list ---- */}
       <div className="relative min-h-0 flex-1">
         <div
+          ref={listRef}
           className={
             'h-full overflow-y-auto px-2 pt-1.5 ' +
             ((inBin && workspace.trash.length > 0) || (!inBin && (dragging || selCount > 0))

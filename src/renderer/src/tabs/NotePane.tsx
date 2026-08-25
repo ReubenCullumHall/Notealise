@@ -95,6 +95,13 @@ interface Props {
    *  column being rearranged always may, a tab needs room for a new column */
   edgeDrops: boolean
   onDropTab: (zone: DropZone) => void
+  /** this column's share of the row (`paneSizes`), applied as `flex-grow`
+   *  against a zero basis so the numbers are pure proportions — 0.6/0.4 lays out
+   *  identically at any window width. Deliberately NOT a `min-width`: the clamp
+   *  that keeps a column readable is enforced in pixels at the drag
+   *  (`MIN_PANE_PX`), because a CSS minimum would overflow a narrow window
+   *  instead of just refusing to shrink. */
+  size: number
 }
 
 const nameOf = (p: string): string => p.slice(p.lastIndexOf('/') + 1)
@@ -162,7 +169,8 @@ export function NotePane({
   onDragPane,
   onDragEnd,
   edgeDrops,
-  onDropTab
+  onDropTab,
+  size
 }: Props): React.JSX.Element {
   // This pane's live CodeMirror, for its own format bar. Per pane, not per app:
   // each column's commands act on the column they sit in.
@@ -251,9 +259,14 @@ export function NotePane({
   return (
     <section
       className={
-        'relative flex min-w-0 flex-1 flex-col ' +
+        'pane-col relative flex min-w-0 flex-col ' +
         (split ? 'border-l border-ink-300/25 first:border-l-0 ' : '')
       }
+      // `flex-1` in the class list would be `flex: 1 1 0%` — an equal share,
+      // hardcoded. The same thing with the grow factor made a variable, so a
+      // dragged column keeps its proportion at any window size. `.pane-col`
+      // carries the transition that makes it glide when the number changes.
+      style={{ flexGrow: size, flexShrink: 1, flexBasis: 0 }}
       onMouseDownCapture={onFocus}
       onFocusCapture={onFocus}
       aria-label={blank ? 'Select a note' : stripMd(nameOf(path))}

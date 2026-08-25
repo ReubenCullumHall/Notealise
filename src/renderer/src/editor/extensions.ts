@@ -7,10 +7,12 @@ import { livePreview } from './livePreview'
 import { imageClick } from './imagePass'
 import { attachInput } from './attachInput'
 import { attachDeleteKeys, embedSelectionAttr } from './attachSelect'
+import { scrollbarReveal } from './scrollbarReveal'
 import { webLinkGestures } from './webLinkPass'
 import { taskClick } from './taskPass'
 import { blockMath } from './blockMath'
 import { blockTable } from './blockTable'
+import { lineMove } from './lineMove'
 import { applyColor } from './colorCommands'
 import { completionExtension } from './completions'
 import { linkEnv, linkHandlersFacet, type LinkHandlersRef } from './linkEnv'
@@ -52,6 +54,7 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // Must come after drawSelection: it marks the editor so the selection that
     // extension paints can be suppressed over a picked embed.
     embedSelectionAttr,
+    scrollbarReveal,
     livePreview,
     imageClick,
     attachInput,
@@ -59,6 +62,9 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     taskClick,
     blockMath,
     blockTable,
+    // The six-dot grip beside the active line (lineMove.ts). After the passes,
+    // so it never competes with a widget for the same gesture.
+    lineMove,
     editorStyling,
     completionExtension()
   ]
