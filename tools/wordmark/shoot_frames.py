@@ -36,14 +36,28 @@ SEEK = "(t) => document.getAnimations().forEach(a => { try { a.currentTime = t; 
 
 
 def windows():
-    """Each letter's first and last slice time, straight out of the generated markup."""
+    """Each letter's first and last slice time, straight out of the generated markup.
+
+    Every lookup below is checked rather than `.group(0)`'d straight through: this
+    reads a file gen_pen.py owns, so a markup change shows up here as a missing
+    match, and a bare "NoneType has no attribute group" says nothing about which
+    letter or which change caused it."""
     html = open(HTML, encoding="utf-8").read()
-    block = re.search(r"<!-- wordmark:begin.*?<!-- wordmark:end -->", html, re.S).group(0)
+    m = re.search(r"<!-- wordmark:begin.*?<!-- wordmark:end -->", html, re.S)
+    if not m:
+        sys.exit(f"shoot_frames: no wordmark:begin/end block in {HTML} — run gen_pen.py first")
+    block = m.group(0)
     out = {}
     for L in LETTERS:
         g = re.search(rf'<path id="glyph-{L}".*?(?=<path id="glyph-|<circle class="wm-pen-dot")',
-                      block, re.S).group(0)
-        ts = [float(x) for x in re.findall(r"--sliceAt:(\d+)ms", g)]
+                      block, re.S)
+        if not g:
+            sys.exit(f"shoot_frames: no <path id=\"glyph-{L}\"> in the wordmark block — "
+                     "the generated markup has changed shape")
+        ts = [float(x) for x in re.findall(r"--sliceAt:(\d+)ms", g.group(0))]
+        if not ts:
+            sys.exit(f"shoot_frames: {L!r} has no --sliceAt times — it was generated with "
+                     "no reveal slices at all")
         out[L] = (min(ts), max(ts))
     return out
 
@@ -60,7 +74,13 @@ def main():
     with sync_playwright() as pw:
         b = pw.chromium.launch()
         page = b.new_page(viewport={"width": 1400, "height": 900}, device_scale_factor=SCALE)
-        page.goto(URL)
+        # The local dev server not being up is the single most common way these
+        # scripts fail, and a raw Playwright connection traceback doesn't say so.
+        try:
+            page.goto(URL, timeout=15000)
+        except Exception as e:
+            b.close()
+            sys.exit(f"shoot_frames: couldn't open {URL} — is the local dev server running?\n  {e}")
         page.wait_for_timeout(300)
         print("paused", page.evaluate(PAUSE), "animations")
         for L, (t0, t1) in win.items():

@@ -33,6 +33,7 @@ import json
 import os
 import re
 import shutil
+import sys
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -1255,6 +1256,12 @@ def main():
                     if plen(b) >= 4.0 and len(b) >= 2]
         nodes, edges = build_graph(branches)
         ys, xs = np.nonzero(mask)
+        # An all-false mask (a letter whose geometry is malformed, or which
+        # rasterises off-canvas) makes .min() raise a bare "zero-size array"
+        # error that names no letter. Say which one, and what to look at.
+        if not len(ys):
+            sys.exit(f"build_centerlines: {name!r} rasterised to an empty mask — "
+                     "its glyph path is malformed or falls outside the canvas")
         bbox = (ys.min(), ys.max(), xs.min(), xs.max())
 
         if name in ROUTE:

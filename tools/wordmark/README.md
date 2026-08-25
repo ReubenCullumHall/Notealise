@@ -316,3 +316,50 @@ by at most **2/255** on opaque pixels — the residue is the RGB→YUV conversio
 `yuv420p`. Check it in a browser instead — a `<video>` over a coloured background — which is the
 only place webm alpha is used anyway. Premiere's webm alpha support is unreliable; use the `.mov`
 for editing.
+
+## Failure-mode guards, and how to verify a change to the generator (2026-08-20)
+
+None of this changes a single byte of the output — see the verification method below, which is the
+more useful half of this note.
+
+`gen_pen.py` rewrites an HTML file it does not own, and both `str.replace` and `re.sub` are
+**silent no-ops** when their target isn't there. Point `--out` at a page missing all three
+recognised markers and the run printed its normal success line while writing a file with no
+animation wired into it. Every rewrite that must land now goes through `must_sub` / `must_replace`,
+which count matches rather than comparing before-and-after — a re-run that writes exactly what is
+already there matches fine and must not be reported as a failure. `.wm-pen-dot` is the deliberate
+exception: a no-op there is normal on every run after the first, so it is checked by asserting the
+finished rule is in the file either way.
+
+Three crashes that named no letter now do: an empty stroke-index list (`np.vstack` on `[]` raises
+"need at least one array to concatenate"), an all-false pixel mask in `build_centerlines.py`
+(`.min()` on a zero-size array), and a degenerate zero-length stroke — that last one did not even
+crash, it divided by zero, and numpy *warns to stderr and returns NaN*, quietly baking garbage
+slice timing into the shipped animation. **Numpy failing silently is the dangerous case, not the
+loud one.**
+
+`outlines.json` is paired positionally with `geometry.json`, and only the latter's letter order was
+ever asserted. `sample_outlines.py` now records each group's own letter (from its
+`<use href="#glyph-X">`), and `gen_pen.py` checks the order when the names are there and says so
+out loud when they aren't. An older names-less `outlines.json` still works, count-checked only.
+
+`shoot_frames.py`, `render_promo.py` and `sample_outlines.py` now fail with "is the local dev
+server running?" instead of a raw Playwright traceback. The ad-hoc `verify_*.py` scripts are
+deliberately left alone as throwaways.
+
+### Verifying a change here: diff the OUTPUT, not the diff
+
+The thing that made this pass safe to land, and the method to repeat:
+
+```sh
+cp ../../site/index.html /tmp/new.html && python3 gen_pen.py --out /tmp/new.html
+mkdir /tmp/head && cp *.json /tmp/head/          # geometry.json + outlines.json live beside the script
+git show HEAD:tools/wordmark/gen_pen.py > /tmp/head/gen_pen.py
+cp ../../site/index.html /tmp/old.html && (cd /tmp/head && python3 gen_pen.py --out /tmp/old.html)
+diff /tmp/old.html /tmp/new.html                 # must be empty
+```
+
+Byte-identical output is proof the change is behaviour-preserving, which reading the diff cannot
+give you. Note `SCRATCH = HERE`: the script reads its JSON from its own directory, so the old copy
+has to be run from a folder that has them — not from `/tmp` with a bare `gen_pen.py` in it. And
+always point `--out` at a COPY; the real `site/index.html` is the shipped artefact.

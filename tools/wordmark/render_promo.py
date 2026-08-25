@@ -47,7 +47,13 @@ def main():
             os.makedirs(outdir, exist_ok=True)
             pg = b.new_page(viewport={"width": 1600, "height": 900},
                             device_scale_factor=SCALE)
-            pg.goto(URL)
+            # A dev server that isn't up is by far the commonest failure here, and
+            # a raw Playwright connection traceback never says so.
+            try:
+                pg.goto(URL, timeout=15000)
+            except Exception as e:
+                b.close()
+                sys.exit(f"render_promo: couldn't open {URL} — is the local dev server running?\n  {e}")
             pg.wait_for_timeout(500)
             box = pg.evaluate(STRIP)
             if colour:

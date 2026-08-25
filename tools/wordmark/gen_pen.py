@@ -25,8 +25,36 @@ Watch the width printout at the end of a run: values near 340-500 are healthy, a
 anything approaching four figures means a letter has a limb the pen never reaches, which
 will show up as ink flashing on nowhere near the dot.
 """
-import argparse, json, os, re
+import argparse, json, os, re, sys
 import numpy as np
+
+
+def _no_match(what):
+    sys.exit(
+        f"gen_pen: nothing matched for {what} — is this the right --out file, and "
+        "does it still carry that markup?"
+    )
+
+
+def must_sub(pattern, repl, text, what, count=0, flags=0):
+    """`re.sub` is a SILENT no-op when nothing matches, and this script's entire job
+    is rewriting an HTML file it does not own. Point --out at a page missing one of
+    the recognised markers and the run used to print its normal success line while
+    writing a file with no animation wired into it at all.
+
+    Counts matches rather than comparing before/after: a re-run that writes exactly
+    what is already there matches fine and must NOT be reported as a failure."""
+    out, n = re.subn(pattern, repl, text, count=count, flags=flags)
+    if n == 0:
+        _no_match(what)
+    return out
+
+
+def must_replace(text, target, repl, what):
+    """The `str.replace` counterpart of must_sub, same reasoning."""
+    if target not in text:
+        _no_match(what)
+    return text.replace(target, repl)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRATCH = HERE            # outlines.json lives beside this script
@@ -135,9 +163,24 @@ def strokes_for(letter, subs):
 
 
 html = open(HTML, encoding="utf-8").read()
-outlines = [np.array(g["outline"], float)[::2] for g in json.load(open(os.path.join(SCRATCH, "outlines.json")))]
+raw_outlines = json.load(open(os.path.join(SCRATCH, "outlines.json")))
+outlines = [np.array(g["outline"], float)[::2] for g in raw_outlines]
 geom = json.load(open(os.path.join(SCRATCH, "geometry.json")))["letters"]
 assert [g["name"] for g in geom] == LETTERS, "geometry.json letter order"
+# outlines.json is indexed POSITIONALLY against geom below (outlines[gi] is paired
+# with geom[gi]'s coverage), and until 2026-08-20 only geometry.json's order was
+# ever checked. If a future sample ever renders the SVG groups in a different
+# order, the wrong outline pairs with the wrong letter — no crash, just a quietly
+# corrupted reveal shipped into site/index.html. sample_outlines.py records each
+# group's own letter now, so that can be checked rather than assumed; an older
+# file with no names still works, count-checked only.
+assert len(outlines) == len(LETTERS), \
+    f"outlines.json has {len(outlines)} letters, expected {len(LETTERS)} — re-run sample_outlines.py"
+_names = [g.get("name") for g in raw_outlines]
+if any(n is not None for n in _names):
+    assert _names == LETTERS, f"outlines.json letter order is {_names}, expected {LETTERS}"
+else:
+    print("note: outlines.json predates letter names — order assumed, not verified")
 
 letter_paths, all_strokes = [], []      # all_strokes: (letter_index, densified points)
 for gi, g in enumerate(geom):
@@ -153,6 +196,14 @@ for gi, g in enumerate(geom):
 cov_by_stroke = {}
 for gi in range(5):
     idxs = [n for n, (g2, _) in enumerate(all_strokes) if g2 == gi]
+    # np.vstack on an empty list raises a bare "need at least one array to
+    # concatenate", which says nothing about WHICH letter is malformed. This
+    # happens when geometry.json's center_d for a letter is empty, or when every
+    # one of its subpaths was filtered out above as too short (len <= 1).
+    assert idxs, (
+        f"no centreline strokes for {LETTERS[gi]!r} — geometry.json's center_d for it is "
+        "empty or every subpath is a single point; re-run build_centerlines.py"
+    )
     C = np.vstack([all_strokes[n][1] for n in idxs])
     O = outlines[gi]
     d2 = ((O[:, None, :] - C[None, :, :]) ** 2).sum(-1)
@@ -335,7 +386,16 @@ for pi, (kind, gi, pts, t0, t1, tfrac, w_arr, si) in enumerate(pieces):
     maxw[gi] = width_by_letter[gi]
     seg = np.linalg.norm(np.diff(pts, axis=0), axis=1)
     afrac = np.concatenate([[0.0], np.cumsum(seg)])
-    afrac /= afrac[-1]
+    # A degenerate stroke (every point identical) has total length 0, and numpy
+    # divides by it without raising — it warns to stderr and hands back NaN,
+    # which then bakes garbage slice-reveal timing into the shipped animation.
+    # Refuse it out loud instead.
+    total = afrac[-1]
+    assert total > 0, (
+        f"zero-length stroke in {LETTERS[gi]!r} (piece {pi}) — its centreline points are all "
+        "the same; re-run build_centerlines.py"
+    )
+    afrac /= total
     for band in geom[gi].get("bands") or []:
         # The settle pass is a clip with no stretch of journey behind it - it fires when
         # the letter is finished - so it is kept out of the arithmetic below.
@@ -455,18 +515,29 @@ if KBEG in html:
 elif "@keyframes pen-move" in html:
     html = re.sub(r"    @keyframes pen-move \{.*?\n    \}", lambda m: kblock, html, flags=re.S)
 else:
-    html = html.replace(
+    # The last of the three recognised shapes. If this one doesn't match either,
+    # there is nowhere to put the keyframes and the page would be written with none.
+    html = must_replace(
+        html,
         "    @keyframes dot-trace {\n"
         "      0%, 0.1% { offset-distance: 0%;   opacity: 0; }\n"
         "      0.2%     { offset-distance: 0%;   opacity: 1; }\n"
         "      99.9%    { offset-distance: 100%; opacity: 1; }\n"
         "      100%     { offset-distance: 100%; opacity: 0; }\n"
-        "    }", kblock)
+        "    }",
+        kblock,
+        "the keyframes block (no marker, no pen-move, no dot-trace)")
+# NOT wrapped in must_change: a no-op here is the normal case on every run after the
+# first, since the pre-generation form is only present once. The check that matters
+# is that the finished rule is in the file either way, which is asserted below.
 html = html.replace(
     '      .wm-pen-dot {\n'
     '        animation: dot-trace var(--revealDur) ease-in-out var(--revealDelay) both,\n'
     '                   var(--dotR) var(--revealDur) linear var(--revealDelay) both;\n      }',
     '      .wm-pen-dot { animation: pen-move var(--penDur) linear var(--penDelay) forwards; }')
+if "animation: pen-move" not in html:
+    sys.exit("gen_pen: .wm-pen-dot is not wired to pen-move — the page's dot rule is in "
+             "neither the pre-generation nor the generated form")
 # The nudge is `top`, NOT `vertical-align`. .wordmark is inline-flex, so alise is a flex
 # item, and vertical-align does not apply to flex items at all - the value written here
 # until 2026-08-12 was inert, which is why alise still sat visibly low after the pass that
@@ -474,13 +545,15 @@ html = html.replace(
 # its border box, so margin does not shift it. Verified all four mechanisms in a real
 # browser (DESIGN.md, tenth pass). Rewrites the whole declaration block so it is
 # idempotent whichever form is currently in the file.
-html = re.sub(
+html = must_sub(
     r"\.wm-alise-svg \{[^}]*\}",
     ".wm-alise-svg { display: inline-block; margin-left: 0.06em; overflow: visible;\n"
     f"      position: relative; top: -{NUDGE:.5f}em; }}",
-    html, count=1)
-html = re.sub(r'style="height:[\d.]+em;width:[\d.]+em"',
-              f'style="height:{0.6463*ALISE_SCALE:.4f}em;width:{1.9194*ALISE_SCALE:.4f}em"', html)
+    html, "the .wm-alise-svg rule", count=1)
+html = must_sub(
+    r'style="height:[\d.]+em;width:[\d.]+em"',
+    f'style="height:{0.6463*ALISE_SCALE:.4f}em;width:{1.9194*ALISE_SCALE:.4f}em"',
+    html, "the alise svg's height/width style")
 
 open(HTML, "w", encoding="utf-8").write(html)
 print("strokes:", len(all_strokes), " pen ends:", round(PEN_END), "ms  (was 4900)")
