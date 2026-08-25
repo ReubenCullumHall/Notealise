@@ -7,6 +7,8 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+
+## [0.9.0] - 2026-08-25
 - The editor no longer switches off your computer's spell check. It had been turning it off for
   every note, so a machine set to check your spelling everywhere else was told not to bother here,
   and there was nothing you could do about it. The app still ships no dictionary of its own — if
