@@ -1,0 +1,140 @@
+[
+  {
+    "tag_name": "v0.8.0",
+    "prerelease": false,
+    "draft": false,
+    "assets": [
+      {
+        "name": "latest.yml",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.8.0/latest.yml"
+      },
+      {
+        "name": "Notealise-Setup.exe",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.8.0/Notealise-Setup.exe"
+      },
+      {
+        "name": "Notealise-Setup.exe.blockmap",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.8.0/Notealise-Setup.exe.blockmap"
+      },
+      {
+        "name": "Notealise.dmg",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.8.0/Notealise.dmg"
+      }
+    ]
+  },
+  {
+    "tag_name": "v0.7.1",
+    "prerelease": false,
+    "draft": false,
+    "assets": [
+      {
+        "name": "latest.yml",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.7.1/latest.yml"
+      },
+      {
+        "name": "Notes-Setup.exe",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.7.1/Notes-Setup.exe"
+      },
+      {
+        "name": "Notes-Setup.exe.blockmap",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.7.1/Notes-Setup.exe.blockmap"
+      },
+      {
+        "name": "Notes.dmg",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.7.1/Notes.dmg"
+      }
+    ]
+  },
+  {
+    "tag_name": "v0.7.0",
+    "prerelease": false,
+    "draft": false,
+    "assets": [
+      {
+        "name": "latest.yml",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.7.0/latest.yml"
+      },
+      {
+        "name": "Notes-Setup.exe",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.7.0/Notes-Setup.exe"
+      },
+      {
+        "name": "Notes-Setup.exe.blockmap",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.7.0/Notes-Setup.exe.blockmap"
+      },
+      {
+        "name": "Notes.dmg",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.7.0/Notes.dmg"
+      }
+    ]
+  },
+  {
+    "tag_name": "v0.6.0",
+    "prerelease": false,
+    "draft": false,
+    "assets": [
+      {
+        "name": "latest.yml",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.6.0/latest.yml"
+      },
+      {
+        "name": "Notes-Setup.exe",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.6.0/Notes-Setup.exe"
+      },
+      {
+        "name": "Notes-Setup.exe.blockmap",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.6.0/Notes-Setup.exe.blockmap"
+      },
+      {
+        "name": "Notes.dmg",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.6.0/Notes.dmg"
+      }
+    ]
+  },
+  {
+    "tag_name": "v0.5.0",
+    "prerelease": false,
+    "draft": false,
+    "assets": [
+      {
+        "name": "latest.yml",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.5.0/latest.yml"
+      },
+      {
+        "name": "Notes-Setup.exe",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.5.0/Notes-Setup.exe"
+      },
+      {
+        "name": "Notes-Setup.exe.blockmap",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.5.0/Notes-Setup.exe.blockmap"
+      },
+      {
+        "name": "Notes.dmg",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.5.0/Notes.dmg"
+      }
+    ]
+  },
+  {
+    "tag_name": "v0.4.0",
+    "prerelease": false,
+    "draft": false,
+    "assets": [
+      {
+        "name": "latest.yml",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.4.0/latest.yml"
+      },
+      {
+        "name": "Notes-Setup.exe",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.4.0/Notes-Setup.exe"
+      },
+      {
+        "name": "Notes-Setup.exe.blockmap",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.4.0/Notes-Setup.exe.blockmap"
+      },
+      {
+        "name": "Notes.dmg",
+        "browser_download_url": "https://github.com/ReubenCullumHall/Notes-app/releases/download/v0.4.0/Notes.dmg"
+      }
+    ]
+  }
+]
