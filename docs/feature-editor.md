@@ -487,6 +487,18 @@ interfere with the passes. It sits in the `.cm-line` gutter above, so it never s
 and it aligns to the FIRST line of the block, not the block's midpoint, because it is meant to read
 as belonging to where the cursor is.
 
+**Two grips on a picture's own line is deliberate (ruled 2026-08-25).** A line holding nothing but
+a photo shows the media grip on the picture AND the line grip in the gutter, and they do the same
+thing. Flagged under rule 9 and Reuben kept both: the media grip is where your hand already is when
+you are looking at a picture, and the line grip is where it is for every other line. Do not "tidy"
+this away later thinking it was missed.
+
+**The spacing a move leaves behind is also as intended.** Moving a paragraph out from between two
+blank lines leaves both (a double gap); dropping into another pane lands the block flush against
+the line below. Both match what the media drag has always done — it moves the block, never the
+blank lines around it. Reviewed and kept rather than special-cased, because collapsing whitespace
+on the user's behalf is the kind of tidying that surprises people.
+
 ## Dragging between panes (built 2026-08-25)
 
 The same grips now cross into another split pane. `viewRegistry.ts` is a Set of live views that
@@ -506,6 +518,14 @@ produces byte-identical text and no spurious diff in the vault.
 **Alt copies; a plain drag moves.** Read at DROP, not at mousedown, so the decision is made while
 you can see where it would land. Alt inside ONE pane is left as a plain move — a duplicate a few
 lines from its original is not something anybody drags to achieve.
+
+**The one Windows question in this feature, unverified as of 2026-08-25.** Alt is the menu-bar key
+on Windows: pressing and releasing it focuses the menu. Holding it through a drop may therefore pop
+the menu open on release, where on macOS Option does nothing of the sort. Everything else here is
+platform-neutral by construction — the path maths emits POSIX separators throughout, which is what
+CLAUDE.md's cross-platform rule already requires of every internal path (main converts at the fs
+boundary), and the clipboard and pointer code is the same Chromium on both. If Alt-copy misbehaves
+on Windows, the fix is a different modifier, not different path handling.
 
 ## Shared media: the file only leaves when the last note stops using it (2026-08-25)
 
