@@ -7,6 +7,13 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Find and replace, in the editor. Cmd/Ctrl-F opens a bar above the note — next, previous, replace
+  and replace all, with match case / regexp / whole word options, styled to sit quietly rather than
+  looking like a browser default dropped onto the page
+- A name that gets adjusted for cross-platform safety (a colon, a slash, a name too long for the
+  file system) now says so in plain terms rather than citing a Windows-specific character limit —
+  the sidebar rename, tab-title rename and space rename already told you when this happened; only
+  the wording of the too-long case was out of voice
 - Fixed two bugs in yesterday's Mac update check, both only reachable by clicking things twice or
   waiting long enough for the app's own background check to run: clicking Download a second time
   before the first finished could make the app report a scary error even though the file had

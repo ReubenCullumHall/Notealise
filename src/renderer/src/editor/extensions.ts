@@ -1,6 +1,7 @@
 import type { Extension } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { search, searchKeymap } from '@codemirror/search'
 import { drawSelection, EditorView, keymap } from '@codemirror/view'
 import { editorStyling } from './highlight'
 import { livePreview } from './livePreview'
@@ -49,6 +50,22 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
       ...defaultKeymap,
       ...historyKeymap
     ]),
+    // Find & replace, at the top of the note rather than CodeMirror's own
+    // default of the bottom — this app's chrome (format bar, tabs) is all
+    // above the text already, so a panel appearing there reads as one more
+    // toolbar rather than something popping up out of nowhere below whatever
+    // is currently on screen.
+    search({ top: true }),
+    // A SEPARATE keymap extension, placed AFTER the one above — CM6 resolves
+    // a key by extension order, so this is what lets our own bindings keep
+    // winning collisions rather than searchKeymap's. There is exactly one:
+    // Mod-Shift-l is both this app's "insert inline maths" (bound above) and
+    // CodeMirror's own "select all matches of the current selection". Ours
+    // wins, matching the "our formatting bindings come first" rule already
+    // stated above — `selectSelectionMatches` simply never fires. Every other
+    // searchKeymap binding (Mod-f open, Mod-g/F3 next, Escape close, Mod-d
+    // select-next-occurrence, Mod-Alt-g goto-line) is free.
+    keymap.of(searchKeymap),
     markdown({ base: markdownLanguage }),
     EditorView.lineWrapping,
     // Stop switching the machine's OWN spell checker off. CodeMirror hardcodes

@@ -91,7 +91,91 @@ const editorTheme = EditorView.theme({
     fontStyle: 'normal',
     marginLeft: '0.5em',
     fontSize: '0.85em'
-  }
+  },
+  // Find & replace (@codemirror/search's own panel). Its baseTheme ships a
+  // flat grey/white bar (`&light`/`&dark` — a switch CodeMirror's OWN theme()
+  // toggles via a `dark` option this app never passes, so it always renders
+  // `&light`, on any of this app's own themes). Every colour below overrides
+  // that outright with this app's tokens instead of ever opting into CM6's
+  // switch, the same choice `.cm-tooltip-autocomplete` above already made.
+  '.cm-panels': { background: 'transparent', color: 'inherit' },
+  '.cm-panels-top': { borderBottom: `1px solid ${c('--wash', 0.1)}` },
+  '.cm-search': {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '10px 14px',
+    background: c('--surface', 0.97),
+    backdropFilter: 'blur(6px)',
+    fontFamily: 'var(--font-sans)',
+    fontSize: '12.5px',
+    color: c('--ink-600')
+  },
+  // CodeMirror inserts a bare <br> before the replace row to start a second
+  // line. Measured (2026-08-26): inside this flex container it keeps its
+  // OWN natural inline sizing (a 0×15px box) no matter what CSS is put on
+  // it — a `<br>` does not reliably become an ordinary flex item across
+  // engines, so `flex-basis: 100%` on it is silently ignored rather than
+  // forcing the wrap. Hidden here, and the wrap is forced the reliable way
+  // instead, below: giving the replace field itself `flex-basis: 100%` — an
+  // ordinary `<input>` DOES honour it.
+  '.cm-search br': { display: 'none' },
+  '.cm-search input.cm-textfield': {
+    minWidth: '140px',
+    flex: '1 1 160px',
+    border: `1px solid ${c('--ink-300', 0.3)}`,
+    borderRadius: '999px',
+    background: c('--paper', 0.4),
+    padding: '5px 12px',
+    color: c('--ink-900'),
+    outline: 'none'
+  },
+  // AFTER .cm-textfield above, not before: both rules match this same input
+  // at equal specificity (one class + one element + one more selector each),
+  // so whichever is declared later wins the tie — here, that has to be this
+  // one, or .cm-textfield's own `flex: 1 1 160px` shorthand overwrites the
+  // flex-basis this sets and the wrap silently stops forcing. 340px, not
+  // 100%: wide enough that it never fits the remainder of the find row (so
+  // the wrap is still guaranteed) but narrow enough to leave room for
+  // "replace"/"replace all" on the SAME line as the field — three rows
+  // measured worse than two: find-row, then a lone full-width input, then
+  // the two buttons alone below that.
+  '.cm-search input[name=replace]': { flexBasis: '340px', flexGrow: '1' },
+  '.cm-search input.cm-textfield:focus': {
+    borderColor: c('--brand-300'),
+    boxShadow: `0 0 0 3px ${c('--brand-100', 0.6)}`
+  },
+  '.cm-search label': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    color: c('--ink-500'),
+    whiteSpace: 'nowrap'
+  },
+  '.cm-search input[type=checkbox]': { accentColor: c('--brand-500'), margin: '0' },
+  '.cm-search button.cm-button': {
+    border: 'none',
+    borderRadius: '999px',
+    background: c('--wash', 0.08),
+    color: c('--ink-700'),
+    padding: '5px 12px',
+    cursor: 'pointer'
+  },
+  '.cm-search button.cm-button:hover': { background: c('--wash', 0.14) },
+  // The close × sits apart from the action buttons — closing is not a peer
+  // of "next"/"replace all", it is the one thing on the bar that leaves.
+  '.cm-search button[name=close]': {
+    marginLeft: 'auto',
+    border: 'none',
+    background: 'transparent',
+    color: c('--ink-400'),
+    fontSize: '15px',
+    lineHeight: '1',
+    padding: '4px 6px',
+    cursor: 'pointer'
+  },
+  '.cm-search button[name=close]:hover': { color: c('--ink-700') }
 })
 
 export const editorStyling = [syntaxHighlighting(mdHighlight), editorTheme]

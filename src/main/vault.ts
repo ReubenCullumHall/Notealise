@@ -57,10 +57,15 @@ function toRel(abs: string): string {
 // Windows caps a full path at 260 chars unless long-path support is on. Check on
 // every platform so a Mac user is warned before making a vault that breaks on Win.
 function assertPathLength(abs: string): void {
+  // 259, not the 260 the limit is usually quoted as: this is the full path
+  // INCLUDING the file itself, and 260 is where Windows starts refusing it.
+  // The message doesn't say "Windows" (docs/voice.md — plain, no jargon; a
+  // Mac user reading a Windows-specific number mid-sentence is not calm
+  // copy) even though the limit only bites there — every renamed vault has
+  // to survive being opened on either OS (CLAUDE.md rule 7), so the rule is
+  // enforced everywhere rather than only on the platform that needs it.
   if (abs.length > 259) {
-    throw new Error(
-      `Path is too long (${abs.length} chars). Windows caps paths at 260 — use a shorter name or a shallower folder.`
-    )
+    throw new Error('That name is too long — try something shorter, or a shallower folder.')
   }
 }
 
