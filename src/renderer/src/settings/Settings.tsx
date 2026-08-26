@@ -7,6 +7,7 @@ import { Spaces, type SpaceActions } from './Spaces'
 import { Collection } from './Collection'
 import { Customisation } from './Customisation'
 import { Tutorials } from './tutorials'
+import { OssLicenses } from './OssLicenses'
 import { SourceFolder } from './SourceFolder'
 import { Recovery } from './Recovery'
 import { ImportPanel } from '../import/ImportPanel'
@@ -117,6 +118,7 @@ const SEARCH_INDEX: SearchEntry[] = [
   { section: 'general', label: 'Number format', hint: 'Choose how numbers are formatted.', keywords: 'decimal comma thousand separator locale numbers' },
   { section: 'general', label: 'Onboarding completed', hint: 'Dev tool — reloads into the first-run flow.', keywords: 'onboarding tutorial first run walkthrough developer testing' },
   { section: 'general', label: 'Reset test vault', hint: 'Wipes a disposable test folder and clears onboarding.', keywords: 'test vault wipe clean slate developer sandbox' },
+  { section: 'general', label: 'Open source licences', hint: 'Every third-party package the app ships, and its licence.', keywords: 'legal licenses license copyright open source third party attribution warranty' },
   { section: 'customisation', label: 'Theme', hint: 'Light, dark or extra dark, applied to the whole app.', keywords: 'dark mode light mode night mode black extra dark appearance colour scheme' },
   { section: 'customisation', label: 'Text colour', hint: 'How bright the writing sits on a dark background.', keywords: 'white grey text brightness dark theme readability contrast' },
   { section: 'customisation', label: 'Accent colour', hint: 'Pick a colour, then choose how far it reaches.', keywords: 'accent color highlight brand colour tint hue' },
@@ -681,6 +683,9 @@ function General({ settings, onChange }: Props): React.JSX.Element {
     void window.api.resetOnboardingTestVault().then(() => window.location.reload())
   }
 
+  const [showLicenses, setShowLicenses] = useState(false)
+  if (showLicenses) return <OssLicenses onBack={() => setShowLicenses(false)} />
+
   return (
     <>
       <h3 className="font-display text-[15px] font-semibold text-ink-900">Startup</h3>
@@ -770,6 +775,20 @@ function General({ settings, onChange }: Props): React.JSX.Element {
           </button>
         </div>
       </div>
+
+      <h3 className="mt-6 font-display text-[15px] font-semibold text-ink-900">Legal</h3>
+      <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
+        Notealise is provided as-is, with no warranty of any kind. Back up anything important —
+        software can have bugs, and the app's author is not liable for lost data.
+      </p>
+      <button
+        type="button"
+        onClick={() => setShowLicenses(true)}
+        className="mt-2 flex items-center gap-1 rounded-lg border-none bg-transparent px-2 py-1 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"
+      >
+        Open source licences
+        <Icon name="chevron" className="h-3.5 w-3.5" />
+      </button>
     </>
   )
 }

@@ -7,6 +7,9 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Settings → General now ends with a Legal section: a plain no-warranty notice, and an "Open
+  source licences" list covering every third-party package the app ships, each showing its
+  version, licence, and full licence text where one could be found on disk
 - Find and replace, in the editor. Cmd/Ctrl-F opens a bar above the note — next, previous, replace
   and replace all, with match case / regexp / whole word options, styled to sit quietly rather than
   looking like a browser default dropped onto the page
