@@ -168,7 +168,14 @@ export async function downloadMacDmg(
 
   try {
     await pipeline(asStream(res), createWriteStream(part))
-    if (total && seen !== total) {
+    // `total` is the length GitHub declared, when it declared one at all — a
+    // release asset always has, confirmed against the live feed, but a proxy
+    // or CDN in front of it is not obliged to forward the header. Rather than
+    // skip verification entirely when it's missing, fall back to "not empty":
+    // still catches the connection-dropped-immediately case a bare "the
+    // pipeline resolved" cannot, without depending on a header the server
+    // might not send.
+    if (total ? seen !== total : seen === 0) {
       throw new Error('the download ended early — try again')
     }
     await fs.rename(part, dest)

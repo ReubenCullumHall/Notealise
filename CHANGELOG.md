@@ -7,6 +7,12 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Fixed two bugs in yesterday's Mac update check, both only reachable by clicking things twice or
+  waiting long enough for the app's own background check to run: clicking Download a second time
+  before the first finished could make the app report a scary error even though the file had
+  actually landed fine, and the app's own six-hourly background check could quietly demote a
+  finished download back to "not downloaded yet" in the sidebar. Neither ever touched a note or
+  lost a download — both were about what the sidebar SAID, not what happened on disk
 - On a Mac the app now tells you when a new version is out, and fetches it for you. It could not
   before — and not just "could not update itself": it never even asked, so the sidebar stayed quiet
   and Check for updates answered with a technical excuse rather than the version number. You could

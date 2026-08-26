@@ -7,6 +7,7 @@ import { getUpdatePrefs, saveUpdatePrefs } from './config'
 import {
   BETA_CHANNEL,
   RELEASES_URL,
+  isNewerVersion,
   shouldFollowBeta,
   type FeedRelease,
   type UpdateStatus
@@ -145,11 +146,42 @@ const isMac = (): boolean => process.platform === 'darwin' && (app.isPackaged ||
 let macFound: FeedRelease | null = null
 
 /** macOS: ask the feed directly. electron-updater is never touched — it cannot
- *  help here — so this is a plain read of the same information Windows gets. */
+ *  help here — so this is a plain read of the same information Windows gets.
+ *
+ *  Two guards, not one, and the first version of this shipped with only the
+ *  second and it still lost. Declining outright while a download is already
+ *  running (guard 1) misses the case where a check starts first and a
+ *  download finishes WHILE it is still waiting on the network — so the
+ *  result is also re-checked against the CURRENT status once the round trip
+ *  answers (guard 2). The bug that made both necessary: this function used
+ *  to call `setStatus({state:'checking'})` unconditionally as its first act,
+ *  which overwrote a `ready` status the instant a check began — so by the
+ *  time a "don't downgrade ready" check ran after the network call, `ready`
+ *  had already been erased and there was nothing left to protect. A
+ *  three-download-plus-a-check race confirmed this 2026-08-26: the checking
+ *  overwrite fired before the guard could see what state it was destroying,
+ *  and a perfectly good downloaded file was reported as merely `available`
+ *  again. Fixed by never touching status with `checking` in the first place
+ *  when a finished download is already sitting there — nothing about a
+ *  redundant check needs to interrupt that with a flicker. */
 async function checkMac(): Promise<UpdateStatus> {
-  setStatus({ state: 'checking', manual: true })
+  if (macDownload) return status
+  const readyBefore = status.state === 'ready' ? status : null
+  if (!readyBefore) setStatus({ state: 'checking', manual: true })
   const { betaChannel } = await getUpdatePrefs()
   const found = await checkMacUpdate(shouldFollowBeta(betaChannel, app.getVersion()))
+  if (macDownload) return status
+  // Re-read NOW, not just what was captured before the network round trip —
+  // a download that started AFTER this check began could have finished
+  // during the await, and its `ready` deserves the same protection.
+  const readyNow = readyBefore ?? (status.state === 'ready' ? status : null)
+  if (readyNow?.version) {
+    // Only a genuinely NEWER release may override — not "the same version
+    // again" (a plain `!==` would treat that as different) and not "nothing
+    // at all" (found === null, e.g. a rate limit or a dropped connection on
+    // THIS check, which says nothing about the file already on disk).
+    if (!found || !isNewerVersion(found.version, readyNow.version)) return status
+  }
   macFound = found
   if (!found) {
     // Also the offline answer. Saying "you are up to date" when the check
@@ -166,13 +198,32 @@ async function checkMac(): Promise<UpdateStatus> {
   return status
 }
 
+/** The in-flight download, so a second call joins it instead of starting a
+ *  race. Neither the sidebar strip's button nor the Settings one disables
+ *  itself between click and response — a real double-click, or clicking both
+ *  at once, reaches here as two calls with nothing in the renderer stopping
+ *  them. Confirmed 2026-08-26: without this, two `downloadMacDmg` calls wrote
+ *  the same `.part` path concurrently, and the second's `fs.rename` failed
+ *  with ENOENT because the first had already moved it — which overwrote a
+ *  genuine `ready` with a scary error the user had no reason to hit. */
+let macDownload: Promise<UpdateStatus> | null = null
+
 /** macOS: fetch the .dmg into Downloads, then report where it landed. */
 async function downloadMac(): Promise<UpdateStatus> {
+  if (macDownload) return macDownload
+  const run = downloadMacOnce()
+  macDownload = run.finally(() => {
+    macDownload = null
+  })
+  return macDownload
+}
+
+async function downloadMacOnce(): Promise<UpdateStatus> {
   const target = macFound
   if (!target) {
     await checkMac()
     if (!macFound) return status
-    return downloadMac()
+    return downloadMacOnce()
   }
   setStatus({ state: 'downloading', version: target.version, percent: 0, manual: true })
   try {
