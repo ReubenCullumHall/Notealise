@@ -500,15 +500,20 @@ SETTLE_CSS = (
     "       required to fire its fill, and `both` is what holds the 0% state through the\n"
     "       delay so nothing is on the page before its turn.\n"
     "\n"
-    "       The hiding MUST sit inside no-preference. This page opts IN to animation, so\n"
-    "       under reduced motion there is no animation to switch anything on, and a bare\n"
-    "       `opacity: 0` would leave the wordmark blank in the STATIC render rather than\n"
-    "       showing the finished word. Outside the query they default to visible. */\n"
+    "       The hiding MUST sit behind the same html.wm-motion gate as the rest of the reveal\n"
+    "       (see the head script, and the .wm-note/.wm-caret/.wm-pen-dot rules above) rather than\n"
+    "       a bare @media (prefers-reduced-motion: no-preference). A media query alone races\n"
+    "       first paint in real Safari: matching a system accessibility setting isn't guaranteed\n"
+    "       resolved by the first style pass, so the base (visible) rule can paint for a frame\n"
+    "       before the query's hiding rule lands - a flash of the finished word right before it\n"
+    "       blanks and replays. `html.wm-motion` is set by a synchronous head script before any\n"
+    "       of this markup is parsed, so there is nothing left to race. Under reduced motion, or\n"
+    "       with JS off, the class is never added, so a bare `opacity: 0` here would leave the\n"
+    "       wordmark blank instead of showing the finished word - outside the gate they still\n"
+    "       default to visible, same as before. */\n"
     "    @keyframes wm-settle { to { opacity: 1; } }\n"
-    "    @media (prefers-reduced-motion: no-preference) {\n"
-    "      .wm-slice  { opacity: 0; animation: wm-settle 1ms linear var(--sliceAt) both; }\n"
-    "      .wm-settle { opacity: 0; animation: wm-settle 1ms linear var(--settleAt) both; }\n"
-    "    }")
+    "    html.wm-motion .wm-slice  { opacity: 0; animation: wm-settle 1ms linear var(--sliceAt) both; }\n"
+    "    html.wm-motion .wm-settle { opacity: 0; animation: wm-settle 1ms linear var(--settleAt) both; }")
 kblock = "\n".join([KBEG, pen_keyframes] + ink_keyframes + [SETTLE_CSS, KEND])
 if KBEG in html:
     html = re.sub(re.escape(KBEG) + r".*?" + re.escape(KEND), lambda m: kblock, html, flags=re.S)

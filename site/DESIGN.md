@@ -1211,3 +1211,46 @@ check preferred the artefact; look at the pixels.**
 crossbar meets the bowl, so its first slice covers a genuinely wide, irregular piece of letter and
 reads as a small wedge for ~80ms. That is the letter being started where it is started, not a
 reveal artefact - but it is the one moment left that does not look like a pen.
+
+## Eleventh pass, 2026-08-26 — the finished word flashing on load, then blanking and replaying
+
+Reuben reported the wordmark showing complete ("Notealise" fully formed) for a couple of frames on
+page load, then blanking and playing the reveal from the start.
+
+**The default state IS the finished word, by design** (see "`prefers-reduced-motion` is the default
+state, not an override" above) - `@media (prefers-reduced-motion: no-preference)` only ADDS the
+hidden-until-animated starting states on top of that default. Correct for a browser that doesn't
+understand the media feature, or for reduced-motion users. It also means: if that one media query
+isn't resolved by the very first style pass, the base (visible) rule is what paints. Viewport-based
+media features are known synchronously from the initial layout; a system-preference feature like
+`prefers-reduced-motion` depends on an OS accessibility lookup, which isn't guaranteed to land
+before that first pass, especially in real Safari. That reproduces the report exactly: finished
+word, then blank, then a normal replay once the query catches up.
+
+**Could not reproduce it under Playwright** - WebKit or Chromium, localhost, zero network latency,
+dozens of rapid-capture loads, zero flashes in either engine. Consistent with the theory (a
+scripted browser likely answers `matchMedia` from a fixed value at process launch rather than a
+live OS lookup), not evidence against it - but it means this fix is argued from the CSS timing
+model, not a red-to-green repro.
+
+**Fix: swap the gate from a media query to a plain class.** A synchronous script in `<head>`,
+before any wordmark markup exists, reads `matchMedia('(prefers-reduced-motion: reduce)')` once and
+adds `wm-motion` to `<html>` if it doesn't match. Every hidden-until-animated rule - the
+hand-written `.wm-note`/`.wm-caret`/`.wm-pen-dot` block and the generated `.wm-slice`/`.wm-settle`
+block - now gates on `html.wm-motion` instead of the media query directly. The reduced-motion
+fallback is unchanged: no script, no `matchMedia` support, or an explicit "reduce" preference all
+still mean the class is never added and the finished word shows immediately. What changes is that
+the *animated* path now depends on a DOM class set before the wordmark is even parsed, not a media
+feature resolving on its own clock.
+
+`gen_pen.py`'s `SETTLE_CSS` owns the generated half of this gate - edited only in the generator,
+regenerated, and diffed against a scratch copy per the usual rule (empty diff outside the intended
+lines). Verified via Playwright, both engines: `prefers-reduced-motion: reduce` still renders the
+settled word with zero `wm-motion` class and zero animation; `no-preference` gets the class, and
+the settled state after the reveal is visually identical to the reduced-motion render, same as
+before this pass.
+
+**Not yet watched live.** Fixed and verified structurally, not verified against the original bug
+reproducing and then disappearing - the flash never happened under test, so there's no red-to-green
+here, only "the mechanism that would cause this is now gone." Worth a real look in actual Safari
+once this is deployed.

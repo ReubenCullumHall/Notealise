@@ -6,6 +6,21 @@
   <title>Notealise — Download</title>
   <meta name="description" content="Download Notealise for Windows and macOS." />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <script>
+    // Sets html.wm-motion before any body markup is parsed, so the wordmark's hidden-until-
+    // animated CSS (below, and in the generated block) can gate on a plain class instead of
+    // @media (prefers-reduced-motion: no-preference). A media query alone can race first paint
+    // in real Safari — matching a system accessibility setting isn't guaranteed resolved by the
+    // very first style pass, so the base (visible, finished-word) rule can paint for a frame
+    // before the query's hiding rule lands: the word flashes fully formed, then blanks, then
+    // replays from the start. matchMedia() here runs synchronously before <body> exists at all,
+    // so there is nothing left to race. No JS, or an old browser without matchMedia, means the
+    // class is never added and the page shows the plain finished word — same safe fallback as
+    // before.
+    if (window.matchMedia && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.documentElement.classList.add("wm-motion");
+    }
+  </script>
   <style>
     :root {
       --bg: #ffffff;
@@ -106,16 +121,17 @@
        and is also exactly what the animation settles into. Letters are NOT
        bridged with connecting strokes (tried once, removed by decision — see
        DESIGN.md). */
-    @media (prefers-reduced-motion: no-preference) {
-      .wm-note { clip-path: inset(0 100% 0 0); animation: note-type 600ms steps(1, jump-end) 250ms both; }
-      .wm-caret {
-        animation: caret-life 600ms steps(1, jump-end) 250ms both,
-                   caret-move 600ms steps(1, jump-end) 250ms both;
-      }
-      /* The slices' own switch-on rules are generated (they carry a per-slice delay off
-         the pen's pacing curve) and sit in the keyframes block below. */
-      .wm-pen-dot { animation: pen-move var(--penDur) linear var(--penDelay) forwards; }
+    /* Gated on html.wm-motion (set by a synchronous head script), not a bare
+       @media (prefers-reduced-motion: no-preference) — see that script's comment for why a
+       media query alone let the finished word flash on first paint in real Safari. */
+    html.wm-motion .wm-note { clip-path: inset(0 100% 0 0); animation: note-type 600ms steps(1, jump-end) 250ms both; }
+    html.wm-motion .wm-caret {
+      animation: caret-life 600ms steps(1, jump-end) 250ms both,
+                 caret-move 600ms steps(1, jump-end) 250ms both;
     }
+    /* The slices' own switch-on rules are generated (they carry a per-slice delay off
+       the pen's pacing curve) and sit in the keyframes block below. */
+    html.wm-motion .wm-pen-dot { animation: pen-move var(--penDur) linear var(--penDelay) forwards; }
     /* THE STOPS SIT IN THE GAPS BETWEEN THE LETTERS' INK, NOT ON THEIR ADVANCE WIDTHS.
        A character's advance box is not its ink box: `t` is drawn with its crossbar reaching
        back past where the glyph's box starts, so cutting at the o/t advance boundary (the
@@ -2455,15 +2471,20 @@
        required to fire its fill, and `both` is what holds the 0% state through the
        delay so nothing is on the page before its turn.
 
-       The hiding MUST sit inside no-preference. This page opts IN to animation, so
-       under reduced motion there is no animation to switch anything on, and a bare
-       `opacity: 0` would leave the wordmark blank in the STATIC render rather than
-       showing the finished word. Outside the query they default to visible. */
+       The hiding MUST sit behind the same html.wm-motion gate as the rest of the reveal
+       (see the head script, and the .wm-note/.wm-caret/.wm-pen-dot rules above) rather than
+       a bare @media (prefers-reduced-motion: no-preference). A media query alone races
+       first paint in real Safari: matching a system accessibility setting isn't guaranteed
+       resolved by the first style pass, so the base (visible) rule can paint for a frame
+       before the query's hiding rule lands - a flash of the finished word right before it
+       blanks and replays. `html.wm-motion` is set by a synchronous head script before any
+       of this markup is parsed, so there is nothing left to race. Under reduced motion, or
+       with JS off, the class is never added, so a bare `opacity: 0` here would leave the
+       wordmark blank instead of showing the finished word - outside the gate they still
+       default to visible, same as before. */
     @keyframes wm-settle { to { opacity: 1; } }
-    @media (prefers-reduced-motion: no-preference) {
-      .wm-slice  { opacity: 0; animation: wm-settle 1ms linear var(--sliceAt) both; }
-      .wm-settle { opacity: 0; animation: wm-settle 1ms linear var(--settleAt) both; }
-    }
+    html.wm-motion .wm-slice  { opacity: 0; animation: wm-settle 1ms linear var(--sliceAt) both; }
+    html.wm-motion .wm-settle { opacity: 0; animation: wm-settle 1ms linear var(--settleAt) both; }
     /* wordmark-keyframes:end */
 
     .scroll-cue {
