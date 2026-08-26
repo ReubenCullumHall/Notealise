@@ -47,9 +47,10 @@ renames, moves and bins real files, writes `.mdnotes/` into the vault, and **rew
 inside notes the user does not have open**. Rule 1 of `CLAUDE.md` protects the user's data; it does
 not make data loss impossible.
 
-Unmeasured and worth measuring: the worst-case autosave data-loss window in seconds, two-window
-behaviour on one vault, and what happens when a file is edited outside the app while open
-(`watcher.ts` has never had its guarantees written down).
+**Resolved 2026-08-26, from the write path rather than a live measurement — see the ruling below.**
+The worst-case crash-loss window, two-window behaviour on one vault, and what happens when a file
+is edited outside the app while open are no longer unmeasured: `watcher.ts`'s guarantees are now
+written down in `CLAUDE.md`'s Gotchas.
 
 ## Parity gaps ruled pre-launch
 
@@ -109,6 +110,38 @@ is exactly the app-native effort Reuben ruled out. The line stays because it can
 it there is no possibility of a check at all. Windows uses a different engine (Hunspell, not
 NSSpellChecker) and is untested — it may simply work there. Both platforms are on the tester
 checklist.
+
+### Autosave races: last-write-wins is fine, corruption isn't (2026-08-26)
+
+**Ruled by Reuben: the known crash-loss window is acceptable as-is, and the real bar for two
+things editing a note at once is "does not corrupt," not "merges correctly."** Raised while
+deciding whether to move "measure the autosave data-loss window" into a future-features list —
+Reuben's own framing was "as long as you know what you're doing with the crash in 400ms then
+it's fine, and as long as notes don't corrupt if two things are editing them at the same time,
+it's good."
+
+Both halves check out, verified by reading the write path rather than by building a live
+measurement:
+
+- **The crash-loss window is the known, already-built bound.** 400ms after typing stops
+  (`App.tsx:423`), closed further by an immediate flush on window blur and just before quit
+  (`App.tsx:2089`, `2095`). Nothing new was built for this — the number was already true of the
+  shipped code.
+- **Corruption cannot happen, because every write is atomic.** `writeNote` (`vault.ts:333–356`)
+  writes to a temp file, `fsync`s it, then renames over the real path — so the file on disk is
+  always one complete version or the other, never a torn or half-written mix, no matter how many
+  processes (two windows, or two whole app instances on the shared Mac sandbox) race on the same
+  note.
+- **What two-way editing actually costs is last-write-wins, not merging — and that's accepted.**
+  Each side keeps its own in-memory dirty buffer; whichever side's flush lands last silently
+  overwrites the other's edit. `App.tsx:1503` skips reloading a tab that's still dirty when an
+  external change comes in, which stops a mid-keystroke edit from being clobbered live — but it
+  does not reconcile the two versions, it just changes who loses and when.
+
+**No dedicated test was written, and none is planned** — this was closed by reading
+`vault.ts`/`watcher.ts`/`App.tsx` against Reuben's stated bar, not by a repro. The full trace is
+logged in `CLAUDE.md`'s Gotchas (2026-08-26 entry) for anyone touching autosave or the watcher
+next.
 
 ## Unchanged and confirmed
 

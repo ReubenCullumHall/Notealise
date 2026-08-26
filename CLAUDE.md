@@ -487,6 +487,19 @@ every session — see the table in **Folder structure** above for the full list.
   no-admin tarball at `~/.local/opt/node` and is not on `PATH` — the script prepends it. Verified
   2026-08-06: typecheck clean, 340 tests pass, `src/` lints clean (the oxlint warnings are all in
   read-only `legacy/`).
+- **To typecheck/lint an OneDrive-tree change without running `sync:mac`** — which stops any
+  running dev server, and might be someone else's live session (see the shared-sandbox gotcha
+  below) — point the mac tree's own working binaries at the OneDrive project instead of syncing:
+  `~/.local/opt/node/bin/node ~/notes-app-mac/node_modules/typescript/bin/tsc --noEmit
+  --composite false -p tsconfig.web.json` (and again with `tsconfig.node.json`), run from inside
+  the OneDrive `notes-app/` folder, plus the same pattern with
+  `~/notes-app-mac/node_modules/.bin/oxlint`. This works because `@types` packages and oxlint's
+  rules are platform-agnostic; only `typescript` itself (and anything else shipping a native
+  per-platform binary) fails when run from OneDrive's own, Windows-targeted `node_modules`.
+  Verified 2026-08-26. One false-positive to know about: a `Cannot find module
+  '@codemirror/search'` error this way is a real but pre-existing gap in OneDrive's
+  `node_modules` (present in `package-lock.json`, missing on disk) — not something your change
+  broke.
 - **Verify against the tree Reuben RUNS, not the one you edit.** `ps ax -o pid,etime,command |
   grep electron-vite` names the tree AND how long it has been up; a multi-day `etime` means the
   main process predates nearly everything, since electron-vite reloads the renderer and never main.
@@ -553,6 +566,20 @@ every session — see the table in **Folder structure** above for the full list.
   as "the fix doesn't work" when it meant "the fix never ran". Re-measure the exact number that
   showed the bug, and treat an unchanged number as a question about the harness, not only about the
   logic.
+- **Autosave races lose an edit, never corrupt a file — verified from the write path, not measured
+  live (2026-08-26).** `writeNote` (`vault.ts:333`) always writes to a temp file, `fsync`s, then
+  renames over the real path — so whatever lands on disk is one complete version or the other,
+  never torn or half-written, no matter how many processes are racing on the same note. Two
+  windows (or two whole app instances — see the shared-sandbox gotcha) editing the same note at
+  once is still **last-write-wins**: each keeps its own in-memory dirty buffer, and whichever side's
+  debounce/blur/before-quit flush lands last silently overwrites the other's edit. The watcher-side
+  guard only prevents the OTHER window from clobbering an edit you're mid-typing — `App.tsx:1503`
+  skips reloading a tab that's still dirty, so an external change loses to your keystroke rather
+  than stomping it — it does not make the two sides merge. Reuben's accepted bar: the crash-loss
+  window (400ms debounce, closed further by blur/before-quit — `App.tsx:370/423/2089/2095`) is
+  fine as understood, and last-write-wins is fine as long as it never corrupts — which the atomic
+  rename guarantees. No dedicated test was written for this; it was reasoned from the write path
+  instead. Ruling recorded in `docs/product-rulings.md`.
 
 ### Tooltips are `data-tip`, never `title`
 
