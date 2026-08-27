@@ -7,6 +7,12 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Development: Delete `site/index-MacBook Air.html`, a 460KB OneDrive sync-conflict duplicate of
+  the download page that had sat unused since 13 August. Never tracked in git, nothing referenced
+  it — the risk was purely a future edit landing in the wrong file
+- Development: Fix a stale comment in onboarding's step model claiming resume-at-step isn't
+  persisted. It has been since `main/config.ts`'s `onboardingStep` shipped; the comment just never
+  got updated when that landed
 
 ## [0.10.0] - 2026-08-27
 - Settings → General now ends with a Legal section: a plain no-warranty notice, and an "Open
