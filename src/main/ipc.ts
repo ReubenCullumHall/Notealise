@@ -33,6 +33,7 @@ import {
   updateEntries
 } from './workspace'
 import {
+  canSelfInstall,
   checkNow,
   currentStatus,
   downloadUpdate,
@@ -235,7 +236,10 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.getUpdateState, async () => ({
     version: app.getVersion(),
     status: currentStatus(),
-    prefs: await getUpdatePrefs()
+    prefs: await getUpdatePrefs(),
+    // Answered here rather than inferred from a status field, because the
+    // renderer needs it before any check has run — see canSelfInstall.
+    selfInstall: canSelfInstall()
   }))
   ipcMain.handle(CH.checkForUpdate, () => checkNow())
   ipcMain.handle(CH.downloadUpdate, () => downloadUpdate())

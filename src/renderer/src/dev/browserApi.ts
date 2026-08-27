@@ -408,7 +408,12 @@ const api: VaultApi = {
   getUpdateState: async () => ({
     version: 'browser-preview',
     status: { state: 'unsupported', reason: 'This is the browser preview — updates live in the app.' },
-    prefs: { autoUpdate: false, betaChannel: false }
+    prefs: { autoUpdate: false, betaChannel: false },
+    // The preview is not macOS-pretending-to-be-unsigned; it simply has no
+    // updater at all, and `unsupported` above already says so. True keeps the
+    // Windows shape, so the preview shows the toggle rather than silently
+    // exercising the macOS branch of every update control.
+    selfInstall: true
   }),
   checkForUpdate: async () => ({ state: 'unsupported', reason: 'Browser preview' }),
   downloadUpdate: async () => ({ state: 'unsupported', reason: 'Browser preview' }),

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notealise — Opening it on macOS</title>
+  <meta name="description" content="How to clear the macOS checks the first time you open Notealise." />
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+  <link rel="stylesheet" href="guide.css" />
+</head>
+<body data-os="mac">
+  <a href="../" aria-label="Notealise home"><img class="mark" src="../favicon.svg" alt="Notealise" width="34" height="34" /></a>
+
+  <main>
+    <p class="eyebrow">macOS</p>
+    <h1>Opening Notealise for the first time</h1>
+    <p class="lede">macOS adds a few checks for apps that are not from the App Store. Here is how to clear them &mdash; you only do this once.</p>
+    <p class="lede why">Notealise is not signed with an Apple certificate &mdash; I have not paid for the developer programme yet. That is the only reason macOS stops it. The full source is <a href="https://github.com/ReubenCullumHall/Notes-app" rel="noopener">on GitHub</a>.</p>
+
+    <p class="status">
+      <b class="status-msg">Ready to install Notealise for macOS.</b>
+      <a class="status-link" data-download href="https://github.com/ReubenCullumHall/Notes-app/releases/latest/download/Notealise.dmg" target="_blank" rel="noopener">Download it</a>
+    </p>
+
+    <ol class="steps">
+      <li>
+        <h2>Move Notealise into Applications</h2>
+        <p>Open the downloaded <strong>Notealise.dmg</strong>. In the window that opens, drag the Notealise icon onto the <strong>Applications</strong> folder. Then open Applications and double-click Notealise.</p>
+        <figure class="drag" aria-label="Drawing: drag the Notealise icon onto the Applications folder">
+          <span class="drag-item">
+            <img src="../favicon.svg" alt="" width="42" height="42" />
+            Notealise
+          </span>
+          <svg class="drag-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15M13 6l6 6-6 6" /></svg>
+          <span class="drag-item">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" aria-hidden="true"><path d="M5 14c0-2 1.5-3.5 3.5-3.5h8.5l4 4H39.5c2 0 3.5 1.6 3.5 3.6V37.5c0 2-1.5 3.5-3.5 3.5H8.5C6.5 41 5 39.5 5 37.5z" /></svg>
+            Applications
+          </span>
+        </figure>
+      </li>
+
+      <li>
+        <h2>On the first warning, click &ldquo;Done&rdquo;</h2>
+        <p>macOS says it <strong>could not verify</strong> Notealise. Click <strong>Done</strong>. Do not click <em>Move to Trash</em>.</p>
+        <figure class="mock" aria-label="Drawing of the macOS &ldquo;Not Opened&rdquo; warning">
+          <div class="mock-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 15H3z" /><path d="M12 10v4" /><path d="M12 17h.01" /></svg>
+            <span class="mock-title">&ldquo;Notealise&rdquo; Not Opened</span>
+          </div>
+          <p class="mock-body">Apple could not verify &ldquo;Notealise&rdquo; is free of malware that may harm your Mac or compromise your privacy.</p>
+          <div class="mock-actions">
+            <span class="mock-btn">Move to Trash</span>
+            <span class="mock-btn key">Done</span>
+          </div>
+        </figure>
+      </li>
+
+      <li>
+        <h2>Allow Notealise in System Settings</h2>
+        <p>Open the <strong>Apple menu &rarr; System Settings &rarr; Privacy &amp; Security</strong>. Scroll down to <strong>Security</strong>. You will see a line saying Notealise was blocked. Click <strong>Open Anyway</strong>, then confirm with your password or Touch&nbsp;ID.</p>
+        <figure class="mock" aria-label="Drawing of the Privacy &amp; Security settings pane">
+          <div class="mock-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+            <span class="mock-title">Privacy &amp; Security</span>
+          </div>
+          <p class="mock-body">&ldquo;Notealise&rdquo; was blocked to protect your Mac.</p>
+          <div class="mock-actions">
+            <span class="mock-btn key">Open Anyway</span>
+          </div>
+        </figure>
+      </li>
+
+      <li>
+        <h2>Confirm once more</h2>
+        <p>A final dialog asks if you are sure. Click <strong>Open Anyway</strong>. Notealise opens, and from now on it opens like any other app.</p>
+        <figure class="mock" aria-label="Drawing of the final confirmation dialog">
+          <div class="mock-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 15H3z" /><path d="M12 10v4" /><path d="M12 17h.01" /></svg>
+            <span class="mock-title">Open &ldquo;Notealise&rdquo;?</span>
+          </div>
+          <p class="mock-body">macOS cannot verify the developer of &ldquo;Notealise&rdquo;. Opening it will always allow it to run on this Mac.</p>
+          <div class="mock-actions">
+            <span class="mock-btn">Move to Trash</span>
+            <span class="mock-btn">Cancel</span>
+            <span class="mock-btn key">Open Anyway</span>
+          </div>
+        </figure>
+      </li>
+    </ol>
+
+    <details class="tshoot">
+      <summary>
+        <svg class="tshoot-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+        Not working? Here&rsquo;s what worked for me
+      </summary>
+      <div class="tshoot-body">
+        <p>The <strong>Open Anyway</strong> button in Privacy &amp; Security can take a minute or two to appear, and sometimes it needs a nudge. This is the exact sequence that worked for me:</p>
+        <ol>
+          <li>Open Notealise from Applications so macOS registers the block, then click <strong>Done</strong> on the warning.</li>
+          <li>Open <strong>System Settings &rarr; Privacy &amp; Security</strong> and scroll to <strong>Security</strong>. If there is no mention of Notealise yet, wait a minute or two.</li>
+          <li>Still nothing? Quit Notealise, open it again from Applications (it will be blocked again &mdash; that is fine), then check Privacy &amp; Security once more. The <strong>Open Anyway</strong> button should be there now.</li>
+          <li>Quit Notealise.</li>
+          <li>Click <strong>Open Anyway</strong> in Settings and confirm with your password or Touch&nbsp;ID. macOS opens Notealise for you.</li>
+        </ol>
+      </div>
+    </details>
+
+    <p class="aside">On <strong>macOS 14 (Sonoma) and earlier</strong> you can skip System Settings: right-click (or Control-click) Notealise in Applications, choose <strong>Open</strong>, then <strong>Open</strong> again on the dialog.</p>
+
+    <a class="back" href="../">&larr; Back to the download page</a>
+  </main>
+
+  <footer class="footer">
+    <span class="footer-brand">Notealise <span class="footer-est">est. 2026</span></span>
+    <span class="footer-legal">&copy; 2026 Notealise. All rights reserved.</span>
+  </footer>
+
+  <script src="guide.js"></script>
+</body>
+</html>

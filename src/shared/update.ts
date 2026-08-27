@@ -104,6 +104,24 @@ export function defaultBetaChannel(version: string): boolean {
 /** Where a user goes when the app can't update itself (macOS, or a hard error). */
 export const RELEASES_URL = 'https://github.com/ReubenCullumHall/Notes-app/releases/latest'
 
+/** MAC_UNSIGNED_WORKAROUND
+ *
+ *  The Gatekeeper walkthrough on the download site (`site/install/mac.html`),
+ *  offered after a macOS update downloads — the fresh .dmg is another unsigned
+ *  binary, so it trips the same "Apple could not verify" block the first
+ *  install did.
+ *
+ *  No `?dl=1`: that parameter is what makes the page start a download, and the
+ *  file is already in Downloads by the time this is opened. The page reads as a
+ *  plain set of steps without it.
+ *
+ *  The host is confirmed by Reuben (2026-08-27): notealise.com is the Vercel
+ *  deployment of `site/`, so this path is whatever `site/install/mac.html` is.
+ *  Nothing in the repo records the domain — `vercel.json` names only an output
+ *  directory — so if the site ever moves, this constant is the one place to
+ *  change and nothing will fail loudly to tell you. */
+export const MAC_INSTALL_GUIDE_URL = 'https://notealise.com/install/mac.html'
+
 /** The read-only releases feed. Public, unauthenticated, and the only network
  *  call macOS makes — the app stays offline-first, this is the same information
  *  Windows already fetches through `latest.yml`, asked for a different way

@@ -1254,3 +1254,67 @@ before this pass.
 reproducing and then disappearing - the flash never happened under test, so there's no red-to-green
 here, only "the mechanism that would cause this is now gone." Worth a real look in actual Safari
 once this is deployed.
+
+## The install guides, 2026-08-27 — `site/install/windows.html` + `mac.html`
+
+The "unverified developer" help this file parked back on 2026-08-09 ("deliberately removed for
+now — Reuben wants it reintroduced later as a click-through sequence gated on which OS button was
+clicked, not as a static `<details>`"). Built as two pages rather than one OS-detected page with a
+toggle: Reuben's call, and it means neither page has to carry the other's markup or a switcher
+nobody asked for. Shared `guide.css` + `guide.js`, so the two cannot drift on styling or on the
+download logic.
+
+**Design decisions, all Reuben's:**
+
+- **Drawn dialogs, not screenshots.** Each OS warning is rebuilt in the site's own flat monochrome
+  — a bordered card with a hairline title bar, the button to press filled in `--ink`. Chosen over
+  real screenshots so there is no capture work on two machines and nothing goes stale when an OS
+  repaints its chrome. The trade, accepted: they are not pixel-identical to what the user sees.
+- **Airy, not documentation-dense.** The steps sit on a numbered spine with generous spacing, a
+  nod to the home page's composition without turning a four-step guide into four screens.
+- **Small mark only** — no wordmark, no animation, no nav. Same fixed top-left circle as the home
+  page, linking home. Reuben explicitly did not want the hero wordmark here: someone on this page
+  is mid-install and stuck, not being introduced to the product.
+- **Brand: hold at "the colours and the logo", nothing more.** The proper site-wide treatment
+  lands with the website build (2026-08-28), which will re-theme these pages. Deliberately not
+  gold-plated tonight.
+
+**The download only fires on `?dl=1`.** The home page's buttons link to
+`install/<os>.html?dl=1`; the page starts the download only when that parameter is present, then
+strips it from the URL. A direct visit or a search landing ("notealise won't open on mac") just
+reads the steps, with a "Download it" link. Reuben's call, and it is the right shape: the page has
+two audiences and only one of them wants a file.
+
+The download runs in a **hidden iframe**, not an `<a download>`: this file already established
+(2026-08-26, the "flash of a self-closing tab" investigation) that a cross-origin link into
+GitHub's `Content-Disposition: attachment` response opens and closes a real auxiliary tab, and
+that the `download` attribute is ignored cross-origin. An iframe pointed at the same URL just
+downloads, and the page the visitor is reading never navigates. **Verified**: the guide does not
+navigate away and exactly one download request fires. **Not verified**: that the browser
+*completes* the save through GitHub's redirect chain from inside an iframe — Chrome and Safari
+have both tightened iframe-initiated downloads, and that needs a real deployment to test per
+browser. If any of them refuse, soften "Your download has started" to "should start" and lean on
+the visible link, which is always wired.
+
+**The `<details>` on the macOS page is a deliberate exception to this file's own rule, not
+drift.** The 2026-08-09 note above says the unverified-developer help must not come back as a
+`<details>` block — and it has not: that help *is* the numbered step path. The disclosure holds
+something different, which did not exist then: Reuben's own account of what he actually had to do
+when the steps alone did not work (the Open Anyway button takes a minute or two to appear, and
+sometimes needs the app quit and reopened to show up at all). It is titled "Not working? Here's
+what worked for me", collapsed by default, and lives *below* the steps. A troubleshooting note
+that most readers should never open is exactly the case a disclosure is for.
+
+**macOS version coverage:** the current System Settings → Privacy & Security → Open Anyway flow is
+the main path; macOS 14 and earlier gets a one-line footnote for the old right-click → Open
+bypass, which Sequoia removed. Leading with the old flow would be wrong for most machines; showing
+both equally would double the page for a shrinking minority.
+
+**Voice:** first person, per `docs/voice.md`'s founder-voice-on-the-website-only rule. It says
+plainly that the app is unsigned because a certificate has not been bought, and links the source
+on GitHub. Not "we" — one person.
+
+**All of this is temporary.** The pages exist only because the builds are unsigned; they come out
+with the rest of that layer when the Apple Developer ID and Windows certificate are bought. The
+app links here from `shared/update.ts`'s `MAC_INSTALL_GUIDE_URL` — see `docs/feature-updates.md`,
+whose `MAC_UNSIGNED_WORKAROUND` tags make the whole removal a grep.

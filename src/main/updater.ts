@@ -141,6 +141,23 @@ function applyChannel(pref: boolean): void {
  *  the .dmg, hand it over. A dev run is excluded — it has nothing to update. */
 const isMac = (): boolean => process.platform === 'darwin' && (app.isPackaged || devTest)
 
+/** MAC_UNSIGNED_WORKAROUND
+ *
+ *  Whether this platform can replace its own binary. False on macOS and only
+ *  because the build is unsigned — Squirrel.Mac refuses an unsigned update, a
+ *  signature check rather than a warning. The renderer needs the answer BEFORE
+ *  the first check has run (that is when it decides whether to show the
+ *  "Update automatically" toggle at all), which `UpdateStatus.manual` cannot
+ *  give it — `manual` only appears once a check has produced a status.
+ *
+ *  Deliberately a capability, not a platform string: when the Apple Developer
+ *  ID is bought this returns true everywhere, every consumer of it collapses to
+ *  its Windows branch, and the whole macOS half of this feature is deletable.
+ *  See docs/feature-updates.md. */
+export function canSelfInstall(): boolean {
+  return process.platform !== 'darwin'
+}
+
 /** The release the manual flow last found, so `downloadUpdate` knows what to
  *  fetch without asking GitHub a second time. */
 let macFound: FeedRelease | null = null
@@ -250,12 +267,25 @@ export async function revealUpdate(): Promise<void> {
   shell.showItemInFolder(status.filePath)
 }
 
-/** Prepare the updater and, if auto-update is on, start the background schedule.
- *  Safe to call in dev; on macOS it takes the manual route instead. */
+/** Prepare the updater and start the background schedule. Safe to call in dev;
+ *  on macOS it takes the manual route instead.
+ *
+ *  **The check always runs — the `autoUpdate` pref does not gate it** (changed
+ *  2026-08-27). It used to return early when the pref was off, on both
+ *  platforms, so turning the toggle off meant the app never asked GitHub
+ *  anything and nothing was ever surfaced: an install could sit months behind
+ *  and look identical to an up-to-date one. That silence is the bug this
+ *  feature exists to fix, and a preference about *installing* was never a
+ *  reasonable place to also switch off *knowing*.
+ *
+ *  So the pref now governs exactly one thing: whether Windows downloads and
+ *  stages an available update in the background (`autoDownload`). Nothing is
+ *  ever downloaded on macOS without a click regardless, which is why there is
+ *  no equivalent line in that branch — and why Settings hides the toggle there
+ *  (see canSelfInstall). */
 export async function initUpdater(): Promise<void> {
   if (isMac()) {
-    const { autoUpdate } = await getUpdatePrefs()
-    if (!autoUpdate) return
+    // MAC_UNSIGNED_WORKAROUND — reads the releases feed directly; see macUpdate.ts.
     // Same cadence as Windows: late enough not to compete with first paint,
     // then every six hours for a window left open.
     setTimeout(() => void checkMac(), 10_000).unref()
@@ -271,7 +301,6 @@ export async function initUpdater(): Promise<void> {
   const { autoUpdate, betaChannel } = await getUpdatePrefs()
   applyChannel(betaChannel)
   updater().autoDownload = autoUpdate
-  if (!autoUpdate) return
 
   // Delayed so a check never competes with first paint, then every 6 hours for
   // a long-running window.

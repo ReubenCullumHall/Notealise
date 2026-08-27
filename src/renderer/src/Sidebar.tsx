@@ -775,7 +775,7 @@ export function Sidebar({
           </button>
         )}
 
-        <UpdateBanner status={update} canSelfUpdate={update.state !== 'unsupported' && !update.manual} />
+        <UpdateBanner status={update} />
 
         {/* The space switcher, directly above "Switch folder": one row of
             emoji, one per top-level folder (up to SPACE_CAP = 10), wrapping

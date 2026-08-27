@@ -12,7 +12,11 @@ import { SourceFolder } from './SourceFolder'
 import { Recovery } from './Recovery'
 import { ImportPanel } from '../import/ImportPanel'
 import { DATE_FORMATS, NUMBER_FORMATS, formatDate, localZone, timezones } from '../intl'
-import { isPrereleaseVersion, type UpdateStatus } from '../../../shared/update'
+import {
+  isPrereleaseVersion,
+  MAC_INSTALL_GUIDE_URL,
+  type UpdateStatus
+} from '../../../shared/update'
 import type { PresetActions } from './Presets'
 import type { SpacePreset } from '../../../shared/presets'
 import type { RecoveryItem } from '../../../shared/workspace'
@@ -149,7 +153,7 @@ const SEARCH_INDEX: SearchEntry[] = [
   { section: 'recovery', label: 'Recovery', hint: 'A 7-day safety net for anything deleted — restore or purge it.', keywords: 'trash bin recycle bin deleted restore undo delete recover backup' },
   { section: 'import', label: 'Import', hint: 'Bring notes in from Notion, Word, Google Keep, Apple Notes, HTML or Markdown.', keywords: 'notion word docx google keep apple notes html markdown migrate transfer evernote onenote obsidian' },
   { section: 'tutorials', label: 'Tutorials', hint: 'Guides for using the app, including linking your notes.', keywords: 'help guide how to learn walkthrough' },
-  { section: 'updates', label: 'Update automatically', hint: 'Downloads new versions quietly and applies them when you quit.', keywords: 'auto update background version download install' },
+  { section: 'updates', label: 'Install updates automatically', hint: 'Downloads new versions quietly and applies them when you quit. Windows only — a Mac cannot replace a running app.', keywords: 'auto update background version download install' },
   { section: 'updates', label: 'Receive test builds', hint: 'Early versions, for helping test.', keywords: 'beta channel early access prerelease test build' },
   { section: 'updates', label: 'Check for updates', hint: 'Manually check for a new version.', keywords: 'check version update manual refresh' },
   { section: 'reportBug', label: 'Report a bug', hint: 'Email us about something that went wrong.', keywords: 'bug crash issue problem broken feedback support email contact' },
@@ -851,6 +855,10 @@ function UpdatesSection(): React.JSX.Element {
   const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [autoUpdate, setAuto] = useState(true)
   const [beta, setBeta] = useState(false)
+  /** false on the unsigned macOS build. Read from main rather than inferred
+   *  from `status.manual`, which does not exist until a check has run — and
+   *  this decides whether a control is rendered at all. */
+  const [selfInstall, setSelfInstall] = useState(true)
 
   useEffect(() => {
     void (async () => {
@@ -859,6 +867,7 @@ function UpdatesSection(): React.JSX.Element {
       setStatus(s.status)
       setAuto(s.prefs.autoUpdate)
       setBeta(s.prefs.betaChannel)
+      setSelfInstall(s.selfInstall)
     })()
     return window.api.onUpdateStatus(setStatus)
   }, [])
@@ -908,31 +917,44 @@ function UpdatesSection(): React.JSX.Element {
         {version
           ? isBeta
             ? "You're on a test build — thanks for helping try things early."
-            : "You're all set."
+            : selfInstall
+              ? "You're all set."
+              : // MAC_UNSIGNED_WORKAROUND — with the toggle gone (below), this
+                // line is the only thing left saying the app is looking at all.
+                // Without it the macOS page reads as inert: a heading, a
+                // version, and a button, with nothing to say checking happens.
+                'Notealise checks for a new version each time it opens, and tells you when there is one.'
           : 'Checking for updates…'}
       </p>
 
-      <div className="mode-row">
-        <button
-          className={'mode-btn' + (autoUpdate && !blocked ? ' on' : '')}
-          aria-pressed={autoUpdate && !blocked}
-          disabled={blocked}
-          onClick={() => {
-            const next = !autoUpdate
-            setAuto(next)
-            void window.api.setAutoUpdate(next)
-          }}
-        >
-          <span className="t">Update automatically</span>
-          <span className="s">
-            {blocked
-              ? 'Not available on this build'
-              : manual
-                ? 'Checks quietly and downloads a new version for you. On a Mac the last step is yours — an unsigned app is not allowed to replace itself.'
-                : 'Downloads new versions quietly and applies them when you quit.'}
-          </span>
-        </button>
-      </div>
+      {/* MAC_UNSIGNED_WORKAROUND — hidden on macOS, where it has nothing left to
+          control. The check now runs on every launch regardless of this pref
+          (see main/updater.ts's initUpdater), and a Mac never downloads without
+          a click, so on that platform the toggle governed nothing a user could
+          observe. A control that does nothing is worse than an absent one.
+          Comes back on its own when the app is signed and `selfInstall` is
+          true everywhere. */}
+      {selfInstall && (
+        <div className="mode-row">
+          <button
+            className={'mode-btn' + (autoUpdate && !blocked ? ' on' : '')}
+            aria-pressed={autoUpdate && !blocked}
+            disabled={blocked}
+            onClick={() => {
+              const next = !autoUpdate
+              setAuto(next)
+              void window.api.setAutoUpdate(next)
+            }}
+          >
+            <span className="t">Install updates automatically</span>
+            <span className="s">
+              {blocked
+                ? 'Not available on this build'
+                : 'Downloads new versions quietly and applies them when you quit. Either way, Notealise checks for one each time it opens and tells you.'}
+            </span>
+          </button>
+        </div>
+      )}
 
       {/* Only a build that is ALREADY a test build offers this, so an ordinary
           download has no route onto the beta channel. It's kept here (rather
@@ -971,19 +993,42 @@ function UpdatesSection(): React.JSX.Element {
         >
           {blocked ? 'Open downloads page' : busy ? 'Checking…' : 'Check now'}
         </button>
-        {status.state === 'ready' && (
+        {status.state === 'ready' && !manual && (
           <button className="mini" onClick={() => window.api.installUpdate()}>
             Restart &amp; install
           </button>
         )}
+        {status.state === 'ready' && manual && (
+          <button className="mini" onClick={() => void window.api.revealUpdate()}>
+            Show it in Finder
+          </button>
+        )}
         {status.state === 'available' && !blocked && (
           <button className="mini" onClick={() => void window.api.downloadUpdate()}>
-            Download
+            {/* Named on macOS, because this is where the toast's "Get it" lands
+                and a bare "Download" gives no clue what arrives or how big. */}
+            {manual ? `Download ${status.version ?? ''}`.trim() : 'Download'}
           </button>
         )}
       </div>
 
       {line && <p className="hint">{line}</p>}
+
+      {/* MAC_UNSIGNED_WORKAROUND — the walkthrough, reachable at any time rather
+          than only in the moment a download finishes (App.tsx's prompt). Someone
+          who dismissed that dialog, or who is part-way through the steps and
+          stuck, needs a way back to them, and Settings → Updates is where they
+          will look. Goes when the app is signed. */}
+      {!selfInstall && (
+        <p className="hint">
+          <button
+            className="rounded border-none bg-transparent p-0 font-medium text-brand-600 underline underline-offset-2 outline-none transition-colors hover:bg-transparent hover:text-brand-700"
+            onClick={() => void window.api.openExternal(MAC_INSTALL_GUIDE_URL)}
+          >
+            How to open a new version on a Mac
+          </button>
+        </p>
+      )}
     </section>
   )
 }

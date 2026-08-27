@@ -80,7 +80,8 @@ import {
 } from '../../shared/presets'
 import { Sidebar } from './Sidebar'
 import type { SearchHit } from './Search'
-import type { UpdateStatus } from '../../shared/update'
+import { MAC_INSTALL_GUIDE_URL, type UpdateStatus } from '../../shared/update'
+import { UpdateToast } from './update/UpdateToast'
 import { Icon } from './icons'
 import {
   autoColorPlan,
@@ -341,6 +342,10 @@ export default function App(): React.JSX.Element {
   // In-app updates. `unsupported` covers a dev build and unsigned macOS; the
   // banner and Settings both read it, so it lives here and flows down.
   const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' })
+  /** false on the unsigned macOS build, which cannot replace its own binary.
+   *  Seeded from main below; assume it can until told otherwise, so a Windows
+   *  install never flashes the macOS wording on first paint. */
+  const [selfInstall, setSelfInstall] = useState(true)
   const [notice, setNotice] = useState<Notice | null>(null)
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const showNotice = useCallback((n: Notice): void => {
@@ -2080,9 +2085,50 @@ export default function App(): React.JSX.Element {
 
   // Update state: seed once, then follow the pushes from main.
   useEffect(() => {
-    void window.api.getUpdateState().then((s) => setUpdate(s.status))
+    void window.api.getUpdateState().then((s) => {
+      setUpdate(s.status)
+      setSelfInstall(s.selfInstall)
+    })
     return window.api.onUpdateStatus(setUpdate)
   }, [])
+
+  // The corner toast is dismissed per SESSION, not persisted: "later" must not
+  // become "never tell me again", so the next launch's check shows it afresh
+  // while the install is still behind. Keyed by version so a NEWER release
+  // during a long session gets its own announcement rather than inheriting the
+  // dismissal of the one before it.
+  const [updateDismissed, setUpdateDismissed] = useState<string | null>(null)
+  const toastVersion = update.version ?? ''
+  const showUpdateToast = updateDismissed !== toastVersion
+
+  // MAC_UNSIGNED_WORKAROUND — the whole block. When a macOS download finishes,
+  // offer the Gatekeeper walkthrough: the .dmg that just landed is a fresh
+  // unsigned binary, so the new copy triggers the same "Apple could not verify"
+  // block the first install did, and the steps are not obvious enough to expect
+  // anyone to remember them from last time.
+  //
+  // Fires on the TRANSITION into a manual `ready`, tracked by version in a ref
+  // rather than off the render, because `status` is re-pushed on every
+  // subscriber and re-read by getUpdateState whenever Settings mounts — keying
+  // off the value alone would re-open this dialog on a status replay that
+  // reported nothing new. Deliberately not persisted to config.json: a genuine
+  // second download of the same version (the file was deleted, or the user
+  // clicked again) is a real event that deserves the offer again.
+  const [verifyPrompt, setVerifyPrompt] = useState<string | null>(null)
+  const promptedFor = useRef<string | null>(null)
+  useEffect(() => {
+    if (update.state !== 'ready' || !update.manual) return
+    const v = update.version ?? ''
+    if (promptedFor.current === v) return
+    promptedFor.current = v
+    setVerifyPrompt(v)
+    // And retire the toast for this version as the dialog opens. The two would
+    // otherwise say the same thing at the same time, one on top of the other.
+    // Nothing is lost by it: `ready` is exactly the state the sidebar strip
+    // still covers, so after the dialog is answered there is a quiet
+    // "0.11.0 downloaded · Show me" in the footer to come back to.
+    setUpdateDismissed(v)
+  }, [update.state, update.manual, update.version])
 
   // flush unsaved edits when the window loses focus and just before the app quits
   useEffect(() => {
@@ -2576,6 +2622,53 @@ export default function App(): React.JSX.Element {
           }
           onClose={() => setColorFor(null)}
         />
+      )}
+
+      {/* The corner card announcing a new version. Mounted here, beside
+          `.notice`, rather than in the sidebar: the sidebar's backdrop-filter
+          makes it a containing block for fixed-position children, so anything
+          pinned to the viewport has to live outside it (CLAUDE.md). */}
+      {showUpdateToast && (
+        <UpdateToast
+          status={update}
+          selfInstall={selfInstall}
+          onOpenUpdates={() => setSettingsJumpTo('updates')}
+          onDismiss={() => setUpdateDismissed(toastVersion)}
+        />
+      )}
+
+      {/* MAC_UNSIGNED_WORKAROUND — offered once per finished macOS download.
+          Goes when the app is signed and the .dmg stops tripping Gatekeeper. */}
+      {verifyPrompt && (
+        <div className="confirm-backdrop" onClick={() => setVerifyPrompt(null)}>
+          <div
+            className="prompt confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Opening the new version"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="prompt-title">Notealise {verifyPrompt} is in your Downloads</div>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-500">
+              Drag it into Applications to replace this copy. macOS will ask you to confirm
+              it again, the same way it did the first time.
+            </p>
+            <div className="prompt-actions">
+              {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+              <button autoFocus onClick={() => setVerifyPrompt(null)}>
+                I know what to do
+              </button>
+              <button
+                onClick={() => {
+                  void window.api.openExternal(MAC_INSTALL_GUIDE_URL)
+                  setVerifyPrompt(null)
+                }}
+              >
+                Show me the steps
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {notice && (

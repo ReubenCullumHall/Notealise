@@ -157,8 +157,15 @@ export interface VaultApi {
   deleteSpace(folder: string): Promise<Workspace>
 
   // --- in-app updates -------------------------------------------------------
-  /** This build's version, and the current update state + preference. */
-  getUpdateState(): Promise<{ version: string; status: UpdateStatus; prefs: UpdatePrefs }>
+  /** This build's version, the current update state + preference, and whether
+   *  this platform can replace its own binary at all (`selfInstall` is false on
+   *  the unsigned macOS build — see main/updater.ts's canSelfInstall). */
+  getUpdateState(): Promise<{
+    version: string
+    status: UpdateStatus
+    prefs: UpdatePrefs
+    selfInstall: boolean
+  }>
   /** Ask the GitHub feed whether a newer version exists. */
   checkForUpdate(): Promise<UpdateStatus>
   /** Download an offered update (used when auto-download is off). On macOS this
@@ -171,7 +178,9 @@ export interface VaultApi {
   /** macOS: show the downloaded .dmg in Finder. Replacing a running app is the
    *  user's job there, and the Finder window is where that job starts. */
   revealUpdate(): Promise<void>
-  /** Turn background auto-update on/off; persisted in userData. */
+  /** Turn background auto-update on/off; persisted in userData. Governs only
+   *  whether an available update is DOWNLOADED and staged in the background —
+   *  the check itself always runs, on every launch, on both platforms. */
   setAutoUpdate(on: boolean): Promise<UpdateStatus>
   /** Opt in/out of prerelease (beta) builds; persisted in userData. Checks the
    *  newly selected channel immediately. */

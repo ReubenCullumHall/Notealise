@@ -1207,6 +1207,66 @@ button.icon:hover {
   opacity: 0.82;
 }
 
+/* --- update toast --- */
+/* The corner card that says a new version exists (update/UpdateToast.tsx).
+   Bottom-RIGHT, where .notice is bottom-centre, because the two mean different
+   things and must not be mistaken for each other: .notice reports something
+   that just happened and times out; this one waits.
+
+   A card on --surface with a real border and float shadow rather than the solid
+   brand strip .notice uses — the same treatment as .menu and .prompt, which is
+   this app's vocabulary for "a surface floating above the page" as opposed to
+   "a message about the last action". It is legacy-less UI, so it lives here as
+   CSS rather than as utilities (rule 8's carve-out, same as the settings modal).
+
+   Sits under .prompt/.confirm-backdrop's stacking (z-index 200 matches .notice)
+   so a modal always covers it. */
+.update-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 268px;
+  padding: 11px 12px 12px;
+  background: rgb(var(--surface));
+  color: rgb(var(--ink-900));
+  border: 1px solid rgb(var(--wash) / 0.1);
+  border-radius: 12px;
+  box-shadow: var(--shadow-float);
+  z-index: 200;
+}
+/* The one action. Filled rather than outlined: it is the only thing on the card
+   worth clicking, and a .mini here read as a third piece of chrome next to the
+   dismiss ×. */
+.update-toast-go {
+  margin-top: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgb(var(--brand-600));
+  color: rgb(var(--paper));
+}
+.update-toast-go:hover {
+  background: rgb(var(--brand-700));
+  color: rgb(var(--paper));
+}
+.update-toast-x {
+  flex: none;
+  margin: -3px -3px 0 0;
+  padding: 3px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: rgb(var(--ink-400));
+}
+.update-toast-x:hover {
+  background: rgb(var(--wash) / 0.08);
+  color: rgb(var(--ink-800));
+}
+
 /* --- settings panel --- */
 /* The settings window genies out of the gear. Ported verbatim from
    legacy/src/index.css:158-200 — the shell is Tailwind on the component (rule 8);

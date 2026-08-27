@@ -7,6 +7,22 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Notealise now checks for a new version every time it opens, whether or not automatic installing
+  is switched on, and says so in a small card in the corner. It used to only check when automatic
+  updates were on — so turning that off meant the app never asked at all, and an install months
+  behind looked exactly like an up-to-date one. The card names the version, waits rather than
+  timing out, and closing it only silences that version: the next time you open Notealise, if
+  there is still something newer, it says so again
+- On a Mac, once a new version has downloaded, Notealise offers to walk you through opening it —
+  macOS blocks it the same way it did the first time, and the steps are not the sort of thing
+  anyone should be expected to remember. Settings → Updates also keeps a permanent link to them.
+  On a Mac that page no longer offers "Install updates automatically", because a Mac cannot
+  replace a running app and the setting controlled nothing you could see
+- Two new pages on the download site, one per platform, explaining how to get past the warning
+  Windows and macOS show for an app without a certificate. The Download buttons go there first and
+  start the download on arrival; opening either page directly just shows the steps. The macOS page
+  carries a "Not working? Here's what worked for me" note for the case where the Open Anyway
+  button takes a couple of minutes to appear
 - Development: Delete `site/index-MacBook Air.html`, a 460KB OneDrive sync-conflict duplicate of
   the download page that had sat unused since 13 August. Never tracked in git, nothing referenced
   it — the risk was purely a future edit landing in the wrong file

@@ -1,3 +1,6 @@
+# Ephemeral cross-session coordination status (see notes-app/CLAUDE.md's shared-sandbox gotcha)
+.claude/status.md
+
 # Logs
 logs
 *.log

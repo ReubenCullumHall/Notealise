@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notealise — Opening it on Windows</title>
+  <meta name="description" content="How to get past the warning Windows shows the first time you open Notealise." />
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+  <link rel="stylesheet" href="guide.css" />
+</head>
+<body data-os="windows">
+  <a href="../" aria-label="Notealise home"><img class="mark" src="../favicon.svg" alt="Notealise" width="34" height="34" /></a>
+
+  <main>
+    <p class="eyebrow">Windows</p>
+    <h1>Opening Notealise for the first time</h1>
+    <p class="lede">Here is how to get past the warning Windows shows for an app it has not seen before.</p>
+    <p class="lede why">Notealise is not signed with a Microsoft certificate &mdash; I have not bought one yet. That is the only reason the warning appears. The full source is <a href="https://github.com/ReubenCullumHall/Notes-app" rel="noopener">on GitHub</a>.</p>
+
+    <p class="status">
+      <b class="status-msg">Ready to install Notealise for Windows.</b>
+      <a class="status-link" data-download href="https://github.com/ReubenCullumHall/Notes-app/releases/latest/download/Notealise-Setup.exe" target="_blank" rel="noopener">Download it</a>
+    </p>
+
+    <ol class="steps">
+      <li>
+        <h2>Open the installer</h2>
+        <p>Double-click <strong>Notealise-Setup.exe</strong> in your Downloads folder, or click it in your browser&rsquo;s download bar.</p>
+      </li>
+
+      <li>
+        <h2>Click &ldquo;More info&rdquo;</h2>
+        <p>Windows shows a blue box headed <strong>Windows protected your PC</strong>. At first it only offers <em>Don&rsquo;t run</em>. Click the small <strong>More info</strong> link to reveal the rest.</p>
+        <figure class="mock" aria-label="Drawing of the Windows SmartScreen warning">
+          <div class="mock-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3.5v5.5c0 5-3.4 8-8 9.5-4.6-1.5-8-4.5-8-9.5V6.5z"/></svg>
+            <span class="mock-title">Windows protected your PC</span>
+          </div>
+          <p class="mock-body">Microsoft Defender SmartScreen prevented an unrecognised app from starting. Running this app might put your PC at risk.</p>
+          <span class="mock-link">More info</span>
+          <div class="mock-actions">
+            <span class="mock-btn">Don&rsquo;t run</span>
+          </div>
+        </figure>
+      </li>
+
+      <li>
+        <h2>Click &ldquo;Run anyway&rdquo;</h2>
+        <p>The box now names the app and shows a <strong>Run anyway</strong> button. Click it. Notealise installs and opens, and Windows will not ask again.</p>
+        <figure class="mock" aria-label="Drawing of the same warning after clicking More info, now showing a Run anyway button">
+          <div class="mock-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3.5v5.5c0 5-3.4 8-8 9.5-4.6-1.5-8-4.5-8-9.5V6.5z"/></svg>
+            <span class="mock-title">Windows protected your PC</span>
+          </div>
+          <p class="mock-body">Microsoft Defender SmartScreen prevented an unrecognised app from starting.</p>
+          <p class="mock-kv"><span>App:</span> Notealise-Setup.exe<br /><span>Publisher:</span> Unknown publisher</p>
+          <div class="mock-actions">
+            <span class="mock-btn key">Run anyway</span>
+            <span class="mock-btn">Don&rsquo;t run</span>
+          </div>
+        </figure>
+      </li>
+    </ol>
+
+    <p class="aside">Nothing happened when you double-clicked? Some browsers hold the file until you confirm the download. Check the download bar or your <strong>Downloads</strong> folder and open it from there.</p>
+
+    <a class="back" href="../">&larr; Back to the download page</a>
+  </main>
+
+  <footer class="footer">
+    <span class="footer-brand">Notealise <span class="footer-est">est. 2026</span></span>
+    <span class="footer-legal">&copy; 2026 Notealise. All rights reserved.</span>
+  </footer>
+
+  <script src="guide.js"></script>
+</body>
+</html>

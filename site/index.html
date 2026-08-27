@@ -2526,13 +2526,6 @@
     .btn.primary { background: var(--ink); color: var(--bg); }
     .btn.primary:hover { background: color-mix(in srgb, var(--ink) 88%, transparent); }
     .btn svg { width: 20px; height: 20px; flex: 0 0 auto; }
-    .btn[aria-disabled="true"] { opacity: .4; pointer-events: none; }
-
-    .config-warn {
-      margin: 0 0 4px; padding: 12px 14px; border-radius: 12px; font-size: 13px;
-      border: 1px solid var(--line); color: var(--muted); width: min(560px, 100%);
-    }
-    .hidden { display: none; }
 
     /* ── Bottom bar. ─────────────────────────────────────────────────── */
     .footer {
@@ -2551,7 +2544,6 @@
          with them or the bar spills past the fold. */
       :root { --footer-h: 92px; }
       .btns { grid-template-columns: 1fr; width: min(360px, 100%); }
-      .config-warn { width: min(360px, 100%); }
       .footer { justify-content: center; text-align: center; }
     }
   </style>
@@ -3211,15 +3203,12 @@
   <section class="gap"></section>
 
   <section id="download" class="download">
-    <div id="configWarn" class="config-warn hidden">
-      This page isn't linked to a repo yet — set <code>REPO</code> in <code>site/index.html</code> to your GitHub <code>user/repo</code>.
-    </div>
     <div class="btns">
-      <a id="winBtn" class="btn" href="#" rel="nofollow">
+      <a id="winBtn" class="btn" href="install/windows.html?dl=1">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.7 10.2 4.7v6.8H3V5.7zM10.2 12.5v6.8L3 18.3v-5.8h7.2zM11.2 4.55 21 3.2v8.3h-9.8V4.55zM21 12.5v8.3l-9.8-1.35V12.5H21z"/></svg>
         <span>Download for Windows</span>
       </a>
-      <a id="macBtn" class="btn" href="#" rel="nofollow">
+      <a id="macBtn" class="btn" href="install/mac.html?dl=1">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.36 12.9c.02 2.5 2.19 3.33 2.22 3.34-.02.06-.35 1.2-1.15 2.37-.69 1.02-1.41 2.03-2.55 2.05-1.11.02-1.47-.66-2.75-.66-1.27 0-1.67.64-2.72.68-1.09.04-1.93-1.1-2.63-2.11-1.42-2.07-2.51-5.85-1.05-8.4.72-1.27 2.02-2.07 3.42-2.09 1.07-.02 2.08.72 2.75.72.66 0 1.9-.9 3.2-.76.54.02 2.07.22 3.05 1.66-.08.05-1.82 1.07-1.8 3.19zM14.28 5.4c.59-.72 1-1.71.89-2.71-.86.03-1.9.57-2.51 1.29-.55.63-1.03 1.65-.9 2.62.96.07 1.94-.49 2.52-1.2z"/></svg>
         <span>Download for macOS</span>
       </a>
@@ -3232,50 +3221,11 @@
   </footer>
 
   <script>
-    // ── Set this to your GitHub "user/repo" once the repo exists. ──────────────
-    const REPO = "ReubenCullumHall/Notes-app";
-    // Fixed fallback links — match the artifactName in electron-builder.yml, so
-    // /releases/latest/download/<name> always points at the newest build.
-    const FALLBACK = {
-      win: `https://github.com/${REPO}/releases/latest/download/Notealise-Setup.exe`,
-      mac: `https://github.com/${REPO}/releases/latest/download/Notealise.dmg`,
-    };
-
-    const winBtn = document.getElementById("winBtn");
-    const macBtn = document.getElementById("macBtn");
-    const notConfigured = REPO === "OWNER/REPO";
-
-    if (notConfigured) document.getElementById("configWarn").classList.remove("hidden");
-
-    // Highlight the button matching the visitor's OS.
+    // Both buttons link to the per-OS install guide (site/install/), which starts
+    // the download and walks through the first-run warning the unsigned build
+    // triggers. Here we only highlight the button matching the visitor's OS.
     const ua = (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "").toLowerCase();
-    const isMac = /mac/.test(ua);
-    (isMac ? macBtn : winBtn).classList.add("primary");
-
-    // Start with the stable fallback links, then upgrade to the exact asset URLs
-    // from the latest Release if the API is reachable.
-    winBtn.href = FALLBACK.win;
-    macBtn.href = FALLBACK.mac;
-
-    async function loadLatest() {
-      if (notConfigured) return;
-      try {
-        const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-          headers: { Accept: "application/vnd.github+json" },
-        });
-        if (!r.ok) throw new Error(r.status);
-        const rel = await r.json();
-        const find = (ext) => rel.assets?.find((a) => a.name.toLowerCase().endsWith(ext));
-        const exe = find(".exe"), dmg = find(".dmg");
-        if (exe) winBtn.href = exe.browser_download_url;
-        if (dmg) macBtn.href = dmg.browser_download_url;
-        winBtn.setAttribute("aria-disabled", String(!exe));
-        macBtn.setAttribute("aria-disabled", String(!dmg));
-      } catch {
-        // keep the fallback links working
-      }
-    }
-    loadLatest();
+    document.getElementById(/mac/.test(ua) ? "macBtn" : "winBtn").classList.add("primary");
   </script>
 </body>
 </html>

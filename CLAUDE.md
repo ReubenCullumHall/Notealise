@@ -347,6 +347,10 @@ just the changelog line:**
    (nothing outstanding) or **not yet — here's what's open and why**, so "logged" never quietly
    reads as "done" when it isn't.
 
+**Report back in one line, not a walkthrough.** Do all four steps, but the reply to Reuben is just
+the verdict line — "logged, ready to clear" or "logged, not yet: <what's open>". Don't restate what
+got appended or where the lesson went unless he asks for the explanation.
+
 "Log that" (session-end wording) does all of the above **plus**:
 
 5. **Scan the whole conversation for anything else worth keeping that lives outside the diff** — a
@@ -534,6 +538,13 @@ every session — see the table in **Folder structure** above for the full list.
   features were being built live in the same repo at the same time. See
   `notesapp-mac-sandbox-concurrency` in project memory for the shared-`userData` risk and the
   isolated-`--user-data-dir` workaround.
+- **Announce before touching `site/`, the release ritual (tag/push), or `~/notes-app-mac` — don't
+  only check reactively.** Read `.claude/status.md` (gitignored, one line per session: `[name]
+  HH:MM — what/where`) and `ListAgents` first; if either shows someone active in the same area,
+  coordinate before starting. Then add your own line to the file AND `SendMessage` a brief note to
+  whatever peers `ListAgents` shows — the file catches a session that starts later with no peer yet
+  to ping, the message catches one already running that won't re-read the file on its own. Remove
+  your line when done. Not needed for ordinary work confined to a file nobody else touches.
 - `out/` is the build dir (gitignored). `node_modules` lives under OneDrive — installs work but
   sync churn is possible; moving the project out of OneDrive is a later cleanup.
 - **`npm run package:dir` can fail with `EPERM ... rename 'win-unpacked.tmp' -> 'win-unpacked'`.**
