@@ -147,6 +147,31 @@ $l.assets | ForEach-Object { "{0} {1:N1} MB {2}" -f $_.name, ($_.size/1MB), $_.s
 All four assets (`Notealise-Setup.exe`, `Notealise-Setup.exe.blockmap`, `latest.yml`, `Notealise.dmg`) must read
 `uploaded` **and** `latest` must be the new tag. Only then tell anyone to download.
 
+**CI now checks this for you** (`verify-release` job in `release.yml`, added 2026-08-27) — it fails
+the workflow loudly if any expected asset isn't `uploaded`. The manual check above is still worth
+running yourself before telling anyone to download, but a red `verify-release` job is the thing to
+trust over a green `build` job.
+
+### Never re-run a release workflow long after the tag was pushed — bump a version instead
+
+**electron-builder's GitHub publisher silently skips uploading — exit 0, no error — if the release
+it's publishing to was created more than 2 hours ago.** It's a guard against a stale/delayed CI run
+clobbering a release that's moved on since, but it can't tell that apart from an OS's build job
+having failed and being re-run hours later while diagnosing why. Hit this 2026-08-27: `v0.10.0`'s
+Windows job failed outright on the first run; by the time the failure was diagnosed and "re-run
+failed jobs" was clicked, over 2 hours had passed since the release was first created (by the
+macOS job, which succeeded first). The re-run built `Setup.exe`/`.blockmap`/`latest.yml` correctly,
+then logged `skipped publishing ... reason=existing release published more than 2 hours ago` for
+all three and exited 0 — a fully green job that shipped nothing. (The `verify-release` job above
+exists because of this: this exact failure mode leaves every build job green.)
+
+**If more than ~2 hours have passed since a release tag was pushed and a build job needs
+re-running, don't re-run the workflow — bump to a new patch version and tag that instead**
+(`v0.10.0` → `v0.10.1`, no code changes required). That gets a release object with a fresh
+timestamp, so the guard never engages. Nobody has "downloaded a bad version" from an incomplete
+release — there was nothing to download for the missing platform — so this is exactly the safe,
+low-stakes case the "ship the fix as a higher version" rule above already covers.
+
 ---
 
 ## When a bad version ships

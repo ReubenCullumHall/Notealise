@@ -93,3 +93,50 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Unsigned MVP: don't let electron-builder try to find a signing identity.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+  # electron-builder's GitHub publisher silently SKIPS uploading (exit 0, no
+  # error) if the release it's publishing to was created more than 2 hours
+  # ago — a guard against a stale/delayed CI run clobbering a release that's
+  # moved on. That guard has no way to know "clobbering" isn't the risk here;
+  # it just as happily protects a release that's incomplete because the OTHER
+  # matrix job failed and got re-run hours later (found 2026-08-27: a Windows
+  # re-run built Setup.exe/.blockmap/latest.yml perfectly and then logged
+  # "skipped publishing ... reason=existing release published more than 2
+  # hours ago" for all three — job green, nothing shipped). So "the build
+  # jobs are green" is not evidence the release is complete; this job checks
+  # the actual GitHub Release object instead.
+  verify-release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm every expected asset actually uploaded
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          if [[ "$version" == *-* ]]; then
+            pre="${version#*-}"
+            yml="${pre%%.*}.yml"
+          else
+            yml="latest.yml"
+          fi
+          expected=("Notealise-Setup.exe" "Notealise-Setup.exe.blockmap" "Notealise.dmg" "$yml")
+
+          release_json=$(curl -sf -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "User-Agent: notes-app-release-verify" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${tag}")
+
+          missing=0
+          for name in "${expected[@]}"; do
+            state=$(echo "$release_json" | python3 -c "import json,sys; d=json.load(sys.stdin); m=[a['state'] for a in d.get('assets',[]) if a['name']=='$name']; print(m[0] if m else 'MISSING')")
+            echo "  $name -> $state"
+            [ "$state" = "uploaded" ] || missing=1
+          done
+
+          if [ "$missing" = "1" ]; then
+            echo "::error::Release ${tag} is missing one or more expected assets. If the build jobs above are green anyway, this is almost certainly electron-builder's >2h-old-release publish guard (see docs/release-checklist.md) — don't re-run this workflow, bump to a new patch version and tag that instead."
+            exit 1
+          fi
+          echo "All expected assets are uploaded for ${tag}."
