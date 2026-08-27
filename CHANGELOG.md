@@ -7,6 +7,8 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+
+## [0.10.0] - 2026-08-27
 - Settings → General now ends with a Legal section: a plain no-warranty notice, and an "Open
   source licences" list covering every third-party package the app ships, each showing its
   version, licence, and full licence text where one could be found on disk
