@@ -160,6 +160,7 @@ notes-app/
     feature-tabs-spaces.md  tabs/panes, Spaces, space presets — build history and decisions
     feature-organise.md     pins/archive/bin, the theme/token system's build state
     feature-editor.md       format buttons, command registry, note links, entry colours, tables
+    feature-updates.md      the launch check, the update toast, and the macOS unsigned workaround
     product-rulings.md      decisions from the 2026-08-09 interview that the code has to honour
     onboarding-plan.md      the first-run onboarding plan — READ THE FLAGGED CONFLICT AT ITS TOP
     voice.md                the locked UI-copy voice rules
@@ -383,6 +384,9 @@ every session — see the table in **Folder structure** above for the full list.
 - Touching **organise (pins/archive/bin) or the theme/token system** → `docs/feature-organise.md`
 - Touching **format buttons, commands, links, entry colours, or tables** → `docs/feature-editor.md`
 - Touching **an importer** → `docs/importing-notes.md`
+- Touching **the updater, the update toast, or Settings → Updates** → `docs/feature-updates.md`.
+  Note the `MAC_UNSIGNED_WORKAROUND` tag: every block that exists only because the macOS build is
+  unsigned carries it, so the whole layer can be grepped out once the app is signed.
 - Touching **the wordmark generator** (`tools/wordmark/`) → `tools/wordmark/README.md`, which now
   also carries the implementation-level gotchas (routing, slice geometry, retrace) that used to be
   duplicated here
