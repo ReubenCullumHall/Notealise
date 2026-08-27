@@ -172,6 +172,21 @@ timestamp, so the guard never engages. Nobody has "downloaded a bad version" fro
 release — there was nothing to download for the missing platform — so this is exactly the safe,
 low-stakes case the "ship the fix as a higher version" rule above already covers.
 
+### The two build jobs used to race to CREATE the release — fixed, but know the symptom
+
+**Second failure mode, found the same day trying to fix the first one.** `v0.10.1` was a genuinely
+fresh tag — the 2-hour guard above can't have been the cause — and it still shipped with only
+*one* of the four expected assets. Cause: `build`'s Windows and macOS jobs both run
+`electron-builder --publish always` against the same tag, in parallel (that's what the matrix is
+for). If the release doesn't exist yet, **each job tries to create it**, and two parallel creates
+against the same tag is a race — only one asset survived.
+
+**Fixed by adding a `create-release` job that runs once, before the matrix, and creates the
+release if it's missing.** Both OS jobs now only ever *upload* to a release that's guaranteed to
+already exist, so there's nothing left to race over. If `verify-release` ever fails again on a
+tag that was created moments ago (ruling out the 2-hour guard), suspect this job didn't run, was
+skipped, or `build`'s `needs:` stopped pointing at it — not a new mystery.
+
 ---
 
 ## When a bad version ships
