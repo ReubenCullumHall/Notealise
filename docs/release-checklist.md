@@ -107,35 +107,23 @@ $env:NOTES_TEST_UPDATER = "1"; npm run dev
 reads `dev-app-update.yml` and talks to the live GitHub feed. To make it actually find something,
 temporarily lower `version` in `package.json`.
 
-### Gate 3 — beta
+### Gate 3 — beta *(removed 2026-08-29)*
 
-For putting a build in front of real people without risking everyone else.
+**There is no beta channel any more.** Reuben's call: testers get the same public download link
+as everyone else, so a separate opted-in channel was upkeep with no user. The "Receive test
+builds" toggle, the `betaChannel` pref, and `shouldFollowBeta` are gone from the app.
+
+What's left as a **safety net, not a supported flow:** CI still marks any tag containing `-`
+(`v1.1.0-rc.1`) as a GitHub *prerelease*, which GitHub keeps out of `releases/latest` and which
+stable installs ignore (`allowPrerelease` is `false` by default). So a stray `-` tag can't reach
+users — but there is no mechanism to deliberately get a build to a subset of people. If that need
+comes back, it's a new feature, not a revert.
+
+To dry-run the update *check* against the live feed without any of this:
 
 ```powershell
-# set "version" in package.json to 0.2.0-beta.1
-git commit -am "v0.2.0-beta.1: <what testers should hammer on>"
-git tag v0.2.0-beta.1
-git push; git push --tags
+$env:NOTES_TEST_UPDATER = "1"; npm run dev    # + temporarily lower "version" in package.json
 ```
-
-Any tag containing `-` is published as a **GitHub prerelease**, and CI names the channel from the
-tag's prerelease part (`-beta.1` → `beta`). Three consequences:
-
-1. `beta.yml` is published instead of `latest.yml`, so only installs on the beta channel see it.
-2. GitHub excludes prereleases from `releases/latest`, so **the download page keeps serving
-   stable** with no change needed.
-3. Stable installs have `allowPrerelease === false` and never look at it.
-
-**After the build, check the release carries `beta.yml` and NOT `latest.yml`.** A beta that ships
-`latest.yml` still works — electron-updater falls back to it — so this fails silently. It caught us
-once already: electron-builder does not infer the channel from the version for GitHub releases, and
-CI has to pass `--config.publish.channel` explicitly.
-
-**Making a tester:** they install a beta build once, *or* turn on **Settings → Updates → Receive
-test builds**. Both routes stick. Turning it off returns them to stable (that step down in version
-is why the code sets `allowDowngrade`).
-
-Iterate `-beta.2`, `-beta.3`… When it holds up, release the plain version.
 
 ---
 
@@ -158,7 +146,7 @@ uploading, and during that window `releases/latest` still points at the **previo
 Anyone downloading gets the old app.
 
 ```powershell
-$l = Invoke-RestMethod "https://api.github.com/repos/ReubenCullumHall/Notes-app/releases/latest" -Headers @{'User-Agent'='ps'}
+$l = Invoke-RestMethod "https://api.github.com/repos/ReubenCullumHall/Notealise/releases/latest" -Headers @{'User-Agent'='ps'}
 "latest = $($l.tag_name)"
 $l.assets | ForEach-Object { "{0} {1:N1} MB {2}" -f $_.name, ($_.size/1MB), $_.state }
 ```

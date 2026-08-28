@@ -9,7 +9,7 @@
 //     (userData/presets.json — outlives any vault by design), custom fonts the
 //     user imported (userData/fonts/custom/ — the file, not the choice), which
 //     catalogue fonts were downloaded (userData/fonts/downloaded/ — a re-fetchable
-//     cache), and the update channel (userData/config.json).
+//     cache), and whether updates install automatically (userData/config.json).
 //
 // The file is ordinary readable JSON. It carries a LIST of presets the same way
 // a .mdpreset does, so `fromPresetFile` validates them field by field for free.
@@ -52,7 +52,6 @@ export interface TransferFont {
 
 export interface TransferUpdatePrefs {
   autoUpdate: boolean
-  betaChannel: boolean
 }
 
 export interface TransferBundle {
@@ -109,7 +108,6 @@ export interface TransferInventory {
   customFonts: number
   downloadedFonts: number
   autoUpdate: boolean
-  betaChannel: boolean
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -154,7 +152,9 @@ function coerceIds(raw: unknown): string[] {
 
 function coerceUpdatePrefs(raw: unknown): TransferUpdatePrefs {
   const r = isRecord(raw) ? raw : {}
-  return { autoUpdate: r.autoUpdate === true, betaChannel: r.betaChannel === true }
+  // A bundle written by an older build may also carry `betaChannel`; it is
+  // ignored rather than rejected — the beta channel no longer exists.
+  return { autoUpdate: r.autoUpdate === true }
 }
 
 /**

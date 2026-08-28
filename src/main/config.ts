@@ -1,19 +1,13 @@
 import { app } from 'electron'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import {
-  DEFAULT_UPDATE_PREFS,
-  defaultBetaChannel,
-  normalizeUpdatePrefs,
-  type UpdatePrefs
-} from '../shared/update'
+import { DEFAULT_UPDATE_PREFS, normalizeUpdatePrefs, type UpdatePrefs } from '../shared/update'
 
 // App-level config lives in userData — NEVER inside the vault itself. In-vault
 // config belongs in <vault>/.mdnotes/. These qualify, for the same reason:
 // the app must know them *before* any vault is open.
 //   - vaultPath:   which vault to reopen
 //   - autoUpdate:  a property of this install, not of a folder of notes
-//   - betaChannel: likewise — this machine is a test machine, or it isn't
 //
 // The space-preset library belongs in userData for the same reason, but it has a
 // file of its own (`presets.json`, main/presets.ts) rather than a key here: it
@@ -23,7 +17,6 @@ const configPath = (): string => path.join(app.getPath('userData'), 'config.json
 interface AppConfig {
   vaultPath?: string
   autoUpdate?: boolean
-  betaChannel?: boolean
   /** Has this install ever finished the onboarding flow? App-level, not
    *  per-vault, like vaultPath — triggers once ever, not "no vault open". */
   hasOnboarded?: boolean
@@ -141,24 +134,14 @@ export async function freshOnboardingTestVault(): Promise<string> {
   return dir
 }
 
-/** Update preferences for this install (not for the open vault).
- *
- *  `betaChannel` defaults to *what kind of build this is*, not to a constant. A
- *  tester installing a fresh beta has no key in config.json, and the flat
- *  `false` default made that build read "stable" and immediately downgrade
- *  itself off the beta channel — the exact opposite of installing a beta. So an
- *  absent key means "follow this build's own type"; only an explicit key
- *  overrides. (The constant in shared/update.ts stays `false`: it is the safe
- *  answer for a stable build, and this version-aware default is main-process
- *  policy, since main is the only place `app.getVersion()` exists.) */
+/** Update preferences for this install (not for the open vault). */
 export async function getUpdatePrefs(): Promise<UpdatePrefs> {
   const cfg = await read()
   return normalizeUpdatePrefs({
-    autoUpdate: cfg.autoUpdate ?? DEFAULT_UPDATE_PREFS.autoUpdate,
-    betaChannel: cfg.betaChannel ?? defaultBetaChannel(app.getVersion())
+    autoUpdate: cfg.autoUpdate ?? DEFAULT_UPDATE_PREFS.autoUpdate
   })
 }
 
 export async function saveUpdatePrefs(prefs: UpdatePrefs): Promise<void> {
-  await update({ autoUpdate: prefs.autoUpdate, betaChannel: prefs.betaChannel })
+  await update({ autoUpdate: prefs.autoUpdate })
 }

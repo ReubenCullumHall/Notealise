@@ -86,11 +86,11 @@ function getText(url: string, timeoutMs = 15_000): Promise<string> {
  * whether to surface anything; a thrown error here would have to be swallowed
  * there anyway.
  */
-export async function checkMacUpdate(allowPrerelease: boolean): Promise<FeedRelease | null> {
+export async function checkMacUpdate(): Promise<FeedRelease | null> {
   try {
     const body = await getText(`${RELEASES_API}?per_page=20`)
     const feed = parseFeed(JSON.parse(body))
-    return pickRelease(feed, app.getVersion(), allowPrerelease)
+    return pickRelease(feed, app.getVersion())
   } catch {
     return null
   }

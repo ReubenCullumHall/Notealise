@@ -106,7 +106,7 @@ export interface VaultApi {
   // --- transfer data: the "lives only on this machine" bundle ---------------
   // See shared/transfer.ts. Everything visual already travels inside the vault
   // folder; this is the preset library + custom fonts + downloaded-font list +
-  // update channel, none of which do.
+  // the auto-update setting, none of which do.
   /** Write the bundle to a `.notealisedata` file the user picks. Returns the
    *  path and a count of what went in, or null if the save dialog was
    *  cancelled. */
@@ -114,7 +114,7 @@ export interface VaultApi {
   /** Read a bundle back in. Pass nothing and main opens a picker; pass the
    *  file's text (drag-and-drop) and it reads that. Presets and fonts ADD, never
    *  overwrite; downloaded catalogue fonts are re-fetched best-effort; the
-   *  update channel is only reported back, for the page's explicit "Apply". */
+   *  auto-update setting is only reported back, for the page's explicit "Apply". */
   importTransfer(text?: string): Promise<TransferImportResult>
   /** Live counts for the "on this machine now" panel. */
   transferInventory(): Promise<TransferInventory>
@@ -203,9 +203,6 @@ export interface VaultApi {
    *  whether an available update is DOWNLOADED and staged in the background —
    *  the check itself always runs, on every launch, on both platforms. */
   setAutoUpdate(on: boolean): Promise<UpdateStatus>
-  /** Opt in/out of prerelease (beta) builds; persisted in userData. Checks the
-   *  newly selected channel immediately. */
-  setBetaChannel(on: boolean): Promise<UpdateStatus>
   /** Open the GitHub releases page in the default browser. */
   openReleases(): void
   /** Does the OPEN vault already carry a `.mdnotes/settings.json` — i.e. has

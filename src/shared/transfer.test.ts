@@ -16,7 +16,7 @@ const wellFormed = {
     { displayName: 'My Face', originalName: 'my-face.woff2', ext: 'woff2', data: 'AAAA', addedAt: 1 }
   ],
   downloadedFontIds: ['ibm-plex-mono', 'ibm-plex-mono', ' spaced '],
-  updatePrefs: { autoUpdate: true, betaChannel: false }
+  updatePrefs: { autoUpdate: true }
 }
 
 describe('normalizeBundle', () => {
@@ -27,7 +27,7 @@ describe('normalizeBundle', () => {
     expect(b!.presets[0].name).toBe('Revision')
     expect(b!.customFonts).toHaveLength(1)
     expect(b!.customFonts[0].ext).toBe('woff2')
-    expect(b!.updatePrefs).toEqual({ autoUpdate: true, betaChannel: false })
+    expect(b!.updatePrefs).toEqual({ autoUpdate: true })
   })
 
   it('de-dupes and trims downloaded-font ids', () => {
@@ -78,10 +78,10 @@ describe('normalizeBundle', () => {
     ).not.toThrow()
   })
 
-  it('keeps a bundle that only carries update prefs', () => {
+  it('keeps a bundle that only carries update prefs, ignoring a stale betaChannel key', () => {
     const b = normalizeBundle({ updatePrefs: { autoUpdate: false, betaChannel: true } })
     expect(b).not.toBeNull()
-    expect(b!.updatePrefs).toEqual({ autoUpdate: false, betaChannel: true })
+    expect(b!.updatePrefs).toEqual({ autoUpdate: false })
     expect(b!.presets).toHaveLength(0)
   })
 })

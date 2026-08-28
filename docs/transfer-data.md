@@ -23,7 +23,7 @@ rather than of a folder of notes:
 | The saved-preset library | `userData/presets.json` | Its whole purpose is to **outlive** any one vault (see `main/presets.ts`'s header) |
 | Custom fonts (the files) | `userData/fonts/custom/` + `custom.json` | A font you imported from your own disk has no catalogue entry to re-fetch from |
 | Which catalogue fonts are downloaded | `userData/fonts/downloaded/*.woff2` | A re-fetchable cache, not content |
-| The update channel | `userData/config.json` (`autoUpdate`, `betaChannel`) | Per-vault would mean updates on for one folder, off for another |
+| The auto-update setting | `userData/config.json` (`autoUpdate`) | Per-vault would mean updates on for one folder, off for another |
 
 An app-cleaner (AppCleaner, AppZapper) that wipes `~/Library/Application Support/Notealise/`, a
 new machine, or a switch between Mac and Windows takes all four with it. The notes are never at
@@ -41,7 +41,7 @@ exactly what lives where is what narrowed this feature to those four rows.
   presets:          SharedPreset[]   // the library, PLUS the current vault's own spaces folded in
   customFonts:      TransferFont[]   // {displayName, originalName, ext, data(base64), addedAt}
   downloadedFontIds: string[]        // catalogue ids to re-fetch on the destination
-  updatePrefs:      {autoUpdate, betaChannel} | null }   // null = the file carried no opinion
+  updatePrefs:      {autoUpdate} | null }   // null = the file carried no opinion
 ```
 
 - **`presets` folds in the open vault's spaces** at export time — "include this vault's full look"

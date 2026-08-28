@@ -391,8 +391,10 @@ full before running it.** Short version: when Reuben says "push the latest updat
 heading, and tag. **Ask Reuben small-vs-big first** (patch `1.0.1` vs minor `1.1.0`) — see
 `notesapp-versioning-and-release-cadence` in memory; also: no version number in the in-app UI
 except the "it's in your Downloads folder" line; plain `vX.Y.Z` GitHub release titles. The
-checklist doc covers the beta channel, the rename/auto-update trap, macOS's limitation, and how
-to pull back a bad release — none of that is repeated here.
+checklist doc covers the rename/auto-update trap, macOS's limitation, and how to pull back a bad
+release — none of that is repeated here. **There is no beta channel** (removed 2026-08-29):
+testers use the same public link; a `-` tag is only a "keep it out of `releases/latest`" safety
+net now, not a way to reach a subset of people.
 
 **Concurrent sessions work in separate `git worktree`s** (`EnterWorktree`) — a shared working
 tree is how one session's `git commit` swept up another's unfinished work into `205d4c6`. Every

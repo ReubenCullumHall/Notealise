@@ -42,8 +42,7 @@ import {
   installNow,
   openReleasesPage,
   setAutoUpdate,
-  revealUpdate,
-  setBetaChannel
+  revealUpdate
 } from './updater'
 import { getUpdatePrefs } from './config'
 
@@ -246,7 +245,6 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.checkForUpdate, () => checkNow())
   ipcMain.handle(CH.downloadUpdate, () => downloadUpdate())
   ipcMain.handle(CH.setAutoUpdate, (_e, on: boolean) => setAutoUpdate(on))
-  ipcMain.handle(CH.setBetaChannel, (_e, on: boolean) => setBetaChannel(on))
   ipcMain.on(CH.installUpdate, () => installNow())
   ipcMain.handle(CH.revealUpdate, () => revealUpdate())
   ipcMain.on(CH.openReleases, () => void openReleasesPage())

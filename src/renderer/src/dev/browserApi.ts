@@ -258,8 +258,7 @@ const api: VaultApi = {
     presets: 0,
     customFonts: 0,
     downloadedFonts: 0,
-    autoUpdate: false,
-    betaChannel: false
+    autoUpdate: false
   }),
 
   // Real fetches, same CDN the Electron app hits — this is the one place a
@@ -427,7 +426,7 @@ const api: VaultApi = {
   getUpdateState: async () => ({
     version: 'browser-preview',
     status: { state: 'unsupported', reason: 'This is the browser preview — updates live in the app.' },
-    prefs: { autoUpdate: false, betaChannel: false },
+    prefs: { autoUpdate: false },
     // The preview is not macOS-pretending-to-be-unsigned; it simply has no
     // updater at all, and `unsupported` above already says so. True keeps the
     // Windows shape, so the preview shows the toggle rather than silently
@@ -439,7 +438,6 @@ const api: VaultApi = {
   installUpdate: () => {},
   revealUpdate: async () => {},
   setAutoUpdate: async () => ({ state: 'unsupported', reason: 'Browser preview' }),
-  setBetaChannel: async () => ({ state: 'unsupported', reason: 'Browser preview' }),
   openReleases: () => {},
   sendBugReport: async () => false,
   sendFeatureRequest: async () => false,

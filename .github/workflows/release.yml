@@ -4,12 +4,14 @@ name: Release
 # GitHub Release. macOS is required to produce the .dmg — it can't be built on
 # Windows, which is why the build runs on a matrix of runners.
 #
-# Two kinds of tag:
-#   v0.2.0         -> a normal release. Becomes `releases/latest`, publishes
+#   v1.0.1         -> a normal release. Becomes `releases/latest`, publishes
 #                     `latest.yml`, and every installed app updates to it.
-#   v0.2.0-beta.1  -> a PRERELEASE. Publishes `beta.yml`, is excluded from
-#                     `releases/latest` by GitHub, and only reaches installs that
-#                     opted into test builds. See docs/release-checklist.md.
+#   v1.0.1-rc.1    -> a PRERELEASE. GitHub keeps it out of `releases/latest` and
+#                     stable installs ignore it. There is no beta CHANNEL any
+#                     more (removed 2026-08-29 — see docs/release-checklist.md);
+#                     the `-` handling below stays only so a stray dash-tag can
+#                     never reach users, not as a supported "ship to testers"
+#                     route.
 on:
   push:
     tags:

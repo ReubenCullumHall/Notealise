@@ -28,7 +28,7 @@ import {
 // in the bundle and why the list is so short: nearly everything visual already
 // travels inside the vault folder, so this is only the handful of things that
 // live in userData -- the preset library, custom fonts, the downloaded-font
-// cache, and the update channel.
+// cache, and whether updates install automatically.
 //
 // Rule 6 still holds -- this reads/writes files, so it lives in main. The
 // renderer's page (settings/TransferData.tsx) only ever calls the three IPC
@@ -75,7 +75,7 @@ async function buildBundle(): Promise<TransferBundle> {
     presets,
     customFonts,
     downloadedFontIds,
-    updatePrefs: { autoUpdate: prefs.autoUpdate, betaChannel: prefs.betaChannel }
+    updatePrefs: { autoUpdate: prefs.autoUpdate }
   }
 }
 
@@ -126,9 +126,9 @@ function blank(extra: Partial<TransferImportResult>): TransferImportResult {
  *
  * Presets and custom fonts ADD, never overwrite. Downloaded catalogue fonts are
  * re-fetched best-effort -- a space's font *choice* travelled inside the vault,
- * this just restocks the file so it renders. The update channel is NOT applied:
- * a single toggle cannot be "added as a copy", so it comes back in the result
- * for the page to offer an explicit Apply.
+ * this just restocks the file so it renders. The auto-update setting is NOT
+ * applied: a single toggle cannot be "added as a copy", so it comes back in the
+ * result for the page to offer an explicit Apply.
  */
 export async function importTransfer(
   win: BrowserWindow,
@@ -200,7 +200,6 @@ export async function transferInventory(): Promise<TransferInventory> {
     presets: presets.length,
     customFonts,
     downloadedFonts: downloadedIds.length,
-    autoUpdate: prefs.autoUpdate,
-    betaChannel: prefs.betaChannel
+    autoUpdate: prefs.autoUpdate
   }
 }

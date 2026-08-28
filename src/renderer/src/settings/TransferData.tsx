@@ -24,8 +24,7 @@ const ZERO: TransferInventory = {
   presets: 0,
   customFonts: 0,
   downloadedFonts: 0,
-  autoUpdate: false,
-  betaChannel: false
+  autoUpdate: false
 }
 
 type Notice =
@@ -39,10 +38,10 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
   const [busy, setBusy] = useState<'export' | 'import' | null>(null)
   const [notice, setNotice] = useState<Notice>(null)
   const [dropping, setDropping] = useState(false)
-  // The update channel the imported file carried, offered as an explicit apply —
-  // a single toggle can't be "added as a copy" the way a preset can, so import
-  // never changes it silently. Cleared once applied or dismissed.
-  const [pendingChannel, setPendingChannel] = useState<{ autoUpdate: boolean; betaChannel: boolean } | null>(null)
+  // The auto-update setting the imported file carried, offered as an explicit
+  // apply — a single toggle can't be "added as a copy" the way a preset can, so
+  // import never changes it silently. Cleared once applied or dismissed.
+  const [pendingChannel, setPendingChannel] = useState<{ autoUpdate: boolean } | null>(null)
   const [channelApplied, setChannelApplied] = useState(false)
 
   const refresh = useCallback(async () => {
@@ -104,7 +103,6 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
     if (!pendingChannel) return
     try {
       await window.api.setAutoUpdate(pendingChannel.autoUpdate)
-      await window.api.setBetaChannel(pendingChannel.betaChannel)
       setChannelApplied(true)
       void refresh()
     } catch (e) {
@@ -131,7 +129,7 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
           <li>· Your saved space presets — kept in the app so they outlast any one vault</li>
           <li>· Fonts you added yourself from a file on your machine</li>
           <li>· Which catalogue fonts have been downloaded</li>
-          <li>· The update channel (automatic updates, and test builds)</li>
+          <li>· Whether new versions install automatically</li>
         </ul>
         <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">
           Clear this app&rsquo;s data with a cleanup tool, or move to another computer, and these
@@ -145,7 +143,7 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
         <span>{inv.presets} {inv.presets === 1 ? 'preset' : 'presets'}</span>
         <span>{inv.customFonts} custom {inv.customFonts === 1 ? 'font' : 'fonts'}</span>
         <span>{inv.downloadedFonts} downloaded {inv.downloadedFonts === 1 ? 'font' : 'fonts'}</span>
-        <span>Updates: {inv.betaChannel ? 'test builds' : 'stable'}{inv.autoUpdate ? ', automatic' : ''}</span>
+        <span>Updates: {inv.autoUpdate ? 'automatic' : 'manual'}</span>
       </div>
 
       <h3 className="mt-7 font-display text-[15px] font-semibold text-ink-900">
@@ -223,18 +221,15 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
           {notice.kind === 'imported' &&
             !notice.result.invalid &&
             pendingChannel &&
-            // Show while the file's channel differs from this machine's — and
+            // Show while the file's setting differs from this machine's — and
             // keep showing once applied, so the "Applied" state doesn't vanish
             // the instant the refreshed inventory matches.
-            (channelApplied ||
-              pendingChannel.autoUpdate !== inv.autoUpdate ||
-              pendingChannel.betaChannel !== inv.betaChannel) && (
+            (channelApplied || pendingChannel.autoUpdate !== inv.autoUpdate) && (
               <div className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-ink-300/15 pt-2.5">
                 <span className="flex-1 text-[11.5px] text-ink-500">
                   That file&rsquo;s update setting:{' '}
                   <span className="font-medium text-ink-700">
-                    {pendingChannel.betaChannel ? 'test builds' : 'stable'}
-                    {pendingChannel.autoUpdate ? ', automatic' : ''}
+                    {pendingChannel.autoUpdate ? 'automatic' : 'manual'}
                   </span>
                   . It hasn&rsquo;t been applied.
                 </span>

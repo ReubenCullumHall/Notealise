@@ -50,59 +50,23 @@ export interface FeedRelease {
  *  alongside the vault path — the exception CLAUDE.md rule 2 already carves out. */
 export interface UpdatePrefs {
   autoUpdate: boolean
-  /** Receive prerelease (`x.y.z-beta.n`) builds. Off for everyone by default —
-   *  this is how a tester is opted in without affecting real users, who keep
-   *  reading `latest.yml` and never see a beta at all. */
-  betaChannel: boolean
 }
 
-export const DEFAULT_UPDATE_PREFS: UpdatePrefs = { autoUpdate: true, betaChannel: false }
+export const DEFAULT_UPDATE_PREFS: UpdatePrefs = { autoUpdate: true }
 
-/** Coerce arbitrary parsed JSON into valid prefs. Never throws. */
+/** Coerce arbitrary parsed JSON into valid prefs. Never throws. An unknown key
+ *  (e.g. `betaChannel` from a config written by an older build) is ignored, not
+ *  rejected. */
 export function normalizeUpdatePrefs(raw: unknown): UpdatePrefs {
   const v = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
   return {
     autoUpdate:
-      typeof v.autoUpdate === 'boolean' ? v.autoUpdate : DEFAULT_UPDATE_PREFS.autoUpdate,
-    betaChannel:
-      typeof v.betaChannel === 'boolean' ? v.betaChannel : DEFAULT_UPDATE_PREFS.betaChannel
+      typeof v.autoUpdate === 'boolean' ? v.autoUpdate : DEFAULT_UPDATE_PREFS.autoUpdate
   }
 }
 
-/** The prerelease channel name. Must match the tag suffix used when releasing
- *  (`v0.2.0-beta.1`), because electron-builder derives the channel file name
- *  (`beta.yml`) from the version's prerelease component. */
-export const BETA_CHANNEL = 'beta'
-
-/** True when this build is itself a prerelease (`0.2.0-beta.1`). */
-export const isPrereleaseVersion = (version: string): boolean => version.includes('-')
-
-/**
- * Whether an install should actually follow the beta channel.
- *
- * **Beta is honoured only on a build that is itself a prerelease.** An ordinary
- * download therefore has no route onto test builds — not via the UI, not via a
- * crafted IPC call, and not by hand-editing `betaChannel: true` into
- * `config.json`. The only way in is installing a beta build, which comes from us.
- *
- * Kept here, pure and tested, because it is the rule that decides who receives
- * unfinished software. `main/updater.ts` enforces it; the Settings toggle merely
- * reflects it.
- */
-export function shouldFollowBeta(pref: boolean, version: string): boolean {
-  return pref && isPrereleaseVersion(version)
-}
-
-/** What `betaChannel` means when `config.json` doesn't mention it: follow this
- *  build's own type. A fresh beta install has no key, and defaulting it to a
- *  flat `false` made that build read as stable and immediately downgrade itself
- *  off the channel it was installed for. */
-export function defaultBetaChannel(version: string): boolean {
-  return isPrereleaseVersion(version)
-}
-
 /** Where a user goes when the app can't update itself (macOS, or a hard error). */
-export const RELEASES_URL = 'https://github.com/ReubenCullumHall/Notes-app/releases/latest'
+export const RELEASES_URL = 'https://github.com/ReubenCullumHall/Notealise/releases/latest'
 
 /** MAC_UNSIGNED_WORKAROUND
  *
@@ -127,7 +91,7 @@ export const MAC_INSTALL_GUIDE_URL = 'https://notealise.com/install/mac.html'
  *  Windows already fetches through `latest.yml`, asked for a different way
  *  because there is no `latest-mac.yml` to read (electron-builder writes one
  *  only for signed mac builds; see docs/release-checklist.md's known gaps). */
-export const RELEASES_API = 'https://api.github.com/repos/ReubenCullumHall/Notes-app/releases'
+export const RELEASES_API = 'https://api.github.com/repos/ReubenCullumHall/Notealise/releases'
 
 // --- version comparison -----------------------------------------------------
 // Written here rather than pulled in: `semver` would be a new dependency for
@@ -199,20 +163,15 @@ export const isNewerVersion = (candidate: string, current: string): boolean =>
  *
  * Deliberately strict about two things. A release with **no .dmg asset** is
  * skipped rather than offered: telling a Mac user to download something that
- * isn't there is worse than saying nothing. And a prerelease is only ever
- * considered when `allowPrerelease` is true, which `shouldFollowBeta` already
- * gates on this build being a prerelease itself — so an ordinary install has no
- * route onto test builds here either, matching the Windows rule rather than
- * quietly inventing a second, looser one.
+ * isn't there is worse than saying nothing. And a **prerelease is never
+ * offered** — if a `vX.Y.Z-rc.1` tag is ever published, a stable install must
+ * not be pulled onto it.
  */
 export function pickRelease(
   releases: FeedRelease[],
-  currentVersion: string,
-  allowPrerelease: boolean
+  currentVersion: string
 ): FeedRelease | null {
-  const usable = releases.filter(
-    (r) => r.dmgUrl !== null && (allowPrerelease || !r.prerelease)
-  )
+  const usable = releases.filter((r) => r.dmgUrl !== null && !r.prerelease)
   let best: FeedRelease | null = null
   for (const r of usable) {
     if (!isNewerVersion(r.version, currentVersion)) continue

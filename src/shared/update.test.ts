@@ -3,8 +3,6 @@ import {
   compareVersions,
   isNewerVersion,
   pickRelease,
-  shouldFollowBeta,
-  defaultBetaChannel,
   normalizeUpdatePrefs,
   parseFeed,
   isAllowedReleaseUrl,
@@ -75,55 +73,45 @@ describe('pickRelease', () => {
   const current = '0.9.0'
 
   it('returns null when nothing on the feed is newer', () => {
-    expect(pickRelease([rel('0.9.0'), rel('0.8.0')], current, false)).toBeNull()
+    expect(pickRelease([rel('0.9.0'), rel('0.8.0')], current)).toBeNull()
   })
 
   it('returns the newest usable release, not merely the first', () => {
     // GitHub returns newest-first, but that is its ordering, not a guarantee we
     // should build on — so the feed is deliberately handed over out of order.
-    const got = pickRelease([rel('0.9.1'), rel('0.10.0'), rel('0.9.5')], current, false)
+    const got = pickRelease([rel('0.9.1'), rel('0.10.0'), rel('0.9.5')], current)
     expect(got?.version).toBe('0.10.0')
   })
 
   it('skips a release with no .dmg asset', () => {
     // A Windows-only release, or one whose mac job failed. Offering it would
     // send someone to a download that does not exist.
-    const got = pickRelease([rel('0.9.1', false, false), rel('0.9.0')], current, false)
+    const got = pickRelease([rel('0.9.1', false, false), rel('0.9.0')], current)
     expect(got).toBeNull()
   })
 
-  it('ignores prereleases unless they are allowed', () => {
+  it('never offers a prerelease, even when it is the newest tag', () => {
+    // The beta channel is gone, but a stray `vX.Y.Z-rc.1` tag must still not
+    // pull a stable install onto it.
     const feed = [rel('1.0.0-beta.1', true), rel('0.9.1')]
-    expect(pickRelease(feed, current, false)?.version).toBe('0.9.1')
-    expect(pickRelease(feed, current, true)?.version).toBe('1.0.0-beta.1')
-  })
-
-  it('does not offer a stable user the beta of the version they already run', () => {
-    expect(pickRelease([rel('0.9.0-beta.2', true)], current, true)).toBeNull()
+    expect(pickRelease(feed, current)?.version).toBe('0.9.1')
+    expect(pickRelease([rel('1.0.0-beta.1', true)], current)).toBeNull()
   })
 
   it('handles an empty feed', () => {
-    expect(pickRelease([], current, false)).toBeNull()
+    expect(pickRelease([], current)).toBeNull()
   })
 })
 
-describe('the beta rules these lean on', () => {
-  it('only honours beta on a build that is itself a prerelease', () => {
-    expect(shouldFollowBeta(true, '0.9.0')).toBe(false)
-    expect(shouldFollowBeta(true, '0.9.0-beta.1')).toBe(true)
-    expect(shouldFollowBeta(false, '0.9.0-beta.1')).toBe(false)
-  })
-
-  it('defaults the channel to the build type when config.json is silent', () => {
-    expect(defaultBetaChannel('0.9.0')).toBe(false)
-    expect(defaultBetaChannel('0.9.0-beta.1')).toBe(true)
-  })
-
+describe('normalizeUpdatePrefs', () => {
   it('normalises junk prefs without throwing', () => {
-    expect(normalizeUpdatePrefs(null)).toEqual({ autoUpdate: true, betaChannel: false })
-    expect(normalizeUpdatePrefs({ autoUpdate: 'yes' })).toEqual({
-      autoUpdate: true,
-      betaChannel: false
+    expect(normalizeUpdatePrefs(null)).toEqual({ autoUpdate: true })
+    expect(normalizeUpdatePrefs({ autoUpdate: 'yes' })).toEqual({ autoUpdate: true })
+  })
+
+  it('ignores a stale betaChannel key from an older config', () => {
+    expect(normalizeUpdatePrefs({ autoUpdate: false, betaChannel: true })).toEqual({
+      autoUpdate: false
     })
   })
 })
@@ -147,8 +135,8 @@ describe('parseFeed, against a real GitHub payload', () => {
   })
 
   it('offers 0.8.0 to someone on 0.7.1, and nothing to someone on 0.9.0', () => {
-    expect(pickRelease(feed, '0.7.1', false)?.version).toBe('0.8.0')
-    expect(pickRelease(feed, '0.9.0', false)).toBeNull()
+    expect(pickRelease(feed, '0.7.1')?.version).toBe('0.8.0')
+    expect(pickRelease(feed, '0.9.0')).toBeNull()
   })
 
   it('accepts the real asset host and refuses anything else', () => {
@@ -161,7 +149,7 @@ describe('parseFeed, against a real GitHub payload', () => {
 
   it('drops a draft release, which only the repo owner can see', () => {
     const withDraft = [{ ...realFeed[0], tag_name: 'v9.9.9', draft: true }, ...realFeed]
-    expect(pickRelease(parseFeed(withDraft), '0.8.0', false)).toBeNull()
+    expect(pickRelease(parseFeed(withDraft), '0.8.0')).toBeNull()
   })
 
   it('survives junk in the feed without throwing', () => {

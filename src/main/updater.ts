@@ -4,14 +4,7 @@ import path from 'node:path'
 import electronUpdater from 'electron-updater'
 import { CH } from '../shared/channels'
 import { getUpdatePrefs, saveUpdatePrefs } from './config'
-import {
-  BETA_CHANNEL,
-  RELEASES_URL,
-  isNewerVersion,
-  shouldFollowBeta,
-  type FeedRelease,
-  type UpdateStatus
-} from '../shared/update'
+import { RELEASES_URL, isNewerVersion, type FeedRelease, type UpdateStatus } from '../shared/update'
 import { checkMacUpdate, downloadMacDmg } from './macUpdate'
 
 // The only file that imports electron-updater. It reads the `latest.yml` that
@@ -97,6 +90,12 @@ function wire(): void {
 
   const au = updater()
   au.autoInstallOnAppQuit = true
+  au.channel = 'latest'
+  // `allowDowngrade` is what makes the rollback in docs/release-checklist.md
+  // work: when a bad release is demoted to prerelease, `releases/latest` falls
+  // back and installs move *down* onto the last good version. Was previously a
+  // side effect of setting `au.channel` in the now-removed beta-channel code.
+  au.allowDowngrade = true
   au.logger = null
   // `&& !app.isPackaged` matters: in a packaged build this would send
   // electron-updater looking for dev-app-update.yml *inside the asar*, where it
@@ -120,21 +119,6 @@ function wire(): void {
   )
   au.on('update-downloaded', (info) => setStatus({ state: 'ready', version: info.version }))
   au.on('error', (err) => setStatus({ state: 'error', message: err?.message ?? String(err) }))
-}
-
-/** Point the updater at the stable or the beta feed.
- *
- *  Setting `channel` also sets `allowDowngrade = true`. That is wanted in both
- *  directions: leaving beta means stepping 0.2.0-beta.2 → 0.2.0, which is a
- *  downgrade in semver terms and would otherwise strand the tester; and on
- *  stable it is what makes the rollback in docs/release-checklist.md work — when
- *  a bad release is demoted, `releases/latest` falls back and installs move
- *  *down* onto the last good version. */
-function applyChannel(pref: boolean): void {
-  const beta = shouldFollowBeta(pref, app.getVersion())
-  const au = updater()
-  au.channel = beta ? BETA_CHANNEL : 'latest'
-  au.allowPrerelease = beta
 }
 
 /** True when this build should use the manual macOS flow: read the feed, fetch
@@ -185,8 +169,7 @@ async function checkMac(): Promise<UpdateStatus> {
   if (macDownload) return status
   const readyBefore = status.state === 'ready' ? status : null
   if (!readyBefore) setStatus({ state: 'checking', manual: true })
-  const { betaChannel } = await getUpdatePrefs()
-  const found = await checkMacUpdate(shouldFollowBeta(betaChannel, app.getVersion()))
+  const found = await checkMacUpdate()
   if (macDownload) return status
   // Re-read NOW, not just what was captured before the network round trip —
   // a download that started AFTER this check began could have finished
@@ -298,8 +281,7 @@ export async function initUpdater(): Promise<void> {
     return
   }
   wire()
-  const { autoUpdate, betaChannel } = await getUpdatePrefs()
-  applyChannel(betaChannel)
+  const { autoUpdate } = await getUpdatePrefs()
   updater().autoDownload = autoUpdate
 
   // Delayed so a check never competes with first paint, then every 6 hours for
@@ -376,29 +358,6 @@ export async function setAutoUpdate(on: boolean): Promise<UpdateStatus> {
     wire()
     updater().autoDownload = on
     if (on) void checkNow()
-  }
-  return status
-}
-
-/** Opt this install in or out of prerelease builds. Checks immediately, because
- *  the whole point is to see the other channel's version straight away.
- *
- *  Turning it ON is refused on a stable build. Settings hides the control there,
- *  but the renderer is not a trust boundary — the rule is enforced here, so
- *  neither a crafted IPC call nor a hand-edited config.json opts a stranger into
- *  test builds. Turning it OFF is always allowed, or a tester would be stuck. */
-export async function setBetaChannel(on: boolean): Promise<UpdateStatus> {
-  const next = shouldFollowBeta(on, app.getVersion())
-  const prefs = await getUpdatePrefs()
-  await saveUpdatePrefs({ ...prefs, betaChannel: next })
-  if (isMac()) {
-    void checkMac()
-    return status
-  }
-  if (!unsupportedReason()) {
-    wire()
-    applyChannel(next)
-    void checkNow()
   }
   return status
 }

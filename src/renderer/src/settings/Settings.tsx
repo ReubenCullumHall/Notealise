@@ -13,11 +13,7 @@ import { TransferData } from './TransferData'
 import { Recovery } from './Recovery'
 import { ImportPanel } from '../import/ImportPanel'
 import { DATE_FORMATS, NUMBER_FORMATS, formatDate, localZone, timezones } from '../intl'
-import {
-  isPrereleaseVersion,
-  MAC_INSTALL_GUIDE_URL,
-  type UpdateStatus
-} from '../../../shared/update'
+import { MAC_INSTALL_GUIDE_URL, type UpdateStatus } from '../../../shared/update'
 import type { PresetActions } from './Presets'
 import type { SpacePreset } from '../../../shared/presets'
 import type { RecoveryItem } from '../../../shared/workspace'
@@ -165,9 +161,8 @@ const SEARCH_INDEX: SearchEntry[] = [
   { section: 'sourceFolder', label: 'Source folder', hint: 'Where your vault lives on disk, and switching to a different one.', keywords: 'vault folder location switch change move disk path' },
   { section: 'recovery', label: 'Recovery', hint: 'A 7-day safety net for anything deleted — restore or purge it.', keywords: 'trash bin recycle bin deleted restore undo delete recover backup' },
   { section: 'import', label: 'Import', hint: 'Bring notes in from Notion, Word, Google Keep, Apple Notes, HTML or Markdown.', keywords: 'notion word docx google keep apple notes html markdown migrate transfer evernote onenote obsidian' },
-  { section: 'transferData', label: 'Transfer data', hint: 'Move your presets, custom fonts and update channel to another computer.', keywords: 'transfer move migrate new mac new computer switch backup restore export import presets custom fonts update channel app cleaner lost settings preferences device windows mac' },
+  { section: 'transferData', label: 'Transfer data', hint: 'Move your presets, custom fonts and update setting to another computer.', keywords: 'transfer move migrate new mac new computer switch backup restore export import presets custom fonts app cleaner lost settings preferences device windows mac' },
   { section: 'updates', label: 'Install updates automatically', hint: 'Downloads new versions quietly and applies them when you quit. Windows only — a Mac cannot replace a running app.', keywords: 'auto update background version download install' },
-  { section: 'updates', label: 'Receive test builds', hint: 'Early versions, for helping test.', keywords: 'beta channel early access prerelease test build' },
   { section: 'updates', label: 'Check for updates', hint: 'Manually check for a new version.', keywords: 'check version update manual refresh' },
   { section: 'reportBug', label: 'Report a bug', hint: 'Email us about something that went wrong.', keywords: 'bug crash issue problem broken feedback support email contact' },
   { section: 'requestFeature', label: 'Request a feature', hint: 'Email us an idea for something new.', keywords: 'feature request suggest idea feedback contact' }
@@ -897,7 +892,6 @@ function UpdatesSection(): React.JSX.Element {
   const [version, setVersion] = useState('')
   const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' })
   const [autoUpdate, setAuto] = useState(true)
-  const [beta, setBeta] = useState(false)
   /** false on the unsigned macOS build. Read from main rather than inferred
    *  from `status.manual`, which does not exist until a check has run — and
    *  this decides whether a control is rendered at all. */
@@ -909,7 +903,6 @@ function UpdatesSection(): React.JSX.Element {
       setVersion(s.version)
       setStatus(s.status)
       setAuto(s.prefs.autoUpdate)
-      setBeta(s.prefs.betaChannel)
       setSelfInstall(s.selfInstall)
     })()
     return window.api.onUpdateStatus(setStatus)
@@ -917,7 +910,6 @@ function UpdatesSection(): React.JSX.Element {
 
   const blocked = status.state === 'unsupported'
   const busy = status.state === 'checking' || status.state === 'downloading'
-  const isBeta = isPrereleaseVersion(version)
 
   // macOS reaches every state below EXCEPT that it can never apply anything —
   // Squirrel.Mac refuses an unsigned update. So the words change, not the
@@ -958,15 +950,13 @@ function UpdatesSection(): React.JSX.Element {
       <h3>Updates</h3>
       <p className="hint">
         {version
-          ? isBeta
-            ? "You're on a test build — thanks for helping try things early."
-            : selfInstall
-              ? "You're all set."
-              : // MAC_UNSIGNED_WORKAROUND — with the toggle gone (below), this
-                // line is the only thing left saying the app is looking at all.
-                // Without it the macOS page reads as inert: a heading, a
-                // version, and a button, with nothing to say checking happens.
-                'Notealise checks for a new version each time it opens, and tells you when there is one.'
+          ? selfInstall
+            ? "You're all set."
+            : // MAC_UNSIGNED_WORKAROUND — with the toggle gone (below), this
+              // line is the only thing left saying the app is looking at all.
+              // Without it the macOS page reads as inert: a heading, a
+              // version, and a button, with nothing to say checking happens.
+              'Notealise checks for a new version each time it opens, and tells you when there is one.'
           : 'Checking for updates…'}
       </p>
 
@@ -994,32 +984,6 @@ function UpdatesSection(): React.JSX.Element {
               {blocked
                 ? 'Not available on this build'
                 : 'Downloads new versions quietly and applies them when you quit. Either way, Notealise checks for one each time it opens and tells you.'}
-            </span>
-          </button>
-        </div>
-      )}
-
-      {/* Only a build that is ALREADY a test build offers this, so an ordinary
-          download has no route onto the beta channel. It's kept here (rather
-          than removed) so a tester can turn it off and come back to stable.
-          Main enforces the same rule — this is presentation, not the gate. */}
-      {isBeta && (
-        <div className="mode-row">
-          <button
-            className={'mode-btn' + (beta && !blocked ? ' on' : '')}
-            aria-pressed={beta && !blocked}
-            disabled={blocked}
-            onClick={() => {
-              const next = !beta
-              setBeta(next)
-              void window.api.setBetaChannel(next)
-            }}
-          >
-            <span className="t">Receive test builds</span>
-            <span className="s">
-              {blocked
-                ? 'Not available on this build'
-                : 'Early versions, for helping test. They can be rough — turn this off to go back to the stable release.'}
             </span>
           </button>
         </div>

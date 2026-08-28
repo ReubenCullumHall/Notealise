@@ -38,9 +38,9 @@ export const CH = {
    *  drag-and-drop passes the file's text, already read in the renderer */
   importPresets: 'presets:import',
   /** Settings → Transfer data. The whole "lives only on this machine" bundle
-   *  (preset library + custom fonts + downloaded-font ids + update channel) —
-   *  write it to a file, read one back, or just count what's on this machine
-   *  now. See shared/transfer.ts and main/transfer.ts. */
+   *  (preset library + custom fonts + downloaded-font ids + the auto-update
+   *  setting) — write it to a file, read one back, or just count what's on this
+   *  machine now. See shared/transfer.ts and main/transfer.ts. */
   exportTransfer: 'transfer:export',
   importTransfer: 'transfer:import',
   transferInventory: 'transfer:inventory',
@@ -68,7 +68,6 @@ export const CH = {
   downloadUpdate: 'update:download',
   installUpdate: 'update:install',
   setAutoUpdate: 'update:setAuto',
-  setBetaChannel: 'update:setBeta',
   openReleases: 'update:openReleases',
   /** macOS only: show the downloaded .dmg in Finder (it cannot self-install) */
   revealUpdate: 'update:reveal',
