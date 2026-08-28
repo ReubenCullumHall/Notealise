@@ -1595,16 +1595,25 @@ export default function App(): React.JSX.Element {
    *  used to be a plain empty landing, and before that, a "Three things worth
    *  knowing" screen (Walkthrough, cut 2026-08-20) whose links (Tutorials,
    *  Report a bug, Request a feature) now live in that note's own text. */
-  const finishOnboarding = async (importNotePath: string | null): Promise<void> => {
+  const finishOnboarding = async (
+    importNotePath: string | null,
+    opts?: { established?: boolean }
+  ): Promise<void> => {
     const homeSpaceFolder = settingsRef.current.activeSpaceFolder
     let welcomeNotePath: string | null = null
-    try {
-      welcomeNotePath = await seedWelcomeNotes(homeSpaceFolder)
-      await loadTree()
-    } catch (e) {
-      // A first-run nicety, not a load-bearing feature — a failure here must
-      // not strand the user mid-onboarding with no way into their own app.
-      flash(`Couldn't set up the welcome notes: ${(e as Error).message}`)
+    // `established` means the Vault step recognised an existing setup and skipped
+    // the rest of the flow — there is a real vault behind this overlay already,
+    // with its own notes, so seeding the curated welcome notes on top would be
+    // litter.
+    if (!opts?.established) {
+      try {
+        welcomeNotePath = await seedWelcomeNotes(homeSpaceFolder)
+        await loadTree()
+      } catch (e) {
+        // A first-run nicety, not a load-bearing feature — a failure here must
+        // not strand the user mid-onboarding with no way into their own app.
+        flash(`Couldn't set up the welcome notes: ${(e as Error).message}`)
+      }
     }
     await window.api.setOnboarded(true)
     await window.api.setOnboardingStep(null)
@@ -2335,7 +2344,7 @@ export default function App(): React.JSX.Element {
           onOpenSpace={(folder) => openSpaceRef.current(folder)}
           onPickNoteFont={pickOnboardingFont}
           onPickAccent={pickOnboardingAccent}
-          onFinished={(path) => finishOnboarding(path)}
+          onFinished={(path, opts) => finishOnboarding(path, opts)}
           onDismissed={() => {
             setHasOnboarded(true)
             hasOnboardedRef.current = true // same eager update as the boot effect's
@@ -2379,6 +2388,7 @@ export default function App(): React.JSX.Element {
         update={update}
         onRestoreRecovery={restoreRecovery}
         onPurgeRecovery={purgeRecovery}
+        onTransferChanged={() => void loadPresets()}
         actions={{
           onOpen: (p, newTab) => void openNote(p, newTab),
           onContext: openMenu,

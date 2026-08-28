@@ -78,6 +78,9 @@ interface Props {
   /** the 7-day recovery safety net (Settings-only) — see shared/workspace.ts */
   onRestoreRecovery: (ids: string[]) => void
   onPurgeRecovery: (ids?: string[]) => void
+  /** run after a Settings → Transfer data import, so App re-reads the preset
+   *  library (which that import changed outside App's knowledge) */
+  onTransferChanged?: () => void
   /** Handed a function that opens one folder and closes the rest. An imperative
    *  handle, the same idiom as the editor's `editorRef`: the path bar lives in
    *  App and the tree state lives here, and passing the state up instead would
@@ -236,6 +239,7 @@ export function Sidebar({
   update,
   onRestoreRecovery,
   onPurgeRecovery,
+  onTransferChanged,
   revealRef,
   actions
 }: Props): React.JSX.Element {
@@ -886,6 +890,7 @@ export function Sidebar({
             onRestoreRecovery={onRestoreRecovery}
             onPurgeRecovery={onPurgeRecovery}
             onRevealHeld={actions.onRevealHeld}
+            onTransferChanged={onTransferChanged}
             jumpToSection={settingsJumpToSection}
             onJumpHandled={onSettingsJumpHandled}
           />

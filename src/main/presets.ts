@@ -15,6 +15,7 @@ import {
   toPresetFile,
   type PresetDraft,
   type PresetImportResult,
+  type SharedPreset,
   type SpacePreset
 } from '../shared/presets'
 
@@ -246,6 +247,50 @@ export function importPresets(win: BrowserWindow, text?: string): Promise<Preset
     }
     if (added) await write(list)
     return { added, found: incoming.length, presets: sortPresets(list) }
+  })
+}
+
+/**
+ * Merge shared presets from a **transfer bundle** into the library (see
+ * main/transfer.ts). Standalone from `importPresets` on purpose — it can't call
+ * it (both take the same write `queue`, and a queued call inside a queued
+ * callback deadlocks), and it wants a slightly different rule.
+ *
+ * ADD-ONLY like `importPresets`, but with an identical-look no-op: a bundle
+ * folds in the exporting machine's own vault spaces, and if the other device
+ * points at the same synced folder those spaces are already in its library
+ * verbatim — re-adding them as "Revision (2)" would be noise, not safety. A
+ * name clash with a *different* look is still suffixed, never overwritten. (A
+ * person hand-importing one `.mdpreset` via the Presets page still gets the
+ * duplicate row — that path is a deliberate choice they made, this one is a
+ * side effect of a device move.)
+ */
+export function mergeSharedPresets(
+  incoming: SharedPreset[]
+): Promise<{ added: number; found: number; full: boolean }> {
+  return queue(async () => {
+    const list = await listPresets()
+    const at = Date.now()
+    let added = 0
+    let full = false
+    for (const p of incoming) {
+      const key = lookKey(p.look)
+      if (list.some((e) => e.name === p.name && lookKey(e.look) === key)) continue // already here
+      if (list.length >= PRESET_CAP) {
+        full = true // a look that WOULD have been added had no room
+        break
+      }
+      list.push({
+        id: randomUUID(),
+        name: freeName(p.name, list),
+        origin: IMPORTED_ORIGIN,
+        savedAt: at,
+        look: p.look
+      })
+      added++
+    }
+    if (added) await write(list)
+    return { added, found: incoming.length, full }
   })
 }
 

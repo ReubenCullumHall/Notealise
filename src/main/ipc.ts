@@ -6,8 +6,10 @@ import {
   getOnboardingStep,
   saveVault,
   setHasOnboarded,
-  setOnboardingStep
+  setOnboardingStep,
+  vaultLooksEstablished
 } from './config'
+import { exportTransfer, importTransfer, transferInventory } from './transfer'
 import { ensureMdnotes } from './mdnotes'
 import { getSettings, readThemeCacheSync, setSettings } from './settings'
 import {
@@ -255,6 +257,13 @@ export function registerIpc(window: BrowserWindow): void {
     sendFeatureRequest(fromEmail, message)
   )
   ipcMain.handle(CH.openExternal, (_e, url: string) => openAllowedExternal(url))
+  ipcMain.handle(CH.exportTransfer, () => exportTransfer(window))
+  ipcMain.handle(CH.importTransfer, (_e, text?: string) => importTransfer(window, text))
+  ipcMain.handle(CH.transferInventory, () => transferInventory())
+  ipcMain.handle(CH.vaultEstablished, () => {
+    const root = getVaultRoot()
+    return root ? vaultLooksEstablished(root) : false
+  })
   ipcMain.handle(CH.getOnboarded, () => getHasOnboarded())
   ipcMain.handle(CH.setOnboarded, (_e, value: boolean) => setHasOnboarded(value))
   ipcMain.handle(CH.getOnboardingStep, () => getOnboardingStep())

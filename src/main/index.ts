@@ -1,7 +1,13 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import path from 'node:path'
 import { CH } from '../shared/channels'
-import { getSavedVault } from './config'
+import {
+  getHasOnboarded,
+  getOnboardingStep,
+  getSavedVault,
+  setHasOnboarded,
+  vaultLooksEstablished
+} from './config'
 import { activateVault, registerIpc } from './ipc'
 import { installMenu } from './menu'
 import { initUpdater } from './updater'
@@ -35,12 +41,37 @@ function createWindow(): BrowserWindow {
 
 app.whenReady().then(async () => {
   installMenu()
+
+  const saved = await getSavedVault()
+
+  // Self-heal the onboarding flag — BEFORE the window exists, so the renderer's
+  // first `getOnboarded()` already sees the healed value. If this machine's
+  // config still points at a vault but has lost the `hasOnboarded` mark (an old
+  // install predating onboarding, or userData partially cleared), and that vault
+  // visibly has a prior setup in it, treat the flow as done rather than dropping
+  // the user into it on top of their real notes. The renderer's Vault step
+  // handles the harder case — config gone entirely, folder re-picked by hand.
+  //
+  // `!onboardingStep` matters: a genuine first run that quit part-way (after
+  // Spaces, say) has ALREADY written `.mdnotes/settings.json`, so it "looks
+  // established" too — but it left a resume step behind, and healing here would
+  // strand it before Write / Fonts / the welcome notes. An absent step means
+  // the flow either never started or finished, and only the latter leaves a
+  // set-up vault.
+  if (
+    saved &&
+    !(await getHasOnboarded()) &&
+    !(await getOnboardingStep()) &&
+    (await vaultLooksEstablished(saved))
+  ) {
+    await setHasOnboarded(true)
+  }
+
   const win = createWindow()
   registerIpc(win)
 
   // Open straight into the saved vault if it still exists; otherwise the
   // renderer shows the folder picker (getVault() returns null).
-  const saved = await getSavedVault()
   if (saved) activateVault(saved)
 
   // Parks in `unsupported` in dev and on macOS; never throws, never blocks boot.

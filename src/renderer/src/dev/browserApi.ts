@@ -242,6 +242,25 @@ const api: VaultApi = {
   deletePreset: async () => [],
   exportPresets: async () => null,
   importPresets: async () => ({ added: 0, found: 0, cancelled: true, presets: [] }),
+  exportTransfer: async () => null,
+  importTransfer: async () => ({
+    cancelled: true,
+    presetsAdded: 0,
+    presetsFound: 0,
+    presetsLibraryFull: false,
+    customFontsAdded: 0,
+    customFontsFound: 0,
+    downloadedFontsFetched: 0,
+    downloadedFontsFailed: 0,
+    updatePrefs: null
+  }),
+  transferInventory: async () => ({
+    presets: 0,
+    customFonts: 0,
+    downloadedFonts: 0,
+    autoUpdate: false,
+    betaChannel: false
+  }),
 
   // Real fetches, same CDN the Electron app hits — this is the one place a
   // fake window.api reaches the network, and it mirrors production rather
@@ -427,6 +446,7 @@ const api: VaultApi = {
   openExternal: async () => false, // no shell access outside Electron
   // Browser preview has no real folder picker or importer, so onboarding
   // (which needs both) is never worth showing here — always "already done".
+  vaultEstablished: async () => false,
   getOnboarded: async () => true,
   setOnboarded: async () => {},
   getOnboardingStep: async () => null,

@@ -16,9 +16,15 @@ export interface StepReadyState {
   ready: boolean
   /** run when Continue is clicked, before advancing (e.g. Write saves the note) */
   commit?: () => void | Promise<void>
-  /** overrides "Continue" — only Fonts uses this now, for "Start writing" on
-   *  what's become the last step since Walkthrough was cut (2026-08-20) */
+  /** overrides "Continue" — Fonts uses it for "Start writing" (the last step
+   *  since Walkthrough was cut, 2026-08-20); Vault uses it for "Pick up where
+   *  you left off" when it recognises an already-set-up folder */
   continueLabel?: string
+  /** Vault step only: the picked folder already has a Notealise setup in it, so
+   *  Continue ends the flow here instead of walking through Import → Spaces →
+   *  Write → Disk-proof → Fonts. `onFinished` is told not to seed welcome notes
+   *  over the top of the folder's real ones. */
+  skipToFinish?: boolean
 }
 
 export interface OnboardingStepProps {
@@ -57,7 +63,10 @@ interface Props {
    *  fully on screen; `importNotePath` is set only when a real import ran
    *  this session, and opens the "how this import is organised" note
    *  instead of the welcome note every other first run opens on. */
-  onFinished: (importNotePath: string | null) => Promise<void>
+  onFinished: (
+    importNotePath: string | null,
+    opts?: { established?: boolean }
+  ) => Promise<void>
   /** Called after onFinished resolves AND the closing fade has played —
    *  THIS is what App.tsx uses to flip `hasOnboarded` and unmount Onboarding.
    *  Split from onFinished so the real app underneath is already showing its
@@ -140,6 +149,13 @@ export function Onboarding({
   // going Back into Import and skipping instead: re-importing overwrites it
   // via ImportStep's own onImported call, same "last write wins" as notePath.
   const [importNotePath, setImportNotePath] = useState<string | null>(null)
+  // Has the flow gone past the Vault step at any point this session? Once it
+  // has, a folder that "looks set up" is that progress talking (the Spaces step
+  // wrote settings.json), not a prior completed setup — so the Vault step's
+  // "pick up where you left off" short-circuit is withdrawn. A ref, not state:
+  // it only needs to be right by the time `goTo` re-renders VaultStep, which it
+  // always does (the step subtree is keyed on `animKey`).
+  const advancedPastVault = useRef(stepIndex(initialStep) > stepIndex('vault'))
 
   const idx = stepIndex(step)
 
@@ -157,6 +173,7 @@ export function Onboarding({
     navLock.current = true // held across the exit animation, released by swap
 
     const swap = (): void => {
+      if (stepIndex(id) > stepIndex('vault')) advancedPastVault.current = true
       setStep(id)
       setAnimKey((k) => k + 1)
       setReady({ ready: false })
@@ -181,6 +198,10 @@ export function Onboarding({
     // EXIT_MS gap goTo opens (where `ready` still belongs to the step we're
     // leaving, so a re-run would commit it twice).
     if (!ready.ready || navLock.current) return
+    // Captured before commit/goTo can touch `ready`: the Vault step sets this
+    // when the folder it was handed already has a Notealise setup, and it means
+    // "end the flow here" no matter which step we're on.
+    const finishNow = ready.skipToFinish === true
     navLock.current = true
     setBusy(true)
     try {
@@ -193,21 +214,24 @@ export function Onboarding({
       navLock.current = false
       setBusy(false)
     }
-    const next = nextStep(step)
+    const next = finishNow ? null : nextStep(step)
     if (next) {
       goTo(next)
       return
     }
-    // Last step. Do the real finishing work (seed the welcome notes, open
-    // one) while onboarding is STILL fully visible — the app shell
-    // underneath updates invisibly behind this overlay, so by the time the
-    // dismiss fade below reveals it, it's already showing the finished
-    // state rather than a blank pane that then pops. onDismissed (not
-    // onFinished) is what actually unmounts this component.
+    // Last step (or the Vault step recognised an existing setup). Do the real
+    // finishing work (seed the welcome notes, open one) while onboarding is
+    // STILL fully visible — the app shell underneath updates invisibly behind
+    // this overlay, so by the time the dismiss fade below reveals it, it's
+    // already showing the finished state rather than a blank pane that then
+    // pops. onDismissed (not onFinished) is what actually unmounts this
+    // component. When `finishNow`, there's a real vault behind the overlay
+    // already — pass `established` so onFinished doesn't seed welcome notes
+    // over the top of the folder's own.
     navLock.current = true
     setBusy(true)
     try {
-      await onFinished(importNotePath)
+      await onFinished(finishNow ? null : importNotePath, finishNow ? { established: true } : undefined)
     } finally {
       navLock.current = false
       setBusy(false)
@@ -266,7 +290,19 @@ export function Onboarding({
             }
           >
             {step === 'welcome' && <WelcomeStep {...stepProps} theme={theme} />}
-            {step === 'vault' && <VaultStep {...stepProps} vault={vault} onPickVault={onPickVault} />}
+            {step === 'vault' && (
+              <VaultStep
+                {...stepProps}
+                vault={vault}
+                onPickVault={onPickVault}
+                // Only a run that hasn't gone past Vault gets the "you've set
+                // this folder up before" short-circuit. Once it has (resumed
+                // from a later step, or advanced and stepped Back), a folder
+                // that looks established is this session's own Spaces step
+                // writing settings.json, not a prior completed setup.
+                recogniseExistingSetup={!advancedPastVault.current}
+              />
+            )}
             {step === 'import' && (
               <ImportStep {...stepProps} onOpenSpace={onOpenSpace} onImported={setImportNotePath} />
             )}

@@ -8,6 +8,11 @@ import type { LinkRow } from './links'
 import type { UpdatePrefs, UpdateStatus } from './update'
 import type { ImportFormat, ImportPreview, ImportProgress, ImportResult } from './notesImport'
 import type { DownloadFontResult, ImportCustomFontResult, InstalledFont } from './fonts'
+import type {
+  TransferExportSummary,
+  TransferImportResult,
+  TransferInventory
+} from './transfer'
 
 /** A node in the vault file tree. `path` is always vault-relative, POSIX-style
  *  ("/" separators), and "" denotes the vault root. */
@@ -98,6 +103,22 @@ export interface VaultApi {
    *  ADDS — an imported look never overwrites one of yours. */
   importPresets(text?: string): Promise<PresetImportResult>
 
+  // --- transfer data: the "lives only on this machine" bundle ---------------
+  // See shared/transfer.ts. Everything visual already travels inside the vault
+  // folder; this is the preset library + custom fonts + downloaded-font list +
+  // update channel, none of which do.
+  /** Write the bundle to a `.notealisedata` file the user picks. Returns the
+   *  path and a count of what went in, or null if the save dialog was
+   *  cancelled. */
+  exportTransfer(): Promise<{ path: string; summary: TransferExportSummary } | null>
+  /** Read a bundle back in. Pass nothing and main opens a picker; pass the
+   *  file's text (drag-and-drop) and it reads that. Presets and fonts ADD, never
+   *  overwrite; downloaded catalogue fonts are re-fetched best-effort; the
+   *  update channel is only reported back, for the page's explicit "Apply". */
+  importTransfer(text?: string): Promise<TransferImportResult>
+  /** Live counts for the "on this machine now" panel. */
+  transferInventory(): Promise<TransferInventory>
+
   // --- fonts: downloaded or user-imported on THIS install (userData/fonts/) -
   // Bundled fonts (Inter/OpenDyslexic/JetBrains Mono/Fraunces) need none of
   // this — they're already real @font-face rules in theme.css. This is only
@@ -187,6 +208,11 @@ export interface VaultApi {
   setBetaChannel(on: boolean): Promise<UpdateStatus>
   /** Open the GitHub releases page in the default browser. */
   openReleases(): void
+  /** Does the OPEN vault already carry a `.mdnotes/settings.json` — i.e. has
+   *  this folder been set up with the app before? The onboarding Vault step
+   *  asks this so a returning user whose machine was wiped (app-cleaner, new
+   *  Mac) can skip straight past the flow instead of being walked through it. */
+  vaultEstablished(): Promise<boolean>
   /** Has this install ever finished the onboarding flow? App-level, like
    *  vaultPath — not "is a vault currently open". */
   getOnboarded(): Promise<boolean>

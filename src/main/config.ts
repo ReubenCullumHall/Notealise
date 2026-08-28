@@ -82,6 +82,30 @@ export async function getHasOnboarded(): Promise<boolean> {
   return (await read()).hasOnboarded === true
 }
 
+/** Has `root` been set up with the app before — does it carry the appearance
+ *  file the app writes on first real use?
+ *
+ *  `.mdnotes/settings.json` specifically, NOT just the `.mdnotes/` directory:
+ *  `ensureMdnotes` makes the empty folder the instant any vault is activated
+ *  (onboarding's own Vault step included), so the folder alone proves nothing.
+ *  `settings.json` is only written once `setSettings` has run — which for a
+ *  genuine first run doesn't happen until the flow is underway — so its
+ *  presence means this folder has a real prior setup in it.
+ *
+ *  This is the durable "have we onboarded" signal that `hasOnboarded` in
+ *  userData is not: it travels INSIDE the vault (rule 2), so an app-cleaner
+ *  wiping this machine's config, or a move to a new machine, can't take it
+ *  with them. `config.ts` is the right home for it — like `getSavedVault`, it
+ *  is a question the app must answer before any vault module is wired up. */
+export async function vaultLooksEstablished(root: string): Promise<boolean> {
+  try {
+    const st = await fs.stat(path.join(root, '.mdnotes', 'settings.json'))
+    return st.isFile()
+  } catch {
+    return false
+  }
+}
+
 /** Set or clear the flag. Clearing it is the dev "replay onboarding" hook
  *  (Settings → General → Developer) — go through different first-run setups
  *  without reinstalling or hand-editing config.json. */

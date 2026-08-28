@@ -37,6 +37,13 @@ export const CH = {
   /** read one back in: the button passes nothing and main opens a picker; a
    *  drag-and-drop passes the file's text, already read in the renderer */
   importPresets: 'presets:import',
+  /** Settings → Transfer data. The whole "lives only on this machine" bundle
+   *  (preset library + custom fonts + downloaded-font ids + update channel) —
+   *  write it to a file, read one back, or just count what's on this machine
+   *  now. See shared/transfer.ts and main/transfer.ts. */
+  exportTransfer: 'transfer:export',
+  importTransfer: 'transfer:import',
+  transferInventory: 'transfer:inventory',
   /** renderer -> main: fonts downloaded or imported on THIS install
    *  (userData/fonts/) — see shared/fonts.ts and main/fonts.ts */
   listInstalledFonts: 'fonts:listInstalled',
@@ -66,6 +73,11 @@ export const CH = {
   /** macOS only: show the downloaded .dmg in Finder (it cannot self-install) */
   revealUpdate: 'update:reveal',
   getAppVersion: 'app:version',
+  /** renderer -> main: does the OPEN vault already have a .mdnotes/settings.json?
+   *  i.e. has this folder been set up with the app before — the signal the
+   *  onboarding Vault step uses to offer "pick up where you left off" when this
+   *  machine's own record was wiped. */
+  vaultEstablished: 'app:vaultEstablished',
   /** renderer -> main: has this install ever finished onboarding? */
   getOnboarded: 'app:getOnboarded',
   /** renderer -> main: mark onboarding finished for good */

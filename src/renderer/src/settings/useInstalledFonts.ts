@@ -22,6 +22,9 @@ export interface FontLibrary {
   download: (id: string) => Promise<void>
   importCustom: () => Promise<void>
   remove: (id: string) => Promise<void>
+  /** Re-read the whole installed list from main — for when something OTHER
+   *  than this hook's own actions changed it, e.g. a Transfer data import. */
+  reload: () => Promise<void>
 }
 
 export function useInstalledFonts(): FontLibrary {
@@ -79,5 +82,11 @@ export function useInstalledFonts(): FontLibrary {
     setInstalled((list) => list.filter((f) => f.id !== id))
   }, [])
 
-  return { installed, downloading, importing, errors, download, importCustom, remove }
+  const reload = useCallback(async () => {
+    const list = await window.api.listInstalledFonts()
+    setInstalled(list)
+    for (const f of list) void loadInstalledFont(f)
+  }, [])
+
+  return { installed, downloading, importing, errors, download, importCustom, remove, reload }
 }

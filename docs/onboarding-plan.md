@@ -15,11 +15,20 @@
 > | "Start writing" ends the flow on Disk proof | **Ends on Fonts** ("Start writing" is that screen's Continue label) — Walkthrough (the closing screen with three bullet points) was cut entirely 2026-08-20 | Its content is now the seeded welcome notes themselves (below), which a screen of prose was always a weaker version of. Finishing now plays a whole-overlay dismiss/hand-off fade (`onboarding-dismiss`, 320ms) so the app shell is already showing its finished state — welcome note open, sidebar populated — by the time the fade reveals it, rather than fading to blank then popping |
 > | Standard 260ms slide between steps | A **crossfade** (`onboarding-fade-in`/`-out`, direction-agnostic) | Simplified 2026-08-21 at Reuben's explicit request after trying the slide live — "no slide" |
 >
-> **Now built, previously outstanding:** the five curated welcome notes ARE seeded automatically on
+> **Now built, previously outstanding:** the curated welcome notes ARE seeded automatically on
 > finish (`onboarding/welcomeNotes.ts`) — only when nothing was imported; an import opens the
 > imported note instead and skips seeding. **Resuming at the exact step** after a quit is built
 > (`onboardingStep` in `userData/config.json`, validated against the current `STEPS` array on boot
 > so a removed step id like the old `'walkthrough'` falls back to `'welcome'` safely).
+>
+> **Onboarding self-heal (BUILT 2026-08-28, NOT live-verified — see `docs/transfer-data.md`):** the
+> `hasOnboarded` flag in `userData/config.json` is no longer the only trigger. If that file is lost
+> (an app-cleaner, a new machine, a partial wipe) the durable signal is
+> `<vault>/.mdnotes/settings.json` — `main/config.ts`'s `vaultLooksEstablished`. Boot heals a lost
+> flag (guarded on `!onboardingStep` so a genuine quit-after-Spaces run still resumes); the Vault
+> step offers **"Pick up where you left off"** when the picked folder is already set up (guarded on
+> `advancedPastVault` so it only fires on a fresh run). A sixth welcome note, "Used Notealise
+> before?", points people at Settings → Transfer data.
 >
 > **Still outstanding from the spec:** the **per-format organise popup** (one generic message is
 > used for every import format, not the per-source table in Step 2 below).

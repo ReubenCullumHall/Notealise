@@ -9,6 +9,7 @@ import { Customisation } from './Customisation'
 import { Tutorials } from './tutorials'
 import { OssLicenses } from './OssLicenses'
 import { SourceFolder } from './SourceFolder'
+import { TransferData } from './TransferData'
 import { Recovery } from './Recovery'
 import { ImportPanel } from '../import/ImportPanel'
 import { DATE_FORMATS, NUMBER_FORMATS, formatDate, localZone, timezones } from '../intl'
@@ -45,6 +46,10 @@ type ShellProps = Props & {
   onPurgeRecovery: (ids?: string[]) => void
   /** held file path, and the note it came out of (null if it wasn't in one) */
   onRevealHeld: (path: string, note: string | null) => void
+  /** run after a Transfer data import — App re-reads the preset library, which
+   *  that import changed behind its back (fonts are refreshed here, since the
+   *  font library is created in SettingsWindow, not App) */
+  onTransferChanged?: () => void
 }
 
 export type SectionId =
@@ -52,10 +57,11 @@ export type SectionId =
   | 'customisation'
   | 'spaces'
   | 'collection'
+  | 'tutorials'
   | 'sourceFolder'
   | 'recovery'
   | 'import'
-  | 'tutorials'
+  | 'transferData'
   | 'updates'
   | 'reportBug'
   | 'requestFeature'
@@ -83,10 +89,16 @@ const SECTIONS: { id: SectionId; label: string; icon: IconName }[] = [
   { id: 'customisation', label: 'Customisation', icon: 'sun' },
   { id: 'spaces', label: 'Spaces', icon: 'spaces' },
   { id: 'collection', label: 'Your collection', icon: 'library' },
+  { id: 'tutorials', label: 'Tutorials', icon: 'book' },
   { id: 'sourceFolder', label: 'Source folder', icon: 'folder' },
   { id: 'recovery', label: 'Recovery', icon: 'restore' },
+  // Import → Transfer data → Updates as one run: getting set up and staying
+  // current. Bring your notes in, bring the app's own settings across from
+  // another machine, then keep the app itself up to date. Transfer data sits
+  // with Import because that's the mental slot it lands in, not with Source
+  // folder.
   { id: 'import', label: 'Import', icon: 'import' },
-  { id: 'tutorials', label: 'Tutorials', icon: 'book' },
+  { id: 'transferData', label: 'Transfer data', icon: 'export' },
   { id: 'updates', label: 'Updates', icon: 'restore' },
   { id: 'reportBug', label: 'Report a bug', icon: 'flag' },
   { id: 'requestFeature', label: 'Request a feature', icon: 'star' }
@@ -149,10 +161,11 @@ const SEARCH_INDEX: SearchEntry[] = [
   { section: 'spaces', label: 'Representational emoji', hint: 'Shown on the switcher and the tab above, so you can tell spaces apart.', keywords: 'emoji icon space icon avatar' },
   { section: 'spaces', label: 'Saved presets', hint: 'Reusable looks you can apply to any space.', keywords: 'preset template save look apply' },
   { section: 'collection', label: 'Your collection', hint: 'Browse, download and import fonts.', keywords: 'fonts browse download library install' },
+  { section: 'tutorials', label: 'Tutorials', hint: 'Guides for using the app, including linking your notes.', keywords: 'help guide how to learn walkthrough' },
   { section: 'sourceFolder', label: 'Source folder', hint: 'Where your vault lives on disk, and switching to a different one.', keywords: 'vault folder location switch change move disk path' },
   { section: 'recovery', label: 'Recovery', hint: 'A 7-day safety net for anything deleted — restore or purge it.', keywords: 'trash bin recycle bin deleted restore undo delete recover backup' },
   { section: 'import', label: 'Import', hint: 'Bring notes in from Notion, Word, Google Keep, Apple Notes, HTML or Markdown.', keywords: 'notion word docx google keep apple notes html markdown migrate transfer evernote onenote obsidian' },
-  { section: 'tutorials', label: 'Tutorials', hint: 'Guides for using the app, including linking your notes.', keywords: 'help guide how to learn walkthrough' },
+  { section: 'transferData', label: 'Transfer data', hint: 'Move your presets, custom fonts and update channel to another computer.', keywords: 'transfer move migrate new mac new computer switch backup restore export import presets custom fonts update channel app cleaner lost settings preferences device windows mac' },
   { section: 'updates', label: 'Install updates automatically', hint: 'Downloads new versions quietly and applies them when you quit. Windows only — a Mac cannot replace a running app.', keywords: 'auto update background version download install' },
   { section: 'updates', label: 'Receive test builds', hint: 'Early versions, for helping test.', keywords: 'beta channel early access prerelease test build' },
   { section: 'updates', label: 'Check for updates', hint: 'Manually check for a new version.', keywords: 'check version update manual refresh' },
@@ -278,6 +291,7 @@ export function SettingsButton({
   onRestoreRecovery,
   onPurgeRecovery,
   onRevealHeld,
+  onTransferChanged,
   jumpToSection,
   onJumpHandled
 }: ShellProps & {
@@ -432,6 +446,7 @@ export function SettingsButton({
               onRestoreRecovery={onRestoreRecovery}
               onPurgeRecovery={onPurgeRecovery}
               onRevealHeld={onRevealHeld}
+              onTransferChanged={onTransferChanged}
               initialSection={initialSection}
               onClose={close}
               armed={armed}
@@ -463,6 +478,7 @@ function SettingsWindow({
   onRestoreRecovery,
   onPurgeRecovery,
   onRevealHeld,
+  onTransferChanged,
   initialSection,
   onClose,
   armed,
@@ -624,6 +640,14 @@ function SettingsWindow({
             />
           )}
           {section === 'sourceFolder' && <SourceFolder vault={vault} onPickVault={onPickVault} />}
+          {section === 'transferData' && (
+            <TransferData
+              onImported={() => {
+                onTransferChanged?.()
+                void fontLibrary.reload()
+              }}
+            />
+          )}
           {section === 'recovery' && (
             <Recovery
               items={recovery}
@@ -633,7 +657,26 @@ function SettingsWindow({
             />
           )}
           {section === 'import' && (
-            <ImportPanel onOpenSpace={spaceActions.onOpenSpace} onClose={onClose} variant="settings" />
+            <>
+              <button
+                type="button"
+                onClick={() => setSection('transferData')}
+                className="btn-edge flex w-full items-center gap-2.5 rounded-xl border border-ink-300/30 bg-brand-500/6 px-3.5 py-2.5 text-left outline-none transition duration-200 hover:border-brand-300 focus-visible:ring-4 focus-visible:ring-brand-100"
+              >
+                <Icon name="export" className="h-4 w-4 shrink-0 text-brand-500" />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12.5px] font-medium text-ink-700">
+                    Moving your setup from another computer?
+                  </span>
+                  <span className="block text-[11.5px] leading-relaxed text-ink-400">
+                    Presets, custom fonts and the update channel move separately from your notes —
+                    manage that in Transfer data.
+                  </span>
+                </span>
+                <Icon name="chevron" className="h-4 w-4 shrink-0 text-ink-300" />
+              </button>
+              <ImportPanel onOpenSpace={spaceActions.onOpenSpace} onClose={onClose} variant="settings" />
+            </>
           )}
           {section === 'tutorials' && <Tutorials />}
           {section === 'spaces' && (

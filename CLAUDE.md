@@ -163,13 +163,18 @@ notes-app/
     feature-updates.md      the launch check, the update toast, and the macOS unsigned workaround
     product-rulings.md      decisions from the 2026-08-09 interview that the code has to honour
     onboarding-plan.md      the first-run onboarding plan — READ THE FLAGGED CONFLICT AT ITS TOP
+    transfer-data.md        Settings → Transfer data: moving the preset library / custom fonts /
+                            update channel between machines, + the onboarding self-heal. UNVERIFIED
     voice.md                the locked UI-copy voice rules
     appearance-research-brief.md
   .github/workflows/        verify.yml (every push) + release.yml (v* tags; verify gates packaging)
   src/
     main/                   MAIN PROCESS — the only code allowed to touch fs
       index.ts              app lifecycle + BrowserWindow (contextIsolation on, nodeIntegration off)
-      config.ts             vault path + autoUpdate in userData/config.json (never inside the vault)
+      config.ts             vault path + autoUpdate + hasOnboarded in userData/config.json (never
+                            inside the vault); vaultLooksEstablished = the onboarding self-heal signal
+      transfer.ts           Settings → Transfer data: export/import the userData-only bundle
+                            (presets + custom fonts + downloaded-font ids + update channel). UNVERIFIED
       updater.ts            the ONLY importer of electron-updater; dev + macOS guards, status push
       vault.ts              path boundary + all fs ops (list/read/atomic-write/create/rename/bin)
       workspace.ts          .mdnotes/workspace.json: order/pins/archive/bin (debounced, atomic)
@@ -206,6 +211,7 @@ notes-app/
                             entry's CDN url) + InstalledFont/CustomFont — main needs this to know
                             what to fetch, the renderer to render every picker (docs/feature-tabs-spaces.md)
       update.ts             UpdateStatus / UpdatePrefs contract + normalise
+      transfer.ts           the Transfer data bundle contract + normalizeBundle (docs/transfer-data.md)
       channels.ts           IPC channel names
     renderer/
       index.html            renderer entry
@@ -391,6 +397,9 @@ every session — see the table in **Folder structure** above for the full list.
   also carries the implementation-level gotchas (routing, slice geometry, retrace) that used to be
   duplicated here
 - Planning **onboarding** → `docs/onboarding-plan.md` — read the flagged conflict at its top first
+- Touching **Settings → Transfer data, `*/transfer.ts`, or the onboarding self-heal**
+  (`vaultLooksEstablished`) → `docs/transfer-data.md`. **Built 2026-08-28, NOT live-verified** —
+  no CHANGELOG line until Reuben's own check; see the tester-checklist memory.
 - A **product decision that isn't in the code** → `docs/product-rulings.md`
 - **UI copy** → `docs/voice.md`
 

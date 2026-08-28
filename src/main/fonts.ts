@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { DOWNLOADABLE_FONTS, findFont, type CustomFont, type InstalledFont } from '../shared/fonts'
+import type { TransferFont } from '../shared/transfer'
 
 // Fonts downloaded from the catalogue's CDN, or imported from the user's own
 // machine — see shared/fonts.ts for why these are the only two kinds that
@@ -224,5 +225,109 @@ export function removeCustomFont(id: string): Promise<void> {
     const file = await findCustomFile(id)
     if (file) await fs.unlink(file).catch(() => {})
     await writeManifest(next)
+  })
+}
+
+// --- transfer data: read these out for a bundle, and write them back in ------
+// See shared/transfer.ts. Downloaded catalogue fonts travel as bare ids (the
+// destination re-fetches them with `downloadFont`); custom fonts have no
+// catalogue entry to re-fetch from, so their bytes travel inline.
+
+/** Catalogue ids whose woff2 is currently cached on this machine — the file's
+ *  presence IS the "installed" answer (see the header), so this is just the
+ *  directory listing with the extension stripped. */
+export async function listDownloadedFontIds(): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(downloadedDir())
+    return entries
+      .filter((e) => e.toLowerCase().endsWith('.woff2'))
+      .map((e) => e.replace(/\.woff2$/i, ''))
+  } catch {
+    return []
+  }
+}
+
+/** How many custom fonts are really installed — manifest entry AND file both
+ *  present. For the Transfer data inventory line, without reading every font's
+ *  bytes the way `listInstalledFonts` does. */
+export async function countCustomFonts(): Promise<number> {
+  const manifest = await readManifest()
+  let n = 0
+  for (const c of manifest) if (await findCustomFile(c.id)) n++
+  return n
+}
+
+/** Every custom (user-imported) font, base64'd for a transfer bundle. Skips a
+ *  manifest entry whose file has gone missing, the same way `listInstalledFonts`
+ *  does — a broken row must not fail the whole export. */
+export async function readCustomFontsForTransfer(): Promise<TransferFont[]> {
+  const manifest = await readManifest()
+  const out: TransferFont[] = []
+  for (const c of manifest) {
+    const p = await findCustomFile(c.id)
+    if (!p) continue
+    const ext = path.extname(p).slice(1).toLowerCase()
+    if (!CUSTOM_EXTENSIONS.includes(ext as CustomExt)) continue
+    try {
+      const buf = await fs.readFile(p)
+      out.push({
+        displayName: c.displayName,
+        originalName: c.originalName,
+        ext: ext as CustomExt,
+        data: buf.toString('base64'),
+        addedAt: c.addedAt
+      })
+    } catch {
+      /* listed but unreadable — skip, as elsewhere in this module */
+    }
+  }
+  return out
+}
+
+/** Install a custom font that arrived in a transfer bundle. Add-only, the same
+ *  rule preset import follows: an incoming font whose original filename AND byte
+ *  length both match one already on disk is the same font re-imported, and is
+ *  skipped (`skipped: true`); anything else is written under a fresh id so a
+ *  genuine second font of the same name is never silently replaced. */
+export function installCustomFontData(font: TransferFont): Promise<
+  { ok: true; font: InstalledFont } | { ok: false; skipped: true } | { ok: false; error: string }
+> {
+  return queue(async () => {
+    if (!CUSTOM_EXTENSIONS.includes(font.ext as CustomExt)) {
+      return { ok: false, error: 'Unsupported font type.' }
+    }
+    const buf = Buffer.from(font.data, 'base64')
+    if (buf.length === 0) return { ok: false, error: 'Font data was empty.' }
+
+    const manifest = await readManifest()
+    for (const c of manifest) {
+      if (c.originalName !== font.originalName) continue
+      const p = await findCustomFile(c.id)
+      if (!p) continue
+      const st = await fs.stat(p).catch(() => null)
+      if (st && st.size === buf.length) return { ok: false, skipped: true }
+    }
+
+    const id = randomUUID()
+    await fs.mkdir(customDir(), { recursive: true })
+    await fs.writeFile(path.join(customDir(), `${id}.${font.ext}`), buf)
+    const entry: CustomFont = {
+      id,
+      displayName: font.displayName,
+      originalName: font.originalName,
+      addedAt: font.addedAt || Date.now()
+    }
+    manifest.push(entry)
+    await writeManifest(manifest)
+    return {
+      ok: true,
+      font: {
+        id,
+        source: 'custom',
+        family: entry.displayName,
+        fallback: extFallback(font.ext),
+        base64: buf.toString('base64')
+      }
+    }
   })
 }

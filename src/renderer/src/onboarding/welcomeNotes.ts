@@ -23,6 +23,7 @@ Everything in this space right now is a real, ordinary file — this note, the t
 - [[How this app is organised]]
 - [[Make it yours]]
 - [[Things you can delete]]
+- [[Used Notealise before?]]
 
 A few places worth knowing about, whenever you want them — all in Settings:
 
@@ -45,6 +46,17 @@ The font and colour you picked a moment ago aren't fixed — every space can hav
 Settings → Customisation changes the whole app at once. Settings → Spaces changes just one.
 `
 
+const USED_BEFORE = `# Used Notealise before?
+
+If you've run Notealise on another computer — or on this one before a reinstall — most of your setup is already here. Theme, colours, fonts, spaces and arranging all live inside your notes folder, so they came across with it.
+
+A few things don't travel with the folder: your saved space presets, any fonts you added from a file, and the update channel. Those live with the app on each computer.
+
+To bring them over, open the other computer's copy, go to Settings → Transfer data, and save a transfer file. Move it here however you like, then open it from the same page. This works between Mac and Windows in both directions.
+
+Nothing you already have is overwritten — presets and fonts are added alongside.
+`
+
 const THINGS_YOU_CAN_DELETE = `# Things you can delete
 
 A small folder, kept around to prove a point.
@@ -57,7 +69,7 @@ const SAFE_TO_BIN = `# This one's safe to bin
 Right-click this note, or the folder it's in, and delete it. Nothing else in the app depends on it.
 `
 
-/** Seeds the five curated notes + demo folder into `spaceFolder`, and returns
+/** Seeds the curated welcome notes + demo folder into `spaceFolder`, and returns
  *  the path of "Start here" — the one App.tsx opens the workspace on. */
 export async function seedWelcomeNotes(spaceFolder: string): Promise<string> {
   const startHere = await window.api.createNote(spaceFolder, 'Start here')
@@ -68,6 +80,9 @@ export async function seedWelcomeNotes(spaceFolder: string): Promise<string> {
 
   const makeItYours = await window.api.createNote(spaceFolder, 'Make it yours')
   await window.api.writeNote(makeItYours, MAKE_IT_YOURS)
+
+  const usedBefore = await window.api.createNote(spaceFolder, 'Used Notealise before?')
+  await window.api.writeNote(usedBefore, USED_BEFORE)
 
   const demoFolder = await window.api.createFolder(spaceFolder, 'Things you can delete')
   const thingsIndex = await window.api.createNote(spaceFolder, 'Things you can delete')

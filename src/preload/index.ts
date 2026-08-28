@@ -28,6 +28,9 @@ const api: VaultApi = {
   deletePreset: (id) => ipcRenderer.invoke(CH.deletePreset, id),
   exportPresets: (ids) => ipcRenderer.invoke(CH.exportPresets, ids),
   importPresets: (text) => ipcRenderer.invoke(CH.importPresets, text),
+  exportTransfer: () => ipcRenderer.invoke(CH.exportTransfer),
+  importTransfer: (text) => ipcRenderer.invoke(CH.importTransfer, text),
+  transferInventory: () => ipcRenderer.invoke(CH.transferInventory),
   listInstalledFonts: () => ipcRenderer.invoke(CH.listInstalledFonts),
   downloadFont: (id) => ipcRenderer.invoke(CH.downloadFont, id),
   importCustomFont: () => ipcRenderer.invoke(CH.importCustomFont),
@@ -54,6 +57,7 @@ const api: VaultApi = {
   sendFeatureRequest: (fromEmail, message) =>
     ipcRenderer.invoke(CH.sendFeatureRequest, fromEmail, message),
   openExternal: (url) => ipcRenderer.invoke(CH.openExternal, url),
+  vaultEstablished: () => ipcRenderer.invoke(CH.vaultEstablished),
   getOnboarded: () => ipcRenderer.invoke(CH.getOnboarded),
   setOnboarded: (value) => ipcRenderer.invoke(CH.setOnboarded, value),
   getOnboardingStep: () => ipcRenderer.invoke(CH.getOnboardingStep),
