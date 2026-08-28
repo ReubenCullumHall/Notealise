@@ -7,12 +7,26 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+
+## [1.0.1] - 2026-08-29
+- New, in Settings → Transfer data: move the parts of your setup that live on one computer and
+  don't travel inside your vault folder — your saved space looks, fonts you added from a file,
+  and which of the downloadable fonts you've fetched — to another computer as a single file.
+  For moving to a new machine, or getting your setup back after an app-cleaner wipes it. Your
+  notes were never part of this: they're plain files in the folder you chose
+- Opening a vault you've set up before now skips the first-run walkthrough even if this
+  computer's copy of the app is brand new — it checks the vault's own hidden folder, not just
+  this machine's memory of having onboarded
+- The "Receive test builds" option is gone from Settings → Updates. It only ever showed on a
+  test build, and there are no separate test builds any more — everyone is on the same release
 - Development: `docs/workflow.md` + `tools/release-review.sh` — a written statement of what
   reaches users (only a pushed `v*` tag; commits to `main` do not) and a review that runs before
   every tag, listing every change since the last release for a per-item ship-or-hold sign-off
   against the actual diff. Added after v1.0.0 shipped an unreviewed feature that had been
-  committed under a mislabelled message. Also: concurrent sessions now work in separate
-  `git worktree`s so one session's commit cannot sweep up another's unfinished work
+  committed under a mislabelled message. Concurrent sessions now work in separate `git worktree`s
+- Development: the GitHub repository is renamed `Notes-app` → `Notealise`. GitHub's permanent
+  redirects keep every earlier install's update check working; builds from 1.0.1 point at the
+  new name directly
 
 ## [1.0.0] - 2026-08-28
 - Notealise reaches 1.0 — the first public release. Earlier builds were numbered 0.x
