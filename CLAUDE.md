@@ -153,6 +153,8 @@ notes-app/
   package.json              scripts + deps ("main": out/main/index.js)
   dev-app-update.yml        ONLY read by NOTES_TEST_UPDATER=1 npm run dev; never packaged
   docs/
+    workflow.md             what reaches users (only a v* tag) vs. the main/[Unreleased] waiting
+                            area; the release-review sign-off; per-session worktrees
     release-checklist.md    the four gates, the release ritual, and how to recover a bad release
     commands.md             the ONE editor-command registry — read before adding any command
     decorations.md          the live-preview pass engine and its extension point
@@ -261,6 +263,9 @@ notes-app/
   tools/wordmark/           GENERATOR for the wordmark animation in site/index.html, plus its
                             verification harness and its own gotchas doc. Not shipped, not an
                             app dependency. See tools/wordmark/README.md
+  tools/release-review.sh   run BEFORE every git tag — dumps everything on main since the last
+                            tag (commits, files by area, diffstat, [Unreleased]) for a per-item
+                            ship/hold sign-off. See docs/workflow.md
   <vault>/.mdnotes/         created (hidden on Windows); settings.json + workspace.json + trash/
 ```
 
@@ -372,13 +377,26 @@ Do this without being asked to break it into steps separately; that's the whole 
 shorthand. The projects-root `CLAUDE.md` carries the cross-project versions of these defaults,
 plus the rule about offering an artifact when a complex task hasn't landed in 1–2 prompts.
 
+**What reaches users: only a pushed `v*` tag.** Commits and pushes to `main` reach no user's
+app — `release.yml` triggers on tags alone. `main` + `CHANGELOG.md`'s `[Unreleased]` is the
+**waiting area**; a release flushes all of it at once. `site/` is the exception — it deploys to
+Vercel on every push to `main`, deliberately. Full model, and how this blurred once (v1.0.0
+shipped an unreviewed feature via a mislabelled commit): `docs/workflow.md`.
+
 **Shipping a release is a separate, much longer ritual — read `docs/release-checklist.md` in
-full before running it.** Short version: when Reuben says "push the latest update," read
-`Unreleased` first, sanity-check it against `git status` and `git log vX.Y.Z..HEAD --stat`, run the
-four gates in the checklist, then bump `package.json`'s version, move `Unreleased`'s bullets under
-a new `## [x.y.z] - YYYY-MM-DD` heading, and tag. The release checklist doc covers the beta
-channel, the "renaming the product breaks auto-update" trap, macOS's auto-update limitation, and
-how to pull back a bad release — none of that is repeated here.
+full before running it.** Short version: when Reuben says "push the latest update," run
+`tools/release-review.sh` and get Reuben's per-item *ship it / hold* on everything in the range
+(read the **diff**, not the commit messages — they have lied), run the four gates, then bump
+`package.json`'s version, move `Unreleased`'s bullets under a new `## [x.y.z] - YYYY-MM-DD`
+heading, and tag. **Ask Reuben small-vs-big first** (patch `1.0.1` vs minor `1.1.0`) — see
+`notesapp-versioning-and-release-cadence` in memory; also: no version number in the in-app UI
+except the "it's in your Downloads folder" line; plain `vX.Y.Z` GitHub release titles. The
+checklist doc covers the beta channel, the rename/auto-update trap, macOS's limitation, and how
+to pull back a bad release — none of that is repeated here.
+
+**Concurrent sessions work in separate `git worktree`s** (`EnterWorktree`) — a shared working
+tree is how one session's `git commit` swept up another's unfinished work into `205d4c6`. Every
+commit stays pathspec-scoped regardless.
 
 ## Where the rest of it lives
 
@@ -583,6 +601,14 @@ every session — see the table in **Folder structure** above for the full list.
   (`document.execCommand('copy')` over a selection, for that one) and **verify the fallback by
   deleting the modern API** — `Object.defineProperty(navigator, 'clipboard', {get: () => undefined})`
   in an init script reproduces the packaged environment exactly.
+- **The updater is the one subsystem `npm run dev` cannot show you.** `main/updater.ts` and
+  `macUpdate.ts` fork on `app.isPackaged` — in plain `npm run dev` the whole thing reports
+  `unsupported`, and on a Mac the entire `manual` download path (`isMac() = darwin &&
+  (app.isPackaged || NOTES_TEST_UPDATER)`) is off. So "tested it in Electron, looked fine" is not
+  evidence for update UI: a dead "Restart & install" button shipped in v0.10.0–0.10.2 on Mac and
+  was invisible in dev the whole time (fixed in v1.0.0). Verify update work in a **packaged**
+  build, or with `NOTES_TEST_UPDATER=1 npm run dev` + a lowered `package.json` version — and see
+  `notesapp-post-launch-todo` (memory) for the on-demand dev harness that still needs building.
 - **When a fix changes nothing, check that it FIRED before changing it again.** The same session's
   first attempt at a re-measure hook attached `img.addEventListener('load', …)` — correct, except a
   cached or `data:` URI image is already `complete` before that line runs, so `load` had been and

@@ -9,6 +9,25 @@ So "staging" here means: run the exact thing users would get, somewhere it can't
 
 ---
 
+## Gate −1 — the release-review sign-off (do this FIRST)
+
+A release ships **everything** on `main` since the last tag, not just the thing you have in
+mind — `[Unreleased]` is a whole queue. Before touching the version number:
+
+```
+tools/release-review.sh          # or --full for the complete diff
+```
+
+Go down the output **item by item**. For each: verified in the real app → *ship it*; otherwise
+→ *hold*. **Read the diff, not the commit messages** — `205d4c6` was titled "Add cross-session
+status file convention" and carried the entire update-notification feature into `v1.0.0` unseen.
+
+Holding an item: either the release waits until it's verified, or `git revert <sha>` on a
+release-prep commit so the release goes out without it (revert the revert afterwards to keep the
+work on `main`). Only tag once every item in the range is "ship it". Full model: `docs/workflow.md`.
+
+---
+
 ## The four gates
 
 Work down the list. Later gates are slower, so failing early is cheaper.

@@ -7,6 +7,12 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Development: `docs/workflow.md` + `tools/release-review.sh` — a written statement of what
+  reaches users (only a pushed `v*` tag; commits to `main` do not) and a review that runs before
+  every tag, listing every change since the last release for a per-item ship-or-hold sign-off
+  against the actual diff. Added after v1.0.0 shipped an unreviewed feature that had been
+  committed under a mislabelled message. Also: concurrent sessions now work in separate
+  `git worktree`s so one session's commit cannot sweep up another's unfinished work
 
 ## [1.0.0] - 2026-08-28
 - Notealise reaches 1.0 — the first public release. Earlier builds were numbered 0.x

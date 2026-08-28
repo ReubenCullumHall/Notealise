@@ -1,8 +1,17 @@
 # In-app update notifications
 
-> **Status: BUILT 2026-08-27.** Verified headlessly (renderer preview + Playwright); the
-> main-process half and the whole macOS flow still need a **packaged build** to be honestly
-> called done — see "What is verified, and what isn't" at the end.
+> **Status: BUILT 2026-08-27, SHIPPED in v1.0.0 (2026-08-29).** Verified headlessly (renderer
+> preview + Playwright), plus Reuben confirmed the *idle* Settings → Updates page on a packaged
+> v1.0.0 Mac (no auto-toggle, no "Restart & install", "You're up to date"). The **active** flow —
+> toast on launch, download, the macOS Gatekeeper dialog — is still **not** verified in a package;
+> see "What is verified, and what isn't" at the end. The dev harness to exercise it on demand is
+> `notesapp-post-launch-todo` item 1 in memory.
+>
+> **This layer shipped via a mislabelled commit.** `205d4c6`, titled "Add cross-session status
+> file convention", actually carried the whole feature (shared-index accident — see
+> `docs/workflow.md`). v1.0.0 was then cut believing it had no app changes. The `CHANGELOG` was
+> right; whoever cut it read the messages, not the diff. `tools/release-review.sh` exists so that
+> can't recur.
 
 ## Why
 
@@ -53,6 +62,11 @@ macOS users could sit on a months-old build without knowing. Three causes, all n
   the macOS Download button (this is where the toast lands, and a bare "Download" says nothing);
   adds a permanent "How to open a new version on a Mac" link; `ready`+`manual` now offers "Show
   it in Finder" rather than "Restart & install", which would have restarted into the same version.
+  **This last one fixed a real shipped bug:** v0.10.0–0.10.2 rendered "Restart & install" on Mac
+  with no `!manual` guard, so a Mac user who let a `.dmg` download saw a button that calls
+  `quitAndInstall()` → Squirrel.Mac refuses an unsigned update → **nothing happens**. Reuben hit
+  it and reported it as "the button doesn't work". It was invisible in `npm run dev` because
+  `isMac()` needs `app.isPackaged || devTest` — the whole `manual` path is off in plain dev.
 - **`shared/update.ts`** — `MAC_INSTALL_GUIDE_URL` (`https://notealise.com/install/mac.html`;
   notealise.com is the Vercel deployment of `site/`, confirmed by Reuben 2026-08-27). Nothing in
   the repo records the domain, so if the site moves this constant is the one place to change and
@@ -99,6 +113,10 @@ wrapped via the documented `Object.defineProperty` set-trap):
 - Sidebar strip no longer says "is out" in any state.
 - `typecheck` (both projects) and `oxlint src/` clean; **550 tests pass**.
 
+**Also verified on a packaged v1.0.0 (Reuben, 2026-08-29):** the *idle* Settings → Updates page
+on a Mac — no "Install updates automatically" toggle, no "Restart & install" button, "Check now"
+→ "You're up to date." The states that need a *newer* release to reach are still open below.
+
 **Not verified — needs a packaged build or a real feed:**
 
 - **The always-check change itself.** `initUpdater()` no longer returns early when `autoUpdate`
@@ -114,9 +132,15 @@ wrapped via the documented `Object.defineProperty` set-trap):
 
 ## Open
 
-- **Toast copy names the version but not what changed.** A line of "what's new" would need a
-  source — the GitHub release body is the obvious one, and `parseRelease` already has the payload
-  in hand. Not built; decide if it is wanted.
+- **Version numbers must come OUT of the in-app update UI (Reuben, 2026-08-29).** The rule is no
+  version number anywhere in the app *except* the "it's in your Downloads folder" line, where it
+  identifies `Notealise.dmg`. Right now the toast (`Notealise 1.0.0`, `UpdateToast.tsx:52/114`),
+  the sidebar banner (`1.0.0 downloaded`, `UpdateBanner.tsx:63`) and Settings → Updates (`Version
+  X is out`, `Download X`) all name it. Swap for "a new version" / "an update" / "the latest
+  version". Also: the popup must not do "new version, here are the features" framing — Reuben
+  "just doesn't like that". Tracked in `notesapp-post-launch-todo` (1b) +
+  `notesapp-versioning-and-release-cadence` in memory. This resolves the old "toast copy names
+  the version but not what changed" item — the answer is it should name *neither*.
 - The 6h interval re-checks but the toast only appears when the version *changes*, since
   dismissal is keyed by version. That is intended; worth revisiting if someone dismisses at 09:00
   and wants reminding by 17:00.
