@@ -7,6 +7,9 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-08-28
+- Notealise reaches 1.0 — the first public release. Earlier builds were numbered 0.x
 - Notealise now checks for a new version every time it opens, whether or not automatic installing
   is switched on, and says so in a small card in the corner. It used to only check when automatic
   updates were on — so turning that off meant the app never asked at all, and an install months
