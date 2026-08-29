@@ -99,8 +99,8 @@ export async function vaultLooksEstablished(root: string): Promise<boolean> {
   }
 }
 
-/** Set or clear the flag. Clearing it is the dev "replay onboarding" hook
- *  (Settings → General → Developer) — go through different first-run setups
+/** Set or clear the flag. Clearing it is the "replay onboarding" hook
+ *  (Settings → General → Vault reset) — go through the first-run flow again
  *  without reinstalling or hand-editing config.json. */
 export async function setHasOnboarded(value: boolean): Promise<void> {
   await update({ hasOnboarded: value })
