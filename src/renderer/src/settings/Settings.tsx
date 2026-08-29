@@ -128,8 +128,8 @@ const SEARCH_INDEX: SearchEntry[] = [
   { section: 'general', label: 'Date format', hint: 'Used for edit times and for the archive and bin.', keywords: 'day month year dd mm yyyy 12 hour 24 hour 12hr 24hr am pm dates' },
   { section: 'general', label: 'Time zone', hint: 'Which clock times are shown in.', keywords: 'timezone clock utc gmt local time' },
   { section: 'general', label: 'Number format', hint: 'Choose how numbers are formatted.', keywords: 'decimal comma thousand separator locale numbers' },
-  { section: 'general', label: 'Onboarding completed', hint: 'Dev tool — reloads into the first-run flow.', keywords: 'onboarding tutorial first run walkthrough developer testing' },
-  { section: 'general', label: 'Reset test vault', hint: 'Wipes a disposable test folder and clears onboarding.', keywords: 'test vault wipe clean slate developer sandbox' },
+  { section: 'general', label: 'Replay the first-run walkthrough', hint: 'Reopens the introduction you saw the first time.', keywords: 'onboarding tutorial first run walkthrough welcome intro replay redo again reset vault' },
+  { section: 'general', label: 'Reset to a blank test vault', hint: 'Switch to a disposable folder to try things out.', keywords: 'test vault wipe clean slate sandbox reset disposable experiment developer' },
   { section: 'general', label: 'Open source licences', hint: 'Every third-party package the app ships, and its licence.', keywords: 'legal licenses license copyright open source third party attribution warranty' },
   { section: 'customisation', label: 'Theme', hint: 'Light, dark or extra dark, applied to the whole app.', keywords: 'dark mode light mode night mode black extra dark appearance colour scheme' },
   { section: 'customisation', label: 'Text colour', hint: 'How bright the writing sits on a dark background.', keywords: 'white grey text brightness dark theme readability contrast' },
@@ -494,6 +494,15 @@ function SettingsWindow({
     setSection(initialSection)
   }, [initialSection])
 
+  // General's "Open source licences" swaps the whole General page for the
+  // licence list. Held here rather than inside General so the swap replaces
+  // every block at once (Startup, Vault reset, Formatting, Legal) instead of
+  // dropping the list in underneath them. Reset on any section change.
+  const [showLicenses, setShowLicenses] = useState(false)
+  useEffect(() => {
+    setShowLicenses(false)
+  }, [section])
+
   const [query, setQuery] = useState('')
   const matches = useMemo(() => searchSettings(query), [query])
   const jumpTo = (target: SectionId): void => {
@@ -609,20 +618,37 @@ function SettingsWindow({
         {/* The scroll container. `min-h-0` on the row above is what lets it
             actually scroll instead of stretching the window past its height. */}
         <div className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5">
-          {section === 'general' && (
-            <>
-              <General settings={settings} onChange={onChange} />
-              <Formatting settings={settings} onChange={onChange} />
-              <p className="mt-2 rounded-xl bg-brand-500/8 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-500 ring-1 ring-brand-300/40">
-                <span className="font-medium text-brand-600">Looking for the theme, colours or
-                the sidebar?</span>{' '}
-                Those belong to a space, not to the app — see{' '}
-                <span className="font-medium text-ink-600">Customisation</span> to set them
-                everywhere at once, or <span className="font-medium text-ink-600">Spaces</span> to
-                set one on its own.
-              </p>
-            </>
-          )}
+          {section === 'general' &&
+            (showLicenses ? (
+              <OssLicenses onBack={() => setShowLicenses(false)} />
+            ) : (
+              // Each block wrapped so the container's `gap-6` separates the
+              // sections and each section's own margins do the rest — General
+              // and Formatting return flat fragments, so without a wrapper
+              // every heading floated a full gap off its own subtitle.
+              <>
+                <div>
+                  <General settings={settings} onChange={onChange} />
+                </div>
+                <div>
+                  <VaultReset />
+                </div>
+                <div>
+                  <Formatting settings={settings} onChange={onChange} />
+                </div>
+                <p className="rounded-xl bg-brand-500/8 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-500 ring-1 ring-brand-300/40">
+                  <span className="font-medium text-brand-600">Looking for the theme, colours or
+                  the sidebar?</span>{' '}
+                  Those belong to a space, not to the app — see{' '}
+                  <span className="font-medium text-ink-600">Customisation</span> to set them
+                  everywhere at once, or <span className="font-medium text-ink-600">Spaces</span> to
+                  set one on its own.
+                </p>
+                <div>
+                  <Legal onOpenLicences={() => setShowLicenses(true)} />
+                </div>
+              </>
+            ))}
           {section === 'customisation' && (
             <Customisation
               settings={settings}
@@ -698,36 +724,6 @@ function SettingsWindow({
 }
 
 function General({ settings, onChange }: Props): React.JSX.Element {
-  // Not part of AppSettings (it's app-level, in userData/config.json, like
-  // vaultPath) — read straight off the IPC rather than threaded through
-  // `settings`/`onChange`, the same way Updates/Recovery below own their reads.
-  const [onboarded, setOnboardedState] = useState(true)
-  useEffect(() => {
-    void window.api.getOnboarded().then(setOnboardedState)
-  }, [])
-  const toggleOnboarding = (): void => {
-    const next = !onboarded
-    setOnboardedState(next)
-    // A reload, not a live prop update: this is a dev testing hook, and a
-    // full boot from scratch is a truer "different setup" than patching
-    // Onboarding's live React state would be. Also clears the resume step —
-    // without it, flipping this off would resume wherever a PAST mid-flow
-    // quit left off rather than genuinely restarting at Welcome.
-    void window.api
-      .setOnboarded(next)
-      .then(() => window.api.setOnboardingStep(null))
-      .then(() => window.location.reload())
-  }
-
-  const [resetting, setResetting] = useState(false)
-  const resetTestVault = (): void => {
-    setResetting(true)
-    void window.api.resetOnboardingTestVault().then(() => window.location.reload())
-  }
-
-  const [showLicenses, setShowLicenses] = useState(false)
-  if (showLicenses) return <OssLicenses onBack={() => setShowLicenses(false)} />
-
   return (
     <>
       <h3 className="font-display text-[15px] font-semibold text-ink-900">Startup</h3>
@@ -789,22 +785,70 @@ function General({ settings, onChange }: Props): React.JSX.Element {
           hint="Select a photo or video by its grip and press Backspace and the file goes to the bin, alongside your deleted notes. On, you get asked first. Off, you get an Undo instead. This is what the dialog's Always ask and Never ask again set."
         />
       </div>
+    </>
+  )
+}
 
-      <h3 className="mt-6 font-display text-[15px] font-semibold text-ink-900">Developer</h3>
-      <p className="mt-0.5 text-[12px] text-ink-500">Testing tools — not meant for a shipped build.</p>
+/** Two ways to start the app fresh without reinstalling: replay the first-run
+ *  flow, or switch to a disposable vault to experiment in. Both talk to main
+ *  directly (app-level, in userData/config.json), the same way Updates and
+ *  Recovery own their reads. Neither touches the notes in the real vault.
+ *  Was the "Developer" section — pulled out under its own heading because a
+ *  returning user genuinely reaches for both of these, not only someone
+ *  testing the app. */
+function VaultReset(): React.JSX.Element {
+  const [replaying, setReplaying] = useState(false)
+  const replayOnboarding = (): void => {
+    setReplaying(true)
+    // A full reload into the flow, not a live state flip: a boot from scratch
+    // is a truer first run. Clearing the saved step stops it resuming wherever
+    // a past mid-flow quit left off instead of starting at Welcome.
+    void window.api
+      .setOnboarded(false)
+      .then(() => window.api.setOnboardingStep(null))
+      .then(() => window.location.reload())
+  }
+
+  const [resetting, setResetting] = useState(false)
+  const resetTestVault = (): void => {
+    setResetting(true)
+    void window.api.resetOnboardingTestVault().then(() => window.location.reload())
+  }
+
+  return (
+    <>
+      <h3 className="font-display text-[15px] font-semibold text-ink-900">Vault reset</h3>
+      <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
+        Start over without reinstalling. Neither of these touches the notes in your real vault.
+      </p>
       <div className="mt-3 flex flex-col gap-2">
-        <ToggleRow
-          on={onboarded}
-          onClick={toggleOnboarding}
-          label="Onboarding completed"
-          hint="Off reloads straight into the first-run flow, to run through different setups without reinstalling. On skips it again."
-        />
         <div className="btn-edge flex items-center gap-3 rounded-xl px-3 py-3 ring-1 ring-ink-300/20">
           <span className="min-w-0 flex-1">
-            <span className="block text-[13px] font-medium text-ink-700">Reset test vault</span>
+            <span className="block text-[13px] font-medium text-ink-700">
+              Replay the first-run walkthrough
+            </span>
             <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">
-              Wipes a disposable folder, switches to it, and clears onboarding — a genuinely blank
-              slate every time. Never touches your real vault.
+              Reloads the app and opens the introduction you saw the first time. It recognises this
+              vault, so nothing is re-created — your notes and settings stay as they are.
+            </span>
+          </span>
+          <button
+            type="button"
+            disabled={replaying}
+            onClick={replayOnboarding}
+            className="mini shrink-0"
+          >
+            {replaying ? 'Opening…' : 'Replay'}
+          </button>
+        </div>
+        <div className="btn-edge flex items-center gap-3 rounded-xl px-3 py-3 ring-1 ring-ink-300/20">
+          <span className="min-w-0 flex-1">
+            <span className="block text-[13px] font-medium text-ink-700">
+              Reset to a blank test vault
+            </span>
+            <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">
+              Switches to a separate, disposable folder and wipes it clean, for trying things out
+              without affecting your real vault. Switch back any time from Source folder.
             </span>
           </span>
           <button
@@ -817,15 +861,25 @@ function General({ settings, onChange }: Props): React.JSX.Element {
           </button>
         </div>
       </div>
+    </>
+  )
+}
 
-      <h3 className="mt-6 font-display text-[15px] font-semibold text-ink-900">Legal</h3>
+/** The no-warranty notice and the open-source licences link — last on the
+ *  General page. `onOpenLicences` is owned by SettingsWindow, not local state,
+ *  so opening the list replaces the whole General page rather than stacking
+ *  under the sections above it. */
+function Legal({ onOpenLicences }: { onOpenLicences: () => void }): React.JSX.Element {
+  return (
+    <>
+      <h3 className="font-display text-[15px] font-semibold text-ink-900">Legal</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         Notealise is provided as-is, with no warranty of any kind. Back up anything important —
         software can have bugs, and the app's author is not liable for lost data.
       </p>
       <button
         type="button"
-        onClick={() => setShowLicenses(true)}
+        onClick={onOpenLicences}
         className="mt-2 flex items-center gap-1 rounded-lg border-none bg-transparent px-2 py-1 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         Open source licences
@@ -861,6 +915,12 @@ function Formatting({ settings, onChange }: Props): React.JSX.Element {
           onChange={(v) => onChange({ dateFormat: v as AppSettings['dateFormat'] })}
         />
       </SettingRow>
+      {/* Sits with Date format, not at the foot of the group — it's the worked
+          example of what the format above does to a note's own header. */}
+      <p className="-mt-1.5 px-1 pb-1 text-[11.5px] leading-relaxed text-ink-400">
+        A note's header shows when it was last edited — {formatDate(now, settings.dateFormat, tz)} right
+        now. Hover it for the exact time, and when the note was created.
+      </p>
       <div className="border-t border-ink-300/15" />
 
       <SettingRow title="Time zone" desc="Which clock times are shown in. Hover a note's edit time to see it.">
@@ -875,11 +935,6 @@ function Formatting({ settings, onChange }: Props): React.JSX.Element {
           onChange={(v) => onChange({ numberFormat: v as AppSettings['numberFormat'] })}
         />
       </SettingRow>
-
-      <p className="mt-4 px-1 text-[11.5px] leading-relaxed text-ink-400">
-        A note's header shows when it was last edited — {formatDate(now, settings.dateFormat, tz)} right now. Hover
-        it for the exact time, and when the note was created.
-      </p>
     </>
   )
 }
