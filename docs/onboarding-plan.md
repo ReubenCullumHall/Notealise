@@ -39,6 +39,22 @@
 > instead of "Choose a folder" (2026-08-22). The Fonts screen no longer repeats a "Thursday…" text
 > sample below the font cards — each card's own one-word preview was judged enough on its own
 > (2026-08-22). Import's screen-flash bug is fixed — see "Fixes from the 2026-08-22 review" below.
+>
+> **Reuben's copy pass (2026-08-30)** — he went through all seven screens replacing the
+> AI-generated wording with his own. Landed in `src/renderer/src/onboarding/steps/`:
+> Welcome title → "Before you start writing…", body trimmed (no em-dash, "Then you're writing"
+> cut as it echoed the title); Vault gains "No way to collect any data." after "Not an account.";
+> Import's Skip link enlarged (12.5→13.5px, ink-400→500) — he *wants* it doubling as Continue;
+> the Spaces **"Revision" preset chip → "Research"** (Revision just re-reads as "School");
+> Write's intro trimmed to the heading instruction alone and its reveal line gains "Now hit
+> Enter and see how it formats" (one more action to take); Disk-proof's trailing
+> "…it's all in Settings" paragraph **removed** — that orientation moves into the seeded welcome
+> notes (`welcomeNotes.ts`), still TODO; Fonts' "five built in / sixteen more" counts are now
+> **derived** (`BUILT_IN_COUNT`, `DOWNLOADABLE_FONTS.length`) so adding a font to
+> `shared/fonts.ts` keeps the sentence correct. **Brand principle he stated:** onboarding stays
+> deliberately thin — the customisation surface should be a *discovery* ("wow, look at all this
+> in Settings"), never taught up front. He explicitly refused page-looks/tints in onboarding on
+> that basis. Trim onboarding copy toward action; resist adding explanation.
 
 Status of the spec text below: **as written 2026-08-14, superseded in the four rows above.** It is
 copied verbatim from

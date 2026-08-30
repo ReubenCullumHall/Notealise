@@ -47,11 +47,6 @@ export function DiskProofStep({ notePath, noteText, onReady }: Props): React.JSX
       >
         Show me the file
       </button>
-
-      <p className="max-w-[420px] text-[12px] text-ink-400">
-        Nearly everything about how this looks and works can be changed — themes, colours, spacing,
-        what&rsquo;s in the toolbar. It&rsquo;s all in Settings when you want it.
-      </p>
     </div>
   )
 }

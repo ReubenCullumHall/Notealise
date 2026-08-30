@@ -26,10 +26,12 @@ export function WelcomeStep({ theme, onReady }: Props): React.JSX.Element {
   return (
     <div className="flex flex-col items-center gap-8 text-center">
       <div>
-        <h1 className="font-display text-[26px] font-semibold text-ink-900">Before you start writing</h1>
+        <h1 className="font-display text-[26px] font-semibold text-ink-900">
+          Before you start writing&hellip;
+        </h1>
         <p className="mx-auto mt-3 max-w-[420px] text-[14px] leading-relaxed text-ink-500">
-          A few short screens — where your notes live, what they&rsquo;re for, how the app works. Then
-          you&rsquo;re writing.
+          A few short screens that explain where your notes live, what they&rsquo;re for, and how the
+          app works.
         </p>
       </div>
       <video

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { FONTS, fontCssValue, type FontOption } from '../../settings/fonts'
+import { DOWNLOADABLE_FONTS, FONTS, fontCssValue, type FontOption } from '../../settings/fonts'
 import { ACCENTS } from '../../settings/model'
 import type { ResolvedThemeId } from '../../../../shared/settings'
 import type { OnboardingStepProps } from '../Onboarding'
@@ -32,6 +32,17 @@ import type { OnboardingStepProps } from '../Onboarding'
 // odd second thing to offer before the app has explained what it's for.
 const ORDER = ['inter', 'fraunces', 'jetbrains-mono', 'opendyslexic']
 const CHOICES: FontOption[] = ORDER.map((id) => FONTS.find((f) => f.id === id && f.source === 'bundled')!)
+
+// The copy below quotes two counts — the cards shown here, and everything else
+// in the catalogue. Both are derived, not written, so adding a font to
+// shared/fonts.ts keeps the sentence honest with no edit to this file.
+const BUILT_IN_COUNT = CHOICES.length + 1 // + the "App default" card
+const NUMBER_WORDS = [
+  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+  'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
+  'seventeen', 'eighteen', 'nineteen', 'twenty'
+]
+const numberWord = (n: number): string => NUMBER_WORDS[n] ?? String(n)
 
 /** What each bundled face is actually FOR, in one line — the catalogue's own
  *  `blurb` is written for someone browsing Settings who already knows what a
@@ -122,9 +133,9 @@ export function FontsStep({ theme, value, onPick, accent, onPickAccent, onReady 
       </div>
 
       <p className="max-w-[420px] text-[12px] leading-relaxed text-ink-400">
-        These five are built in, so they work offline from the day you install. Sixteen more — plus
-        any font file of your own — live in{' '}
-        <span className="text-ink-500">Settings → Your collection → Fonts</span>.
+        These {numberWord(BUILT_IN_COUNT)} are built in, so they work offline from the day you
+        install. Another {numberWord(DOWNLOADABLE_FONTS.length)} — plus any font file of your own —
+        live in <span className="text-ink-500">Settings → Your collection → Fonts</span>.
       </p>
 
       <div className="flex flex-col items-center gap-2.5 border-t border-ink-300/15 pt-5">

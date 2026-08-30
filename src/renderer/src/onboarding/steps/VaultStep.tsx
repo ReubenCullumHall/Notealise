@@ -80,9 +80,9 @@ export function VaultStep({
           Everything here is a file on your computer
         </h1>
         <p className="mx-auto mt-3 max-w-[440px] text-[14px] leading-relaxed text-ink-500">
-          Not a database. Not an account. Pick a folder and that&rsquo;s where your notes live — you can
-          open them in anything, and if you delete this app tomorrow they&rsquo;re exactly where you left
-          them.
+          Not a database. Not an account. No way to collect any data. Pick a folder and that&rsquo;s
+          where your notes live — you can open them in anything, and if you delete this app tomorrow
+          they&rsquo;re exactly where you left them.
         </p>
       </div>
 

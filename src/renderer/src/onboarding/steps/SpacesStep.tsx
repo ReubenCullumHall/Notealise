@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { SPACE_CAP } from '../../../../shared/settings'
 import type { OnboardingStepProps } from '../Onboarding'
 
-const PRESETS = ['School', 'Work', 'Journal', 'Projects', 'Ideas', 'Revision', 'Personal', 'Reading']
+const PRESETS = ['School', 'Work', 'Journal', 'Projects', 'Ideas', 'Research', 'Personal', 'Reading']
 const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
 
 interface Props extends OnboardingStepProps {

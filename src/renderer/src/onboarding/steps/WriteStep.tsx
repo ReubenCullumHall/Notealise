@@ -81,8 +81,7 @@ export function WriteStep({
       <div>
         <h1 className="font-display text-[24px] font-semibold text-ink-900">Try writing something</h1>
         <p className="mx-auto mt-3 max-w-[440px] text-[14px] leading-relaxed text-ink-500">
-          Type a <span className="font-mono">#</span> and a space before a line to make it a heading. Watch
-          what happens to the <span className="font-mono">#</span>.
+          Type a <span className="font-mono">#</span> and a space before a line to make it a heading.
         </p>
       </div>
 
@@ -100,7 +99,7 @@ export function WriteStep({
 
       <p className={'text-[12px] text-brand-600 transition-opacity duration-200 ' + (hasHeading ? 'opacity-100' : 'opacity-0')}>
         That&rsquo;s Markdown. The app hides the symbols while you&rsquo;re not on that line, so it stays
-        readable.
+        readable. Now hit Enter and see how it formats.
       </p>
     </div>
   )

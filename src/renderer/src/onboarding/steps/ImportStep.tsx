@@ -80,7 +80,7 @@ export function ImportStep({ onOpenSpace, onImported, onReady, onAdvance }: Prop
       <button
         type="button"
         onClick={onAdvance}
-        className="rounded border-none bg-transparent p-0 text-[12.5px] text-ink-400 underline-offset-2 hover:text-ink-600 hover:underline"
+        className="rounded border-none bg-transparent p-0 text-[13.5px] text-ink-500 underline-offset-2 hover:text-ink-700 hover:underline"
       >
         Skip — I&rsquo;m starting fresh
       </button>
