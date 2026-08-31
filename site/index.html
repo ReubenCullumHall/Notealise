@@ -6,6 +6,7 @@
   <title>Notealise — Download</title>
   <meta name="description" content="Download Notealise for Windows and macOS." />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="nav.css" />
   <script>
     // Sets html.wm-motion before any body markup is parsed, so the wordmark's hidden-until-
     // animated CSS (below, and in the generated block) can gate on a plain class instead of
@@ -37,7 +38,8 @@
     body {
       background: var(--bg);
       color: var(--ink);
-      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+      /* --sans (Inter first) is defined in nav.css's :root. */
+      font: 16px/1.55 var(--sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif);
       -webkit-font-smoothing: antialiased;
     }
 
@@ -57,6 +59,10 @@
     .wordmark {
       margin: 0; font-size: clamp(3.2rem, 11vw, 8.5rem); font-weight: 700;
       letter-spacing: -0.03em; line-height: 1; display: inline-flex; align-items: baseline;
+      /* "Note" stays on the OS UI font — never Inter. The typewriter keyframes
+         (note-type / caret-move %s) were measured against this exact rendering;
+         swapping in a shipped webfont would shift the clip stops off the glyphs. */
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
     }
     /* "alise" — traced from PetitFormalScript, not rendered as live text (see
        DESIGN.md: "the load-in animation" for why). The <path> data below is
@@ -2487,6 +2493,161 @@
     html.wm-motion .wm-settle { opacity: 0; animation: wm-settle 1ms linear var(--settleAt) both; }
     /* wordmark-keyframes:end */
 
+    /* ── The tagline under the wordmark ──────────────────────────────── */
+    /* "the bridge between complexity and constraint", typed in after the
+       wordmark settles. Six words, four treatments: `bridge` is written along
+       an arch and then drops onto the line, `complexity` is bold with a ring
+       of small clay marks around it, `constraint` is squeezed out of bold and
+       into italic, and the rest is plain typing.
+
+       THE SETTLED LINE IS THE MARKUP. `<p class="tagline">` ships as ordinary
+       text with a <b> and an <i>; the script at the end of <body> only replaces
+       it with per-letter spans when html.wm-motion is set. No JS, reduced
+       motion, or an old browser means the finished sentence, no motion, no
+       flash — the same fallback contract the wordmark uses.
+
+       COLOUR: the clay is a deliberate, dated departure from this site's
+       monochrome rule. See site/DESIGN.md, "The tagline, 2026-08-31". */
+    .tagline {
+      margin: clamp(18px, 2.6vh, 30px) 0 0;
+      padding: 0 16px;
+      font-size: clamp(1.02rem, 2.15vw, 1.34rem);
+      line-height: 1.5;
+      letter-spacing: 0.002em;
+      color: var(--soft, oklch(44% 0.015 50));
+      white-space: nowrap;
+    }
+    /* One line at every width, shrunk rather than wrapped — a wrap that lands
+       inside `bridge` would tear the arch in half. Measured at 375px: the line
+       is 331px inside 343px of usable width. */
+    @media (max-width: 560px) {
+      .tagline { font-size: clamp(0.72rem, 3.55vw, 1.02rem); padding: 0 12px; }
+    }
+
+    .tl-w { display: inline-block; position: relative; white-space: nowrap; }
+    .tl-let {
+      display: inline-block; position: relative; white-space: pre;
+      opacity: 0;
+      /* linear, NOT steps(1). Over a 1ms window a delay of ~5s leaves iteration
+         progress at 0.999999999999, and steps(1, jump-end) returns 0 for
+         anything below 1 — every letter past the first second would stay
+         invisible forever. Measured, not guessed. The 1ms linear ramp is
+         imperceptible and immune. */
+      animation: tl-in 1ms linear var(--at) forwards;
+    }
+    @keyframes tl-in { from { opacity: 0 } to { opacity: 1 } }
+
+    /* The caret is one per letter, alive only for that letter's own dwell, so
+       it always trails the newest character with no measurement of where the
+       glyphs actually land. */
+    .tl-let::after {
+      content: ""; position: absolute; left: 100%; top: .14em; bottom: .16em;
+      width: 1.5px; background: currentColor; opacity: 0;
+      animation: tl-caret var(--dwell) linear var(--at) forwards;
+    }
+    @keyframes tl-caret { 0% { opacity: .8 } 99.9% { opacity: .8 } 100% { opacity: 0 } }
+
+    /* bridge: written along a parabola, then collapsed onto the line with a
+       squash. Rotation is ±9° — at ±20° the end letters, which sit at zero
+       rise, tilted hard enough to read as tumbling rather than as an arch. */
+    .tl-w-arch .tl-let {
+      transform: translate(var(--ax), var(--ay)) rotate(var(--ar));
+      animation: tl-in 1ms linear var(--at) forwards,
+                 tl-pop 620ms cubic-bezier(.5, 0, .25, 1) var(--popAt) forwards;
+    }
+    @keyframes tl-pop {
+      0%   { transform: translate(var(--ax), var(--ay)) rotate(var(--ar)) scale(1, 1) }
+      48%  { transform: translate(0, .17em) rotate(0deg) scale(1.14, .80) }
+      66%  { transform: translate(0, -.09em) rotate(0deg) scale(.95, 1.08) }
+      82%  { transform: translate(0, .04em) rotate(0deg) scale(1.03, .97) }
+      92%  { transform: translate(0, -.01em) rotate(0deg) scale(.99, 1.01) }
+      100% { transform: translate(0, 0) rotate(0deg) scale(1, 1) }
+    }
+
+    .tl-w-bold .tl-let { font-weight: 700 }
+
+    /* constraint: the bold roman and the real italic are stacked, and the swap
+       is hidden under the deepest part of the squeeze. Skewing one glyph set
+       instead would give a fake italic — the real face has different letterforms.
+       The cost is that each box keeps its BOLD advance width, so the settled
+       italic is ~9% wider-tracked than real italic text. Accepted 2026-08-31. */
+    .tl-mo {
+      transform-origin: 50% 78%;
+      animation: tl-in 1ms linear var(--at) forwards,
+                 tl-squeeze 460ms cubic-bezier(.36, 1.06, .4, 1) var(--mAt) forwards;
+    }
+    .tl-mo .tl-ro { display: inline-block; font-weight: 700;
+      animation: tl-ro-out 460ms linear var(--mAt) forwards }
+    .tl-mo .tl-it { position: absolute; left: 0; top: 0; white-space: pre;
+      font-style: italic; font-weight: 400; opacity: 0;
+      animation: tl-it-in 460ms linear var(--mAt) forwards }
+    @keyframes tl-squeeze {
+      0%   { transform: scaleX(1) scaleY(1) skewX(0deg) }
+      38%  { transform: scaleX(.76) scaleY(1.13) skewX(-11deg) }
+      62%  { transform: scaleX(1.07) scaleY(.95) skewX(-3.5deg) }
+      100% { transform: scaleX(1) scaleY(1) skewX(0deg) }
+    }
+    @keyframes tl-ro-out { 0%, 36% { opacity: 1 } 54%, 100% { opacity: 0 } }
+    @keyframes tl-it-in  { 0%, 36% { opacity: 0 } 54%, 100% { opacity: 1 } }
+
+    /* The marks around `complexity`. FOUR LAYERS, each owning exactly one
+       property — put the drift and the shimmer on the same element and they
+       cancel each other out.
+         .tl-o    places the mark
+         .tl-oi   fades it in, then drifts it, forever
+         svg      the whole burst breathing
+         .tl-ray  each spoke drawing in and out on its own phase
+       The shape is a generated many-rayed asterisk. It was a four-point concave
+       sparkle until 2026-08-31, which is the Gemini mark — don't go back to it. */
+    /* Oxblood, chosen 2026-08-31. It replaced a clay orange (#D97757) that
+       Reuben rejected on the grounds that it "looks like Claude just built it
+       and it had no innovation" — the objection is to the cliche, not to warm
+       colour, so a warm red-brown is fine and a saturated orange is not. */
+    .tl-orn { position: absolute; inset: 0; pointer-events: none; color: #7A3B34 }
+    .tl-o {
+      position: absolute; left: var(--ox); top: calc(50% + var(--oy));
+      width: calc(0.52em * var(--os)); height: calc(0.52em * var(--os));
+      transform: translate(-50%, -50%);
+    }
+    .tl-oi {
+      display: block; width: 100%; height: 100%; opacity: 0;
+      animation: tl-orn-in 520ms ease-out var(--oAt) forwards,
+                 tl-drift var(--driftDur) ease-in-out var(--oAt) infinite;
+    }
+    @keyframes tl-orn-in { from { opacity: 0 } to { opacity: .85 } }
+    /* AN ORBIT, NOT A TO-AND-FRO. Two keyframes gave a straight-line slide
+       that reads as static at this size. Four trace a diamond, and ease-in-out
+       rounds it into a circle, so the marks visibly move around one another.
+       --rx/--ry are per mark and a negative --ry reverses the direction, so
+       neighbours circle opposite ways instead of shoaling. */
+    @keyframes tl-drift {
+      0%, 100% { transform: translate(var(--rx), 0) }
+      25%      { transform: translate(0, var(--ry)) }
+      50%      { transform: translate(calc(var(--rx) * -1), 0) }
+      75%      { transform: translate(0, calc(var(--ry) * -1)) }
+    }
+    /* 50% 50%, NOT 12px. On an <svg> ROOT, CSS transform-origin px are CSS
+       pixels of the border box, not user units — and these marks are ~11px
+       wide, so a 12px origin pivoted OUTSIDE the mark and the breathe rotation
+       swung it sideways instead of turning it in place. Found 2026-08-31 when
+       a 48px gear in the study page made it obvious. The .tl-ray rules below
+       are inner SVG elements, where px genuinely are user units: leave those. */
+    .tl-o svg { width: 100%; height: 100%; display: block; fill: currentColor;
+      overflow: visible; transform-origin: 50% 50% }
+    .tl-o-star svg { animation: tl-breathe var(--markDur) ease-in-out var(--oAt) infinite }
+    .tl-o-cog  svg { animation: tl-spin calc(var(--markDur) * 2.6) linear var(--oAt) infinite }
+    .tl-o-cog.tl-rev svg { animation-direction: reverse }
+    @keyframes tl-breathe { 0%, 100% { transform: rotate(0deg) scale(1) }
+                            50%      { transform: rotate(7deg) scale(1.08) } }
+    @keyframes tl-spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+    .tl-ray { transform-origin: 12px 12px }
+    .tl-ray > path {
+      transform-origin: 12px 12px;
+      animation: tl-ray-pulse 1900ms ease-in-out calc(var(--oAt) + var(--i) * 105ms) infinite;
+    }
+    @keyframes tl-ray-pulse { 0%, 100% { transform: scale(1, 1) }
+                              50%      { transform: scale(.56, .72) } }
+
     .scroll-cue {
       margin-top: auto; margin-bottom: 40px;
       display: inline-flex; align-items: center; justify-content: center;
@@ -2500,8 +2661,8 @@
       50% { transform: translateY(8px); }
     }
 
-    /* ── Gap: reserved for content, added later. ─────────────────────── */
-    .gap { min-height: 100dvh; }
+    /* The old blank `.gap` spacer is now `.explore` (styles in nav.css) — the
+       list of links through to the other pages. */
 
     /* ── Download: simple, no extra copy. ────────────────────────────── */
     /* The footer sits directly under this, and the two together make one
@@ -2551,7 +2712,34 @@
 <body>
   <img class="mark" src="favicon.svg" alt="Notealise" width="34" height="34" />
 
-  <section class="hero">
+  <!-- Hidden on load so it never competes with the wordmark animation. nav.js
+       slides it in on the first scroll past the hero, then leaves it up. -->
+  <header class="topbar">
+    <a class="topbar-brand" href="index.html">
+      <img src="favicon.svg" alt="" />
+      <span>Notealise</span>
+    </a>
+    <nav class="topbar-links">
+      <a href="tutorials.html">Tutorials</a>
+      <a href="students.html">Students</a>
+      <a href="about.html">About</a>
+      <a href="updates.html">What&rsquo;s new</a>
+    </nav>
+    <div class="topbar-social">
+      <!-- Placeholder set — confirm which socials and their real URLs. GitHub is live. -->
+      <a href="https://github.com/ReubenCullumHall/Notealise" aria-label="Notealise on GitHub" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+      </a>
+      <a href="#" aria-label="Notealise on X" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      </a>
+      <a href="#" aria-label="Notealise on Bluesky" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.42 2.7c2.87 2.16 5.95 6.53 7.08 8.88 1.13-2.35 4.21-6.72 7.08-8.88 2.07-1.55 5.42-2.76 5.42 1.07 0 .76-.44 6.42-.7 7.34-.9 3.19-4.15 4-7.07 3.51 5.1.87 6.4 3.75 3.6 6.63-5.32 5.47-7.64-1.37-8.24-3.13-.11-.32-.16-.47-.16-.34 0-.13-.05.02-.16.34-.6 1.76-2.92 8.6-8.24 3.13-2.8-2.88-1.5-5.76 3.6-6.63-2.92.49-6.17-.32-7.07-3.51C.44 10.19 0 4.53 0 3.77 0-.06 3.35 1.15 5.42 2.7z"/></svg>
+      </a>
+    </div>
+  </header>
+
+  <section class="hero" data-topbar-reveal>
     <h1 class="wordmark" aria-label="Notealise">
       <span class="wm-note-wrap"><span class="wm-note">Note</span><span class="wm-caret" aria-hidden="true"></span></span><svg class="wm-alise-svg" aria-hidden="true" viewBox="-58 -1712 5141 1731" style="height:0.6011em;width:1.7850em" xmlns="http://www.w3.org/2000/svg">
         <!-- wordmark:begin (generated by tools/wordmark/gen_pen.py) -->
@@ -3195,12 +3383,35 @@
         <!-- wordmark:end -->
       </svg>
     </h1>
+    <p class="tagline" id="tagline">the bridge between <b>complexity</b> and <i>constraint</i></p>
     <a class="scroll-cue" href="#download" aria-label="Scroll to download">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
     </a>
   </section>
 
-  <section class="gap"></section>
+  <!-- Was the reserved blank .gap. Now the quiet way into the other pages, so
+       the top bar doesn't have to sit over the hero. -->
+  <section class="explore">
+    <p class="explore-eyebrow">Explore</p>
+    <nav class="explore-links">
+      <a href="tutorials.html">
+        <span class="explore-title">Tutorials</span>
+        <p class="explore-sub">Guides to the editor, linking notes, and keeping a vault tidy.</p>
+      </a>
+      <a href="students.html">
+        <span class="explore-title">Notealise for students</span>
+        <p class="explore-sub">Lecture notes, revision, and coursework in files you keep.</p>
+      </a>
+      <a href="about.html">
+        <span class="explore-title">About</span>
+        <p class="explore-sub">Who makes Notealise, and what it is trying to be.</p>
+      </a>
+      <a href="updates.html">
+        <span class="explore-title">What&rsquo;s new</span>
+        <p class="explore-sub">What each update adds and fixes.</p>
+      </a>
+    </nav>
+  </section>
 
   <section id="download" class="download">
     <div class="btns">
@@ -3227,5 +3438,190 @@
     const ua = (navigator.userAgentData?.platform || navigator.platform || navigator.userAgent || "").toLowerCase();
     document.getElementById(/mac/.test(ua) ? "macBtn" : "winBtn").classList.add("primary");
   </script>
+  <script>
+    // ── The tagline animation ────────────────────────────────────────────
+    // Upgrades <p class="tagline"> from plain text to per-letter spans and
+    // hands every timing to CSS as a custom property. Nothing here runs on a
+    // frame loop; once the spans exist the browser owns the whole sequence.
+    //
+    // It is gated on html.wm-motion, the same class the wordmark uses, so
+    // reduced motion / no JS leaves the finished sentence exactly as authored.
+    //
+    // LEAD is why this file cares about the wordmark at all: the pen finishes
+    // at 1000ms delay + 1998ms draw = 2998ms, and the last slice settles at
+    // 2998ms. Starting at 3150 leaves a 150ms beat. If the wordmark's timing
+    // is ever regenerated, re-read --penDelay/--penDur and move this with it.
+    (function () {
+      var p = document.getElementById("tagline");
+      if (!p || !document.documentElement.classList.contains("wm-motion")) return;
+
+      var LEAD = 3150, STEP = 86, GAP = 78;
+      var WORDS = [
+        { t: "the",        m: "type" },
+        { t: "bridge",     m: "arch" },
+        { t: "between",    m: "type" },
+        { t: "complexity", m: "bold" },
+        { t: "and",        m: "type" },
+        { t: "constraint", m: "morph" }
+      ];
+      var ARCH_H = 0.46, ARCH_SPREAD = 0.10, ARCH_ROT = 9, POP_STAGGER = 28;
+      var SVGNS = "http://www.w3.org/2000/svg";
+
+      // Where each word starts and stops typing.
+      var t = LEAD, win = {};
+      WORDS.forEach(function (w) {
+        win[w.t] = { s: t, e: t + w.t.length * STEP };
+        t = win[w.t].e + GAP;
+      });
+      // The arch drops the moment `complexity` starts, so it has already landed
+      // by the time that word is finished.
+      var popAt = win.complexity.s;
+      var morphAt = win.constraint.e + 120;
+
+      // One tapered spoke, drawn from the centre outward along +x, sides pulled
+      // slightly in so it reads as a drawn stroke and not a triangle.
+      function rayPath(len, w) {
+        var k1 = len * 0.42, k2 = len * 0.78;
+        return "M12," + (12 - w).toFixed(2) +
+          " C" + (12 + k1).toFixed(2) + "," + (12 - w * 0.40).toFixed(2) +
+          " " + (12 + k2).toFixed(2) + "," + (12 - w * 0.14).toFixed(2) +
+          " " + (12 + len).toFixed(2) + ",12" +
+          " C" + (12 + k2).toFixed(2) + "," + (12 + w * 0.14).toFixed(2) +
+          " " + (12 + k1).toFixed(2) + "," + (12 + w * 0.40).toFixed(2) +
+          " 12," + (12 + w).toFixed(2) + "Z";
+      }
+      // 11 spokes, every other one shortened to 74% — an even burst reads as a
+      // mechanical star rather than an asterisk.
+      function burst() {
+        var svg = document.createElementNS(SVGNS, "svg");
+        svg.setAttribute("viewBox", "0 0 24 24");
+        svg.setAttribute("aria-hidden", "true");
+        for (var i = 0; i < 11; i++) {
+          var g = document.createElementNS(SVGNS, "g");
+          g.setAttribute("class", "tl-ray");
+          g.style.transform = "rotate(" + (i * 360 / 11).toFixed(2) + "deg)";
+          g.style.setProperty("--i", String(i));
+          var path = document.createElementNS(SVGNS, "path");
+          path.setAttribute("d", rayPath(11 * (i % 2 ? 0.74 : 1), 1.5));
+          g.appendChild(path);
+          svg.appendChild(g);
+        }
+        return svg;
+      }
+      function cog() {
+        var svg = document.createElementNS(SVGNS, "svg");
+        svg.setAttribute("viewBox", "0 0 24 24");
+        svg.setAttribute("aria-hidden", "true");
+        var pts = [], seg = Math.PI * 2 / 8, i, k;
+        for (i = 0; i < 8; i++) {
+          var a = [i * seg, i * seg + seg * 0.30, i * seg + seg * 0.42, i * seg + seg * 0.88];
+          var r = [10.6, 10.6, 8.7, 8.7];
+          for (k = 0; k < 4; k++) {
+            pts.push((12 + Math.cos(a[k]) * r[k]).toFixed(2) + " " + (12 + Math.sin(a[k]) * r[k]).toFixed(2));
+          }
+        }
+        var hub = [];
+        for (i = 0; i < 24; i++) {
+          var h = -i / 24 * Math.PI * 2;
+          hub.push((12 + Math.cos(h) * 4.4).toFixed(2) + " " + (12 + Math.sin(h) * 4.4).toFixed(2));
+        }
+        var path = document.createElementNS(SVGNS, "path");
+        path.setAttribute("d", "M" + pts.join("L") + "ZM" + hub.join("L") + "Z");
+        path.setAttribute("fill-rule", "evenodd");
+        svg.appendChild(path);
+        return svg;
+      }
+
+      // Seven marks placed around the word's own box, so they track its width.
+      // They hold station and breathe rather than flying outward: these persist
+      // for the life of the page, and anything that travels reads as debris.
+      // rx/ry are the orbit's radii in px; the sign of ry sets the direction.
+      var MARKS = [
+        { k: "star", ox: "7%",  oy: "-1.32em", s: 1.00, rx: 5.0, ry: -3.4 },
+        { k: "star", ox: "33%", oy: "-1.58em", s: 0.62, rx: 3.4, ry:  4.2 },
+        { k: "cog",  ox: "61%", oy: "-1.36em", s: 0.86, rx: 4.4, ry: -3.0 },
+        { k: "star", ox: "90%", oy: "-1.12em", s: 0.70, rx: 3.0, ry:  4.6 },
+        { k: "cog",  ox: "17%", oy: "1.10em",  s: 0.68, rx: 4.8, ry:  3.2 },
+        { k: "star", ox: "52%", oy: "1.24em",  s: 0.88, rx: 3.6, ry: -4.4 },
+        { k: "star", ox: "83%", oy: "1.02em",  s: 0.56, rx: 5.2, ry:  3.0 }
+      ];
+
+      var frag = document.createDocumentFragment();
+
+      WORDS.forEach(function (w, wi) {
+        if (wi) frag.appendChild(document.createTextNode(" "));
+        var el = document.createElement("span");
+        el.className = "tl-w tl-w-" + w.m;
+        var n = w.t.length;
+
+        for (var i = 0; i < n; i++) {
+          var L = document.createElement("span");
+          L.className = "tl-let";
+          L.style.setProperty("--at", Math.round(win[w.t].s + i * STEP) + "ms");
+          // The last letter of each word holds its caret through the word gap,
+          // so the cursor sits waiting rather than blinking out between words.
+          L.style.setProperty("--dwell", (i === n - 1 ? STEP + GAP : STEP) + "ms");
+
+          if (w.m === "arch") {
+            var u = i / (n - 1), tt = 2 * u - 1;
+            L.style.setProperty("--ax", (ARCH_SPREAD * tt).toFixed(3) + "em");
+            L.style.setProperty("--ay", (-ARCH_H * (1 - tt * tt)).toFixed(3) + "em");
+            L.style.setProperty("--ar", (ARCH_ROT * tt).toFixed(1) + "deg");
+            // The keystone falls furthest, so it leaves fractionally last.
+            L.style.setProperty("--popAt",
+              Math.round(popAt + (1 - Math.abs(tt)) * POP_STAGGER) + "ms");
+          }
+          if (w.m === "morph") {
+            L.className += " tl-mo";
+            // Every letter squeezes together, not as a travelling wave.
+            L.style.setProperty("--mAt", Math.round(morphAt) + "ms");
+            var ro = document.createElement("span");
+            ro.className = "tl-ro"; ro.textContent = w.t[i];
+            var it = document.createElement("span");
+            it.className = "tl-it"; it.textContent = w.t[i];
+            it.setAttribute("aria-hidden", "true");
+            L.appendChild(ro); L.appendChild(it);
+          } else {
+            L.textContent = w.t[i];
+          }
+          el.appendChild(L);
+        }
+
+        if (w.m === "bold") {
+          var layer = document.createElement("span");
+          layer.className = "tl-orn";
+          layer.setAttribute("aria-hidden", "true");
+          MARKS.forEach(function (mk, i) {
+            var o = document.createElement("span");
+            o.className = "tl-o tl-o-" + mk.k + (i % 2 ? " tl-rev" : "");
+            o.style.setProperty("--ox", mk.ox);
+            o.style.setProperty("--oy", mk.oy);
+            o.style.setProperty("--os", String(mk.s));
+            o.style.setProperty("--rx", mk.rx + "px");
+            o.style.setProperty("--ry", mk.ry + "px");
+            o.style.setProperty("--oAt", Math.round(win.complexity.s + i * 130) + "ms");
+            // Deliberately out of lockstep: on one period all seven pulse as a
+            // single object, which reads as a blink rather than as shimmer.
+            o.style.setProperty("--driftDur", (5200 + i * 680) + "ms");
+            o.style.setProperty("--markDur", (5200 + i * 310) + "ms");
+            var inner = document.createElement("span");
+            inner.className = "tl-oi";
+            inner.appendChild(mk.k === "cog" ? cog() : burst());
+            o.appendChild(inner);
+            layer.appendChild(o);
+          });
+          el.appendChild(layer);
+        }
+        frag.appendChild(el);
+      });
+
+      // The sentence is still readable to a screen reader as one string; the
+      // per-letter spans are decoration only.
+      p.setAttribute("aria-label", p.textContent.trim());
+      p.textContent = "";
+      p.appendChild(frag);
+    })();
+  </script>
+  <script src="nav.js"></script>
 </body>
 </html>

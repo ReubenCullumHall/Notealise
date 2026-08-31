@@ -22,10 +22,14 @@ repo). Two things *do* exist and are relevant:
   dark tone) on `--bg` (`#ffffff`, literal white — not off-white).
 - **No "vibe coded" chrome** — no soft glow shadows, no card-on-gradient treatment, no
   decorative flourishes that aren't load-bearing.
-- **No top banner / nav.** Just the mark, top-left, fixed, small.
+- **~~No top banner / nav.~~ Superseded 2026-08-28** — there is now a top bar, but it is
+  deliberately absent from the hero. It starts hidden, slides in on the first scroll past the
+  first screen, then stays put. On the hero itself it is still "just the mark, top-left, fixed,
+  small." See "The site nav, 2026-08-28" below.
 - Hero is the wordmark "Notealise", big, near the top of the viewport.
-- Below the hero: one full-viewport blank spacer (`.gap`) — reserved for content Reuben will
-  brief later. Don't fill it speculatively.
+- Below the hero: ~~one full-viewport blank spacer (`.gap`)~~ **as of 2026-08-28** the `.explore`
+  section — the quiet list of links through to the other pages (Tutorials / Students / About /
+  What's new). This is the content that spacer was reserved for.
 - Scroll cue: a single small bobbing chevron linking to `#download`, plus
   `html { scroll-behavior: smooth }`. That's the whole "scrolling animation" — nothing more.
 - Download section: two buttons, icon + label only (`Download for Windows` /
@@ -1318,3 +1322,178 @@ on GitHub. Not "we" — one person.
 with the rest of that layer when the Apple Developer ID and Windows certificate are bought. The
 app links here from `shared/update.ts`'s `MAC_INSTALL_GUIDE_URL` — see `docs/feature-updates.md`,
 whose `MAC_UNSIGNED_WORKAROUND` tags make the whole removal a grep.
+
+## The site nav, 2026-08-28 — `site/nav.css` + `site/nav.js` + the four inner pages
+
+Reuben's brief: pages across the top (Tutorials, Notealise for students, About, What's new — the
+list is not final), but **not on the hero**, where they would pull the eye off the load-in
+animation. Instead the hero stays clean and the same links sit in a quiet list further down the
+page. The bar itself "slides in as you scroll down the first time, and then when you scroll back
+up it sticks there."
+
+**The reveal is a one-way latch, not scroll-direction tracking.** `nav.js` watches `scroll` on
+the home page (identified by a `[data-topbar-reveal]` element — the `.hero` section carries it).
+The first time `scrollY` passes `min(60% of the viewport, 460px)` it adds `is-visible` to
+`.topbar` and `topbar-in` to `<html>`, then removes its own listener. From then on the bar is
+just there — scrolling back to the top does not retract it. No hide-on-scroll-down,
+show-on-scroll-up behaviour; Reuben asked for "sticks there," so once it's in it's in.
+
+- **`topbar-in` on `<html>`** fades out the fixed top-left `.mark` (opacity → 0), because the bar
+  carries its own mark + "Notealise" on the left. Only ever one mark visible. The fade is the one
+  transition here besides the slide.
+- **Inner pages have no `[data-topbar-reveal]`**, so `nav.js` skips the reveal path entirely and
+  just leaves the bar visible (its markup already has `is-visible`). `nav.js` also marks the
+  current page's link (`is-active`, `aria-current="page"`).
+- **Reduced motion:** `.topbar`'s `transform` transition is dropped under
+  `prefers-reduced-motion: reduce` — the bar snaps in instead of sliding. The latch logic is
+  unchanged.
+
+**Layout: three tracks, links dead-centre (2026-08-28, Reuben's call).** `.topbar` is
+`display: grid; grid-template-columns: 1fr auto 1fr` — brand `justify-self: start`, links
+`justify-self: center`, socials `justify-self: end`. The `1fr` on each side is what keeps the
+link group centred on the *viewport* regardless of how wide the brand or the social cluster
+grows. Reuben wants the right-hand slot for the Notealise socials ("like my personal website was
+before"). Currently a placeholder cluster — **GitHub is the real link**
+(`github.com/ReubenCullumHall/Notealise`), X and Bluesky are `href="#"` stubs pending Reuben
+confirming the actual set and URLs. Icon-only, 18px, `--muted` → `--ink` on hover, 32px hit
+target. Below 620px the grid drops to `auto 1fr` (brand + links only), the socials `display:none`
+(they belong in the footer at that size — not yet wired), and the links right-align and scroll.
+
+**Typeface: the nav uses the site's sans (Inter), unchanged from the wider system below.**
+Brand at 600/16px, links at 500/14.5px in `--muted` → `--ink` on hover, active link 600/`--ink`.
+Reuben's call to leave the bar wordmark plain sans (not mono, not serif) even though the type
+system adds both.
+
+## The type system, 2026-08-28 — `site/nav.css` (@font-face + tokens) + `site/fonts/`
+
+This supersedes the "system UI stack, no web fonts" rule that held until today. Reuben briefed a
+proper brand type pass: pointed at `revise.io` and four portfolio-site screenshots (logged in
+`REFERENCES.md`), answered a round of questions, and reviewed a live specimen artifact before
+choosing. **Direction he set: "modern & precise", a serif for every piece of big type, a
+monospace for the small structural text, the "alise" cursive kept for the logo alone.**
+
+**Three voices, self-hosted (no CDN — see the Google-Fonts empty-glyph bug above; files are from
+`@fontsource`, copied into `site/fonts/`):**
+
+| Voice | Face | Files | Where |
+|---|---|---|---|
+| Display | **Fraunces** (variable) | `fraunces-var.woff2` 67 KB (opsz 9–144 + wght, roman), `fraunces-var-italic.woff2` 46 KB (wght only) | every heading — `h1`, `h2`, `.explore-title`. `font-optical-sizing: auto`, weight 500, `letter-spacing: -0.018em`, `text-wrap: balance`. Never body, never a label. |
+| Body / UI | **Inter** | `inter-400/500/600.woff2` ~24 KB each | paragraphs, `.page-lede`, nav links, buttons, the bar wordmark, the footer |
+| Labels / data | **JetBrains Mono** | `jetbrains-mono-400/500.woff2` ~21 KB each | every eyebrow (`--eyebrow` token: `500 12px` mono, `0.14em` tracking, uppercase, `--muted`), dates, versions, shortcuts, code |
+
+~236 KB of woff2 total, committed to the repo. All three are the **same families the app
+bundles** (`src/renderer/src/assets/fonts/`, `theme.css`), so site and product read as one hand —
+but the site keeps its own copies in `site/fonts/` (the app's Fraunces cut is more heavily subset
+and ships no italic). `--serif` / `--sans` / `--mono` tokens live in `nav.css`'s `:root`;
+`.t-serif` and `.t-eyebrow` are the reusable role classes.
+
+**Why Fraunces over Newsreader / Source Serif 4** (the specimen offered all three): its italic is
+nearly a script in its own right, so it genuinely carries the emphasis the "alise" cursive is
+otherwise reserved for — and the app already uses it, so it is not a new typographic decision,
+just a new file. The trade Reuben accepted: it reads a touch warmer / less clinically "precise"
+than the other two.
+
+**The hero wordmark is untouched.** `.wm-note` ("Note") now carries an explicit
+`font-family: -apple-system, …` (OS UI stack, **Inter excluded**) so the shipped webfont can't
+leak into it — the `note-type` / `caret-move` keyframe percentages were measured against the OS
+rendering of "Note" and a different face would shift the clip stops off the glyphs. "alise" is
+baked SVG, unaffected. Verified: full load-in animation still finishes clean with the fonts in.
+
+**Not re-themed:** `install/windows.html` + `mac.html` (own `guide.css`) — same as the nav note.
+Those pages are temporary (removed when the app is signed); re-theming them is a separate call.
+
+**Shared CSS/JS, but the topbar *markup* is hand-duplicated across all five pages.** `nav.css`
+and `nav.js` are linked by `index.html` and the four inner pages, so the styling and behaviour
+can't drift. The `<header class="topbar">` block itself — brand + four links + the three social
+`<a>`s with their inline SVG paths — is copy-pasted into each `.html` (this static site has no
+templating or build step). That is ~25 lines repeated 5×. **Adding a page, a nav link, or a
+social means editing every file**, and it is easy to miss one — the first cut of this work
+shipped `nav.js` without the `<script>` tag on `index.html`, the one page whose reveal logic
+needed it, and only the screenshot pass caught that the bar never appeared. Before the site grows
+past this, a small topbar-injection script (or an actual build step) earns its keep. Flagged per
+CLAUDE.md rule 9, not resolved.
+
+`index.html` keeps its big inline `<style>` for the hero/wordmark; `nav.css` only owns the bar,
+the `.explore` list, the `body.page` shell, and a copy of the footer rules. Inner pages:
+`tutorials.html`, `students.html`, `about.html`, `updates.html` — all stubs (eyebrow + h1 + one
+lede + back link + footer), no real content yet, in the website's founder voice
+(`docs/voice.md`). "About" not "About us" — the voice rule bans "we"/"us" framing for a
+one-person business; flagged to Reuben.
+
+**Not yet done / open:** real page content (Reuben's); final nav label set and order; real social
+URLs (X + Bluesky are `href="#"` stubs, GitHub is live); the mobile bar (socials drop out, links
+right-align and scroll — may want a proper menu); socials in the footer below 620px; re-theming
+the two `install/` pages; deploy timing (all of this is uncommitted). Verified headlessly
+(Playwright, Chromium): hero clean on load + wordmark animation finishes with the webfonts in,
+bar slides in past the threshold and sticks, mark fades, reduced-motion snaps, links centre on
+the viewport, inner pages show the bar from load with the right link active, all three faces load
+with no failed assets, `h1`→Fraunces / eyebrow→JetBrains Mono / body→Inter / wordmark→OS stack
+confirmed via computed style. Not yet watched live in a real browser or on a real deployment.
+
+## The tagline, 2026-08-31 — `site/index.html`, the line under the wordmark
+
+"the bridge between complexity and constraint", typed in after the wordmark settles. New markup
+between the wordmark `<h1>` and the scroll cue; **the generated wordmark block and every `wm-*`
+rule are untouched** (verified byte-identical against a pre-edit copy).
+
+**This supersedes the monochrome rule, and only this far.** The rules above say "No purple, no
+brand accent colour" and "no decorative flourishes that aren't load-bearing". The marks around
+`complexity` are **oxblood `#7A3B34`**, and they animate continuously and permanently. The
+concession is deliberately narrow: **the accent is on the ornaments only, never on type**, and
+everything else on the page stays monochrome. Do not read this as permission to add accent colour
+anywhere else.
+
+**The colour was clay `#D97757` for one afternoon and Reuben rejected it**, in his words because it
+"looks like Claude just built it and it had no innovation". Read that as a ban on the *cliche*
+rather than on warm colour: oxblood is warmer than the site's ink and is fine; a saturated orange
+is not. Chosen against a live eight-swatch selector (ink / graphite / slate blue / deep teal /
+forest / oxblood / bronze / indigo) rather than argued about.
+
+**Three other treatments were built and rejected on 2026-08-31**, and are worth not re-proposing:
+a node constellation with hairline edges, typographic strata (stacked rules, no icon at all), and
+a meshing gear train. Reuben kept the asterisks-and-cogs. The rejected three still exist in the
+study artifact if the question ever reopens.
+
+### Decisions, all made off a scrubbable study page rather than by argument
+
+- Starts at **3150ms** — the pen finishes at `--penDelay 1000ms` + `--penDur 1998ms` and the last
+  slice settles at 2998ms, so this leaves a 150ms beat. **If the wordmark is ever regenerated,
+  re-read those two values and move `LEAD` with them.**
+- **86ms per letter, 78ms between words.** The line runs 4.46s, so the hero is not still until
+  ~7.6s after load. That is a long time and was chosen deliberately; it is the first thing to
+  revisit if the pacing ever feels wrong.
+- `bridge` is written along a parabola (**0.46em rise, ±9° rotation**) and drops the moment
+  `complexity` starts typing. **The rotation matters:** at ±20° the end letters, which sit at zero
+  rise, tilt hard enough to read as tumbling rather than as an arch.
+- `constraint` stacks a bold roman and a real italic and swaps them under the deepest part of the
+  squeeze. Skewing one glyph set gives a fake italic — the real face has different letterforms.
+  The cost is that each box keeps its **bold** advance width, so the settled italic is ~9%
+  wider-tracked than real italic text. Measured and accepted.
+- The marks are a **generated many-rayed asterisk (11 spokes, alternate ones at 74%)**. They were
+  a four-point concave sparkle until Reuben pointed out that shape *is* the Gemini mark. **Do not
+  go back to it.**
+- **They orbit, they do not slide.** The first version drifted between two points on a straight
+  line, which at this size reads as nothing moving at all. Each mark now traces a small ellipse
+  (`--rx` / `--ry`, a negative `--ry` reversing the direction) on its own period, 5.2s to 9.3s, so
+  no two are ever in step and they visibly travel around one another. That was the specific ask.
+- **`transform-origin` on an `<svg>` ROOT is CSS pixels, not user units.** It was `12px 12px` on a
+  mark about 11px wide, so the pivot sat outside the mark and the breathe rotation swung it
+  sideways instead of turning it in place. It is `50% 50%` now. The `.tl-ray` rules are inner SVG
+  elements, where px genuinely are user units - those keep `12px`.
+
+### Two traps this cost, both worth not repeating
+
+1. **`steps(1)` over a 1ms window silently fails at long delays.** The first build switched each
+   letter on with `animation: … 1ms steps(1) var(--at) forwards`. Every letter after about the
+   first second stayed invisible forever: at a ~5s delay the iteration progress computes to
+   `0.9999999999998899`, and `steps(1, jump-end)` returns 0 for anything below 1. Measured off the
+   live element, not guessed. **Use `linear`** — over 1ms it is imperceptible and immune.
+2. **Four layers, one property each.** The marks place (`.tl-o`), fade and drift (`.tl-oi`),
+   breathe (`svg`) and shimmer (`.tl-ray > path`) on four separate elements. Put the drift and the
+   shimmer on the same element and they cancel: last `transform` wins.
+
+**Fallback contract, same as the wordmark's.** The settled sentence ships as ordinary markup with
+a `<b>` and an `<i>`; the script only replaces it with per-letter spans when `html.wm-motion` is
+set. Verified by loading the real page with JavaScript disabled — plain finished sentence, no
+motion, no flash, identical position. The per-letter spans carry `aria-label` on the `<p>` so a
+screen reader still gets one clean string.

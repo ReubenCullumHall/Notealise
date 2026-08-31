@@ -10,7 +10,7 @@
    iframe pointed at GitHub's attachment response just downloads. */
 
 (function () {
-  var REPO = "ReubenCullumHall/Notes-app";
+  var REPO = "ReubenCullumHall/Notealise";
   var FILE = { windows: "Notealise-Setup.exe", mac: "Notealise.dmg" };
   var OSNAME = { windows: "Windows", mac: "macOS" };
 
