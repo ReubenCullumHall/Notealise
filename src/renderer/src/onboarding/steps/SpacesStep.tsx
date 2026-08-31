@@ -5,6 +5,17 @@ import type { OnboardingStepProps } from '../Onboarding'
 const PRESETS = ['School', 'Work', 'Journal', 'Projects', 'Ideas', 'Research', 'Personal', 'Reading']
 const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
 
+// Someone who picks a single space still lands in an app with two, so the
+// sidebar shows it holds more than one section and "drag a note into another
+// space" (a welcome note, plus the demo note below) has somewhere to go.
+const SECOND_SPACE = 'Default'
+const SECOND_SPACE_NOTE = `# Drag a note here
+
+This is a second space, alongside the one you picked. Drag a note from your other space onto "${SECOND_SPACE}" in the sidebar - the file really moves, because a space is just a folder on disk.
+
+Rename or delete this space whenever you want - right-click it in the sidebar.
+`
+
 interface Props extends OnboardingStepProps {
   activeSpaceFolder: string
   onOpenSpace: (folder: string) => Promise<void>
@@ -66,6 +77,13 @@ export function SpacesStep({ onOpenSpace, onReady }: Props): React.JSX.Element {
               // same free name.
               for (const name of chosen) {
                 actual.push(await window.api.createFolder('', name))
+              }
+              // One picked space → quietly add a second, with a note in it that
+              // makes the "drag between spaces" idea something they can try.
+              if (chosen.length === 1) {
+                const extra = await window.api.createFolder('', SECOND_SPACE)
+                const note = await window.api.createNote(extra, 'Drag a note here')
+                await window.api.writeNote(note, SECOND_SPACE_NOTE)
               }
               await onOpenSpace(actual[0])
             }
@@ -146,10 +164,10 @@ export function SpacesStep({ onOpenSpace, onReady }: Props): React.JSX.Element {
       <p className="min-h-[16px] font-mono text-[12px] text-ink-500">
         {atCap
           ? `That's as many as you can start with here — ${NUMBER_WORDS[SPACE_CAP] ?? SPACE_CAP}. You can add more later from Settings.`
-          : chosen.length > 0 &&
-            `You'll start with ${NUMBER_WORDS[chosen.length] ?? chosen.length} ${
-              chosen.length === 1 ? 'space' : 'spaces'
-            }: ${chosen.join(', ')}.`}
+          : chosen.length === 1
+            ? `You'll start with ${chosen[0]}, plus a ${SECOND_SPACE} space so you can move notes between them.`
+            : chosen.length > 1 &&
+              `You'll start with ${NUMBER_WORDS[chosen.length] ?? chosen.length} spaces: ${chosen.join(', ')}.`}
       </p>
     </div>
   )

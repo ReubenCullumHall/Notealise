@@ -55,6 +55,31 @@
 > deliberately thin — the customisation surface should be a *discovery* ("wow, look at all this
 > in Settings"), never taught up front. He explicitly refused page-looks/tints in onboarding on
 > that basis. Trim onboarding copy toward action; resist adding explanation.
+>
+> **Welcome notes + sidebar + Default space (2026-08-31)** — Reuben rewrote every welcome note
+> (`welcomeNotes.ts`), verified live. The Disk-proof "it's all in Settings" orientation that was
+> removed on 2026-08-30 now lives in "Make it yours" and "How this app is organised" — **that TODO
+> is closed.** These notes are deliberately founder-voice: "I", "us", "our" and one "!" are kept
+> against `docs/voice.md`; the file's header comment says so. Dashes are all spaced hyphens (his
+> call, matching the screen-1 decision). The long blank run in "Start here" before "# Our final
+> word" is load-bearing — it is what makes the `[[Start here#Our final word]]` link read as a jump.
+> **Seed order:** `seedWelcomeNotes` ends with a `reorderEntries` so the space isn't alphabetical —
+> demo folder first, then Start here / How organised / Make it yours / the index note; a Write-step
+> note keeps no order and settles last. **`freeArrange` now defaults on** (`DEFAULT_SPACE`) for new
+> spaces only — a stored `false` is untouched. **New note/folder lands at the bottom**
+> (`placeAtBottom` in `App.tsx`'s `newNote`/`newFolder`) by re-sequencing the level and appending;
+> that stamps an explicit order on siblings that had none, which is the accepted trade. **Default
+> space:** picking exactly one space in `SpacesStep` also creates "Default" with one seeded note
+> ("Drag a note here"), and the summary line says so — so "drag a note into another space" is
+> testable from the first run.
+>
+> **Bug found + fixed the same day:** the seed order was saving to `workspace.json` correctly but
+> not showing — `finishOnboarding` reloaded the tree after `seedWelcomeNotes` but not the
+> workspace, and the boot effect's own `loadWorkspace()` had already run once, before the file
+> existed. Fix: `finishOnboarding` now does `Promise.all([loadTree(), loadWorkspace()])` after
+> seeding. **Lesson:** the disk artefact (`.mdnotes/workspace.json`) was right the whole time —
+> reading it first would have skipped a run of wrong theories about debounce races and normaliser
+> pruning. Check the file before theorising about the pipeline that writes it.
 
 Status of the spec text below: **as written 2026-08-14, superseded in the four rows above.** It is
 copied verbatim from
