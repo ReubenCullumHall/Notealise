@@ -54,14 +54,28 @@ describe('normalizeSettings', () => {
   it('starts a space with the chrome a new user should see', () => {
     // The links strip and the path bar are the features, not decorations on
     // them: a space that started without either read as the feature missing
-    // rather than switched off. Pinning the strip is the opinionated one, so it
-    // stays off until asked for.
+    // rather than switched off. Pinning the strip defaults on too, with the
+    // other three "while scrolling" settings (SpaceForm) — nothing about how
+    // the app looks changes for anyone until they opt a bar into hiding.
     expect(activeSpace(normalizeSettings({}))).toMatchObject({
       showLinks: true,
       showPath: true,
-      pinLinks: false,
+      pinLinks: true,
       showNoteInfo: false
     })
+  })
+
+  it('starts a new space with notes and folders mixed into one order', () => {
+    // freeArrange defaults ON (2026-08-31): a hand-arranged sidebar is the shape
+    // most people expect, and the onboarding welcome notes need it — the demo
+    // folder is seeded above "Start here", which folders-on-top cannot express.
+    // A settings.json that predates the change still gets the default; one that
+    // records `false` explicitly keeps it (the next assertion).
+    expect(DEFAULT_SPACE.freeArrange).toBe(true)
+    expect(activeSpace(normalizeSettings({})).freeArrange).toBe(true)
+    expect(activeSpace(normalizeSettings({ spaces: [{ folder: 'a', freeArrange: false }] })).freeArrange).toBe(
+      false
+    )
   })
 
   it('never turns a chrome option on or off on a coercion', () => {
@@ -75,7 +89,7 @@ describe('normalizeSettings', () => {
             spaces: [{ folder: 'a', pinLinks: bad, showPath: bad, showLinks: bad, showNoteInfo: bad }]
           })
         )
-      ).toMatchObject({ showLinks: true, showPath: true, pinLinks: false, showNoteInfo: false })
+      ).toMatchObject({ showLinks: true, showPath: true, pinLinks: true, showNoteInfo: false })
     }
     // and a real boolean is always obeyed, in both directions
     expect(
@@ -222,6 +236,17 @@ describe('normalizeSettings', () => {
       DEFAULT_SPACE.colorStyle
     )
   })
+
+  it('carries the collection through, keeping only what this build can draw', () => {
+    // shared/looks.ts owns the rules and tests them; this pins that the fields
+    // are actually read by the normaliser, which is what a hand-edited or
+    // half-synced settings.json meets first.
+    const s = normalizeSettings({ pageLookLibrary: ['dots', 'nope'], tintLibrary: ['#ABCDEF@12', 'x'] })
+    expect(s.pageLookLibrary).toEqual(['dots'])
+    expect(s.tintLibrary).toEqual(['#abcdef@12'])
+    expect(normalizeSettings({}).pageLookLibrary).toEqual([])
+  })
+
 })
 
 // The migration is the part that touches every existing user's real settings, so

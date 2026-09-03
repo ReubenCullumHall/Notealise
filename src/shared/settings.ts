@@ -27,7 +27,9 @@
 // only. Unavoidable without a schema-version refusal path — documented rather
 // than engineered around.
 
+import { isColorToken, type ColorToken } from './palette'
 import { DEFAULT_PALETTE, normalizePalette } from './color'
+import { normalizePageLookLibrary, normalizeTintLibrary } from './looks'
 
 /** 'black' is Extra dark: the dark ramp with every surface taken to (near)
  *  pitch black, for OLED panels and dim rooms. It is a VARIANT of dark, not a
@@ -40,6 +42,10 @@ export type ResolvedThemeId = 'dark' | 'light' | 'black'
  *  settings.json/theme-cache.json: main never resolves it, only the renderer
  *  does, since that's the only process with a `prefers-color-scheme` to ask. */
 export type ThemeId = ResolvedThemeId | 'system'
+/** The two ways the revealed syntax marks can read in Markdown pro. */
+export const RAW_MARK_STYLES = ['faded', 'colour'] as const
+export type RawMarkStyleId = (typeof RAW_MARK_STYLES)[number]
+
 /** How bright body text is on a dark theme. 'grey' is the long-standing soft
  *  ramp (#d6d6d6 at the top); 'white' pushes it to full white for maximum
  *  contrast. Ignored by the light theme, which has no white to give. */
@@ -138,12 +144,48 @@ export interface Space {
   // These three belong to a space rather than the app because how a set of
   // notes READS is a property of that set: a revision space wants its links in
   // front of it and its folder trail visible, a journal wants neither. Settings
-  // → Linking content can push any of them to every space at once.
+  // → Links and → Note extras can push any of them to every space at once.
   /** show the strip of this note's links — what it points at, what points back */
   showLinks: boolean
-  /** keep that strip on screen while the note scrolls, instead of letting it go.
+  // --- while scrolling ---
+  // Four bars, one behaviour: ON (the default for all four) keeps the bar on
+  // screen no matter how far down the note you are. OFF is something more
+  // specific than "let it scroll away" — the bar is hidden entirely from the
+  // moment you scroll past the very top, and reappears only once you're back
+  // at scrollTop 0, never on a mid-note scroll-up (that pattern, common in
+  // mobile browsers, would flicker the bar in and out on ordinary up/down
+  // reading anywhere in the middle of a long note). See NotePane.tsx's
+  // `scrolledPastTop` (shared by all four) and App.tsx's `focusedScrolledPastTop`
+  // (which the tab strip and path bar track, since both render once for
+  // whichever pane has the keyboard — see `onScrollTopChange`).
+  // Hidden fades the bar in place rather than collapsing its height — the
+  // note underneath does NOT reflow to fill the gap. Matches `pinLinks`'
+  // original behaviour (its layout space was always reserved, hidden or not)
+  // rather than introducing a second, reflowing kind of "hidden" alongside it.
+  /** Keep the note's heading row — Bold/Italic/custom buttons, the title,
+   *  the word count and dates, the split-view button — on screen while the
+   *  note scrolls. Grouped with the other three "while scrolling" settings in
+   *  SpaceForm, not "Note extras": the row itself can't be turned off (there
+   *  is no `showNoteHeader`), only whether it stays put. */
+  pinNoteHeader: boolean
+  /** Keep the open-notes tab strip on screen while the focused pane scrolls.
+   *  One strip for the whole editor area (TabStrip renders once, above every
+   *  pane), so in a split it follows whichever column has the keyboard. */
+  pinTabs: boolean
+  /** Keep the `Space › Folder › Note` bar (`showPath` below) on screen while
+   *  the focused pane scrolls. Same one-bar-for-the-whole-row reasoning as
+   *  `pinTabs`. Only meaningful when `showPath` is on — there's nothing to
+   *  keep on screen if the bar is off entirely (dimmed in SpaceForm). */
+  pinPath: boolean
+  /** Keep the links strip on screen while the note scrolls. Before 2026-08-29
+   *  this defaulted OFF and meant the strip slid up continuously with the
+   *  scroll offset (clamped to LINKS_BLOCK_HEIGHT) — replaced because that
+   *  resting position landed squarely on top of the note's own heading row
+   *  once scrolled a little way, silently hiding it (CLAUDE.md's "Gotchas":
+   *  the heading row was never actually scrolling away, the links strip was
+   *  parking on top of it). Now defaults ON, with the rest of this group.
    *  Only meaningful when `linksPosition` is 'top' — a bottom strip is always
-   *  fixed, so this is ignored (and hidden in SpaceForm) once it isn't. */
+   *  fixed, so this is ignored (and dimmed in SpaceForm) once it isn't. */
   pinLinks: boolean
   /** top (under the format bar) or fixed to the bottom of the note */
   linksPosition: LinksPosition
@@ -158,6 +200,24 @@ export interface Space {
    *  who never want to see a `**`. Which notes are currently RAW is not here:
    *  that is a property of each note, and lives in workspace.json. */
   markdownPro: boolean
+  /** How the syntax marks read once Markdown pro has revealed them.
+   *
+   *  'faded' greys them so your eye runs past `<mark class="hl-rose">` to the
+   *  words; 'code' gives them a tinted monospace ground so they stand out as
+   *  markup. Reuben's call, 2026-08-29 — "make it blend in or stand out
+   *  depending on what you want". Faded is the default because the common
+   *  reason to be in raw view is to READ the note with its marks showing, not
+   *  to audit the markup.
+   *
+   *  Only ever visible inside raw view; in the formatted view the marks are
+   *  hidden, so this setting has nothing to colour. */
+  rawMarkStyle: RawMarkStyleId
+  /** Which palette colour the marks take when `rawMarkStyle` is 'colour', as the
+   *  same `hl-NAME` / `tc-NAME` token a coloured phrase in a note uses — so the
+   *  choice is made from the very same eight swatches, in the same two layers.
+   *  Reuben, 2026-08-29: the first attempt used a neutral tint and "can't see it
+   *  well, even in light mode". Ignored entirely while the style is 'faded'. */
+  rawMarkTint: ColorToken
   // --- shortcuts ---
   /** The four custom format-bar buttons, in bar order: [farLeft, left, right,
    *  farRight]. Each is an action id from the renderer's catalogue
@@ -286,6 +346,23 @@ export interface AppSettings {
    *  the dialog's own "Never ask again" does — Settings -> General turns it
    *  back on, so that button is never a one-way door. */
   confirmMediaDelete: boolean
+  // --- your collection: what a space's pickers are allowed to offer ---------
+  /** Page look ids added from Settings -> Your collection -> Explore. The
+   *  looks that ship in the collection (shared/looks.ts's 'bundled') are NOT
+   *  listed here — they are in it by definition — so this array holds exactly
+   *  what was added and nothing has to be seeded on first run.
+   *
+   *  Collected per VAULT, not per install, unlike downloaded fonts. Fonts are
+   *  files on this machine and a font you don't have you cannot use; a page
+   *  look is CSS that every build already has, so the list is a preference
+   *  about what to be offered, and preferences live in settings.json beside
+   *  the spaces that consume them. It also means the collection travels with
+   *  the vault the way the spaces themselves do. */
+  pageLookLibrary: string[]
+  /** Saved tints, each a `#rrggbb@nn` token (shared/looks.ts). Same rules as
+   *  `pageLookLibrary`: ours aren't stored, only the ones made with the
+   *  wheel. */
+  tintLibrary: string[]
 }
 
 export const DEFAULT_SPACE: Space = {
@@ -310,10 +387,21 @@ export const DEFAULT_SPACE: Space = {
   colorInherit: true,
   colorFadeNested: false,
   colorPalette: [...DEFAULT_PALETTE],
-  freeArrange: false,
+  // On by default: a hand-arranged sidebar where notes and folders share one
+  // order is the shape most people expect, and the onboarding welcome notes
+  // rely on it (the demo folder is meant to sit above "Start here", which
+  // folders-on-top can't express). Off is still one toggle away, and the order
+  // is stored the same way either way, so flipping it never scrambles anything.
+  // Existing vaults keep whatever their settings.json already records.
+  freeArrange: true,
   compactNav: false,
   showLinks: true,
-  pinLinks: false,
+  // All four "while scrolling" settings default ON — nothing about how the
+  // app looks changes for anyone until they opt a bar into hiding.
+  pinNoteHeader: true,
+  pinTabs: true,
+  pinPath: true,
+  pinLinks: true,
   linksPosition: 'top',
   // On by default: knowing where the note you're reading actually lives is the
   // kind of thing you want in every space, and a new space starting without it
@@ -321,6 +409,10 @@ export const DEFAULT_SPACE: Space = {
   showPath: true,
   showNoteInfo: false,
   markdownPro: false,
+  rawMarkStyle: 'faded',
+  // Violet reads as markup rather than as prose, and its light and dark values
+  // are far enough from the body ink to be unmistakable on either theme.
+  rawMarkTint: 'tc-violet',
   toolbarSlots: ['', '', '', ''],
   pageLook: '',
   font: '',
@@ -342,7 +434,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   timezone: 'system',
   playStartupAnimation: true,
   animationsEnabled: true,
-  confirmMediaDelete: true
+  confirmMediaDelete: true,
+  pageLookLibrary: [],
+  tintLibrary: []
 }
 
 /** A brand-new space, defaults throughout. Every array on DEFAULT_SPACE is
@@ -470,6 +564,9 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     freeArrange: typeof s.freeArrange === 'boolean' ? s.freeArrange : DEFAULT_SPACE.freeArrange,
     compactNav: typeof s.compactNav === 'boolean' ? s.compactNav : DEFAULT_SPACE.compactNav,
     showLinks: chrome(s.showLinks, legacy.showLinks, DEFAULT_SPACE.showLinks),
+    pinNoteHeader: typeof s.pinNoteHeader === 'boolean' ? s.pinNoteHeader : DEFAULT_SPACE.pinNoteHeader,
+    pinTabs: typeof s.pinTabs === 'boolean' ? s.pinTabs : DEFAULT_SPACE.pinTabs,
+    pinPath: typeof s.pinPath === 'boolean' ? s.pinPath : DEFAULT_SPACE.pinPath,
     pinLinks: chrome(s.pinLinks, legacy.pinLinks, DEFAULT_SPACE.pinLinks),
     linksPosition: LINKS_POSITIONS.includes(s.linksPosition as LinksPosition)
       ? (s.linksPosition as LinksPosition)
@@ -478,6 +575,10 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     showNoteInfo:
       typeof s.showNoteInfo === 'boolean' ? s.showNoteInfo : DEFAULT_SPACE.showNoteInfo,
     markdownPro: typeof s.markdownPro === 'boolean' ? s.markdownPro : DEFAULT_SPACE.markdownPro,
+    rawMarkStyle: RAW_MARK_STYLES.includes(s.rawMarkStyle as RawMarkStyleId)
+      ? (s.rawMarkStyle as RawMarkStyleId)
+      : DEFAULT_SPACE.rawMarkStyle,
+    rawMarkTint: isColorToken(s.rawMarkTint) ? s.rawMarkTint : DEFAULT_SPACE.rawMarkTint,
     toolbarSlots: normalizeSlots(s.toolbarSlots),
     pageLook: shortString(s.pageLook),
     font: shortString(s.font),
@@ -552,7 +653,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
     animationsEnabled:
       typeof s.animationsEnabled === 'boolean' ? s.animationsEnabled : DEFAULT_SETTINGS.animationsEnabled,
     confirmMediaDelete:
-      typeof s.confirmMediaDelete === 'boolean' ? s.confirmMediaDelete : DEFAULT_SETTINGS.confirmMediaDelete
+      typeof s.confirmMediaDelete === 'boolean' ? s.confirmMediaDelete : DEFAULT_SETTINGS.confirmMediaDelete,
+    pageLookLibrary: normalizePageLookLibrary(s.pageLookLibrary),
+    tintLibrary: normalizeTintLibrary(s.tintLibrary)
   }
 }
 
@@ -761,6 +864,11 @@ export function normalizeThemeCache(raw: unknown): ThemeCache {
 export function settingsFromThemeCache(c: ThemeCache): AppSettings {
   return {
     ...DEFAULT_SETTINGS,
+    // Copied, not shared — guarantee 5 again: these are empty on DEFAULT_SETTINGS,
+    // and handing the defaults' own arrays out is how a later push into "the
+    // collection" ends up mutating the defaults for the rest of the session.
+    pageLookLibrary: [...DEFAULT_SETTINGS.pageLookLibrary],
+    tintLibrary: [...DEFAULT_SETTINGS.tintLibrary],
     spaces: [
       {
         ...freshSpace(DEFAULT_SPACE.folder),

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { ContextMenu } from '../ContextMenu'
 import {
   activeSpace,
   SPACE_CAP,
@@ -19,6 +21,15 @@ import type { FontLibrary } from './useInstalledFonts'
 import { findAction, SLOT_LABELS } from '../editor/commands'
 import { PRESET_DRAG, PresetLibrary, type PresetActions } from './Presets'
 import { ALL_PARTS, vaultName, type SpacePreset } from '../../../shared/presets'
+import { HelpTip } from '../Tooltip'
+import { claimEscape } from './escapeClaims'
+
+/** Shown next to the option to keep a space's auto-saved preset when the space
+ *  itself is deleted — wherever that option appears (this page's own Delete
+ *  space, and the sidebar's right-click Delete space…, which offers the same
+ *  choice for the same reason). */
+export const PRESET_SAVE_HINT =
+  "Keep this space's look — theme, colours, arranging — saved as a preset you can apply to another space later."
 
 // Settings -> Spaces. Up to five presets; each carries its own look, its own
 // sidebar arranging and its own format-bar buttons, so a maths-revision space
@@ -97,26 +108,116 @@ const THEME_PREVIEW: Record<Space['theme'], { side: string; main: string; line: 
 // app bundles no emoji font (that would be a ~10MB dependency), so these render
 // from the OS — Segoe UI Emoji on Windows, Apple Color Emoji on macOS — and a
 // VS16 sequence can come out monochrome on Windows.
-const EMOJI: { group: string; items: string[] }[] = [
+//
+// `kw` is a handful of plain-English search terms per emoji — not a general
+// emoji-name table (that's the "few thousand" the picker below still isn't),
+// just enough to find something in this one curated set of 80 by typing what
+// it's called instead of scanning a grid for it.
+const EMOJI: { group: string; items: { e: string; kw: string }[] }[] = [
   {
     group: 'Objects',
-    items: ['📝', '📎', '📌', '📁', '📓', '📚', '🔖', '🔑', '💼', '📦', '🧰', '🔨', '🧪', '🎒', '💻', '📱']
+    items: [
+      { e: '📝', kw: 'notes memo write pencil' },
+      { e: '📎', kw: 'clip attach paperclip' },
+      { e: '📌', kw: 'pin pushpin mark' },
+      { e: '📁', kw: 'folder file' },
+      { e: '📓', kw: 'notebook journal' },
+      { e: '📚', kw: 'books library study' },
+      { e: '🔖', kw: 'bookmark tag label' },
+      { e: '🔑', kw: 'key unlock password' },
+      { e: '💼', kw: 'briefcase work business' },
+      { e: '📦', kw: 'box package archive' },
+      { e: '🧰', kw: 'toolbox tools kit' },
+      { e: '🔨', kw: 'hammer tool build fix' },
+      { e: '🧪', kw: 'test tube science lab experiment' },
+      { e: '🎒', kw: 'backpack bag school' },
+      { e: '💻', kw: 'laptop computer code' },
+      { e: '📱', kw: 'phone mobile device' }
+    ]
   },
   {
     group: 'Symbols',
-    items: ['⭐', '✨', '🔥', '⚡', '💡', '🎯', '🧩', '✅', '❌', '🚩', '💎', '🏆', '🔔', '🎉', '💜', '💙']
+    items: [
+      { e: '⭐', kw: 'star favorite favourite' },
+      { e: '✨', kw: 'sparkle shiny new' },
+      { e: '🔥', kw: 'fire hot trending' },
+      { e: '⚡', kw: 'bolt lightning fast energy' },
+      { e: '💡', kw: 'idea lightbulb bright' },
+      { e: '🎯', kw: 'target goal focus dart' },
+      { e: '🧩', kw: 'puzzle piece project' },
+      { e: '✅', kw: 'check done complete tick' },
+      { e: '❌', kw: 'cross no cancel wrong' },
+      { e: '🚩', kw: 'flag alert warning' },
+      { e: '💎', kw: 'gem diamond premium' },
+      { e: '🏆', kw: 'trophy award win' },
+      { e: '🔔', kw: 'bell notification alert' },
+      { e: '🎉', kw: 'party celebrate confetti' },
+      { e: '💜', kw: 'purple heart love' },
+      { e: '💙', kw: 'blue heart love' }
+    ]
   },
   {
     group: 'Nature',
-    items: ['🌿', '🌸', '🌊', '🌙', '🌵', '🍃', '🌻', '🌲', '🐝', '🦋', '🐬', '🌍', '🍂', '🌴', '🗻', '🌞']
+    items: [
+      { e: '🌿', kw: 'leaf plant herb' },
+      { e: '🌸', kw: 'blossom flower cherry' },
+      { e: '🌊', kw: 'wave ocean sea water' },
+      { e: '🌙', kw: 'moon night crescent' },
+      { e: '🌵', kw: 'cactus desert plant' },
+      { e: '🍃', kw: 'leaves wind nature' },
+      { e: '🌻', kw: 'sunflower flower' },
+      { e: '🌲', kw: 'tree pine forest' },
+      { e: '🐝', kw: 'bee insect honey' },
+      { e: '🦋', kw: 'butterfly insect' },
+      { e: '🐬', kw: 'dolphin ocean animal' },
+      { e: '🌍', kw: 'earth globe world planet' },
+      { e: '🍂', kw: 'leaf autumn fall' },
+      { e: '🌴', kw: 'palm tree tropical' },
+      { e: '🗻', kw: 'mountain fuji peak' },
+      { e: '🌞', kw: 'sun face bright day' }
+    ]
   },
   {
     group: 'Activity',
-    items: ['🧠', '👋', '🎧', '🏃', '🧘', '☕', '🍜', '🎸', '🎨', '🎬', '📷', '🎤', '🏀', '⚽', '🎮', '🥁']
+    items: [
+      { e: '🧠', kw: 'brain mind think idea' },
+      { e: '👋', kw: 'wave hand hello greet' },
+      { e: '🎧', kw: 'headphones music audio' },
+      { e: '🏃', kw: 'run running exercise' },
+      { e: '🧘', kw: 'meditate yoga calm' },
+      { e: '☕', kw: 'coffee drink cafe' },
+      { e: '🍜', kw: 'noodles food ramen' },
+      { e: '🎸', kw: 'guitar music instrument' },
+      { e: '🎨', kw: 'art paint palette creative' },
+      { e: '🎬', kw: 'movie film clapper' },
+      { e: '📷', kw: 'camera photo picture' },
+      { e: '🎤', kw: 'mic microphone sing' },
+      { e: '🏀', kw: 'basketball sport ball' },
+      { e: '⚽', kw: 'soccer football sport ball' },
+      { e: '🎮', kw: 'game controller gaming' },
+      { e: '🥁', kw: 'drum music instrument' }
+    ]
   },
   {
     group: 'Places',
-    items: ['🏠', '🏢', '🏡', '🏫', '🏥', '🏰', '🚀', '🚗', '🚲', '🛫', '🧭', '🌆', '🌉', '🗽', '🎡', '⛺']
+    items: [
+      { e: '🏠', kw: 'house home' },
+      { e: '🏢', kw: 'office building work' },
+      { e: '🏡', kw: 'home house garden' },
+      { e: '🏫', kw: 'school building education' },
+      { e: '🏥', kw: 'hospital medical health' },
+      { e: '🏰', kw: 'castle building' },
+      { e: '🚀', kw: 'rocket launch space' },
+      { e: '🚗', kw: 'car drive travel' },
+      { e: '🚲', kw: 'bike bicycle travel' },
+      { e: '🛫', kw: 'plane travel flight airport' },
+      { e: '🧭', kw: 'compass navigate direction' },
+      { e: '🌆', kw: 'city cityscape skyline' },
+      { e: '🌉', kw: 'bridge city' },
+      { e: '🗽', kw: 'statue liberty landmark' },
+      { e: '🎡', kw: 'ferris wheel fair carnival' },
+      { e: '⛺', kw: 'tent camp outdoors' }
+    ]
   }
 ]
 
@@ -173,26 +274,49 @@ export function Spaces({
   const ownPreset = presets.find(
     (p) => p.name === space.folder && !!vault && p.origin === vaultName(vault)
   )
+  const presetFor = (folder: string): SpacePreset | undefined =>
+    presets.find((p) => p.name === folder && !!vault && p.origin === vaultName(vault))
 
-  const deleteSpace = async (keepPreset: boolean): Promise<void> => {
-    if (!space.folder) return
+  // Takes a folder rather than always the active space: the tab strip's
+  // right-click menu (below) deletes whichever tab it was opened on, which
+  // is very often NOT the one currently open in the form underneath it.
+  // Returns whether it actually went, so a modal caller (the right-click
+  // confirm dialog below) knows whether it's safe to close itself — a
+  // refused delete (main.trashEntries can fail) must leave the dialog open
+  // rather than close over an error the user never saw.
+  const deleteSpaceByFolder = async (folder: string, keepPreset: boolean): Promise<boolean> => {
+    if (!folder) return false
     setBusy(true)
     try {
       // Straight to the OS trash, not the app's own bin — a space sitting in
       // the same bin as an individually-trashed note is confusing. The
-      // two-step button below is the confirmation.
-      const ok = await actions.onDeleteSpace(space.folder)
+      // two-step button below (and the right-click confirm dialog) is the
+      // confirmation.
+      const ok = await actions.onDeleteSpace(folder)
       if (ok) {
-        onChange(withoutSpace(settings, space.folder))
+        onChange(withoutSpace(settings, folder))
         // Only after the folder actually went: a refused delete must not take
         // the saved look with it. Deleted by default — see DeleteSpace below
         // for why keepPreset exists to opt OUT of that.
-        if (!keepPreset && ownPreset) presetActions.onDelete(ownPreset.id)
+        if (!keepPreset) {
+          const preset = presetFor(folder)
+          if (preset) presetActions.onDelete(preset.id)
+        }
       }
+      return ok
     } finally {
       setBusy(false)
     }
   }
+  const deleteSpace = (keepPreset: boolean): Promise<boolean> => deleteSpaceByFolder(space.folder, keepPreset)
+
+  // The tab strip's own right-click "Delete space…" — testers found the
+  // sidebar's equivalent but not this one, so it gets the same menu (see
+  // Sidebar.tsx's identical pattern; SpaceDeleteConfirm above is shared with
+  // it for exactly that reason).
+  const [spaceMenu, setSpaceMenu] = useState<{ x: number; y: number; space: Space } | null>(null)
+  const [spaceDeleteTarget, setSpaceDeleteTarget] = useState<Space | null>(null)
+  const [keepSpacePreset, setKeepSpacePreset] = useState(false)
 
   return (
     <>
@@ -241,6 +365,14 @@ export function Spaces({
                   // user may never have opened.
                   if (preset) presetActions.onApply(preset, s.folder, ALL_PARTS)
                 }}
+                onContextMenu={(e) => {
+                  // The vault-fallback space (folder === '') has nothing to
+                  // delete — same guard the sidebar's own switcher uses.
+                  if (!s.folder) return
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setSpaceMenu({ x: e.clientX, y: e.clientY, space: s })
+                }}
               >
                 <span className="em">{s.emoji || i + 1}</span>
                 <span className="nm">{spaceLabel(s)}</span>
@@ -267,6 +399,43 @@ export function Spaces({
             start dividing it up — Revision, Work, Journal.
           </p>
         )}
+
+        {spaceMenu &&
+          createPortal(
+            <ContextMenu
+              x={spaceMenu.x}
+              y={spaceMenu.y}
+              items={[
+                {
+                  label: 'Delete space…',
+                  danger: true,
+                  onClick: () => {
+                    setKeepSpacePreset(false)
+                    setSpaceDeleteTarget(spaceMenu.space)
+                  }
+                }
+              ]}
+              onClose={() => setSpaceMenu(null)}
+            />,
+            document.body
+          )}
+
+        {spaceDeleteTarget &&
+          createPortal(
+            <SpaceDeleteConfirm
+              space={spaceDeleteTarget}
+              hasPreset={!!presetFor(spaceDeleteTarget.folder)}
+              keepPreset={keepSpacePreset}
+              onToggleKeepPreset={() => setKeepSpacePreset((v) => !v)}
+              busy={busy}
+              onCancel={() => setSpaceDeleteTarget(null)}
+              onConfirm={async () => {
+                const ok = await deleteSpaceByFolder(spaceDeleteTarget.folder, keepSpacePreset)
+                if (ok) setSpaceDeleteTarget(null)
+              }}
+            />,
+            document.body
+          )}
       </section>
 
 
@@ -307,30 +476,33 @@ export function Spaces({
             not what you open this page for, so it stays one click away rather
             than sitting above the settings you came to change. */}
         <div className="pt-3">
-          <Disclosure
-            label="Saved presets"
-            hint={
-              (presets.length === 1 ? '1 saved look' : `${presets.length} saved looks`) +
-              ', kept in the app and shared across all your spaces — apply, delete, import or share them'
-            }
-          >
-            <PresetLibrary
-              presets={presets}
-              openVault={vault ? vaultName(vault) : ''}
-              spaces={spaces}
-              actions={presetActions}
-            />
-          </Disclosure>
+          <DisclosureGroup>
+            <Disclosure
+              label="Saved presets"
+              hint={
+                (presets.length === 1 ? '1 saved look' : `${presets.length} saved looks`) +
+                ', kept in the app and shared across all your spaces — apply, delete, import or share them'
+              }
+            >
+              <PresetLibrary
+                presets={presets}
+                openVault={vault ? vaultName(vault) : ''}
+                spaces={spaces}
+                actions={presetActions}
+              />
+            </Disclosure>
+          </DisclosureGroup>
         </div>
       </section>
 
-      <ThemeCards space={space} onChange={patch} />
-
       {/* The SAME form Customisation shows — one component, so "this space
           only" and "every space" can never offer different options or lay them
-          out differently. Only where the change lands differs. */}
-      <div className="flex flex-col gap-2">
-        <p className="px-1 text-[11.5px] leading-relaxed text-ink-400">
+          out differently. Only where the change lands differs.
+          Theme is INSIDE it now (Appearance → Theme) rather than rendered
+          separately just above, which is what made Customisation the one page
+          with no theme control — see ThemeCards. */}
+      <div>
+        <p className="mb-2 px-1 text-[11.5px] leading-relaxed text-ink-400">
           These belong to this space alone. The same list is in{' '}
           <span className="font-medium text-ink-500">Customisation</span>, where changing one
           answers it for every space at once.
@@ -340,10 +512,9 @@ export function Spaces({
           onChange={patch}
           onColorExisting={() => actions.onColorExistingFolders([space.folder])}
           fontLibrary={fontLibrary}
+          collection={{ pageLooks: settings.pageLookLibrary, tints: settings.tintLibrary }}
         />
       </div>
-
-      <ComingSoon />
 
       {space.folder && (
         <div className="mt-2 flex items-center gap-2 border-t border-ink-300/15 pt-4">
@@ -401,15 +572,23 @@ function NameField({
 
 /** A curated grid rather than a full emoji keyboard — a searchable set of
  *  several thousand would mean shipping an emoji data table, and picking a tab
- *  marker is not a task that needs one. */
+ *  marker is not a task that needs one. The search box below filters only
+ *  THIS curated 80, against the short `kw` tags on each one — not a general
+ *  emoji-name lookup. */
 function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => void }): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const box = useRef<HTMLSpanElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   // Same close rules as the Select primitive: click-outside, and Escape
   // captured so it closes this rather than the settings window behind it.
   useEffect(() => {
     if (!open) return
+    // Claimed for exactly as long as this popover would itself act on
+    // Escape — see escapeClaims.ts for why Settings' own close-on-Escape
+    // needs to know this popover gets first say.
+    const release = claimEscape()
     const onDown = (e: MouseEvent): void => {
       if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
     }
@@ -422,10 +601,28 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
     window.addEventListener('mousedown', onDown)
     window.addEventListener('keydown', onKey, true)
     return () => {
+      release()
       window.removeEventListener('mousedown', onDown)
       window.removeEventListener('keydown', onKey, true)
     }
   }, [open])
+
+  // Reopening starts from a clean search rather than wherever the last visit
+  // left it, and lands the cursor straight in the box — the whole point is
+  // typing faster than scanning the grid.
+  useEffect(() => {
+    if (!open) return
+    setQuery('')
+    searchRef.current?.focus()
+  }, [open])
+
+  const q = query.trim().toLowerCase()
+  const groups = q
+    ? EMOJI.map(({ group, items }) => ({
+        group,
+        items: items.filter((it) => it.kw.includes(q) || group.toLowerCase().includes(q))
+      })).filter(({ items }) => items.length > 0)
+    : EMOJI
 
   return (
     <span ref={box} className="relative inline-flex">
@@ -443,13 +640,28 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
 
       {open && (
         <div className="fade-in absolute right-0 top-9 z-40 max-h-[min(360px,55vh)] w-[268px] overflow-y-auto rounded-xl border border-ink-300/25 bg-surface p-2.5 shadow-float">
-          {EMOJI.map(({ group, items }) => (
+          {/* Sticky, so scrolling a long search result doesn't scroll the box
+              you're about to type more into out of view. The negative margin
+              cancels the container's own padding so the search row spans it
+              full-width instead of floating inset. */}
+          <input
+            ref={searchRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search emoji…"
+            aria-label="Search emoji"
+            className="sticky top-0 z-10 -mx-2.5 -mt-2.5 mb-2 w-[calc(100%+20px)] border-0 border-b border-ink-300/20 bg-surface px-4 py-2 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400"
+          />
+          {groups.length === 0 && (
+            <p className="px-1 py-3 text-center text-[11.5px] text-ink-400">No matching emoji</p>
+          )}
+          {groups.map(({ group, items }) => (
             <div key={group}>
               <p className="pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400">
                 {group}
               </p>
               <div className="grid grid-cols-8 gap-1">
-                {items.map((e) => (
+                {items.map(({ e }) => (
                   <button
                     key={e}
                     data-tip={e}
@@ -512,26 +724,29 @@ function DeleteSpace({
   return (
     <span className="flex shrink-0 items-center gap-2">
       {armed && hasPreset && (
-        <button
-          type="button"
-          disabled={keepPreset}
-          onClick={() => setKeepPreset(true)}
-          className={
-            'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-[11.5px] outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-            (keepPreset
-              ? 'text-brand-600'
-              : 'text-ink-500 hover:bg-brand-500/8 hover:text-ink-700')
-          }
-        >
-          {keepPreset ? (
-            <>
-              <Icon name="check" className="h-3.5 w-3.5" />
-              Will be kept
-            </>
-          ) : (
-            'Save the preset before deleting?'
-          )}
-        </button>
+        <span className="flex items-center gap-1">
+          <button
+            type="button"
+            disabled={keepPreset}
+            onClick={() => setKeepPreset(true)}
+            className={
+              'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-[11.5px] outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+              (keepPreset
+                ? 'text-brand-600'
+                : 'text-ink-500 hover:bg-brand-500/8 hover:text-ink-700')
+            }
+          >
+            {keepPreset ? (
+              <>
+                <Icon name="check" className="h-3.5 w-3.5" />
+                Will be kept
+              </>
+            ) : (
+              'Save the preset before deleting?'
+            )}
+          </button>
+          <HelpTip text={PRESET_SAVE_HINT} />
+        </span>
       )}
       <button
         disabled={disabled}
@@ -548,36 +763,166 @@ function DeleteSpace({
   )
 }
 
+/** The confirm dialog behind a right-click "Delete space…" — the sidebar
+ *  switcher's context menu, and this page's own tab strip. Exported so both
+ *  can share one implementation and one wording rather than two copies
+ *  drifting apart; a modal rather than `DeleteSpace`'s two-step arm/disarm
+ *  because there's no button here to arm, only a right-click, so the
+ *  confirmation has to be a surface of its own — the same call App.tsx's own
+ *  delete-media prompt makes. MUST be portalled to `document.body` by the
+ *  caller: `.genie`'s scale-open transform and the sidebar's backdrop-blur
+ *  both make their container a containing block for `position: fixed`
+ *  descendants (CLAUDE.md), which is exactly what `.confirm-backdrop` is. */
+export function SpaceDeleteConfirm({
+  space,
+  hasPreset,
+  keepPreset,
+  onToggleKeepPreset,
+  busy,
+  onCancel,
+  onConfirm
+}: {
+  space: Space
+  hasPreset: boolean
+  keepPreset: boolean
+  onToggleKeepPreset: () => void
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}): React.JSX.Element {
+  const label = spaceLabel(space)
+  // Escape is Cancel, not dismiss — same reasoning as App.tsx's own
+  // delete-media prompt: leaving the space deleted because someone pressed
+  // Escape would be the dialog answering for them. Guarded on `busy` for the
+  // same reason the backdrop click below is: once Delete has been pressed,
+  // closing the dialog must not read as having called it off.
+  useEffect(() => {
+    if (busy) return
+    // Claimed for exactly as long as this dialog would itself act on Escape
+    // — see escapeClaims.ts for why Settings' own close-on-Escape needs to
+    // know this dialog gets first say.
+    const release = claimEscape()
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onCancel()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      release()
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [busy, onCancel])
+  return (
+    <div className="confirm-backdrop" onClick={busy ? undefined : onCancel}>
+      <div
+        className="prompt confirm"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Delete ${label}?`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="prompt-title">Delete &ldquo;{label}&rdquo;?</div>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-ink-500">
+          Sends its folder — and every note in it — to your computer&apos;s Recycle Bin, not this
+          app&apos;s own bin. Recover it from there if you need to.
+          {hasPreset && ' Its saved look goes with it, unless you keep it below.'}
+        </p>
+        {hasPreset && (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={keepPreset}
+            onClick={onToggleKeepPreset}
+            className="mt-3 flex items-center gap-2 rounded-lg border-none bg-transparent px-1.5 py-1.5 text-left text-[12.5px] outline-none transition duration-150 hover:bg-brand-500/10 focus-visible:ring-2 focus-visible:ring-brand-300"
+          >
+            <span
+              aria-hidden="true"
+              className={
+                'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ' +
+                (keepPreset ? 'border-brand-400 bg-brand-500/25 text-brand-600' : 'border-ink-300/50')
+              }
+            >
+              {keepPreset && <Icon name="check" className="h-3 w-3" />}
+            </span>
+            <span className={keepPreset ? 'text-ink-700' : 'text-ink-500'}>
+              Save the preset before deleting
+            </span>
+            <HelpTip text={PRESET_SAVE_HINT} />
+          </button>
+        )}
+        <div className="prompt-actions">
+          {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+          <button autoFocus onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+          <button className="danger" onClick={onConfirm} disabled={busy}>
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // --- the collapsible sections ---------------------------------------------
 
 /** Mount/unmount rather than an animated height: animating to `auto` needs a
  *  measured max-height, and the Shortcuts body is tall and variable — a wrong
  *  one clips the action grid. Container classes copied from ToggleRow so an
  *  open section lines up with the rows inside it (rule 8). */
+/** One bordered container around a run of `Disclosure`s — see `.disclosure-group`
+ *  in app.css for why the grouping (rather than a card each) and why it is not
+ *  `overflow: hidden`. Every place that renders more than one Disclosure should
+ *  use this; a single one still does, so a lone row matches the lists. */
+export function DisclosureGroup({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return <div className="disclosure-group">{children}</div>
+}
+
 export function Disclosure({
   label,
   hint,
+  openSignal,
   children
 }: {
   label: string
   hint: string
+  /** Search sends someone to a PAGE, and every setting on Customisation lives
+   *  behind one of these folds — so "density" landed you on nine closed rows
+   *  with the answer still hidden. Set this for the fold a search result is in
+   *  and it opens itself. A CHANGING number rather than `true`, so a second
+   *  search for the same fold re-opens one the reader closed by hand; and not
+   *  a controlled `open`, so their own click still wins afterwards. */
+  openSignal?: number
   children: React.ReactNode
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (openSignal === undefined) return
+    setOpen(true)
+    // The window has just switched page; the fold can be well down the list.
+    ref.current?.scrollIntoView({ block: 'nearest' })
+  }, [openSignal])
   const id = `disclosure-${label.toLowerCase()}`
   return (
-    <div>
+    <div ref={ref}>
       <button
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className="btn-edge flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left outline-none ring-1 ring-ink-300/20 transition duration-200 hover:bg-brand-500/8 focus-visible:ring-2 focus-visible:ring-brand-300"
+        className="flex w-full items-center gap-3 px-3 py-2 text-left outline-none transition duration-200 hover:bg-brand-500/8 focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         <span className="min-w-0 flex-1">
           <span className={'block text-[13px] font-medium ' + (open ? 'text-brand-600' : 'text-ink-700')}>
             {label}
           </span>
-          <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">{hint}</span>
+          {/* One line, clipped — the hints run to wildly different lengths, and
+              letting the long ones wrap made every second row taller than its
+              neighbours. The full text is still the row's own subject; opening
+              it is what you do when the summary isn't enough. */}
+          <span className="mt-0.5 block truncate text-[11.5px] leading-relaxed text-ink-400">{hint}</span>
         </span>
         <span
           className={
@@ -596,10 +941,21 @@ export function Disclosure({
   )
 }
 
-/** Theme sits outside the Appearance disclosure — it's the setting people come
- *  to a space for, so it stays one click away. Text colour rides along with it:
- *  it only means anything on a dark theme, so it belongs beside the choice that
- *  makes it relevant rather than three sections away. */
+/** Theme, and Text colour riding along with it — it only means anything on a
+ *  dark theme, so it belongs beside the choice that makes it relevant rather
+ *  than three sections away.
+ *
+ *  Rendered as the first thing inside `SpaceAppearance`, which means inside the
+ *  **Appearance** disclosure, which means BOTH scopes get it. Until 2026-08-29
+ *  this sat outside that disclosure and was used only by the space editor
+ *  below — so Settings → Customisation, which renders the shared `SpaceForm`
+ *  and nothing else, had no way to set the theme at all, while the disclosure
+ *  it should have been in advertised "Theme, accent colour…" in its own hint
+ *  and its "spaces differ" check already listed `theme`/`textTone` for controls
+ *  that were not there. Reuben's call on where it goes: every customisation
+ *  setting must exist in both scopes, and one shared component is the only
+ *  thing that keeps them from drifting. It costs a click in the space editor,
+ *  where theme used to be visible without one; that was the trade accepted. */
 function ThemeCards({ space, onChange }: SpaceProps): React.JSX.Element {
   // Text tone only means anything on the two dark ramps (see TEXT_TONES'
   // hint), so when the theme is 'system' this has to ask what it currently
@@ -609,7 +965,12 @@ function ThemeCards({ space, onChange }: SpaceProps): React.JSX.Element {
   return (
     <section className="settings-group">
       <h3>Theme</h3>
-      <p className="hint">Applies to the whole app while you're in this space, editor included.</p>
+      {/* Reads correctly in BOTH scopes now that this renders in both — the old
+          "while you're in this space" was a sentence the Customisation page,
+          which is answering for every space at once, could not say. */}
+      <p className="hint">
+        Applies to the whole app, editor included. Each space can have its own.
+      </p>
       <div className="theme-cards">
         {THEMES.map((t) => {
           const p = THEME_PREVIEW[t.id]
@@ -679,6 +1040,12 @@ function ThemeCards({ space, onChange }: SpaceProps): React.JSX.Element {
 export function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Element {
   return (
     <>
+      {/* First, because it is the setting people open this fold for — and a
+          fragment child here is a flex item of the Disclosure's own
+          `flex flex-col gap-6`, so it spaces itself exactly like the sections
+          below it with no margin of its own. */}
+      <ThemeCards space={space} onChange={onChange} />
+
       <section className="settings-group">
         <h3>Accent</h3>
         <p className="hint">Pick a colour, then choose how far it reaches. Works with either theme.</p>
@@ -909,51 +1276,3 @@ export function SpaceShortcuts({ space, onChange }: SpaceProps): React.JSX.Eleme
 }
 
 // --- the three not built yet ----------------------------------------------
-
-/** Page look / Tints. The fields are already persisted on a Space, so these
- *  controls light up later without a second migration — but nothing reads
- *  them yet, so both buttons are disabled rather than half-wired.
- *  Fonts used to be a third row here; it's real now (see the Fonts
- *  disclosure in SpaceForm) so it moved out rather than staying as a
- *  disabled duplicate of a control that already works. */
-function ComingSoon(): React.JSX.Element {
-  const rows = [
-    {
-      title: 'Page look',
-      desc: 'Write on plain, lined or paper-textured pages. Per space, so revision notes can look different from a journal.'
-    },
-    {
-      title: 'Tints',
-      desc: 'Colour overlays that make text easier to read — useful for visual stress and dyslexia.'
-    }
-  ]
-  return (
-    <section className="settings-group">
-      <h3>Page and tints</h3>
-      <p className="hint">
-        Coming soon. Each will be set per space, and picked from Your collection.
-      </p>
-      {rows.map((r, i) => (
-        <div key={r.title}>
-          {i > 0 && <div className="border-t border-ink-300/15" />}
-          <SettingRow
-            title={r.title}
-            desc={r.desc}
-          >
-            <span className="flex items-center gap-1.5">
-              <span className="rounded-full bg-brand-500/12 px-1.5 py-0.5 text-[10px] font-medium text-brand-600">
-                Soon
-              </span>
-              <button className="mini" disabled data-tip="Coming soon">
-                Choose
-              </button>
-              <button className="mini" disabled data-tip="Coming soon">
-                Explore library
-              </button>
-            </span>
-          </SettingRow>
-        </div>
-      ))}
-    </section>
-  )
-}

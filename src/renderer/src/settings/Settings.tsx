@@ -5,6 +5,8 @@ import { Icon, type IconName } from '../icons'
 import { Select, SettingRow, ToggleRow } from './primitives'
 import { Spaces, type SpaceActions } from './Spaces'
 import { Collection } from './Collection'
+import { Explore, type ExploreTab } from './Explore'
+import { RequestForm } from './RequestForm'
 import { Customisation } from './Customisation'
 import { Tutorials } from './tutorials'
 import { OssLicenses } from './OssLicenses'
@@ -18,6 +20,7 @@ import type { PresetActions } from './Presets'
 import type { SpacePreset } from '../../../shared/presets'
 import type { RecoveryItem } from '../../../shared/workspace'
 import { useInstalledFonts } from './useInstalledFonts'
+import { escapeClaimed } from './escapeClaims'
 
 /** What a plain settings section needs. Kept free of `spaceActions` so General
  *  and Formatting don't have to carry a dependency only Spaces uses. */
@@ -106,6 +109,16 @@ const SECTION_LABEL: Record<SectionId, string> = Object.fromEntries(
 
 interface SearchEntry {
   section: SectionId
+  /** For the four entries that live on Your collection's Explore page rather
+   *  than on the shelves: which tab to open. Searching "make a tint" and
+   *  landing on the collection page with the wheel two clicks away is a
+   *  search result that didn't finish the job. */
+  explore?: ExploreTab
+  /** For the customisation entries, which live inside a collapsed fold on
+   *  SpaceForm: which fold to open on arrival. Without it the search lands you
+   *  on the right page with the setting still hidden behind one of nine rows,
+   *  which is most of the way to not having found it. */
+  disclosure?: string
   label: string
   hint: string
   /** Terms someone might type instead of the label above — synonyms, brand
@@ -124,57 +137,74 @@ const SEARCH_INDEX: SearchEntry[] = [
   { section: 'general', label: 'Start empty', hint: 'Open on the blank screen and pick a note.', keywords: 'blank new launch open' },
   { section: 'general', label: 'Reopen your tabs', hint: 'Come back to the notes you left open, split the way you left them.', keywords: 'resume restore session continue last open tabs' },
   { section: 'general', label: 'Play startup animation', hint: 'A short wordmark animation while a vault opens.', keywords: 'splash screen logo boot launch intro' },
+  { section: 'general', label: 'Check before deleting', hint: 'Ask first when a photo or video is deleted from a note.', keywords: 'photo video image media delete remove confirm ask undo picture attachment' },
   { section: 'general', label: 'Interface animations', hint: 'Opening settings, hovers, dropdowns and the like.', keywords: 'motion transitions effects reduce motion speed disable' },
-  { section: 'general', label: 'Date format', hint: 'Used for edit times and for the archive and bin.', keywords: 'day month year dd mm yyyy 12 hour 24 hour 12hr 24hr am pm dates' },
+  { section: 'general', label: 'Date format', hint: 'Used for edit times and for the archive and bin.', keywords: 'day month year dd mm yyyy 12 hour 24 hour 12hr 24hr am pm dates language locale region british american' },
   { section: 'general', label: 'Time zone', hint: 'Which clock times are shown in.', keywords: 'timezone clock utc gmt local time' },
-  { section: 'general', label: 'Number format', hint: 'Choose how numbers are formatted.', keywords: 'decimal comma thousand separator locale numbers' },
+  { section: 'general', label: 'Number format', hint: 'Choose how numbers are formatted.', keywords: 'decimal comma thousand separator locale numbers language region' },
   { section: 'general', label: 'Replay the first-run walkthrough', hint: 'Reopens the introduction you saw the first time.', keywords: 'onboarding tutorial first run walkthrough welcome intro replay redo again reset vault' },
   { section: 'general', label: 'Reset to a blank test vault', hint: 'Switch to a disposable folder to try things out.', keywords: 'test vault wipe clean slate sandbox reset disposable experiment developer' },
   { section: 'general', label: 'Open source licences', hint: 'Every third-party package the app ships, and its licence.', keywords: 'legal licenses license copyright open source third party attribution warranty' },
-  { section: 'customisation', label: 'Theme', hint: 'Light, dark or extra dark, applied to the whole app.', keywords: 'dark mode light mode night mode black extra dark appearance colour scheme' },
-  { section: 'customisation', label: 'Text colour', hint: 'How bright the writing sits on a dark background.', keywords: 'white grey text brightness dark theme readability contrast' },
-  { section: 'customisation', label: 'Accent colour', hint: 'Pick a colour, then choose how far it reaches.', keywords: 'accent color highlight brand colour tint hue' },
-  { section: 'customisation', label: 'Stronger button edges', hint: 'How hard the edges of buttons and controls read against the page.', keywords: 'button outline border contrast ui buttons edges' },
-  { section: 'customisation', label: 'Density', hint: 'How tightly notes and folders pack in the sidebar.', keywords: 'compact spacing sidebar rows tight loose comfortable size' },
-  { section: 'customisation', label: 'Editor width', hint: 'How wide the writing area grows.', keywords: 'line length text width column wide narrow reading margins' },
-  { section: 'customisation', label: 'Fonts', hint: 'Interface font, notes font, and an easier-reading override.', keywords: 'font family typeface typography ui font' },
-  { section: 'customisation', label: 'Easier reading font', hint: 'A dyslexia-friendly override for a note’s body text.', keywords: 'dyslexia dyslexic accessibility opendyslexic readability' },
-  { section: 'customisation', label: 'How a colour shows', hint: 'A coloured tag, a tinted row, or a solid row.', keywords: 'colour style tag dot tinted row solid display' },
-  { section: 'customisation', label: 'Notes take their folder’s colour', hint: 'Colour inheritance for notes inside a coloured folder.', keywords: 'inherit colour folder notes propagate' },
-  { section: 'customisation', label: 'Reduce opacity for nested colours', hint: 'Fades colour the deeper it’s nested.', keywords: 'opacity fade nested subfolder colour intensity' },
-  { section: 'customisation', label: 'Your palette', hint: 'The colours offered when colouring a note or folder.', keywords: 'colour palette custom colours hex swatch picker' },
-  { section: 'customisation', label: 'Colour new folders automatically', hint: 'Give a new folder a colour as soon as it’s made.', keywords: 'auto colour automatic random new folder' },
-  { section: 'customisation', label: 'Mix notes and folders freely', hint: 'One shared order instead of folders-then-notes.', keywords: 'sort order arrange alphabetical mixed together' },
-  { section: 'customisation', label: 'Nav buttons', hint: 'Icons only for the Note / Folder buttons above the sidebar list.', keywords: 'note folder buttons icons toolbar compact labels' },
-  { section: 'customisation', label: 'Show a note’s links', hint: 'A strip listing what a note points at and what points back at it.', keywords: 'backlinks links wiki links connections graph show hide' },
-  { section: 'customisation', label: 'Keep links on screen', hint: 'The links strip stays put however far you scroll.', keywords: 'pin links sticky scroll fixed' },
-  { section: 'customisation', label: 'Show the file path', hint: 'A bar between the tabs and the format bar reading Space › Folder › Note.', keywords: 'breadcrumb path bar folder location show hide' },
-  { section: 'customisation', label: 'Show when it was last edited', hint: 'The edit time beside the word count.', keywords: 'edit time word count last modified timestamp' },
-  { section: 'customisation', label: 'Markdown pro', hint: 'A button that switches between the formatted view and raw Markdown.', keywords: 'raw markdown source view syntax show hide marks' },
-  { section: 'customisation', label: 'Custom buttons', hint: 'The four custom format-bar shortcut buttons.', keywords: 'format bar shortcuts toolbar bold italic custom' },
+  { section: 'customisation', disclosure: 'Appearance', label: 'Theme', hint: 'Light, dark or extra dark, applied to the whole app.', keywords: 'dark mode light mode night mode black extra dark appearance colour scheme white black background bright darker lighter' },
+  { section: 'customisation', disclosure: 'Appearance', label: 'Text colour', hint: 'How bright the writing sits on a dark background.', keywords: 'white grey text brightness dark theme readability contrast' },
+  { section: 'customisation', disclosure: 'Appearance', label: 'Accent colour', hint: 'Pick a colour, then choose how far it reaches.', keywords: 'accent color highlight brand colour tint hue' },
+  { section: 'customisation', disclosure: 'Appearance', label: 'Stronger button edges', hint: 'How hard the edges of buttons and controls read against the page.', keywords: 'button outline border contrast ui buttons edges' },
+  { section: 'customisation', disclosure: 'Appearance', label: 'Density', hint: 'How tightly notes and folders pack in the sidebar.', keywords: 'compact spacing sidebar rows tight loose comfortable size cramped roomy bigger smaller' },
+  { section: 'customisation', disclosure: 'Appearance', label: 'Editor width', hint: 'How wide the writing area grows.', keywords: 'line length text width column wide narrow reading margins' },
+  { section: 'customisation', disclosure: 'Fonts', label: 'Fonts', hint: 'Interface font, notes font, and an easier-reading override.', keywords: 'font family typeface typography ui font' },
+  { section: 'customisation', disclosure: 'Fonts', label: 'Easier reading font', hint: 'A dyslexia-friendly override for a note’s body text.', keywords: 'dyslexia dyslexic accessibility opendyslexic readability reading difficulty easier' },
+  { section: 'customisation', disclosure: 'Colour', label: 'How a colour shows', hint: 'A coloured tag, a tinted row, or a solid row.', keywords: 'colour style tag dot tinted row solid display' },
+  { section: 'customisation', disclosure: 'Colour', label: 'Notes take their folder’s colour', hint: 'Colour inheritance for notes inside a coloured folder.', keywords: 'inherit colour folder notes propagate' },
+  { section: 'customisation', disclosure: 'Colour', label: 'Reduce opacity for nested colours', hint: 'Fades colour the deeper it’s nested.', keywords: 'opacity fade nested subfolder colour intensity' },
+  { section: 'customisation', disclosure: 'Colour', label: 'Your palette', hint: 'The colours offered when colouring a note or folder.', keywords: 'colour palette custom colours hex swatch picker' },
+  { section: 'customisation', disclosure: 'Colour', label: 'Colour new folders automatically', hint: 'Give a new folder a colour as soon as it’s made.', keywords: 'auto colour automatic random new folder' },
+  { section: 'customisation', disclosure: 'Arranging', label: 'Mix notes and folders freely', hint: 'One shared order instead of folders-then-notes.', keywords: 'sort order arrange alphabetical mixed together' },
+  { section: 'customisation', disclosure: 'Arranging', label: 'Nav buttons', hint: 'Icons only for the Note / Folder buttons above the sidebar list.', keywords: 'note folder buttons icons toolbar compact labels' },
+  { section: 'customisation', disclosure: 'Links', label: 'Show a note’s links', hint: 'A strip listing what a note points at and what points back at it.', keywords: 'backlinks links wiki links connections graph show hide' },
+  { section: 'customisation', disclosure: 'While scrolling', label: 'Keep links on screen', hint: 'The links strip stays put however far you scroll.', keywords: 'pin links sticky scroll fixed while scrolling' },
+  { section: 'customisation', disclosure: 'While scrolling', label: 'Keep the tab strip on screen', hint: 'The open-notes tab strip stays put however far you scroll.', keywords: 'pin tabs sticky scroll fixed while scrolling' },
+  { section: 'customisation', disclosure: 'While scrolling', label: 'Keep the file path bar on screen', hint: 'The Space › Folder › Note bar stays put however far you scroll.', keywords: 'pin path breadcrumb sticky scroll fixed while scrolling' },
+  { section: 'customisation', disclosure: 'While scrolling', label: "Keep the note's heading row on screen", hint: 'Bold, italic, the title, stats and split view stay put however far you scroll.', keywords: 'pin header heading row sticky scroll fixed while scrolling' },
+  { section: 'customisation', disclosure: 'Note extras', label: 'Show the file path', hint: 'A bar between the tabs and the format bar reading Space › Folder › Note.', keywords: 'breadcrumb path bar folder location show hide' },
+  { section: 'customisation', disclosure: 'Note extras', label: 'Show when it was last edited', hint: 'The edit time beside the word count.', keywords: 'edit time word count last modified timestamp' },
+  { section: 'customisation', disclosure: 'Note extras', label: 'Markdown pro', hint: 'A button that switches between the formatted view and raw Markdown.', keywords: 'raw markdown source view syntax show hide marks symbols asterisks hashes stars plain' },
+  { section: 'customisation', disclosure: 'Note extras', label: 'How the marks look in Markdown pro', hint: 'Faded, or highlighted like code.', keywords: 'raw markdown marks syntax faded dim grey highlighted monospace code source' },
+  { section: 'customisation', disclosure: 'Shortcuts', label: 'Custom buttons', hint: 'The four custom format-bar shortcut buttons.', keywords: 'format bar shortcuts toolbar bold italic custom' },
   { section: 'spaces', label: 'Add a space', hint: 'A new set of notes with its own look and folder.', keywords: 'new space create workspace' },
   { section: 'spaces', label: 'Space name', hint: 'What a space is called.', keywords: 'rename space title name' },
   { section: 'spaces', label: 'Representational emoji', hint: 'Shown on the switcher and the tab above, so you can tell spaces apart.', keywords: 'emoji icon space icon avatar' },
+  { section: 'spaces', label: 'Delete a space', hint: 'Remove a space and send its folder to your computer’s bin.', keywords: 'delete remove space folder rid' },
   { section: 'spaces', label: 'Saved presets', hint: 'Reusable looks you can apply to any space.', keywords: 'preset template save look apply' },
-  { section: 'collection', label: 'Your collection', hint: 'Browse, download and import fonts.', keywords: 'fonts browse download library install' },
+  { section: 'collection', label: 'Your collection', hint: 'The fonts, page looks and tints you have.', keywords: 'fonts page looks tints library collection installed owned' },
+  { section: 'collection', explore: 'fonts', label: 'Explore and install more', hint: 'Download fonts, add page looks, make a tint.', keywords: 'browse download install explore catalogue catalog get more add new' },
+  { section: 'collection', explore: 'fonts', label: 'Import your own font', hint: 'Bring in a .ttf, .otf, .woff or .woff2 from your machine.', keywords: 'custom font file ttf otf woff import own upload add' },
+  { section: 'collection', explore: 'tints', label: 'Make a tint', hint: 'Any hex colour, at a strength you set, washed under your words.', keywords: 'tint colour overlay wash hex opacity dyslexia visual stress irlen cream paper colour' },
+  { section: 'collection', explore: 'pageLooks', label: 'Request a page look', hint: 'Ask us to build the paper you want.', keywords: 'request page look paper suggest ask feedback' },
+  { section: 'customisation', disclosure: 'Page', label: 'Page look', hint: 'A pattern behind your writing — lined, grid, dots, graph, grain.', keywords: 'paper lined ruled grid squared dot graph texture background writing area notebook' },
+  { section: 'customisation', disclosure: 'Page', label: 'Tint', hint: 'A colour washed under the words, per space.', keywords: 'tint overlay colour wash page colour dyslexia visual stress reading' },
   { section: 'tutorials', label: 'Tutorials', hint: 'Guides for using the app, including linking your notes.', keywords: 'help guide how to learn walkthrough' },
-  { section: 'sourceFolder', label: 'Source folder', hint: 'Where your vault lives on disk, and switching to a different one.', keywords: 'vault folder location switch change move disk path' },
-  { section: 'recovery', label: 'Recovery', hint: 'A 7-day safety net for anything deleted — restore or purge it.', keywords: 'trash bin recycle bin deleted restore undo delete recover backup' },
+  { section: 'sourceFolder', label: 'Source folder', hint: 'Where your vault lives on disk, and switching to a different one.', keywords: 'vault folder location switch change move disk path sync synced onedrive dropbox icloud google drive cloud saved stored' },
+  { section: 'recovery', label: 'Recovery', hint: 'A 7-day safety net for anything deleted — restore or purge it.', keywords: 'trash bin recycle bin deleted restore undo delete recover backup lost missing gone accidentally recover retrieve' },
   { section: 'import', label: 'Import', hint: 'Bring notes in from Notion, Word, Google Keep, Apple Notes, HTML or Markdown.', keywords: 'notion word docx google keep apple notes html markdown migrate transfer evernote onenote obsidian' },
   { section: 'transferData', label: 'Transfer data', hint: 'Move your presets, custom fonts and update setting to another computer.', keywords: 'transfer move migrate new mac new computer switch backup restore export import presets custom fonts app cleaner lost settings preferences device windows mac' },
-  { section: 'updates', label: 'Install updates automatically', hint: 'Downloads new versions quietly and applies them when you quit. Windows only — a Mac cannot replace a running app.', keywords: 'auto update background version download install' },
+  { section: 'updates', label: 'Install updates automatically', hint: 'Downloads new versions quietly and applies them when you quit. Windows only — a Mac cannot replace a running app.', keywords: 'auto update background version download install upgrade newer latest' },
   { section: 'updates', label: 'Check for updates', hint: 'Manually check for a new version.', keywords: 'check version update manual refresh' },
   { section: 'reportBug', label: 'Report a bug', hint: 'Email us about something that went wrong.', keywords: 'bug crash issue problem broken feedback support email contact' },
   { section: 'requestFeature', label: 'Request a feature', hint: 'Email us an idea for something new.', keywords: 'feature request suggest idea feedback contact' }
 ]
 
 // --- Fuzzy search, so "dark mode" finds Theme and a typo like "recovry"
-// still finds Recovery, without pulling in a search library for 45 static
-// rows. Every word in the query has to mean SOMETHING (exact, substring, or a
-// close typo) in SOME field, or the entry doesn't match at all — that AND
-// across words is what keeps "date format" from also surfacing "Number
-// format". Results are ranked by how well they matched, label counting for
-// most, so a direct hit always beats an incidental mention in a hint.
+// still finds Recovery, without pulling in a search library for 55 static
+// rows. Scoring is a weighted OR, not an AND: an entry needs at least ONE
+// query word to mean something in one of its fields, and `scoreEntry` then
+// scales its score by the fraction of words that landed. So "date format"
+// does still surface "Number format" — it just ranks well below "Date
+// format", which matched both words. That is deliberate, and the comment
+// here claimed the opposite (a strict AND) until 2026-09-02: degrading to
+// "here is the closest thing" beats an empty list when someone types a
+// sentence, and a sentence is what most people type. Results are ranked by
+// how well they matched, label counting for most, so a direct hit always
+// beats an incidental mention in a hint.
 // Dropped from every field, query included, before matching — otherwise a
 // hint like "A coloured tag, a tinted row" leaves stray one-letter tokens
 // ("a") sitting in the haystack, and `token.includes(w)` makes THAT match
@@ -182,7 +212,19 @@ const SEARCH_INDEX: SearchEntry[] = [
 // them). Same failure mode for the leftover "s" a split on `note's` produces.
 const STOPWORDS = new Set([
   'a', 'an', 'the', 'of', 'to', 'in', 'on', 'is', 'are', 'it', 'its', 'your',
-  'you', 'for', 'as', 'at', 'by', 'be', 'this', 'that', 'with', 'from', 'into', 'so', 'or', 'and'
+  'you', 'for', 'as', 'at', 'by', 'be', 'this', 'that', 'with', 'from', 'into', 'so', 'or', 'and',
+  // People type questions, not keywords — "how do i make the app dark",
+  // "where is the backup". Every one of these words used to be a real token
+  // hunting for a match, and the damage was worse than noise: `fieldScore`
+  // scores a 3-letter substring hit at 2, so "how" matched every entry
+  // containing "show" — "Show the file path", "Show a note's links", "How a
+  // colour shows" — and outranked the entry the person actually wanted.
+  // Dropped from the haystack too, which is why "How a colour shows" is still
+  // reachable: it indexes as "colour" + "shows".
+  'how', 'do', 'does', 'did', 'can', 'could', 'would', 'should', 'where', 'what',
+  'when', 'why', 'who', 'which', 'make', 'makes', 'change', 'changing', 'set',
+  'setting', 'settings', 'turn', 'get', 'my', 'me', 'i', 'want', 'need', 'please',
+  'app', 'option', 'options', 'there', 'here', 'have', 'has', 'was', 'were', 'am', 'if'
 ])
 
 function tokenize(s: string): string[] {
@@ -385,6 +427,13 @@ export function SettingsButton({
     // capture, so Escape closes this before the sidebar clears its selection
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
+        // A nested overlay (a Select dropdown, the emoji picker, a confirm
+        // dialog) wants first claim — this handler registers the moment
+        // Settings opens, before any such overlay exists to register its
+        // own Escape listener, so it would otherwise always run FIRST and
+        // close the whole window out from under the overlay. See
+        // escapeClaims.ts and CLAUDE.md's Gotchas.
+        if (escapeClaimed()) return
         e.stopPropagation()
         close()
       }
@@ -490,8 +539,10 @@ function SettingsWindow({
   const [section, setSection] = useState<SectionId>(initialSection)
   // Re-syncs if a File-menu jump fires again while the window is already
   // open — a plain useState initialiser only runs once, on first mount.
+  // Closes Explore with it, for the reason `goTo` below explains.
   useEffect(() => {
     setSection(initialSection)
+    setExplore(null)
   }, [initialSection])
 
   // General's "Open source licences" swaps the whole General page for the
@@ -503,10 +554,44 @@ function SettingsWindow({
     setShowLicenses(false)
   }, [section])
 
+  // Your collection's "Explore and install more" swaps the whole page the same
+  // way, and for the same reason — the shelves and the catalogue must never be
+  // on screen together, which is the entire point of the split (Collection.tsx).
+  // Non-null IS "the explore page is open", and the value is which tab, so the
+  // three doors on Collection can each open on their own one.
+  const [explore, setExplore] = useState<ExploreTab | null>(null)
+
+  /** Every section change goes through here, so that leaving Your collection
+   *  always closes Explore behind you — coming back to a page you left three
+   *  sections ago and finding the catalogue instead of your shelves is a lie
+   *  about where you are.
+   *
+   *  NOT the `useEffect(..., [section])` that `showLicenses` uses beside it,
+   *  which looks like the same problem and isn't. An effect keyed on `section`
+   *  fires AFTER the commit, so it would run after a search result set both
+   *  the section AND its tab — clearing the tab it had just asked for, and
+   *  landing "make a tint" on the shelves every time. Nothing jumps INTO the
+   *  licence list, so the effect is still right for it. */
+  /** Which fold on Customisation a search result asked to open, and a counter
+   *  that makes each ask distinct. The counter is the whole point: search
+   *  "density" (Appearance opens), close it by hand, search "editor width" —
+   *  the fold is the same string, so on its own it would be `===` to last
+   *  time, Disclosure's effect would not re-run, and the second search would
+   *  land on a closed fold. Cleared by any ordinary navigation, so reaching
+   *  Customisation from the nav gives you the page as you left it. */
+  const [openDisclosure, setOpenDisclosure] = useState<{ fold: string; n: number } | null>(null)
+  const askCount = useRef(0)
+
+  const goTo = (target: SectionId, tab: ExploreTab | null = null, fold: string | null = null): void => {
+    setSection(target)
+    setExplore(tab)
+    setOpenDisclosure(fold ? { fold, n: ++askCount.current } : null)
+  }
+
   const [query, setQuery] = useState('')
   const matches = useMemo(() => searchSettings(query), [query])
-  const jumpTo = (target: SectionId): void => {
-    setSection(target)
+  const jumpTo = (target: SearchEntry): void => {
+    goTo(target.section, target.explore ?? null, target.disclosure ?? null)
     setQuery('')
   }
 
@@ -558,7 +643,7 @@ function SettingsWindow({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && matches.length > 0) jumpTo(matches[0].section)
+                if (e.key === 'Enter' && matches.length > 0) jumpTo(matches[0])
               }}
               placeholder="Search settings"
               spellCheck={false}
@@ -577,17 +662,16 @@ function SettingsWindow({
             )}
           </div>
 
-          {query.trim() ? (
+          {/* A search that found nothing used to REPLACE the section list with
+              one sentence, so the moment you typed a word this window doesn't
+              know ("spellcheck", "password") you lost the only way to browse
+              and had to clear the box to get it back. The list stays. */}
+          {query.trim() && matches.length > 0 ? (
             <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
-              {matches.length === 0 && (
-                <p className="px-2.5 py-2 text-[12px] leading-relaxed text-ink-400">
-                  No settings found for &ldquo;{query.trim()}&rdquo;.
-                </p>
-              )}
               {matches.map((m, i) => (
                 <button
                   key={m.section + m.label + i}
-                  onClick={() => jumpTo(m.section)}
+                  onClick={() => jumpTo(m)}
                   className="flex w-full flex-col items-start gap-0.5 rounded-xl border-none px-2.5 py-2 text-left outline-none transition duration-200 hover:bg-brand-500/8 focus-visible:ring-2 focus-visible:ring-brand-300"
                 >
                   <span className="text-[12.5px] font-medium text-ink-700">{m.label}</span>
@@ -596,22 +680,29 @@ function SettingsWindow({
               ))}
             </div>
           ) : (
-            SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setSection(s.id)}
-                aria-current={section === s.id}
-                className={
-                  'flex w-full items-center gap-2 rounded-xl border-none px-2.5 py-2 text-left text-[13px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-                  (section === s.id
-                    ? 'bg-brand-500/12 text-brand-600'
-                    : 'bg-transparent text-ink-500 hover:bg-brand-500/8 hover:text-brand-600')
-                }
-              >
-                <Icon name={s.icon} className="h-4 w-4" />
-                <span>{s.label}</span>
-              </button>
-            ))
+            <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+              {query.trim() && (
+                <p className="px-2.5 pb-1 pt-2 text-[12px] leading-relaxed text-ink-400">
+                  Nothing matched &ldquo;{query.trim()}&rdquo;. The pages themselves:
+                </p>
+              )}
+              {SECTIONS.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => goTo(s.id)}
+                  aria-current={section === s.id}
+                  className={
+                    'flex w-full items-center gap-2 rounded-xl border-none px-2.5 py-2 text-left text-[13px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+                    (section === s.id
+                      ? 'bg-brand-500/12 text-brand-600'
+                      : 'bg-transparent text-ink-500 hover:bg-brand-500/8 hover:text-brand-600')
+                  }
+                >
+                  <Icon name={s.icon} className="h-4 w-4" />
+                  <span>{s.label}</span>
+                </button>
+              ))}
+            </div>
           )}
         </nav>
 
@@ -656,8 +747,9 @@ function SettingsWindow({
               onColorExisting={() =>
                 spaceActions.onColorExistingFolders(settings.spaces.map((s) => s.folder))
               }
-              onGoToSpaces={() => setSection('spaces')}
+              onGoToSpaces={() => goTo('spaces')}
               fontLibrary={fontLibrary}
+              openDisclosure={openDisclosure}
             />
           )}
           {section === 'sourceFolder' && <SourceFolder vault={vault} onPickVault={onPickVault} />}
@@ -681,7 +773,7 @@ function SettingsWindow({
             <>
               <button
                 type="button"
-                onClick={() => setSection('transferData')}
+                onClick={() => goTo('transferData')}
                 className="btn-edge flex w-full items-center gap-2.5 rounded-xl border border-ink-300/30 bg-brand-500/6 px-3.5 py-2.5 text-left outline-none transition duration-200 hover:border-brand-300 focus-visible:ring-4 focus-visible:ring-brand-100"
               >
                 <Icon name="export" className="h-4 w-4 shrink-0 text-brand-500" />
@@ -711,9 +803,25 @@ function SettingsWindow({
               fontLibrary={fontLibrary}
             />
           )}
-          {section === 'collection' && (
-            <Collection onGoToSpaces={() => setSection('spaces')} fontLibrary={fontLibrary} />
-          )}
+          {section === 'collection' &&
+            (explore ? (
+              <Explore
+                tab={explore}
+                onTab={setExplore}
+                onBack={() => setExplore(null)}
+                settings={settings}
+                onChange={onChange}
+                fontLibrary={fontLibrary}
+              />
+            ) : (
+              <Collection
+                settings={settings}
+                onChange={onChange}
+                onGoToSpaces={() => goTo('spaces')}
+                onExplore={setExplore}
+                fontLibrary={fontLibrary}
+              />
+            ))}
           {section === 'updates' && <UpdatesSection />}
           {section === 'reportBug' && <ReportBug />}
           {section === 'requestFeature' && <RequestFeature />}
@@ -728,31 +836,19 @@ function General({ settings, onChange }: Props): React.JSX.Element {
     <>
       <h3 className="font-display text-[15px] font-semibold text-ink-900">Startup</h3>
       <p className="mt-0.5 text-[12px] text-ink-500">What you see when the app opens.</p>
-      <div className="mt-3 flex flex-col gap-1">
-        {STARTUPS.map((s) => {
-          const active = settings.startup === s.id
-          return (
-            <button
-              key={s.id}
-              onClick={() => onChange({ startup: s.id })}
-              aria-pressed={active}
-              className={
-                'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-                (active ? 'bg-brand-500/12 ring-1 ring-brand-300/60' : 'ring-1 ring-transparent hover:bg-brand-500/8')
-              }
-            >
-              <span className="min-w-0 flex-1">
-                <span className={'block text-[13px] font-medium ' + (active ? 'text-brand-600' : 'text-ink-700')}>
-                  {s.label}
-                </span>
-                <span className="block text-[11.5px] text-ink-400">{s.hint}</span>
-              </span>
-              <span className={'shrink-0 text-brand-600 transition-opacity ' + (active ? 'opacity-100' : 'opacity-0')}>
-                <Icon name="check" className="h-4 w-4" />
-              </span>
-            </button>
-          )
-        })}
+      {/* Was two full-height option cards — the same "pick one of these" shape
+          as Date format and Time zone below, just given special-case treatment.
+          A select box says it in the same language as the rest of the page;
+          `size="lg"` keeps each option's description readable rather than
+          truncating it the way Date format's short live-examples can afford to. */}
+      <div className="relative mt-3 inline-block">
+        <Select
+          value={settings.startup}
+          options={STARTUPS.map((s) => ({ id: s.id, label: s.label, example: s.hint }))}
+          onChange={(v) => onChange({ startup: v as AppSettings['startup'] })}
+          align="left"
+          size="lg"
+        />
       </div>
 
       <div className="mt-5">
@@ -782,7 +878,7 @@ function General({ settings, onChange }: Props): React.JSX.Element {
           on={settings.confirmMediaDelete}
           onClick={() => onChange({ confirmMediaDelete: !settings.confirmMediaDelete })}
           label="Check before deleting"
-          hint="Select a photo or video by its grip and press Backspace and the file goes to the bin, alongside your deleted notes. On, you get asked first. Off, you get an Undo instead. This is what the dialog's Always ask and Never ask again set."
+          hint="On, you're asked before it goes to the bin. Off, you get an Undo instead — the same choice the dialog's own Always ask / Never ask again buttons set."
         />
       </div>
     </>
@@ -1095,152 +1191,28 @@ function UpdatesSection(): React.JSX.Element {
   )
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-/** Sends via the OS default mail app (mailto:) opened by main — no account or
- *  API key needed here. The fixed destination lives in src/main/support.ts. */
+/** Both of these are the shared RequestForm (RequestForm.tsx) with a different
+ *  inbox behind them; Explore's "ask us for a page look" is the third. */
 function ReportBug(): React.JSX.Element {
-  const [fromEmail, setFromEmail] = useState('')
-  const [message, setMessage] = useState('')
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
-
-  const canSend = EMAIL_RE.test(fromEmail.trim()) && message.trim().length > 0
-
-  const send = useCallback(async () => {
-    setStatus('sending')
-    const ok = await window.api.sendBugReport(fromEmail.trim(), message.trim())
-    if (ok) {
-      setMessage('')
-      setStatus('sent')
-    } else {
-      setStatus('error')
-    }
-  }, [fromEmail, message])
-
   return (
-    <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Report a bug</h3>
-      <p className="mt-0.5 text-[12px] text-ink-500">
-        Opens your email app with this pre-filled, addressed to our support inbox.
-      </p>
-
-      <div className="mt-4 flex flex-col gap-1">
-        <label htmlFor="bug-email" className="text-[12.5px] font-medium text-ink-700">
-          Your email
-        </label>
-        <input
-          id="bug-email"
-          type="email"
-          value={fromEmail}
-          onChange={(e) => setFromEmail(e.target.value)}
-          placeholder="you@example.com"
-          className="w-full rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-[12px] text-ink-900 outline-none placeholder:text-ink-400"
-        />
-      </div>
-
-      <div className="mt-3 flex flex-col gap-1">
-        <label htmlFor="bug-message" className="text-[12.5px] font-medium text-ink-700">
-          Message
-        </label>
-        <textarea
-          id="bug-message"
-          rows={6}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="What happened, and what did you expect instead?"
-          className="w-full resize-y rounded-lg bg-brand-500/8 px-2.5 py-2 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400"
-        />
-      </div>
-
-      <div className="mt-3 flex items-center gap-2">
-        <button className="mini" disabled={!canSend || status === 'sending'} onClick={() => void send()}>
-          {status === 'sending' ? 'Opening…' : 'Send'}
-        </button>
-        {status === 'sent' && (
-          <span className="text-[11.5px] text-ink-400">
-            Your default mail app should now have this ready to send.
-          </span>
-        )}
-        {status === 'error' && (
-          <span className="text-[11.5px] text-ink-400">
-            Couldn&apos;t open a mail app automatically — email us directly instead.
-          </span>
-        )}
-      </div>
-    </>
+    <RequestForm
+      idPrefix="bug"
+      title="Report a bug"
+      hint="Opens your email app with this pre-filled, addressed to our support inbox."
+      placeholder="What happened, and what did you expect instead?"
+      send={(email, message) => window.api.sendBugReport(email, message)}
+    />
   )
 }
 
-/** Sends via the OS default mail app (mailto:) opened by main — no account or
- *  API key needed here. The fixed destination lives in src/main/support.ts. */
 function RequestFeature(): React.JSX.Element {
-  const [fromEmail, setFromEmail] = useState('')
-  const [message, setMessage] = useState('')
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
-
-  const canSend = EMAIL_RE.test(fromEmail.trim()) && message.trim().length > 0
-
-  const send = useCallback(async () => {
-    setStatus('sending')
-    const ok = await window.api.sendFeatureRequest(fromEmail.trim(), message.trim())
-    if (ok) {
-      setMessage('')
-      setStatus('sent')
-    } else {
-      setStatus('error')
-    }
-  }, [fromEmail, message])
-
   return (
-    <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Request a feature</h3>
-      <p className="mt-0.5 text-[12px] text-ink-500">
-        Opens your email app with this pre-filled, addressed to our features inbox.
-      </p>
-
-      <div className="mt-4 flex flex-col gap-1">
-        <label htmlFor="feature-email" className="text-[12.5px] font-medium text-ink-700">
-          Your email
-        </label>
-        <input
-          id="feature-email"
-          type="email"
-          value={fromEmail}
-          onChange={(e) => setFromEmail(e.target.value)}
-          placeholder="you@example.com"
-          className="w-full rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-[12px] text-ink-900 outline-none placeholder:text-ink-400"
-        />
-      </div>
-
-      <div className="mt-3 flex flex-col gap-1">
-        <label htmlFor="feature-message" className="text-[12.5px] font-medium text-ink-700">
-          Message
-        </label>
-        <textarea
-          id="feature-message"
-          rows={6}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="What would you like to see?"
-          className="w-full resize-y rounded-lg bg-brand-500/8 px-2.5 py-2 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400"
-        />
-      </div>
-
-      <div className="mt-3 flex items-center gap-2">
-        <button className="mini" disabled={!canSend || status === 'sending'} onClick={() => void send()}>
-          {status === 'sending' ? 'Opening…' : 'Send'}
-        </button>
-        {status === 'sent' && (
-          <span className="text-[11.5px] text-ink-400">
-            Your default mail app should now have this ready to send.
-          </span>
-        )}
-        {status === 'error' && (
-          <span className="text-[11.5px] text-ink-400">
-            Couldn&apos;t open a mail app automatically — email us directly instead.
-          </span>
-        )}
-      </div>
-    </>
+    <RequestForm
+      idPrefix="feature"
+      title="Request a feature"
+      hint="Opens your email app with this pre-filled, addressed to our features inbox."
+      placeholder="What would you like to see?"
+      send={(email, message) => window.api.sendFeatureRequest(email, message)}
+    />
   )
 }

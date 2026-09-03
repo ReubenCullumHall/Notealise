@@ -18,6 +18,7 @@ import type { TreeNode, VaultApi, VaultChange } from '../../../shared/types'
 import { indexLinks, stripMd } from '../../../shared/links'
 import { indexEmbeds } from '../../../shared/attachments'
 import { normalizeSettings, type AppSettings } from '../../../shared/settings'
+import { toPreviewLine } from '../../../shared/plainText'
 import { findFont, type InstalledFont } from '../../../shared/fonts'
 import {
   EMPTY_WORKSPACE,
@@ -119,10 +120,14 @@ const unique = (dir: string, name: string): string => {
   return candidate
 }
 
+// The SAME stripper main uses (shared/plainText.ts), not a hand-rolled subset.
+// The old one here didn't strip HTML, so the preview row showed raw
+// `<mark class="hl-rose">` tags that the real app never shows — and on
+// 2026-08-29 that was read as a bug in the app rather than in this stub. A
+// preview that lies about the app is worse than no preview.
 const preview = (text: string): string =>
-  text
-    .replace(/^#+\s.*$/m, '')
-    .replace(/[#*`>_~-]/g, '')
+  toPreviewLine(text, 90)
+    .replace(/^$/, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 120)
@@ -291,7 +296,11 @@ const api: VaultApi = {
     }
   },
   importCustomFont: async () => ({ ok: false, cancelled: true }),
-  removeCustomFont: async () => {},
+  // Really drops it from the cache, like main really deletes the file. A stub
+  // that no-ops here is how a dead Remove button looks alive in the preview.
+  removeFont: async (id) => {
+    saveFontCache(loadFontCache().filter((f) => f.id !== id))
+  },
 
   getWorkspace: async () => store.workspace,
   updateEntry: async (path, partial) => api.updateEntries([path], partial),

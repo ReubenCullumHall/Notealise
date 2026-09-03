@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../icons'
+import { claimEscape } from './escapeClaims'
 
 // The shared controls the Settings sections are built from, lifted out of
 // Settings.tsx unchanged so the section files can share them without importing
@@ -34,25 +35,31 @@ export function SettingRow({
 export interface SelectOption {
   id: string
   label: string
+  /** Shown under the label in the open list — a live example (Date format,
+   *  Time zone) at the default size, or a full description at `size="lg"`. */
   example?: string | null
 }
 
 /** A dropdown that shows each option's live example underneath its label, so
  *  you pick the shape you want rather than decoding a name. `filter` turns on
  *  a search box, which the timezone list needs — there are several hundred.
- *  Ported from legacy/src/App.jsx's Select. */
+ *  `size="lg"` is for options whose `example` is prose rather than a short
+ *  sample — Startup's two choices, say — and needs room to wrap instead of
+ *  truncating to one line. Ported from legacy/src/App.jsx's Select. */
 export function Select({
   value,
   options,
   onChange,
   filter = false,
-  align = 'right'
+  align = 'right',
+  size = 'sm'
 }: {
   value: string
   options: SelectOption[]
   onChange: (id: string) => void
   filter?: boolean
   align?: 'left' | 'right'
+  size?: 'sm' | 'lg'
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
@@ -61,6 +68,10 @@ export function Select({
 
   useEffect(() => {
     if (!open) return
+    // Claimed for exactly as long as this dropdown would itself act on
+    // Escape — see escapeClaims.ts for why Settings' own close-on-Escape
+    // needs to know this dropdown gets first say.
+    const release = claimEscape()
     const onDown = (e: MouseEvent): void => {
       if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
     }
@@ -73,6 +84,7 @@ export function Select({
     window.addEventListener('mousedown', onDown)
     window.addEventListener('keydown', onKey, true)
     return () => {
+      release()
       window.removeEventListener('mousedown', onDown)
       window.removeEventListener('keydown', onKey, true)
     }
@@ -95,11 +107,14 @@ export function Select({
         }}
         aria-expanded={open}
         className={
-          'flex items-center gap-1.5 rounded-lg border border-ink-300/30 px-2.5 py-1.5 text-[12.5px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+          'flex items-center gap-1.5 rounded-lg border border-ink-300/30 font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+          (size === 'lg' ? 'px-3 py-2 text-[13px] ' : 'px-2.5 py-1.5 text-[12.5px] ') +
           (open ? 'bg-brand-500/12 text-brand-600' : 'btn-edge bg-surface/70 text-ink-700 hover:text-brand-600')
         }
       >
-        <span className="max-w-[150px] truncate">{current ? current.label : value}</span>
+        <span className={(size === 'lg' ? 'max-w-[200px]' : 'max-w-[150px]') + ' truncate'}>
+          {current ? current.label : value}
+        </span>
         <span className={'inline-flex text-ink-400 transition-transform duration-200 ' + (open ? 'rotate-90' : '')}>
           <Icon name="chevron" className="h-4 w-4" />
         </span>
@@ -108,7 +123,8 @@ export function Select({
       {open && (
         <div
           className={
-            'fade-in absolute top-full z-40 mt-1 w-max min-w-[190px] rounded-xl border border-ink-300/25 bg-surface p-1 shadow-float ' +
+            'fade-in absolute top-full z-40 mt-1 w-max rounded-xl border border-ink-300/25 bg-surface p-1 shadow-float ' +
+            (size === 'lg' ? 'w-[300px] ' : 'min-w-[190px] ') +
             (align === 'right' ? 'right-0' : 'left-0')
           }
         >
@@ -131,19 +147,26 @@ export function Select({
                   setOpen(false)
                 }}
                 className={
-                  'flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left transition duration-150 ' +
+                  'flex w-full items-start gap-2 rounded-lg text-left transition duration-150 ' +
+                  (size === 'lg' ? 'px-3 py-2.5 ' : 'px-2.5 py-1.5 ') +
                   (o.id === value ? 'bg-brand-500/12' : 'hover:bg-brand-500/8')
                 }
               >
                 <span className="min-w-0 flex-1">
                   <span
                     className={
-                      'block truncate text-[12.5px] ' + (o.id === value ? 'font-medium text-brand-600' : 'text-ink-700')
+                      (size === 'lg' ? 'block text-[13px] ' : 'block truncate text-[12.5px] ') +
+                      (o.id === value ? 'font-medium text-brand-600' : 'text-ink-700')
                     }
                   >
                     {o.label}
                   </span>
-                  {o.example && <span className="block truncate text-[11px] text-ink-400">{o.example}</span>}
+                  {o.example &&
+                    (size === 'lg' ? (
+                      <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">{o.example}</span>
+                    ) : (
+                      <span className="block truncate text-[11px] text-ink-400">{o.example}</span>
+                    ))}
                 </span>
                 <span className={'shrink-0 text-brand-600 ' + (o.id === value ? 'opacity-100' : 'opacity-0')}>
                   <Icon name="check" className="h-4 w-4" />

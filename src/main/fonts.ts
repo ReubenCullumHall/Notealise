@@ -217,8 +217,24 @@ export async function importCustomFont(
   })
 }
 
-export function removeCustomFont(id: string): Promise<void> {
+/** Take a font back out of the collection, whichever kind it is.
+ *
+ *  ONE function rather than two because the caller is one button ("Remove", on
+ *  a card in Settings -> Your collection) and the kind is knowable from the id
+ *  alone: a catalogue id belongs to a download, and a custom import is a UUID
+ *  that can never collide with one (see importCustomFont). Splitting it put
+ *  the decision in the renderer, where it was got wrong — the collection page
+ *  called the custom-only path for a downloaded font, which matched nothing in
+ *  the manifest and returned silently, so the button did nothing at all.
+ *
+ *  For a download the file's presence IS the record (see the header), so
+ *  deleting the woff2 is the whole operation; nothing to unwrite. */
+export function removeFont(id: string): Promise<void> {
   return queue(async () => {
+    if (findFont(id)?.source === 'downloadable') {
+      await fs.unlink(path.join(downloadedDir(), `${id}.woff2`)).catch(() => {})
+      return
+    }
     const manifest = await readManifest()
     const next = manifest.filter((c) => c.id !== id)
     if (next.length === manifest.length) return

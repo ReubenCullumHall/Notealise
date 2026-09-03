@@ -78,7 +78,7 @@ export function useInstalledFonts(): FontLibrary {
   }, [addInstalled])
 
   const remove = useCallback(async (id: string) => {
-    await window.api.removeCustomFont(id)
+    await window.api.removeFont(id)
     setInstalled((list) => list.filter((f) => f.id !== id))
   }, [])
 

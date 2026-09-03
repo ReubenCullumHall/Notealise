@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { hexToHsv, hsvToHex, inkOn, normalizeHex, rgbChannels, type Hsv } from '../../../shared/color'
 import { Icon } from '../icons'
+import { useDragTrack } from './dragTrack'
 
 // The colour picker: a saturation/value square, a hue slider and a hex field —
 // the three controls that between them reach every colour, rather than a fixed
@@ -47,36 +48,6 @@ function useHsvDraft(hex: string): [Hsv, (next: Hsv) => void] {
   return [draft, (next) => setDraft(next)]
 }
 
-/** Drag anywhere in a track and it follows the pointer, including outside the
- *  element — `setPointerCapture` is what makes releasing off the edge behave.
- *  Returns 0–1 on each axis. */
-function useDragTrack(onMove: (x: number, y: number) => void): {
-  onPointerDown: (e: React.PointerEvent) => void
-} {
-  return {
-    onPointerDown: (e: React.PointerEvent): void => {
-      const el = e.currentTarget as HTMLElement
-      el.setPointerCapture(e.pointerId)
-      const emit = (ev: { clientX: number; clientY: number }): void => {
-        const box = el.getBoundingClientRect()
-        onMove(
-          Math.min(1, Math.max(0, (ev.clientX - box.left) / box.width)),
-          Math.min(1, Math.max(0, (ev.clientY - box.top) / box.height))
-        )
-      }
-      emit(e)
-      const move = (ev: PointerEvent): void => emit(ev)
-      const up = (): void => {
-        el.removeEventListener('pointermove', move)
-        el.removeEventListener('pointerup', up)
-        el.removeEventListener('pointercancel', up)
-      }
-      el.addEventListener('pointermove', move)
-      el.addEventListener('pointerup', up)
-      el.addEventListener('pointercancel', up)
-    }
-  }
-}
 
 /** The square + slider + hex field, with no chrome of its own so it drops into
  *  a popover or a settings row alike. */

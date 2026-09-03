@@ -3,6 +3,9 @@
 // place that touches the DOM (applying settings as data-* attributes and inline
 // accent variables on <html>); persistence goes through IPC (window.api).
 
+import { rgbChannels } from '../../../shared/color'
+import { findPageLook, parseTint } from '../../../shared/looks'
+import { splitToken } from '../../../shared/palette'
 import { activeSpace, type AppSettings, type ResolvedThemeId, type Space } from '../../../shared/settings'
 import { findFont, fontCssValue, type FontFallback } from './fonts'
 import { ensureInstalledFontsLoaded, findInstalledFont } from './fontLoader'
@@ -266,6 +269,27 @@ export function applySettings(s: AppSettings): void {
   root.dataset.editorWidth = a.editorWidth
   root.dataset.textTone = a.textTone
   root.dataset.buttonDef = a.buttonDefinition ? 'on' : 'off'
+  // Markdown pro's revealed marks: the style, and — when it is 'colour' — the
+  // chosen palette token split into the layer (which decides whether it paints
+  // the text or behind it) and a var() pointing at the theme-aware value. A NEW
+  // custom property, never an override of a ramp token, so the inline-always-
+  // wins trap above does not apply.
+  root.dataset.rawMarks = a.rawMarkStyle
+  const tint = splitToken(a.rawMarkTint)
+  root.dataset.rawMarkLayer = tint.layer
+  root.style.setProperty('--raw-mark-ink', `var(--${a.rawMarkTint})`)
+  // The writing surface: a pattern behind the text and a colour wash under it
+  // (shared/looks.ts). Both resolved to something the CSS can definitely draw
+  // — an unknown id or an unparseable tint becomes a plain page, never a
+  // half-applied one. `data-page-look` is read by app.css exactly the way
+  // `data-density` is, which is the pattern the appearance brief called for;
+  // the tint is two NEW custom properties rather than an override of --paper,
+  // so nothing that reads the paper ramp (shadows, the ink contrast, the
+  // sidebar) moves underneath it.
+  root.dataset.pageLook = findPageLook(a.pageLook)?.id ?? 'none'
+  const pageTint = parseTint(a.tint)
+  root.style.setProperty('--page-tint-rgb', pageTint ? rgbChannels(pageTint.hex) : '0 0 0')
+  root.style.setProperty('--page-tint-alpha', pageTint ? String(pageTint.opacity / 100) : '0')
   root.dataset.motion = s.animationsEnabled ? 'on' : 'off'
   applyAccent(root, {
     accent: a.accent,

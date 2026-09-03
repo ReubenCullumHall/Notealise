@@ -2,7 +2,7 @@ import { Icon } from '../../icons'
 
 // Settings → Tutorials → Linking your notes.
 //
-// Pure explanation; the switches live on the Linking content page. `[[Note]]` is
+// Pure explanation; the switches live on the Links page. `[[Note]]` is
 // guessable, `[[Note|what it says]]` is not, and neither is the rule about which
 // space the picker offers you. None of it is discoverable from the editor, and a
 // feature nobody can find the shape of may as well not be there.
@@ -154,10 +154,12 @@ export function LinkingGuide(): React.JSX.Element {
         the link sits in.
       </p>
       <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">
-        Whether it shows at all, whether it stays put as you scroll, and whether the folder trail
-        shows above it are all in{' '}
-        <span className="font-medium text-ink-500">Settings → Linking content</span> — and each space
-        can answer them differently.
+        Whether it shows at all is in{' '}
+        <span className="font-medium text-ink-500">Settings → Links</span>, whether it stays put as
+        you scroll is in <span className="font-medium text-ink-500">→ While scrolling</span>, and
+        whether the folder trail shows above it is in{' '}
+        <span className="font-medium text-ink-500">→ Note extras</span> — each space can answer
+        them differently.
       </p>
 
       <p className="mt-6 text-[11.5px] leading-relaxed text-ink-400">

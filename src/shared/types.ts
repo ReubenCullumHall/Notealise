@@ -134,10 +134,11 @@ export interface VaultApi {
   /** Open a native picker for a .ttf/.otf/.woff/.woff2 file and copy it into
    *  userData/fonts/custom/. The display name is derived from the filename. */
   importCustomFont(): Promise<ImportCustomFontResult>
-  /** Delete a previously imported custom font's file and record. Any space
-   *  still pointing at its id just falls back to the built-in default, the
-   *  same way an unrecognised font id always has. */
-  removeCustomFont(id: string): Promise<void>
+  /** Take a font out of the collection — a downloaded catalogue font or a
+   *  custom import alike; main tells them apart from the id. Any space still
+   *  pointing at its id just falls back to the built-in default, the same way
+   *  an unrecognised font id always has. */
+  removeFont(id: string): Promise<void>
 
   // --- workspace: order / pins / archive / bin (.mdnotes/workspace.json) -----
   /** The whole organisation sidecar for the active vault. */

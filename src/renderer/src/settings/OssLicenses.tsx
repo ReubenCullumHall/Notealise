@@ -1,5 +1,5 @@
 import { Icon } from '../icons'
-import { Disclosure } from './Spaces'
+import { Disclosure, DisclosureGroup } from './Spaces'
 import { OSS_LICENSES } from './ossLicenses.generated'
 
 // Settings → General → "Open source licenses". One click deep, same pattern
@@ -30,15 +30,17 @@ export function OssLicenses({ onBack }: Props): React.JSX.Element {
         Notealise is built with the following open-source software, each under its own licence.
       </p>
 
-      <div className="mt-3 flex flex-col gap-2">
-        {OSS_LICENSES.map((pkg) => (
-          <Disclosure key={pkg.name} label={pkg.name} hint={`v${pkg.version} — ${pkg.license}`}>
-            <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap font-mono text-[10.5px] leading-relaxed text-ink-500">
-              {pkg.licenseText ??
-                `No licence file was found for this package. It is declared under the ${pkg.license} licence — see the package's own repository for the full text.`}
-            </pre>
-          </Disclosure>
-        ))}
+      <div className="mt-3">
+        <DisclosureGroup>
+          {OSS_LICENSES.map((pkg) => (
+            <Disclosure key={pkg.name} label={pkg.name} hint={`v${pkg.version} — ${pkg.license}`}>
+              <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap font-mono text-[10.5px] leading-relaxed text-ink-500">
+                {pkg.licenseText ??
+                  `No licence file was found for this package. It is declared under the ${pkg.license} licence — see the package's own repository for the full text.`}
+              </pre>
+            </Disclosure>
+          ))}
+        </DisclosureGroup>
       </div>
     </>
   )

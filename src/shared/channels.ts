@@ -49,7 +49,7 @@ export const CH = {
   listInstalledFonts: 'fonts:listInstalled',
   downloadFont: 'fonts:download',
   importCustomFont: 'fonts:importCustom',
-  removeCustomFont: 'fonts:removeCustom',
+  removeFont: 'fonts:remove',
   /** renderer -> main: order/pins/archive/bin (.mdnotes/workspace.json) */
   getWorkspace: 'workspace:get',
   updateEntry: 'workspace:updateEntry',

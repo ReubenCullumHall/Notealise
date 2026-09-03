@@ -129,21 +129,42 @@ export function lookKey(look: SpaceLook): string {
 // space that one's colours but leave my format buttons alone" is one action
 // rather than a trip through four settings pages.
 
-export const LOOK_PARTS = ['appearance', 'colour', 'arranging', 'chrome', 'shortcuts'] as const
+export const LOOK_PARTS = [
+  'appearance',
+  'colour',
+  'arranging',
+  'links',
+  'noteExtras',
+  'whileScrolling',
+  'shortcuts'
+] as const
 export type LookPart = (typeof LOOK_PARTS)[number]
 
 /** Which fields each tick box covers. **Every field of `SpaceLook` must appear
  *  exactly once here** — a field in no group could never be copied by any
  *  combination of ticks, which is a setting that silently ignores presets.
  *  `presets.test.ts` pins that, so adding a key to `Space` fails a test rather
- *  than quietly going missing. */
+ *  than quietly going missing.
+ *
+ *  `links` / `noteExtras` / `whileScrolling` match SpaceForm's own three
+ *  disclosures of the same names exactly, field for field — this used to be
+ *  one combined `chrome` group (a single "Note chrome" tick box holding all
+ *  nine of these fields), which stopped matching the settings page the moment
+ *  that page split into three. Split the same way here 2026-08-29, and it's
+ *  what surfaced `pinTabs` / `pinPath` / `pinNoteHeader` never having been
+ *  added to any group at all when those three fields landed alongside the
+ *  settings-page split — ungrouped fields fail `presets.test.ts` loudly, but
+ *  only if something remembers to run it; `npm run typecheck` and `lint` both
+ *  stayed clean the whole time these were silently unreachable by any preset. */
 const PART_KEYS: Record<LookPart, readonly (keyof SpaceLook)[]> = {
   // The emoji rides with appearance: it is the space's marker, and a look
   // without it is half a look (the user's call — applying DOES overwrite it).
   appearance: ['emoji', 'theme', 'textTone', 'buttonDefinition', 'density', 'editorWidth', 'accent', 'accentMode', 'pageLook', 'font', 'uiFont', 'dyslexiaFont', 'tint'],
   colour: ['colorStyle', 'colorAuto', 'colorInherit', 'colorFadeNested', 'colorPalette'],
   arranging: ['freeArrange', 'compactNav'],
-  chrome: ['showLinks', 'pinLinks', 'linksPosition', 'showPath', 'showNoteInfo', 'markdownPro'],
+  links: ['showLinks', 'linksPosition'],
+  noteExtras: ['showPath', 'showNoteInfo', 'markdownPro', 'rawMarkStyle', 'rawMarkTint'],
+  whileScrolling: ['pinLinks', 'pinPath', 'pinNoteHeader', 'pinTabs'],
   shortcuts: ['toolbarSlots']
 }
 
@@ -151,7 +172,12 @@ export const PART_LABELS: Record<LookPart, { label: string; hint: string }> = {
   appearance: { label: 'Appearance', hint: 'emoji, theme, accent, density, button edges' },
   colour: { label: 'Colour', hint: 'how entry colours paint, the palette, auto-colouring' },
   arranging: { label: 'Arranging', hint: 'sidebar order and the nav buttons' },
-  chrome: { label: 'Note chrome', hint: 'links strip, path bar, last-edited time, Markdown pro' },
+  links: { label: 'Links', hint: "whether a note's links strip shows, and where it sits" },
+  noteExtras: { label: 'Note extras', hint: 'the file path bar, last-edited time, and the raw-Markdown toggle' },
+  whileScrolling: {
+    label: 'While scrolling',
+    hint: 'whether the tab strip, path bar, heading row and links strip stay put, or get out of the way'
+  },
   shortcuts: { label: 'Format buttons', hint: 'the four custom slots' }
 }
 

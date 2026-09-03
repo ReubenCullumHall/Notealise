@@ -35,6 +35,22 @@ interface Tip {
   fromRight: boolean
 }
 
+/** A small "?" badge that carries only a `data-tip` — for explaining a control
+ *  that isn't self-explanatory from its own label, without permanent copy
+ *  sitting in the layout. Uses the same `data-tip` mechanism as everything
+ *  else, so it needs no wiring of its own. */
+export function HelpTip({ text }: { text: string }): React.JSX.Element {
+  return (
+    <span
+      data-tip={text}
+      aria-label={text}
+      className="inline-flex h-3.5 w-3.5 shrink-0 select-none items-center justify-center rounded-full border border-ink-300/40 text-[9px] font-semibold leading-none text-ink-400"
+    >
+      ?
+    </span>
+  )
+}
+
 export function Tooltip(): React.JSX.Element | null {
   const [tip, setTip] = useState<Tip | null>(null)
   const box = useRef<HTMLDivElement | null>(null)

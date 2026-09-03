@@ -1,4 +1,5 @@
 import { Icon } from '../icons'
+import { HelpTip } from '../Tooltip'
 import { SpaceForm } from './SpaceForm'
 import { activeSpace, type AppSettings, type Space } from '../../../shared/settings'
 import type { FontLibrary } from './useInstalledFonts'
@@ -30,6 +31,9 @@ interface Props {
   /** send the reader to the per-space version of this page */
   onGoToSpaces: () => void
   fontLibrary: FontLibrary
+  /** fold to open on arrival, with the counter that makes repeat asks
+   *  distinct — set when a search result routed here */
+  openDisclosure?: { fold: string; n: number } | null
 }
 
 export function Customisation({
@@ -37,7 +41,8 @@ export function Customisation({
   onChange,
   onColorExisting,
   onGoToSpaces,
-  fontLibrary
+  fontLibrary,
+  openDisclosure
 }: Props): React.JSX.Element {
   const spaces = settings.spaces
   // Shown as the starting point. The active space rather than the first, so the
@@ -56,11 +61,11 @@ export function Customisation({
           <Icon name="spaces" className="h-3.5 w-3.5" />
           Everything here applies to all {spaces.length} {spaces.length === 1 ? 'space' : 'spaces'}
         </p>
-        <p className="mt-1 text-[11.5px] leading-relaxed text-ink-500">
-          Every one of these settings really belongs to a <em>space</em> — how a set of notes looks
-          is a property of that set, so a revision space can be dark and dense while a journal is
-          light and roomy. This page is the shortcut for when you want one answer everywhere: change
-          a control and all {spaces.length} take it.
+        <p className="mt-1 flex items-start gap-1 text-[11.5px] leading-relaxed text-ink-500">
+          <span>Change a control here and all {spaces.length} take it.</span>
+          <HelpTip
+            text={`Every one of these settings really belongs to a space — how a set of notes looks is a property of that set, so a revision space can be dark and dense while a journal stays light and roomy. This page is just the shortcut for setting them all at once.`}
+          />
         </p>
         <button
           onClick={onGoToSpaces}
@@ -73,17 +78,24 @@ export function Customisation({
 
       <div>
         <h3 className="font-display text-[15px] font-semibold text-ink-900">Every space</h3>
-        <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
-          How notes look and what they show. Where your spaces currently disagree about something
-          it&rsquo;s marked — changing it here settles it for all of them.
-        </p>
-        <div className="mt-3 flex flex-col gap-2">
+        {spaces.length > 1 && (
+          <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
+            Where your spaces disagree about something, it&rsquo;s marked — change it here to settle
+            it for everyone.
+          </p>
+        )}
+        {/* No `gap` and no wrapper styling: SpaceForm brings its own
+            DisclosureGroup, which is the single bordered container the whole
+            run of rows now lives in. */}
+        <div className="mt-3">
           <SpaceForm
             space={shown}
             onChange={(patch) => onChange({ spaces: spaces.map((s) => ({ ...s, ...patch })) })}
             differs={spaces.length > 1 ? differs : undefined}
             onColorExisting={onColorExisting}
             fontLibrary={fontLibrary}
+            collection={{ pageLooks: settings.pageLookLibrary, tints: settings.tintLibrary }}
+            openDisclosure={openDisclosure}
           />
         </div>
       </div>

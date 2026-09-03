@@ -81,11 +81,14 @@ Still pending:
   **Legacy's Appearance and Arranging sections no longer exist at the top level** — they belong to
   a space and live inside collapsible sections on the Spaces page, along with Shortcuts. Don't
   "restore" them to the nav; per-space is the point.
-  **Your collection** is a shell: three empty states for page looks / fonts / tints, the future
-  features whose `pageLook` / `font` / `tint` fields a `Space` already persists (so they land
-  without a second migration). It invents **no** storage format — no `collection.json` — on purpose.
+  **Your collection** is real as of 2026-08-30 — all three of page looks / fonts / tints, with
+  the acquiring half split out onto its own **Explore** page behind three identical doors (see
+  `feature-tabs-spaces.md`'s "Page looks and tints"). It still invents **no** file of its own —
+  no `collection.json`: what you've collected is two string arrays on `AppSettings`
+  (`pageLookLibrary`, `tintLibrary`) in the vault's `settings.json`, beside the spaces that
+  consume them, and downloaded fonts stay where they already were (userData, per install).
   **"Paper", "page look", "font" and "tint" are reserved words in this UI** — they name those
-  planned features, so no other control may borrow them. The Light theme's card was briefly
+  features, so no other control may borrow them. The Light theme's card was briefly
   subtitled "Warm paper"; it is neither (`--paper` is `247 247 246`, a neutral white) and it stole a
   term the collection needs. Describe what the tokens actually are — "Plain white" — and don't coin
   product vocabulary that collides with the roadmap.

@@ -865,6 +865,290 @@ button.icon:hover {
   margin: 0 auto;
   padding: 2rem;
 }
+/* --- page looks and tints (shared/looks.ts, applied by model.ts) -----------
+   Two independent axes over the writing area, following data-density's shape
+   exactly (see docs/appearance-research-brief.md §3): ONE data-* attribute on
+   <html> swaps a small set of custom properties, and everything that draws
+   reads those. Nothing here is a colour literal and nothing overrides a ramp
+   token — the lines are --wash, so a look drawn once works on all four themes.
+
+   WHERE IT IS PAINTED, and why it is not `.pane-body`. The obvious place is
+   the pane itself, and it is wrong for exactly one reason: a pane background
+   does not scroll. Rules that stay put while the words slide past them are
+   worse than no rules at all — the text drifts off the lines on the first
+   flick of the wheel. So the paint goes on the SCROLLER, with
+   `background-attachment: local`, which is the one declaration that makes a
+   background travel with the content it sits behind.
+
+   One scroller, because there is only one: this app renders Markdown live in
+   CodeMirror and has no separate reading pane (`.read-layer` above is
+   vestigial, and `reader/ReadingView.tsx` is imported by nothing). Raw view
+   and formatted view are the same editor, so both get the paper for free.
+
+   THE RULE SPACING IS THE EDITOR'S LINE HEIGHT — 16px x 1.7 from
+   editor/highlight.ts. Any other number and a plain paragraph crosses its own
+   rules within a screen. Headings and lists still break the rhythm, which is
+   true of real lined paper too. */
+:root {
+  --page-tint-rgb: 0 0 0;
+  --page-tint-alpha: 0;
+  /* A wash is a fixed fraction of the page it sits on, and the two grounds
+     are not comparable: 16% cream over near-white paper is a clearly warmer
+     page, while the same 16% over BLACK is very nearly nothing — the eye
+     reads the difference between two dark values far less than between two
+     light ones. Rendered side by side, the same seven tints were obvious on
+     light and indistinguishable on dark (measured 2026-08-30).
+
+     So the stored strength is a strength, not an opacity, and the theme
+     decides what it costs. The multiplier lives here rather than in the
+     token, so a tint you made on a light theme still looks like the tint you
+     made when you switch — one saved value, right on both grounds. Every
+     preview tile in Settings picks it up for free, since they inherit from
+     the same <html>.
+
+     1.4, and the first attempt was 2.4 — set by looking at the CARDS, where
+     the seven tints have to be told apart side by side at 76px tall, and
+     where 2.4 looked right. Rendered on the actual editor the same value
+     turned the whole writing area into a mid-grey slab sitting inside black
+     chrome: not a tinted page, a broken one. **A full-bleed wash and a
+     thumbnail of it are not the same judgement, and the thumbnail is the
+     seductive one.** 1.4 was picked by looking at both, and the cards still
+     separate. */
+  --page-tint-boost: 1;
+  --page-rule: 27.2px;
+  --page-cell: 27.2px;
+  --page-line: rgb(var(--wash) / 0.13);
+  --page-line-strong: rgb(var(--wash) / 0.26);
+  --page-look-image: none;
+  --page-look-size: auto;
+}
+:root[data-theme='dark'],
+:root[data-theme='black'] {
+  --page-tint-boost: 1.4;
+}
+
+.edit-layer .cm-scroller {
+  background-color: rgb(var(--page-tint-rgb) / calc(var(--page-tint-alpha) * var(--page-tint-boost)));
+  background-image: var(--page-look-image);
+  background-size: var(--page-look-size);
+  background-attachment: local;
+  /* The scroller's padding-top is what holds the first line clear of the links
+     strip; the rules have to start after it, or the note's first line sits
+     between two of them instead of on one. Measured 2026-08-30: with this,
+     line 1's baseline lands exactly on rule 1. A HEADING then knocks the rest
+     out of phase, because its line box is 35.4px against the body's 27.2 —
+     which is what real ruled paper does with a big title too, and the
+     alternative is forcing every line to one height and losing headings. */
+  background-origin: content-box;
+}
+
+[data-page-look='none'] {
+  --page-look-image: none;
+}
+[data-page-look='lined'],
+[data-page-look='lined-tight'] {
+  --page-look-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--page-rule) - 1px),
+    var(--page-line) calc(var(--page-rule) - 1px),
+    var(--page-line) var(--page-rule)
+  );
+}
+[data-page-look='lined-tight'] {
+  --page-rule: 20.4px;
+}
+[data-page-look='grid'],
+[data-page-look='grid-fine'] {
+  --page-look-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--page-cell) - 1px),
+      var(--page-line) calc(var(--page-cell) - 1px),
+      var(--page-line) var(--page-cell)
+    ),
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(var(--page-cell) - 1px),
+      var(--page-line) calc(var(--page-cell) - 1px),
+      var(--page-line) var(--page-cell)
+    );
+}
+[data-page-look='grid-fine'] {
+  --page-cell: 13.6px;
+}
+/* Dots need a tile size of their own: a radial gradient has no intrinsic one,
+   so without background-size it paints a single blob the size of the pane. */
+[data-page-look='dots'] {
+  --page-look-image: radial-gradient(circle at center, var(--page-line-strong) 0 1.1px, transparent 1.2px);
+  --page-look-size: var(--page-cell) var(--page-cell);
+}
+/* Fine squares with a heavier rule every fifth one — the heavy pair is listed
+   FIRST so it paints over the fine one where they land on the same pixel. */
+[data-page-look='graph'] {
+  --page-cell: 13.6px;
+  --page-look-image:
+    repeating-linear-gradient(to bottom, var(--page-line-strong) 0 1px, transparent 1px calc(var(--page-cell) * 5)),
+    repeating-linear-gradient(to right, var(--page-line-strong) 0 1px, transparent 1px calc(var(--page-cell) * 5)),
+    repeating-linear-gradient(to bottom, var(--page-line) 0 1px, transparent 1px var(--page-cell)),
+    repeating-linear-gradient(to right, var(--page-line) 0 1px, transparent 1px var(--page-cell));
+}
+/* Six speckle layers on deliberately unrelated (near-prime) tile sizes, so the
+   eye never catches the repeat the way it would on one.
+
+   The first pass used four layers of 1.4px dots on 40-80px tiles and read as
+   sparse polka dots, not as paper: at that size each mark is an OBJECT, and
+   four of them per 60px leaves acres of flat ground between. Stock reads as
+   grain because the marks are below the size the eye resolves individually
+   and there are a great many of them — so these are sub-pixel (0.6px, i.e.
+   half a device pixel on a retina panel, which renders as a faint smudge
+   rather than a dot) on tiles a third the size, at a third the opacity. Two
+   coarser layers stay, well under the others, to keep it from looking like
+   uniform noise. */
+[data-page-look='grain'] {
+  --grain: rgb(var(--wash) / 0.05);
+  --grain-coarse: rgb(var(--wash) / 0.035);
+  --page-look-image:
+    radial-gradient(circle at 17% 29%, var(--grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 63% 11%, var(--grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 41% 73%, var(--grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 89% 57%, var(--grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 28% 91%, var(--grain-coarse) 0 1px, transparent 1.2px),
+    radial-gradient(circle at 77% 37%, var(--grain-coarse) 0 1px, transparent 1.2px);
+  --page-look-size: 13px 11px, 17px 19px, 11px 23px, 19px 13px, 53px 61px, 67px 47px;
+}
+
+/* The miniature used by every picker and card in Settings: the same two axes,
+   painted on a tile instead of on a pane, so what you choose from is drawn by
+   the code that draws the real thing rather than by a description of it. The
+   tile carries its own data-page-look and its own inline tint variables, which
+   is what stops it inheriting the ACTIVE space's look from <html>. */
+.look-tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgb(var(--paper));
+  border: 1px solid rgb(var(--wash) / 0.12);
+}
+.look-tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgb(var(--page-tint-rgb) / calc(var(--page-tint-alpha) * var(--page-tint-boost)));
+  background-image: var(--page-look-image);
+  background-size: var(--page-look-size);
+}
+/* The specimen "text" drawn over a tile. The pattern behind it is painted at
+   its REAL size — a miniature that scaled the rules down would lie about the
+   one thing you are choosing between, which is how dense they are — so the
+   stack is spaced to the same --page-rule the editor is, and each bar's BOTTOM
+   lands on a rule. That is what makes the tile show writing sitting on the
+   lines rather than a pattern with some marks near it. */
+.look-tile .ink-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--page-rule) - 3px);
+  padding: calc(var(--page-rule) - 3px) 10px 0;
+}
+.look-tile .ink {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: rgb(var(--ink-900) / 0.42);
+}
+.look-tile.on {
+  border-color: rgb(var(--brand-400) / 0.9);
+  box-shadow: 0 0 0 2px rgb(var(--brand-500) / 0.35);
+}
+
+/* Cards for a page look or a tint. Wider than .font-card's 148px because the
+   tile inside them has to show the pattern at its real size (LookTile.tsx) —
+   a narrower card would crop the repeat rather than shrink it. */
+.look-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  gap: 10px;
+}
+.look-card {
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid rgb(var(--wash) / 0.12);
+  background: transparent;
+  min-width: 0;
+}
+button.look-card {
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+button.look-card:hover {
+  border-color: rgb(var(--brand-400) / 0.5);
+}
+
+/* Explore's three tabs. A segmented control rather than a nav list: they are
+   three views of one page, and the page is already one level down from the
+   settings sections in the sidebar. */
+.explore-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgb(var(--wash) / 0.06);
+}
+.explore-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgb(var(--ink-500));
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.explore-tab:hover {
+  color: rgb(var(--brand-600));
+}
+.explore-tab.on {
+  background: rgb(var(--surface));
+  color: rgb(var(--brand-600));
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+.explore-tab:focus-visible {
+  box-shadow: 0 0 0 2px rgb(var(--brand-300));
+}
+
+/* The tint fine tuner: the same track vocabulary as the colour picker's hue
+   slider (color/Picker.tsx, `.color-hue`), showing the actual colour running
+   from invisible to its strongest, over the page it will sit on. */
+.tint-alpha {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  cursor: ew-resize;
+  touch-action: none;
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.15);
+  /* the page under it, then the colour running from invisible to its strongest
+     — so the slider shows the wash itself, not an abstract 0-100 */
+  background-color: rgb(var(--paper));
+  background-image: linear-gradient(
+    to right,
+    rgb(var(--tuner-rgb) / 0),
+    rgb(var(--tuner-rgb) / var(--tuner-max))
+  );
+}
+.tint-alpha:focus-visible {
+  box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.15), 0 0 0 2px rgb(var(--brand-300));
+}
+
 .prose-note {
   font-family: var(--note-font-sans);
   color: rgb(var(--ink-700));
@@ -1033,6 +1317,45 @@ button.icon:hover {
   padding: 0.06em 0.12em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+}
+
+/* --- Markdown pro: how the revealed syntax marks read -------------------
+   `.cm-raw-mark` covers exactly the ranges the formatted view HIDES, so this
+   styles `#`, `**`, backticks, `[[ ]]`, and the colour tags, and nothing else.
+   Only ever present in raw view (livePreview's build()), so no guard is needed
+   on the formatted side. Two looks, chosen per space by `rawMarkStyle`:
+
+   faded  — the default. Your eye runs past the marks to the words. Colour only,
+            so nothing about the line's metrics changes and text does not shift
+            as you toggle the mode.
+   colour — the marks stand out, in one of the same eight palette colours a
+            phrase in a note can take, in either of the same two layers. The
+            first attempt used a neutral grey tint and Reuben could not pick it
+            out on either theme (2026-08-29), which is why the colour is a real
+            palette choice now rather than a fixed wash.
+
+   `--raw-mark-ink` is set by applySettings to `var(--tc-NAME)` / `var(--hl-NAME)`,
+   so it resolves to whichever of that colour's light or dark value the theme is
+   using — the same reason the note's own colours are tokens and not hexes.
+   Monospace in both coloured layers: a run of punctuation is not prose, so
+   nothing a reader cares about depends on its width. */
+:root[data-raw-marks='faded'] .cm-raw-mark {
+  color: rgb(var(--ink-300));
+}
+:root[data-raw-marks='colour'] .cm-raw-mark {
+  font-family: var(--font-mono);
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+:root[data-raw-marks='colour'][data-raw-mark-layer='tc'] .cm-raw-mark {
+  color: var(--raw-mark-ink);
+}
+/* A highlight paints BEHIND the mark, so the mark keeps the body ink on top —
+   exactly how `hl-NAME` behaves on a phrase in a note. */
+:root[data-raw-marks='colour'][data-raw-mark-layer='hl'] .cm-raw-mark {
+  background: var(--raw-mark-ink);
+  padding: 0.06em 0.12em;
 }
 
 /* --- selection toolbar --- */
@@ -1265,6 +1588,58 @@ button.icon:hover {
 .update-toast-x:hover {
   background: rgb(var(--wash) / 0.08);
   color: rgb(var(--ink-800));
+}
+
+/* --- settings disclosure list --- */
+/* A run of `Disclosure`s reads as ONE list in one container, with hairline
+   dividers, rather than as N separate bordered cards gapped apart. Nine of
+   those stacked (SpaceForm) was the "boxy, too tall, gaps feel off" report
+   from 2026-09-02 — three complaints with one cause: every row was drawing
+   its own frame, so the eye counted nine objects instead of one list.
+   Deliberately NOT `overflow: hidden`, which is the obvious way to make the
+   children respect the container's corners: an open panel can hold a `Select`,
+   whose dropdown is absolutely positioned rather than portalled, and clipping
+   the group would cut it off. The first and last buttons take the corners
+   themselves instead, so a hover fill still follows the container's edge.
+   `:only-child` on the last one: when that disclosure is OPEN its panel
+   follows the button, and rounding the button's bottom then cuts a notch
+   above content that continues below it. */
+.disclosure-group {
+  border-radius: 12px;
+  border: 1px solid rgb(var(--ink-300) / 0.2);
+}
+.disclosure-group > * + * {
+  border-top: 1px solid rgb(var(--ink-300) / 0.15);
+}
+/* The base `button` rule at the top of this file gives EVERY button a 1px
+   border, an 8px radius and a faint `--wash` fill. That is what kept drawing a
+   card around each row after the Tailwind `rounded-xl ring-1` came off them —
+   not the button-definition setting, which was off the whole time. Rows in a
+   group are list items, not buttons with edges: the container draws the only
+   frame, and the divider above is the only line between them. The hover fill
+   stays (Tailwind's `hover:bg-brand-500/8`, specificity 0,2,0, outranks this),
+   so a row still lights up under the pointer. Scoped to the group's own direct
+   grandchildren, so real buttons inside an OPEN panel keep their normal chrome. */
+.disclosure-group > * > button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.disclosure-group > :first-child > button {
+  border-top-left-radius: 11px;
+  border-top-right-radius: 11px;
+}
+.disclosure-group > :last-child > button:only-child {
+  border-bottom-left-radius: 11px;
+  border-bottom-right-radius: 11px;
+}
+/* Button definition, for the container rather than each row — the rows no
+   longer carry a ring of their own. Written without the `:not(:hover)` guard
+   the shared rule above uses: that guard is there so a hovered CONTROL keeps
+   its own hover colour, but this is a container the pointer crosses on the
+   way to every row inside it, and the border must not flicker off each time. */
+:root[data-button-def='on'] .disclosure-group {
+  border-color: rgb(var(--btn-edge) / 0.7);
 }
 
 /* --- settings panel --- */

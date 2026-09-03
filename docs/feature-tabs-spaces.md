@@ -158,8 +158,10 @@ filename (its shape was a map keyed by folder name, which a lax loader would mis
 
 *The model* (`shared/settings.ts`): `AppSettings = { spaces: Space[], activeSpaceFolder, …globals }`.
 Per-space: `folder` (the identity **and** the display name), emoji, theme, textTone,
-buttonDefinition, density, accent, accentMode, freeArrange, compactNav, toolbarSlots, and the inert
-`pageLook`/`font`/`tint`.
+buttonDefinition, density, accent, accentMode, freeArrange, compactNav, toolbarSlots, and
+`pageLook`/`font`/`tint` (all three live now; nothing on `Space` is inert any more).
+`AppSettings` also carries `pageLookLibrary` / `tintLibrary` — what you've collected, which is
+what the per-space pickers are allowed to offer.
 **Global on purpose:** startup, `lastNotePath`, dateFormat, numberFormat, timezone — `lastNotePath`
 especially, because it's written on *every* note open, and nesting it would make each one rewrite
 the whole spaces array. Things to know before editing it:
@@ -382,10 +384,10 @@ you return to; the other spaces open empty and fill as you use them.
 
 ## Fonts (built 2026-08-17)
 
-Three of a Space's long-reserved-but-unused fields are now real: `font`, `uiFont`, `dyslexiaFont`
-(`pageLook` and `tint` are still the inert shell described in `appearance-research-brief.md`,
-which this section supersedes for fonts specifically — that brief's research questions are
-answered below).
+Three of a Space's long-reserved-but-unused fields are now real: `font`, `uiFont`, `dyslexiaFont`.
+(`pageLook` and `tint` followed on 2026-08-30 — see "Page looks and tints" below. Between them
+these two sections supersede `appearance-research-brief.md` entirely; that brief's research
+questions are answered across both.)
 
 **Why three fields, not one.** The app already had two separate CSS variable pairs before this —
 `--font-sans`/`--font-serif` for the interface, nothing for notes — because a note's headings
@@ -428,3 +430,118 @@ files) for anything not yet installed — a live `@font-face` render is impossib
 isn't on disk yet, and the whole point of "preview first" was seeing the shape before spending a
 download on it. `fontLoader.ts`'s `FontFace`/`document.fonts.add` swap-in (not a `<style>` tag)
 is what makes a just-downloaded font render immediately, no reload, the instant its bytes land.
+
+## While scrolling — four bars, one behaviour (built 2026-08-29, verified)
+
+Built, self-verified (typecheck, lint, Playwright against localhost:5173), and confirmed by
+Reuben in the live Electron app the same day — including the reserve-vs-reclaim call below. In
+`CHANGELOG.md`'s `[Unreleased]`.
+
+The tab strip, the path bar, a note's own heading row, and the links strip can each independently
+be kept on screen or set to hide while scrolling — one `Space` field per bar (`pinTabs`, `pinPath`,
+`pinNoteHeader`, `pinLinks`), all defaulting **on** ("always visible"; nothing changes for anyone
+until they opt a bar into hiding), grouped in SpaceForm's "While scrolling" disclosure. `pinLinks`
+existed already (see the links-block section above via CLAUDE.md's Gotchas — its own default
+flipped from off to on here, for consistency with the other three); the other three are new.
+
+**The hide rule, shared by all four**: hidden the instant you scroll past the very top, reappears
+only once you're back at scrollTop 0 — never on a mid-note scroll-up, which would flicker the bar
+in and out on ordinary up/down reading anywhere in the middle of a long note. `NotePane.tsx`'s
+`scrolledPastTop` (one per pane, tracking that pane's own `.cm-scroller`) drives the heading row
+directly; the tab strip and path bar render once for the whole editor area, so they instead follow
+whichever pane is FOCUSED — each `NotePane` reports its own `scrolledPastTop` via
+`onScrollTopChange`, a prop only the pane at `layout.focus` receives (`App.tsx` passes `undefined`
+to every other one), landing in `App.tsx`'s `focusedScrolledPastTop` state. A blank pane (no note
+open) never reports scrolled — permanently "at the top" — and both `App.tsx` uses additionally
+require `openPath` to be non-empty, so a closed editor never reads as a scrolled-away one.
+
+**Reserve the space, don't reclaim it — a deliberate call, confirmed by Reuben after the fact.**
+When a bar hides, its layout space stays exactly as it was; nothing below it reflows to fill the
+gap. This matches how `pinLinks` already worked before this build (`--links-inset` reserves
+`LINKS_BLOCK_HEIGHT`px of editor padding regardless of hidden state) rather than introducing a
+second, reflowing kind of "hidden" alongside it for the other three bars — three bars collapsing
+their height while one stays reserved would have been an inconsistency inside one feature, worse
+than picking either behaviour uniformly. The alternative (collapse to zero height, let the note
+grow into the freed space, closer to how a phone browser tucks its address bar away) was raised as
+the *recommended* option in an artifact shown to Reuben before this was built
+(`https://claude.ai/code/artifact/fa9396aa-00e9-4bf1-88c8-61faa117aee0`), and the build proceeded
+without an explicit answer either way. Reuben verified the shipped (reserve) behaviour in the live
+app afterward and raised nothing against it — settled, not still open. If a future request wants
+the collapsing version after all, it is a real rework: `TabStrip`/`PathBar`/the heading row would
+need height (not just opacity) to transition, and `--links-inset` would need to become conditional
+on `linksHidden` rather than constant.
+
+**Mechanically**, all four use the identical fade: `opacity-0 -translate-y-1 pointer-events-none`
+hidden, `opacity-100 translate-y-0` visible, `transition-[opacity,transform] duration-150` either
+way — copied from the links block's own floating-hidden treatment (`NotePane.tsx`), just applied to
+an ordinary in-flow element instead of an absolutely-positioned one for the other three. Like the
+links block, hidden is `pointer-events-none` but not `inert` or focus-trapped — a sighted keyboard
+user can still Tab into an invisible control. Pre-existing characteristic of the one bar this
+copies from, not something newly introduced here.
+
+
+## Page looks and tints (built 2026-08-30)
+
+The last two reserved fields. A **page look** is a pattern drawn behind the writing; a **tint** is
+a colour washed under it. Independent axes — they stack, and a named combination of the two would
+multiply the catalogue by the palette and still miss the one you wanted.
+
+**The storage question the research brief asked** ("how, without inventing a format beyond those
+three fields") answered itself once the two were separated:
+
+- A page look is an **id**, resolved against `shared/looks.ts`'s catalogue, matched by
+  `[data-page-look='…']` in `app.css`. Every look ships in the app — the pattern is CSS — so
+  there is nothing to download and "installing" one is pure curation.
+- A tint is a **value**: `#rrggbb@nn`, a hex colour and a strength, parsed by `parseTint`. That
+  is the whole definition, which is why a tint can be invented with a colour wheel and still fit
+  the short string a `Space` already had. No id registry to keep in step, and therefore nothing
+  that can drift out of step.
+
+`AppSettings.pageLookLibrary` / `.tintLibrary` hold what you've *collected*: catalogue ids and
+tokens respectively. **Bundled looks and our own tints are never stored** — they're in the
+collection by definition, so first run needs no seeding and a hand-emptied array can't take them
+away.
+
+**Where it paints, and the one thing not to change.** Both axes land on `.edit-layer .cm-scroller`
+with `background-attachment: local`, NOT on `.pane-body`. A pane background does not scroll, and
+rules that stay put while the words slide past them are worse than no rules — the text drifts off
+the lines on the first flick of the wheel. The tint is a wash BEHIND the text rather than a film
+over it (the brief's research question 1): a film mutes the ink with the paper, drops every syntax
+colour's contrast, and would sit over the caret and the selection.
+
+**Rule spacing is the editor's line height** (16px × 1.7 = 27.2px), and `background-origin:
+content-box` starts the pattern below the scroller's padding, so a note's first line lands exactly
+on the first rule. A heading then knocks the rest out of phase, because its line box is 35.4px —
+accepted, not a bug: ruled paper does the same under a big title, and the alternatives are worse.
+Per-line borders can't work (a `.cm-line` is one *logical* line, so a wrapped paragraph would get
+one rule for three visual rows), and forcing every line to 27.2px would cost headings their size
+app-wide.
+
+**Tint strength is a strength, not an opacity: `--page-tint-boost` (1 light, 1.4 dark/black).**
+The same fraction over black is far less visible than over white. Picking that multiplier from
+the 76px preview cards gave 2.4, which turned the real writing area into a grey slab inside black
+chrome — *a full-bleed wash and a thumbnail of it are not the same judgement.* Set it against
+both.
+
+**The collection is per VAULT** (`settings.json`), unlike downloaded fonts, which are per install
+(userData). A font you don't have you cannot use; a page look is CSS every build already has, so
+the list is a preference about what to be *offered* — and it belongs beside the spaces that
+consume it, travelling with the vault as they do.
+
+**Every picker offers what its space is already wearing, collected or not** (`SpacePage.tsx`).
+A preset carries a whole look, page look and tint included, so applying one can set a value
+nothing collected; so can a hand-edited `settings.json` or a vault synced from a better-stocked
+machine. The paper is really painted in all three cases, so omitting it would show nothing
+selected with no way to take it off. It is marked "from a preset".
+
+**Removing anything clears it from every space wearing it** (`settings/library.ts`,
+`withoutPageLook` / `withoutTint` / `withoutFont`). The alternative — leaving a space pointing at
+something its own picker no longer lists — is a control that appears to do nothing, which
+`Customisation.tsx` explains is the worst bug this window can have. `withoutFont` has to clear
+*three* fields, since one font id can sit in interface, notes and easier-reading at once.
+
+**One IPC change came out of this:** `removeCustomFont` became `removeFont` (`fonts:remove`), and
+main routes by id — a catalogue id is a download, a UUID is a custom import. The split had put
+that decision in the renderer, which got it wrong: Your collection called the custom-only path
+for a downloaded font, matched nothing in the manifest, and returned silently. The Remove button
+did nothing at all.

@@ -20,7 +20,7 @@ import {
   renamePreset,
   syncPresets
 } from './presets'
-import { downloadFont, importCustomFont, listInstalledFonts, removeCustomFont } from './fonts'
+import { downloadFont, importCustomFont, listInstalledFonts, removeFont } from './fonts'
 import {
   deleteSpace,
   getWorkspace,
@@ -218,7 +218,7 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.listInstalledFonts, () => listInstalledFonts())
   ipcMain.handle(CH.downloadFont, (_e, id: string) => downloadFont(id))
   ipcMain.handle(CH.importCustomFont, () => importCustomFont(window))
-  ipcMain.handle(CH.removeCustomFont, (_e, id: string) => removeCustomFont(id))
+  ipcMain.handle(CH.removeFont, (_e, id: string) => removeFont(id))
 
   ipcMain.handle(CH.getWorkspace, () => getWorkspace())
   ipcMain.handle(CH.updateEntry, (_e, p: string, partial: EntryMeta) => updateEntries([p], partial))
