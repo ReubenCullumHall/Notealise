@@ -459,7 +459,14 @@ every session — see the table in **Folder structure** above for the full list.
   browser preview renders the *same* components against the same `theme.css`, which is enough for
   layout, copy and font rendering — just not for anything touching real files. `browserApi.ts`
   stubs some flags to a fixed answer (`getOnboarded: async () => true`, which hides onboarding
-  entirely), and it installs itself with a plain `window.api = api` at module load — so
+  entirely) **and stubs the whole saved-preset library to a no-op** (`listPresets`/`syncPresets`
+  both just return `[]`, always) — App.tsx's auto-mirror effect (spaces → presets, 800ms debounce)
+  fires and calls them, but nothing ever comes back, so the "Saved presets" disclosure permanently
+  reads "0 saved looks" and there is no `Use on…` menu to open, no matter how many spaces you add or
+  how long you wait. Confirmed 2026-08-29 chasing what looked like a broken auto-save before finding
+  the stub. Verifying anything about presets — the tick-box labels in `shared/presets.ts`'s
+  `PART_LABELS`, `pickLook`'s grouping, the apply/delete/import flow — needs the real Electron app.
+  It installs itself with a plain `window.api = api` at module load — so
   **`page.addInitScript` can `Object.defineProperty(window, 'api', {set})` and wrap the object as
   it's assigned**, overriding just that stub without editing the file. Verified 2026-08-17 on the
   onboarding Fonts step. One trap when asserting on what you see: match a card/row by its *label
@@ -484,6 +491,45 @@ every session — see the table in **Folder structure** above for the full list.
   This is what made the settings modal open as an unclickable side panel. **Any full-window overlay
   must `createPortal` to `document.body`** (see `settings/Settings.tsx`). Legacy dodges it by
   rendering `SettingsPanel` at the App root instead — either is fine, in-place is not.
+  **The Settings window itself (`.genie`) is a SECOND, separate trap, not just the sidebar you
+  opened it from.** `.genie` carries `will-change: transform` (a containing block on its own,
+  animation running or not) AND its open/close keyframes are `both`-filled `transform: scale(...)`
+  (the same permanent-transform mechanism as `.fade-in`, below) — so a `position: fixed` element
+  mounted anywhere inside `SettingsWindow` is pinned to that ~1040×820px panel, clipped by its
+  `overflow-hidden`, however many `document.body` portals sit between it and the true root. Found
+  2026-08-29 building Spaces.tsx's right-click "Delete space…": the confirm dialog and its
+  `ContextMenu` had to portal to `document.body` a SECOND time, from inside `SettingsWindow`,
+  despite `Settings.tsx` already having portalled the whole window there — one portal escapes one
+  trap, not both. **Generalise past "backdrop-blur" and "the sidebar" specifically**: any ancestor
+  with `backdrop-filter`, `transform` (including a `both`-filled animation that ends at a visual
+  no-op), `will-change: transform`, `filter`, `perspective`, or `contain` is a containing block for
+  `position: fixed` — check every ancestor a new fixed-position surface will actually render
+  inside, not just its immediate parent.
+- **A nested overlay's own `window.addEventListener('keydown', …, true)` Escape handler cannot stop
+  an ANCESTOR overlay's identical pattern from ALSO firing on the same keypress — `stopPropagation`
+  does not do what it looks like it does here.** Both are bound to the exact same target (`window`,
+  not a DOM element in the actual component tree), so real capture/bubble tree-traversal never
+  applies between them — per spec, multiple listeners for the same (type, capture) pair on ONE
+  target fire in the order they were **added**, full stop. `Settings.tsx`'s own Escape-closes-the-
+  window handler (`useEffect` in `SettingsWindow`) registers the moment Settings opens; a popover
+  nested inside it (`Select`, `EmojiPicker`, `SpaceDeleteConfirm`) registers its OWN capture-phase
+  handler strictly later, when IT opens — so Settings' handler always ran FIRST and had already
+  called `close()` before the nested one even executed. `e.stopPropagation()` in the nested handler
+  could not retroactively undo that; only `stopImmediatePropagation()` called by whichever listener
+  runs *first* would stop the others, and the nested one never ran first. **Confirmed 2026-08-29 on
+  the ALREADY-SHIPPED `EmojiPicker`** (Settings → Spaces → Representational emoji): pressing Escape
+  while its popover was open closed the popover as expected AND, ~1–1.5s later once the genie's
+  close animation finished, closed the whole Settings window too — invisible in a quick manual
+  check because the second effect was delayed by that animation, only caught by waiting past it.
+  **FIXED the same day** with `settings/escapeClaims.ts` — a ref-counted claim (`claimEscape()` /
+  `escapeClaimed()`) any nested overlay pushes onto for exactly as long as it's open, paired with
+  the overlay's own Escape-listener effect so the two always move together. Settings' own handler
+  checks `escapeClaimed()` before calling `close()` and does nothing if something nested has first
+  claim — the nested overlay's own (later-registered) handler still runs and closes itself. Wired
+  into `Select` (`settings/primitives.tsx`), `EmojiPicker` and `SpaceDeleteConfirm`
+  (`settings/Spaces.tsx`); any future Settings-nested overlay with its own Escape handler needs the
+  same pairing or it will silently regress into this exact bug — there is nothing that enforces it
+  automatically, the same "no shared base class" gap noted in pattern 4 below.
 - **`.fade-in`'s `animation-fill-mode: both` leaves a permanent, invisible `transform` on its
   element — and any `transform` makes that element a new stacking context.** `.fade-in` animates
   `opacity` AND `transform: translate3d(...)`, `both`-filled so the element holds its start state
@@ -501,6 +547,36 @@ every session — see the table in **Folder structure** above for the full list.
   **Any absolutely-positioned dropdown living inside a `.fade-in`-classed ancestor, that needs to
   visually cover a LATER sibling outside that ancestor, will hit this.** Raising its z-index cannot
   fix it — only escaping the ancestor (portal) can.
+  **And `.fade-in` is only one way in — the general rule is about paint order, not that class.**
+  A second instance, found 2026-08-29: the format bar's `?` slot picker and colour menu opened
+  UNDER the note, so `document.elementFromPoint` on their own buttons returned `div.cm-content`
+  and every click went to CodeMirror. No `.fade-in` ancestor was involved. The command row
+  (`ROW_CLASS`, NotePane.tsx) is `position: static` while its later sibling `.pane-body` is
+  `position: relative` — a positioned element paints over a static one — and the row additionally
+  carries `backdrop-filter` and a `translate-y-0` transform, either of which makes it a stacking
+  context that traps its descendants' z-index inside a box contributing no z-index of its own.
+  **So the question to ask is never "is there a `.fade-in`?" but "is this panel's nearest
+  stacking-context ancestor painted before a positioned sibling it has to cover?"** — and the
+  answer is only ever trustworthy when measured: on that bug, `transform: none` AND
+  `backdrop-filter: none` on the row both changed nothing, while `position: relative; z-index: 50`
+  on the row and `z-index: -1` on `.pane-body` each fixed it. The fix is the same either way
+  (`editor/AnchoredPopover.tsx` portals to `document.body` and positions from
+  `getBoundingClientRect()`), and it buys a second thing free: a portalled panel also escapes the
+  `overflow-x-auto` the toolbar gets in a split column, which would clip it however it painted.
+  One trap to remember when portalling a panel out of a toolbar: **the `onMouseDown`
+  preventDefault that kept the editor's selection alive does not come with it**, so the panel has
+  to carry its own or every colour swatch applies to a collapsed selection.
+- **A component that `return (<>…</>)`s straight into a `flex flex-col gap-N` container has every
+  fragment child become a flex item — so `gap-N` lands between each heading and its own subtitle,
+  not just between sections.** A fragment isn't a real DOM node, so the parent's flex layout sees
+  straight through it to whatever elements it contains; a component meant to render one "section"
+  (a heading, then its description, then its controls) instead contributes three separate flex
+  items, each getting the full inter-section gap. Tell: carefully-tuned `mt-*` values on those
+  children that would be redundant if the gap were only ever meant for section breaks — a sign
+  something is already fighting the layout it's sitting in. `Customisation.tsx` wraps each block in
+  one `<div>` and is fine; `Settings.tsx`'s `General`/`Formatting` returned flat fragments and every
+  heading floated 24px off its own description until `d0ef304` wrapped them each in a `<div>`.
+  Typechecks, tests green, looks implemented — nothing about it is visible without opening the page.
 - **A vault inside OneDrive (or Dropbox/iCloud) breaks a bare `fs.rename`.** The sync client
   briefly holds a handle on the file, so the atomic write's final rename fails with `EPERM`
   (also seen: `EACCES`, `EBUSY`) and the user's edit is lost. Every rename in `vault.ts` and
@@ -536,7 +612,13 @@ every session — see the table in **Folder structure** above for the full list.
   Verified 2026-08-26. One false-positive to know about: a `Cannot find module
   '@codemirror/search'` error this way is a real but pre-existing gap in OneDrive's
   `node_modules` (present in `package-lock.json`, missing on disk) — not something your change
-  broke.
+  broke. **"False-positive" means the diagnosis, not the impact — it still had to be fixed.**
+  Found 2026-08-29: with the package genuinely missing, `npm run dev`'s Vite dev server refused
+  to render the renderer AT ALL (a full-page import-analysis error, in both the Electron window
+  and the `localhost:5173` preview) rather than only failing this one module's typecheck — so
+  nothing could be visually verified until `npm install` restored it. Don't just note the gap and
+  work around it; check whether it's actively blocking the live app you're about to verify
+  against, and if so, `npm install` before trying to look at anything.
 - **Verify against the tree Reuben RUNS, not the one you edit.** `ps ax -o pid,etime,command |
   grep electron-vite` names the tree AND how long it has been up; a multi-day `etime` means the
   main process predates nearly everything, since electron-vite reloads the renderer and never main.
@@ -550,6 +632,30 @@ every session — see the table in **Folder structure** above for the full list.
   system Node). Clear it before launching: `Remove-Item Env:ELECTRON_RUN_AS_NODE`. A normal user
   terminal does not have this set (VS Code itself is Electron), so `npm run dev` works for the
   user unchanged.
+- **On the Mac the same `ELECTRON_RUN_AS_NODE=1` leak needs `env -u`, and it is inherited from VS
+  Code itself.** `env | grep ELECTRON` shows it set by the extension host, so it reaches anything
+  the agent spawns — including the Electron that `electron-vite dev` forks for the app window,
+  which then boots as plain Node with no window and no error. Launch with
+  `env -u ELECTRON_RUN_AS_NODE <electron> <app>`, or, when you must go through `electron-vite`,
+  `delete process.env.ELECTRON_RUN_AS_NODE` at the top of a tiny ESM launcher and import its bin
+  from there. Node itself is NOT installed on this Mac at all (`command -v node` is empty), so
+  every tool runs as `ELECTRON_RUN_AS_NODE=1 <electron> node_modules/typescript/bin/tsc …` /
+  `… node_modules/vitest/vitest.mjs run` / `… node_modules/oxlint/bin/oxlint src`.
+  **A pipe hides the failure**: `npm run typecheck 2>&1 | tail` printed `command not found` and
+  still exited 0, which read as a clean typecheck for a whole round of edits.
+- **Synthetic keyboard events are not a reliable way to drive CodeMirror either — validate the
+  harness on a note with none of the feature in it before trusting a reading.** The CDP gotcha
+  above covers `page.keyboard`; `new KeyboardEvent('keydown', …)` dispatched at `.cm-content` is
+  no better, and it fails in BOTH directions: on a plain `abcdef` note one synthetic Backspace
+  deleted the entire document, and after placing a real collapsed DOM range instead, the same
+  keypress did nothing at all. Two "results" about a colour-tag feature were produced this way on
+  2026-08-29 before a control run on a note with no colour in it showed the instrument was the
+  problem. **For anything keyboard- or selection-driven, prefer a unit test against a real
+  `EditorState`** — it is pure, so `EditorState.create({doc, selection, extensions: [markdown(),
+  …]})` exercises the genuine syntax tree and the genuine transaction filters with no DOM
+  (`editor/colorCommands.test.ts` reads the binding out of the real `keymap` facet, so a renamed
+  binding fails the test rather than passing it). Keep CDP for what it is genuinely good at:
+  geometry, paint order, `getComputedStyle` and `elementFromPoint`.
 - In this environment, launch Electron via `node_modules/electron/dist/electron.exe` directly,
   not the `.bin/electron.cmd` shim (the shim's fallback ran the app under system Node).
 - First `electron` run may download its binary (~100 MB) — let it finish.
@@ -692,6 +798,20 @@ The nav follows exactly that split — keep it:
 last two — one component, so the two scopes can never offer different options or lay them out
 differently.
 
+**"One component" only holds for what is actually INSIDE that component — and nothing enforces
+it.** Theme was the counter-example, from the day Spaces was built until Reuben reported it on
+2026-08-29: `ThemeCards` was rendered directly by the space editor, one line above `<SpaceForm/>`
+rather than within it, so **Settings → Customisation had no theme control at all** — the single
+most-wanted appearance setting, missing from the page whose entire job is "answer this for every
+space." A whole-app scope that silently omits one setting is worse than not having the page.
+Two things had already been written down and were both quietly wrong, which is the tell to look
+for: the Appearance disclosure's own hint string advertised *"Theme, accent colour, button edges,
+sidebar density and editor width"*, and its `differs` check listed `'theme'` and `'textTone'` among
+the keys it compares — a "spaces differ" marker for controls that were not on the page. **When a
+component's hint text or its key list names a control it does not render, believe the text and fix
+the render.** Neither typecheck nor lint nor the test suite can see this; the only way it surfaces
+is opening both pages and diffing what they show, so do that whenever a setting is added or moved.
+
 These were one page called "Master settings" until 2026-08-03. It mixed the two categories, so
 someone after the date format scrolled through the entire appearance system to reach it, and someone
 after the theme had no reason to guess that "master" was where it lived.
@@ -747,8 +867,8 @@ Also note Tailwind's ring utilities are box-shadow, not border: firm up a `ring-
 ### Where the last few bugs actually lived (pattern, not history)
 
 Four features shipped on 2026-07-29; the defects in them clustered in three places, none of which a
-typecheck or the pure-logic suite can see. Check these before declaring an appearance or editor
-feature done:
+typecheck or the pure-logic suite can see (two more patterns, from separate work, were added below
+on 2026-08-29). Check these before declaring an appearance or editor feature done:
 
 1. **A control that writes state nothing reads** — or that something later overrides. Trace the value
    from the click to the pixel: settings → IPC → `normalizeSettings` (does main's copy know the new
@@ -758,6 +878,39 @@ feature done:
    actually in (empty note, empty line, no selection), not the state that makes the code path obvious.
 3. **A stale process.** See the dev-server gotcha above. If behaviour contradicts the source you just
    read, suspect the running bundle before you suspect the logic.
+4. **A new modal/confirm surface built to its own spec instead of matched against the nearest existing
+   one.** Building Spaces.tsx's right-click "Delete space…" dialog (2026-08-29), clicking every button
+   and confirming the delete itself worked was not enough: it shipped without Escape-to-cancel, and its
+   backdrop click wasn't guarded against firing mid-delete — both because I checked it against its own
+   spec, not against `App.tsx`'s `mediaConfirm`, the closest existing analog, which already has both
+   (with its own comment explaining why Escape means Cancel, not dismiss). There is no shared
+   `<ConfirmDialog>` component here — every confirm surface is hand-built — so nothing enforces this
+   parity automatically. **Before calling a new modal done, diff its keyboard handling and its
+   busy/in-flight guards against the closest existing one, not just its click-path.**
+5. **A field added to `Space` without updating everything that assumes exhaustive coverage of
+   it.** `shared/presets.ts`'s `PART_KEYS` must list every `SpaceLook` field exactly once — a field
+   in no group can never be copied by any preset, silently. Nothing in the type system enforces
+   that; only `presets.test.ts`'s one dedicated test does, by diffing `PART_KEYS`'s flattened keys
+   against `Object.keys(spaceLook(DEFAULT_SPACE))`. Adding `pinTabs` / `pinPath` / `pinNoteHeader`
+   to `Space` (2026-08-29, the four-bar "while scrolling" feature) did not touch `PART_KEYS` at
+   all — `npm run typecheck` and `npm run lint` both stayed clean for the rest of that session,
+   because neither one has any idea `PART_KEYS` is supposed to be exhaustive. Only running
+   `npm test` surfaced it, and that didn't happen until prompted by unrelated follow-up work later
+   the same day. **A new field on `Space` isn't done until `npm test` has actually been run** —
+   typecheck and lint verify the code compiles and follows style, not that every consumer of a
+   shared type was updated; for `Space` specifically, `presets.test.ts` is the one thing standing
+   between a new field and it being unreachable by every preset in the app.
+6. **A global element selector in `app.css` (`button { ... }`) still paints once the Tailwind
+   utility classes that used to match its specificity are gone.** Redesigning the Settings
+   disclosure rows into one grouped list (2026-09-02), stripping `rounded-xl ring-1` off each row
+   should have left them borderless — instead every row still drew a card, because the base
+   `button` rule (1px border, 8px radius, a faint `--wash` fill) had been there the whole time,
+   just invisible under the Tailwind classes that matched it in the same places. Removing a
+   component's own classes is not removing its styling if a bare-tag rule is still in scope; check
+   `app.css`'s un-scoped element selectors (`button`, `input`, …) before assuming a stripped-down
+   element starts from nothing. Fixed with an explicit reset scoped to `.disclosure-group`'s own
+   buttons (`border: none; border-radius: 0; background: transparent`) — see the comment above
+   `.disclosure-group` in `app.css`.
 
 When you do work here, move *toward* the rules above; never add code that deepens a gap (e.g. a
 direct-`fs` call in the renderer, config written into the vault's notes, hardcoded style values).
