@@ -7,6 +7,99 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- A tagline now writes itself in under the wordmark on the download page — "the bridge between
+  complexity and constraint", starting once the wordmark settles. `bridge` is drawn along an arch
+  and drops onto the line, `complexity` is bold with small oxblood marks orbiting it, and
+  `constraint` is squeezed out of bold into italic
+- Page looks and tints are real. A space can now be written on lined, grid, dot-grid, graph or
+  narrow-ruled paper, or a soft grain, with a colour of your choosing washed under the words —
+  set per space, or for every space at once under Customisation. The pattern is spaced to the
+  editor's own lines and scrolls with what you write; the tint sits behind the text, so nothing
+  loses contrast
+- Your collection now shows only what you actually have. Everything you don't — the sixteen
+  downloadable fonts, the five extra page looks, the tint wheel — moved to a new **Explore and
+  install more** page behind a door at the foot of each shelf, opening on the shelf you came from
+- Tints can be made from any hex colour at a strength you set, previewed on the page look the
+  space is already wearing, and saved to your collection. None ship built in — which colours and
+  strengths actually help is a research question this app isn't going to guess at in a swatch
+- Page looks can be requested: if the paper you want doesn't exist, the Page looks tab has a form
+  that sends the request straight to Notealise
+- Removing a font, page look or tint now also takes it off any space using it, rather than
+  leaving that space wearing something its own picker no longer lists
+- Fixed: Remove on a downloaded font did nothing at all — it called the custom-import path, which
+  matched nothing and returned silently. Downloaded fonts can now really be uninstalled
+- Fixed the format bar's "?" buttons and its colour menu opening *behind* the note, so every
+  click on them landed in the text instead of the menu. Both now open in front, centred under
+  the button you clicked
+- The colour popover reopens on whichever of highlight or text colour you used last, instead of
+  resetting to highlight every time you select something
+- Colour and highlight no longer show the HTML behind them while you write — the code stays
+  hidden even with the cursor inside the phrase, and deleting part of a coloured phrase keeps the
+  rest coloured rather than leaving stray code in the note. Markdown pro still shows the real source
+- Highlights now fit the text at every size. On a heading the colour was being drawn at
+  body-text height, so the tops and tails of the letters sat outside it
+- The word count now counts what you'd read rather than what the file holds — headings, bold
+  markers, table pipes, link addresses and colour tags no longer score as words. The sidebar's
+  preview line reads cleanly for the same reason
+- Markdown pro can fade the syntax marks it reveals so you read past them, or colour them in any
+  of the palette's colours so they stand out — under Note extras, per space. The eye button hides
+  itself in raw view, where the code behind a photo is already on screen
+- Settings → Customisation can now set the theme. Theme and text colour sit inside the
+  Appearance section in both places now — Customisation, where a change answers for every
+  space at once, and Spaces → that space, where it answers for one
+- Spaces can now be deleted by right-clicking them — in the sidebar switcher, and on the space
+  tabs in Settings → Spaces — rather than only through the Delete space button at the bottom of
+  the settings page, which testers didn't find. Either way, if the space has a saved look, you're
+  offered the choice to keep it as a preset before the space goes, with a "?" explaining what
+  that does
+- Search box in the space emoji picker — type what you're looking for instead of scanning the grid
+- The Settings General tab is tidied: the legal notice and licences link move to the bottom, the
+  "replay the intro" and blank-test-vault controls get their own "Vault reset" section (out of the
+  old "Developer" heading) with plainer wording, and the note explaining a note's edit time now
+  sits with the date format it describes. Section headings sit closer to their descriptions
+  throughout, so the page reads as groups rather than one flat list
+- Fixed the note's own heading row (Bold, Italic, custom buttons, title, stats, split view)
+  appearing to vanish while scrolling — it was never actually moving, the links strip above it was
+  sliding up and parking on top of it. The links strip now hides cleanly instead
+- Split the "Linking content" settings section, which had settings unrelated to links (the file
+  path bar, edit time, Markdown pro) filed under it — those three are now under a new "Note extras"
+  section (renamed from "Note chrome"), and "Links" holds just the two settings actually about links
+- Pressing Escape to close a dropdown or a confirm dialog inside Settings no longer also closes the
+  whole Settings window a moment later
+- The tab strip, the file path bar and the note's own heading row can now each be kept on screen
+  or set to get out of the way while you scroll, the same as the links strip already could — all
+  four default to staying on screen, grouped in one new "While scrolling" section per space
+- Saved presets' "choose what to bring" checkboxes now match the settings page — Links, Note extras
+  and While scrolling are separate ticks instead of one combined "Note chrome", which also fixes
+  applying a preset silently skipping the new tab-strip/path-bar/heading-row scroll settings
+- Reworded every screen of the first-run walkthrough. The Spaces screen's examples swap "Revision"
+  for "Research", and the font screen now counts the built-in and downloadable fonts itself so the
+  numbers stay right as the collection grows
+- The welcome notes a first run leaves you on are rewritten, and the sidebar is now arranged
+  rather than alphabetical — the "Things you can delete" folder on top, "Start here" under it,
+  then the rest in reading order. A note you write during the walkthrough settles at the bottom
+- Picking a single space in the walkthrough now also creates a second one, "Default", with a
+  note in it — so moving a note between spaces is something you can try straight away rather than
+  read about
+- New spaces mix notes and folders in one order by default (it was folders always on top), and
+  a note or folder you create lands at the bottom of its list, ready to drag where you want,
+  instead of dropping in wherever its name falls alphabetically. Existing spaces keep the
+  setting they already had
+- Fixed: the page look and tint cards in Your collection didn't respond to a click — they looked
+  like a picker but were inert. Clicking one now puts it on the space you were last in, and Spaces
+  → Page shows a full-width preview of what that space's writing area actually looks like, since
+  the settings window covers the real editor while you're choosing
+- Startup is now a single dropdown, matching Date format and the other pickers, instead of two
+  full-height option cards — the two are the same kind of choice and now look like it
+- The settings disclosure rows (Appearance, Fonts, Page, Colour and the rest, wherever they
+  appear) are grouped into one bordered list with a hairline between each, instead of nine
+  separate bordered cards stacked apart — and every row is now one line, so the list has a
+  steady rhythm instead of alternating short and tall
+- Settings search understands a typed question, not just a keyword — "how do I make the app
+  dark" now finds Theme instead of matching every row that happens to contain "show". A search
+  with no matches keeps the page list on screen instead of replacing it with one sentence, and a
+  result that lives inside a folded section (most of Customisation) now opens that section and
+  scrolls to it, instead of landing you on a page of closed rows with the answer still hidden
 
 ## [1.0.1] - 2026-08-29
 - New, in Settings → Transfer data: move the parts of your setup that live on one computer and
