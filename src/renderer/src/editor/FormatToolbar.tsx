@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { bold, italic, strike, underline } from './formatCommands'
+import { AnchoredPopover } from './AnchoredPopover'
 import { ColourMenu } from './ColourMenu'
 import { ActionGrid, SlotFace } from './SlotPicker'
 import { findAction } from './commands'
@@ -43,17 +44,11 @@ export function FormatToolbar({ viewRef, slots, onSetSlot, compact }: Props): Re
   // the edge for. Assigned slots keep their place — they're real commands — and
   // an empty one is still fillable from Settings → Spaces → Shortcuts, which is
   // where changing them lives anyway.
-  const slot = (i: number, align: 'left' | 'right'): React.JSX.Element | null => {
+  const slot = (i: number): React.JSX.Element | null => {
     const id = slots[i] ?? ''
     if (compact && !findAction(id)) return null
     return (
-      <SlotButton
-        key={i}
-        id={id}
-        align={align}
-        onPick={(next) => onSetSlot(i, next)}
-        onRun={(fn) => run(fn)()}
-      />
+      <SlotButton key={i} id={id} onPick={(next) => onSetSlot(i, next)} onRun={(fn) => run(fn)()} />
     )
   }
   // The bar trades its internal air before it trades a button.
@@ -76,8 +71,8 @@ export function FormatToolbar({ viewRef, slots, onSetSlot, compact }: Props): Re
       }
       onMouseDown={(e) => e.preventDefault()}
     >
-      {slot(0, 'left')}
-      {slot(1, 'left')}
+      {slot(0)}
+      {slot(1)}
       {divider}
       <button className={FMT_BTN + 'font-bold'} data-tip="Bold  (Ctrl/Cmd+B)" onClick={run(bold)}>
         B
@@ -102,64 +97,48 @@ export function FormatToolbar({ viewRef, slots, onSetSlot, compact }: Props): Re
       {divider}
       <ColourMenu viewRef={viewRef} btnBase={BTN_BASE} btnIdle={BTN_IDLE} btnActive={BTN_ACTIVE} />
       {divider}
-      {slot(2, 'right')}
-      {slot(3, 'right')}
+      {slot(2)}
+      {slot(3)}
     </div>
   )
 }
 
 /** One programmable button, with exactly two modes and no overlap between them:
- *  EMPTY it shows "?" and clicking opens the picker; PROGRAMMED it is an
- *  ordinary format button — clicking runs the command, full stop.
+ *  EMPTY it shows a dashed outline and clicking opens the picker; PROGRAMMED
+ *  it is an ordinary format button — clicking runs the command, full stop.
  *
  *  Re-assigning from the bar (previously a right-click) is deliberately gone:
  *  it made a live command button double as its own settings control, on a
  *  gesture nothing else in the app uses and nothing advertised. Changing an
  *  assigned slot is Settings → Spaces → Shortcuts, which shows all four at once
- *  against a preview of the bar. */
+ *  against a preview of the bar.
+ *
+ *  The picker is an `AnchoredPopover` — portalled to `document.body` — and NOT
+ *  an absolutely-positioned child, which is what it was until 2026-08-29. In
+ *  place it rendered underneath the editor and every click on it went to
+ *  CodeMirror instead; see AnchoredPopover.tsx for the measurement and the
+ *  paint-order reason. */
 function SlotButton({
   id,
-  align,
   onPick,
   onRun
 }: {
   id: string
-  align: 'left' | 'right'
   onPick: (id: string) => void
   onRun: (fn: (v: EditorView) => void) => void
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  const box = useRef<HTMLSpanElement>(null)
+  const btn = useRef<HTMLButtonElement>(null)
   const action = findAction(id)
-
-  // Same close rules as ColourMenu: click-outside, and Escape captured so it
-  // closes this rather than reaching the editor.
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent): void => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        setOpen(false)
-      }
-    }
-    window.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey, true)
-    return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey, true)
-    }
-  }, [open])
 
   const title = action
     ? `${action.label}  —  ${action.hint}\nChange this button in Settings → Spaces → Shortcuts`
     : 'Empty button — click to choose a command for it'
 
   return (
-    <span ref={box} className="relative inline-flex">
+    <span className="inline-flex shrink-0">
       <button
+        ref={btn}
         data-tip={title}
         aria-label={action ? action.label : 'Choose a command for this button'}
         aria-expanded={action ? undefined : open}
@@ -173,11 +152,11 @@ function SlotButton({
       </button>
 
       {open && (
-        <div
-          className={
-            'fade-in absolute top-9 z-40 max-h-[min(420px,60vh)] w-[268px] overflow-y-auto rounded-xl border border-ink-300/25 bg-surface p-2.5 shadow-float ' +
-            (align === 'right' ? 'right-0' : 'left-0')
-          }
+        <AnchoredPopover
+          anchor={btn}
+          width={268}
+          label="Choose a command for this button"
+          onClose={() => setOpen(false)}
         >
           <p className="pb-0.5 text-[12px] text-ink-500">
             Put a command on this button. Once it has one, clicking runs it — change or clear it in
@@ -190,7 +169,7 @@ function SlotButton({
               setOpen(false)
             }}
           />
-        </div>
+        </AnchoredPopover>
       )}
     </span>
   )

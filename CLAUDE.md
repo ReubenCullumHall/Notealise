@@ -101,8 +101,24 @@ than loaded every session — see "Where the rest of it lives" near the end of t
 Ships on Windows + macOS; a vault must survive moving between them. All of this lives in main.
 
 - **Paths:** internal paths are POSIX-style relative-to-vault; convert at the fs boundary
-  (`toRel` / `resolveInVault` in `vault.ts`). Escape check is
-  `rel = path.relative(root, abs); reject if rel.startsWith('..') || path.isAbsolute(rel)`.
+  (`toRel` / `resolveReal` in `vault.ts`). Escape check is
+  `rel = path.relative(root, abs); reject if rel.split(path.sep)[0] === '..' || path.isAbsolute(rel)`.
+  **The first SEGMENT, not the string's prefix** — `rel.startsWith('..')` also matches a file
+  legitimately named `..todo.md`, which made such a note unopenable with a message claiming it
+  escaped the vault (fixed 2026-09-04; `vault.test.ts` asserts both directions).
+  **And the check is lexical, so it must be preceded by symlink resolution.** `resolveReal` does
+  both: `resolveInVault` first (cheap, catches `../` with no stat), then `realInVault`, which
+  resolves the deepest EXISTING ancestor — a path being created does not exist yet, so plain
+  `realpath` throws on it. `setVaultRoot` realpaths the root too, and both halves are required:
+  resolving one side and not the other rejects every path in an ordinary vault, because on macOS
+  the root is routinely behind a link of its own (`/tmp` is really `/private/tmp`).
+- **The boundary lets the vault ROOT through by design** (`listTree` and `scanLinks` need it), so
+  every operation that writes or deletes excludes it separately — `isVaultRoot` in `vault.ts`.
+  That is not belt-and-braces: `purgeRecoveryItem` was the one destructive function without such a
+  guard, and since `heldPath` interpolates a bin record's `id`/`name` straight into a path, a
+  record named `/../../..` aimed the app's only hard `fs.rm` at the whole vault, unattended, from
+  the launch sweep. Held-item segments are now validated in `shared/workspace.ts`
+  (`isSafeHeldSegment`) as well.
 - **Filename sanitisation** (`filenames.ts`, applied on both OSes): strip control chars; replace
   `< > : " / \ | ? *` with `-`; drop trailing dots/spaces; prefix reserved device names
   (`CON PRN AUX NUL COM1-9 LPT1-9`) with `_`. Surface the corrected name to the user; don't
@@ -420,6 +436,12 @@ every session — see the table in **Folder structure** above for the full list.
 - Touching **Settings → Transfer data, `*/transfer.ts`, or the onboarding self-heal**
   (`vaultLooksEstablished`) → `docs/transfer-data.md`. **Built 2026-08-28, NOT live-verified** —
   no CHANGELOG line until Reuben's own check; see the tester-checklist memory.
+- **Anything with a security edge** → `docs/security.md`. Read it before changing `vault.ts`'s path
+  handling, adding an importer, adding anything that renders note content as DOM, touching
+  `electron-builder.yml` or the workflows, or adding a `window.api` method. It carries the threat
+  model (there is no network attacker — the doors are a note, an import, and the update channel),
+  what each boundary is actually for, **what is deliberately left open and why**, and the traps
+  that a green test suite cannot see.
 - A **product decision that isn't in the code** → `docs/product-rulings.md`
 - **UI copy** → `docs/voice.md`
 
@@ -600,6 +622,17 @@ every session — see the table in **Folder structure** above for the full list.
   no-admin tarball at `~/.local/opt/node` and is not on `PATH` — the script prepends it. Verified
   2026-08-06: typecheck clean, 340 tests pass, `src/` lints clean (the oxlint warnings are all in
   read-only `legacy/`).
+  **The script syncs `src/` plus a HAND-MAINTAINED list of root files, and its "trees identical"
+  check only ever diffs `src/` — so a root config it does not list drifts silently while the script
+  reports success.** `tailwind.config.js` and `postcss.config.js` were missing from that list until
+  2026-09-04, and the failure mode is the nastiest kind: `theme.css` lives under `src/` and synced
+  fine, so a change that added tokens there AND remapped the utilities reading them arrived
+  **half-applied** — the variables were defined in the running app and every `rounded-*` class still
+  emitted its old value. Nothing errored; the feature just didn't happen, and a full verify cycle
+  was spent before `diff tailwind.config.js ~/notes-app-mac/tailwind.config.js` found it. Both are
+  in the list now. **If you add a build-time config at the repo root, add it to the rsync line too**
+  — and if a CSS/Tailwind change appears not to apply in the running app, diff the configs between
+  the two trees before you touch the change itself.
 - **To typecheck/lint an OneDrive-tree change without running `sync:mac`** — which stops any
   running dev server, and might be someone else's live session (see the shared-sandbox gotcha
   below) — point the mac tree's own working binaries at the OneDrive project instead of syncing:
@@ -699,6 +732,25 @@ every session — see the table in **Folder structure** above for the full list.
   `npm run dev:legacy` / `build:legacy` + `serve:legacy` (Vite on localhost:5173). See
   `legacy/README.md`.
 
+- **Two whole classes of bug are invisible to `typecheck`, `lint` AND the test suite, and only
+  appear once you PACKAGE the app and launch it.** Both were hit on 2026-09-04, in one session, on
+  changes that read as obviously correct:
+  1. **Flipping an `electronFuses` value invalidates the ad-hoc code signature**, because
+     `@electron/fuses` rewrites bytes inside the Electron binary *after* electron-builder has signed
+     it — and Apple Silicon refuses to `exec` a binary whose signature does not verify. The packaged
+     `.app` died instantly: **no window, no crash dialog, nothing on stdout, exit 0.** The only tell
+     was `spctl -a -vvv` reporting *"code has no resources but signature indicates they must be
+     present"*. `resetAdHocDarwinSignature: true` is mandatory alongside any fuse change; it is in
+     `electron-builder.yml` now, with a comment.
+  2. **A `script-src 'self'` CSP silently blocks `renderer/index.html`'s inline pre-paint script** —
+     the entire no-flash-of-wrong-theme mechanism. There is no error a user would see; the app just
+     opens on the static dark fallback every launch, for everyone. The fix is a SHA-256 of that
+     script in the policy, computed from the **built** HTML in a `transformIndexHtml` hook at
+     `order: 'post'` (hashing the source HTML produces a policy that is correct about a document
+     that never ships). See the `csp` plugin in `electron.vite.config.ts`.
+  **So: any change to `electron-builder.yml`, the CSP, the fuses, or `main/index.ts`'s window setup
+  is not verified until `npm run package:dir` has been run and the result opened.** 638 green tests
+  said nothing about either of these.
 - **A packaged build is not a secure context, so half the modern web APIs are missing there and
   present in dev.** `main/index.ts` uses `loadURL(ELECTRON_RENDERER_URL)` in dev — `http://localhost`,
   which Chromium trusts — and `loadFile(...)` when packaged, i.e. `file://`, which it does not.
@@ -842,6 +894,54 @@ it tests green, and it looks implemented:
   cascade there, and inherits down already resolved. The consequence to remember: override an ink
   token on a **descendant** and the `--ed-*` aliases will NOT follow it. Keep ramp overrides on
   `:root`.
+
+### Radius and motion are design rules, not per-component choices (2026-09-04)
+
+Both were added after Reuben reported the app "looks a bit too cartoony/vibecoded" and a measured
+review found the cause was not the tokens — the ramps and the 33-icon set are uniform and good —
+but the layer of consumer-app reflexes built on top of them.
+
+**Radius: three roles, never a scale.** `--r-control` (4px, things you click), `--r-surface` (10px,
+things that hold other things), `--r-pill` (9999px, things whose radius is half their height). They
+live in `theme.css`; `tailwind.config.js` maps `control`/`surface`/`pill` **and** aliases the whole
+v3 scale onto the same three, so `rounded-lg`, `rounded-xl` and `rounded-2xl` are one value now.
+Before this there were **twenty** distinct radii in `app.css` alone (every integer from 1 to 12,
+plus 14/20/50%/99/999) and seven more across the Tailwind classes, with nothing tying a radius to a
+kind of object — which is precisely why corners had stopped carrying information. **Do not add a
+fourth value without a role that justifies it.** The one standing exception is a 1–2px radius on an
+element that is itself 1–2px tall (drop indicators, the pane divider, the bars inside a theme
+preview): that is a line cap, not an object corner.
+
+**Motion: hover changes colour or ring, never size or position.** `.spring`
+(`cubic-bezier(0.34, 1.56, 0.64, 1)` — a 56% overshoot) is gone, along with two
+`hover:-translate-y-0.5` lifts and three `hover:scale-110` swatches. Nothing that sits still on the
+page may move under the cursor. **Drag-state feedback is the deliberate exception** and keeps the
+overshoot: a target that springs is saying the drop is armed, which is information rather than
+decoration — the drop indicator's `line-in`, `.bin-lid`, `.archive-lid`, and the space switcher's
+`scale-105`. They are named in `app.css` so nobody "finishes the job" by removing them.
+
+**When you delete a transform, check what feedback it was carrying.** `color/Picker.tsx`'s swatches
+had `hover:scale-110` as their *only* hover state — removing it left them inert until a
+`hover:ring-brand-300` went in to replace it. The other two swatch grids already had a ring and
+needed nothing.
+
+### Before you restyle a control, read its event handlers (2026-09-04)
+
+The same review's weakest finding was "the four controls at the foot of the sidebar share no visual
+language — group them into one segmented control". Reading `Sidebar.tsx` killed it: **Bin, Archive
+and every space chip are drag-and-drop targets** (`onDragOver` / `onDrop` — you drag a note onto
+them to bin, archive or move it). Grouping them would have destroyed four separate drop targets, and
+their unequal widths are deliberate — `flex-1` makes them big, and a big target is easier to hit
+mid-drag.
+
+The real fault was the reverse of the one proposed: **Settings** was dressed identically to Bin and
+Archive while being the only one of the three that takes no drop, so the styling promised a gesture
+that could never land. It became a ghost button; the other two were left exactly as they were.
+
+Generalise it: **in this app, visual peers are often functional strangers.** A row of controls that
+look alike may be a drop target, a view switch and a window launcher. Grep the component for
+`onDrop`, `onDragOver`, `draggable` and its click handler before proposing that any two of them be
+merged, aligned or made consistent — appearance is the last thing to read, not the first.
 
 ### Tailwind utilities vs. a global attribute-scoped rule
 

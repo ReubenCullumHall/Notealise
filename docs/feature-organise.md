@@ -193,3 +193,64 @@ sits apart).
     only the landed-path detail) rather than explode. Verified by simulating a stale main against
     the browser preview: before, an empty body and `Cannot read properties of undefined`; after,
     the restore completes, the photo goes back into the note, and nothing is thrown.
+
+## Chrome tightening pass (built 2026-09-04)
+
+Reuben: the app "looks a bit too cartoony/vibecoded". A measured review of the running renderer
+found the tokens were not the problem — the colour ramps are even, and all 33 rendered icons are
+`stroke-width 1.7` at `16×16` with no outlier — but that a layer of consumer-app reflexes had been
+built on top of them. Seven findings, all built. The review artifact (before/after specimens, the
+measurements, and the two findings that turned out to be wrong) is
+`https://claude.ai/code/artifact/16c8c3d2-5333-47e3-aeab-ee40bd37e5ed`.
+
+The two rules this pass established — **radius is three roles, not a scale** and **hover changes
+colour or ring, never size or position** — are in `CLAUDE.md`, because they govern any future UI
+work here rather than this feature alone. So is the lesson about reading a control's event handlers
+before restyling it. What follows is only what is specific to this pass.
+
+**The note title moved out of the command row into the text column.** It was `flex-1` from the
+pane's left edge while the body is a centred `--editor-max-width` column, so the two started at
+different x — and because one was pinned left and the other centred, **the gap grew with the window**:
+176px at 1400px wide, ~450px maximised. `.note-title-row` in `app.css` now reproduces `.cm-content`'s
+geometry exactly (same `max-width`, same `margin: 0 auto`, and the 28px gutter `.cm-line` carries),
+which is what lands the title's first letter on the note's first letter — measured at **x=504 for
+both**, against the actual character via a `Range`, not by arithmetic. Those three numbers live in
+`editor/highlight.ts`; **nothing enforces the pairing, so if they move, `.note-title-row` moves too.**
+
+Three consequences of that move worth knowing:
+
+- **The title is 30px, deliberately above the note's own `# heading`** (`heading1` is `1.7em` of the
+  editor's fixed 16px base = 27.2px). 24px was tried first and lost that comparison; a great many
+  notes open with an H1 repeating their own name, and a title rendering *smaller* than the first
+  line of the document it names reads as a mistake. **If the editor's base size ever stops being a
+  fixed 16px, this has to become relative to it.** Split columns take 20px.
+- **The title is pinned, not scrolled.** Putting it inside CodeMirror's scroller would mean reaching
+  into CM6's own DOM, which rule 3 and `.edit-layer`'s existing comment both warn against. Pinning
+  matches what `pinNoteHeader` already does for the rest of this chrome.
+- **`--links-inset` moved with it.** The scroller's `padding-top` used to clear a floating links
+  strip; the title is now the topmost thing in the column, so it takes that job and the scroller
+  keeps only the 14px gap to the first line. The ruled-paper background stays in phase for free —
+  it is `background-origin: content-box`, so rule 1 is drawn at the top of the content box whatever
+  the padding is.
+
+**Command-row height is unchanged at 47px**, which matters: the row is the shell App's placeholder
+shares, and nothing may shift the text. The title's old `text-lg` line box (28px) and the format
+bar's `h-7` buttons (28px) are the same height, so removing the title cost the row nothing. A
+`flex-1` spacer replaced it to keep the format bar centred over the column — verified at **0.00px**
+off the column's centre.
+
+**Empty format-bar slots.** `SlotFace` renders a dashed outline instead of a `?`. The affordance
+lives in that one component rather than at its two call sites, so the format bar and
+Settings → Shortcuts both got it without either restyling itself — and it retired the last 13px type
+in the chrome, since the `?` was the only glyph in the bar that was not 14px.
+
+**Verified**: title/character alignment 0.00px, bar centring 0.00px, row height unchanged, zero `?`
+glyphs, radii collapsed to 4/10/full plus the density-driven `--row-radius`, in dark, light and a
+two-column split. Renderer typecheck clean, `oxlint src/` exit 0, 638/638 tests. **Not verified**:
+Settings, onboarding and the reading view (findings 4 and 6 are most likely still untidy inside
+Settings), and none of it in a packaged build or against a real vault.
+
+**Known and left alone:** a note whose body opens with an `# H1` repeating its filename now shows
+that name twice, stacked. It was always duplicated; moving the title into the column is what made it
+obvious. Suppressing a leading H1 that matches the title is possible but it is content-mangling —
+rule 4's territory — so it is Reuben's call, not a silent fix.

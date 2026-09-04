@@ -56,6 +56,32 @@
   --note-font-serif: 'Fraunces', Georgia, 'Times New Roman', serif;
 }
 
+/* ---- corner radius ------------------------------------------------------- */
+/* Three roles, NOT a scale (2026-09-04). The app had drifted to 20 distinct
+   radii in app.css and 7 more across the Tailwind classes, with nothing tying a
+   radius to a kind of object — so corners had stopped carrying information and
+   just read as inconsistency. Every corner now answers one question: is this
+   thing a control, a surface, or a pill?
+
+     --r-control   something you click or type into — buttons, inputs, toggles
+     --r-surface   something things sit ON — rows, cards, popovers, windows
+     --r-pill      something whose radius is half its height — chips, handles,
+                   scrollbar thumbs, counts
+
+   Do NOT add a fourth value without a role that justifies it; reach for the
+   nearest of these three instead. tailwind.config.js maps the utility classes
+   onto the same three tokens, so `rounded-lg` and `rounded-xl` are aliases of
+   --r-surface rather than two different sizes.
+
+   The ONE documented exception is a 1–2px radius on an element that is itself
+   only 1–2px tall (drop indicators, the pane divider, the miniature bars inside
+   a theme preview). That is a line cap, not an object corner, and it stays. */
+:root {
+  --r-control: 4px;
+  --r-surface: 10px;
+  --r-pill: 9999px;
+}
+
 /* ---- colour ramps -------------------------------------------------------- */
 /* --wash is the direction a translucent overlay leans: white on dark, black on
    light — it keeps every hover/selection tint working in both themes. */

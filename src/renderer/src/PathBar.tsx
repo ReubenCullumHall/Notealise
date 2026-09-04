@@ -18,15 +18,23 @@ interface Props {
   spaces: SpaceMark[]
   /** open this folder in the sidebar and collapse everything else */
   onReveal: (folder: string) => void
+  /** fade this out of the way (Settings → While scrolling → "Keep the file
+   *  path bar on screen", off). Its layout space stays reserved — nothing
+   *  below it reflows — same as the links block and the note's own heading
+   *  row. */
+  hidden: boolean
 }
 
 const SEP = 'shrink-0 px-1 text-ink-300'
 
-export function PathBar({ path, spaces, onReveal }: Props): React.JSX.Element {
+export function PathBar({ path, spaces, onReveal, hidden }: Props): React.JSX.Element {
   const crumbs = crumbsFor(path, spaces)
   return (
     <div
-      className="path-bar flex h-[26px] shrink-0 items-center overflow-x-auto border-b border-ink-300/20 bg-surface/25 px-3 text-[11.5px] backdrop-blur"
+      className={
+        'path-bar flex h-[26px] shrink-0 items-center overflow-x-auto border-b border-ink-300/20 bg-surface/25 px-3 text-[12px] backdrop-blur transition-[opacity,transform] duration-150 ' +
+        (hidden ? 'pointer-events-none -translate-y-1 opacity-0' : 'translate-y-0 opacity-100')
+      }
       aria-label="File path"
     >
       {/* Nothing open still draws the bar. It is a preference, so it may change

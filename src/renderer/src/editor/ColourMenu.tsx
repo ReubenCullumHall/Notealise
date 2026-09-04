@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { Icon } from '../icons'
+import { AnchoredPopover } from './AnchoredPopover'
 import { PALETTE, type Layer } from './palette'
 import { applyColor, clearColor } from './colorCommands'
 
@@ -31,32 +32,13 @@ const TRIGGER_BAR =
 
 export function ColourMenu({ viewRef, btnBase, btnIdle, btnActive }: Props): React.JSX.Element {
   const [open, setOpen] = useState(false)
-  const box = useRef<HTMLSpanElement>(null)
+  const btn = useRef<HTMLButtonElement>(null)
 
-  // Click-outside and Escape close it. Escape is captured so it closes the menu
-  // rather than reaching the editor.
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent): void => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        setOpen(false)
-      }
-    }
-    window.addEventListener('mousedown', onDown)
-    window.addEventListener('keydown', onKey, true)
-    return () => {
-      window.removeEventListener('mousedown', onDown)
-      window.removeEventListener('keydown', onKey, true)
-    }
-  }, [open])
-
-  // Every action needs the live view and an intact selection. The toolbar's
-  // container already prevents default on mousedown, so the selection survives
-  // the click; all that's left is to close the menu and hand focus back.
+  // Every action needs the live view and an intact selection. `AnchoredPopover`
+  // prevents default on mousedown across the whole panel, so the selection
+  // survives the click; all that's left is to close the menu and hand focus
+  // back. (That used to come from the toolbar's own container — the panel is
+  // portalled out of it now, so it carries the guard itself.)
   const run = (fn: (v: EditorView) => void) => (): void => {
     const view = viewRef.current
     setOpen(false)
@@ -69,14 +51,15 @@ export function ColourMenu({ viewRef, btnBase, btnIdle, btnActive }: Props): Rea
       data-tip={label}
       aria-label={label}
       onClick={run((v) => applyColor(v, layer, name))}
-      className="h-6 w-6 rounded-md border-none ring-1 ring-ink-300/25 outline-none transition duration-150 hover:scale-110 hover:ring-brand-300"
+      className="h-6 w-6 rounded-md border-none ring-1 ring-ink-300/25 outline-none transition duration-150 hover:ring-brand-300"
       style={{ background: `var(--${layer === 'hl' ? 'hl' : 'tc'}-${name})` }}
     />
   )
 
   return (
-    <span ref={box} className="relative inline-flex">
+    <span className="inline-flex shrink-0">
       <button
+        ref={btn}
         data-tip="Text colour & highlight"
         aria-label="Text colour & highlight"
         aria-expanded={open}
@@ -90,7 +73,19 @@ export function ColourMenu({ viewRef, btnBase, btnIdle, btnActive }: Props): Rea
       </button>
 
       {open && (
-        <div className="fade-in absolute left-0 top-9 z-40 w-max rounded-xl border border-ink-300/25 bg-surface p-2.5 shadow-float">
+        // Portalled, like the slot picker beside it — rendered in place this
+        // panel sat underneath the editor and every swatch click went to
+        // CodeMirror. See AnchoredPopover.tsx. `w-max` is gone with it: a fixed
+        // panel needs a number to clamp against the window edge. 256 is what
+        // `w-max` MEASURED at (eight 24px swatches, their gaps and the padding)
+        // — taken from the live panel's own rect, not estimated; at 236 the last
+        // swatch in each row was cut off behind a scrollbar.
+        <AnchoredPopover
+          anchor={btn}
+          width={256}
+          label="Text colour & highlight"
+          onClose={() => setOpen(false)}
+        >
           <p className={HEAD}>Text</p>
           <div className="flex gap-1.5">
             {PALETTE.map((c) => swatch('tc', c.name, c.label))}
@@ -106,7 +101,7 @@ export function ColourMenu({ viewRef, btnBase, btnIdle, btnActive }: Props): Rea
             <Icon name="x" className="h-3.5 w-3.5" />
             <span>Remove colour</span>
           </button>
-        </div>
+        </AnchoredPopover>
       )}
     </span>
   )

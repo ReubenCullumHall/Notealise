@@ -4,7 +4,7 @@ import type { Inspect } from './LinkInspector'
 import type { LinkEntry } from './model'
 
 // The note's connections, in one strip — at the top of the note by default, or
-// fixed to the bottom (Settings → Linking content → position).
+// fixed to the bottom (Settings → Links → position).
 //
 // Chrome, never text: nothing here is written into the .md file (rule 1 — the
 // file is the source of truth, and a generated header would make this app the
@@ -145,7 +145,12 @@ export function LinksBlock({ outgoing, incoming, pinned, edge = 'top', ...rest }
       // own text as that text scrolls up behind it.
       className={
         'links-block flex shrink-0 items-center gap-1 border-ink-300/20 px-3 ' +
-        (edge === 'bottom' ? 'border-t ' : 'border-b ') +
+        // The rule is what makes this read as a BAND across the top of every
+        // note. With no links there is nothing to divide off, so an empty block
+        // drops it and becomes a quiet line of text instead (2026-09-04). The
+        // height is kept either way, deliberately: collapsing it would shunt the
+        // whole editor up the moment you typed a first `[[`.
+        (all.length === 0 ? '' : edge === 'bottom' ? 'border-t ' : 'border-b ') +
         (pinned ? 'bg-surface/30' : 'bg-paper/85 backdrop-blur')
       }
       style={{ height: LINKS_BLOCK_HEIGHT }}
@@ -155,8 +160,17 @@ export function LinksBlock({ outgoing, incoming, pinned, edge = 'top', ...rest }
           when they land. The row is left able to take them so adding them later
           is not a re-layout of everything below. */}
       {all.length === 0 ? (
-        <span className="truncate text-[11.5px] text-ink-300">
-          No links yet — type <span className="font-medium">[[</span> to connect this note to another
+        // Three words, not a sentence. The full instruction was permanent
+        // furniture: it sat at the top of every unlinked note — which is most
+        // notes, forever — teaching something you either already know or are not
+        // looking for right now. It moves to the tooltip, where it is there for
+        // whoever wonders what the empty row is and invisible to everyone else.
+        // `data-tip`, never `title` — see CLAUDE.md's tooltip rule.
+        <span
+          className="truncate text-[12px] text-ink-300"
+          data-tip="Type [[ to connect this note to another"
+        >
+          No links yet
         </span>
       ) : (
         <div className="links-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">

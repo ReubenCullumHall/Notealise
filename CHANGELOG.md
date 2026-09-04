@@ -7,6 +7,43 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- A note's title now sits above the note, in the same column as the words, instead of away in the
+  toolbar. It used to start further and further from your writing the wider you opened the window;
+  now the title and the first line share an edge. Click it to rename, exactly as before
+- Nothing bounces, lifts or grows under the pointer any more. Hovering a button changes its colour
+  and nothing moves. The one place things still spring is where you are dragging something — the
+  bin and the archive still open their lids to show the note will land there
+- An empty button on the format bar is now a dashed outline rather than a question mark, so it
+  reads as room for a command instead of an icon that failed to load
+- Corners are consistent throughout: one shape for things you click, one for things that hold
+  other things, one for pills and counts. There were twenty different corner sizes in the app
+  before this, and nothing said which meant what
+- Settings, at the foot of the sidebar, is quieter and no longer dressed like the bin and the
+  archive beside it — it was the only one of the three you could not drag a note onto
+- A note with no links says just "No links yet", with no rule under it, instead of a full-width
+  line of instructions above every unlinked note. The hint about typing `[[` is on the tooltip
+- Pictures in a note now only come from your own vault. A note that points at a picture on the
+  web, or at a file elsewhere on your computer, shows the same placeholder as one whose file has
+  gone. This closes something worth naming plainly: a note someone else wrote could quietly tell
+  its author the moment you opened it, just by pointing at an image on their server
+- The app can no longer delete your vault. A damaged or tampered-with record in the seven-day
+  recovery net could aim its one permanent delete at the whole folder, on the next launch, with
+  nothing asked and nothing to undo. That delete is now fenced to the recovery folder itself
+- Importing a file someone sent you can no longer read the rest of your computer. A crafted
+  export could name any file on disk and have it copied into your vault alongside your notes
+- Notealise now refuses an archive built to escape the folder it unpacks into, or to fill your
+  disk — a few hundred kilobytes could expand to gigabytes with nothing to stop it or say so
+- An import no longer leaves a full second copy of everything it unpacked sitting in your
+  computer's temporary folder afterwards
+- **Stop** during an import now stops it. It used to say "Stopping…" while carrying on
+- Reopening the window from the Dock no longer shows a JavaScript error, and the file pickers
+  reopen with it properly
+- Only one copy of Notealise runs at a time. Two on the same vault could overwrite each other's
+  pins, ordering and bin
+- A note whose name begins with two dots now opens instead of reporting that it escapes the vault
+- Pressing quit twice quickly no longer beats the save it was waiting for, and rapid
+  window-switching can no longer let an older version of a note overwrite a newer one
+- A font that fails to download properly is now refused rather than installed as a broken file
 - The download page reads as a page now, not just a button. Under the wordmark sits a strip of
   four facts — $0 forever, plain `.md` files, any typeface or colour, spaces you name yourself
   — then three short sections on what Notealise is, what it isn't and who it's for, then the
@@ -35,7 +72,7 @@ enough for a solo project). History before this file existed lives in the `v*` g
   leaving that space wearing something its own picker no longer lists
 - Fixed: Remove on a downloaded font did nothing at all — it called the custom-import path, which
   matched nothing and returned silently. Downloaded fonts can now really be uninstalled
-- Fixed the format bar's "?" buttons and its colour menu opening *behind* the note, so every
+- Fixed the format bar's empty buttons and its colour menu opening *behind* the note, so every
   click on them landed in the text instead of the menu. Both now open in front, centred under
   the button you clicked
 - The colour popover reopens on whichever of highlight or text colour you used last, instead of

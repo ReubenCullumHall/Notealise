@@ -2,7 +2,7 @@ import { Icon } from '../icons'
 import { ACTION_GROUPS, findAction } from './commands'
 
 // The list of commands a custom format-bar slot can be programmed with. Shared
-// by the popover that opens off a "?" button in the bar and by Settings →
+// by the popover that opens off an empty slot in the bar and by Settings →
 // Shortcuts, so both offer exactly the same choices in the same order.
 
 const HEAD = 'col-span-full pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400'
@@ -56,8 +56,26 @@ export function ActionGrid({
   )
 }
 
-/** The face a slot shows: its action's glyph, or the "?" of an empty slot. */
+/** The face a slot shows: its action's glyph, or — when the slot is empty — a
+ *  dashed outline standing in for the button that isn't there yet.
+ *
+ *  It was a literal "?" until 2026-09-04. Two things were wrong with that: a
+ *  question mark means "help" everywhere else in software, and four of them
+ *  spread across the format bar read as four icons that had failed to load —
+ *  which is exactly how it was first reported. A dashed box says "space for
+ *  something" rather than "something is missing".
+ *
+ *  The affordance lives HERE, not in the two call sites, so the format bar and
+ *  Settings → Shortcuts show the same thing without either having to restyle
+ *  itself. (It also retired the last 13px type in the chrome: the "?" was the
+ *  only glyph in the bar that wasn't 14px.) */
 export function SlotFace({ id }: { id: string }): React.JSX.Element {
   const action = findAction(id)
-  return <>{action ? action.glyph : <span className="text-[13px] font-semibold leading-none">?</span>}</>
+  if (action) return <>{action.glyph}</>
+  return (
+    <span
+      aria-hidden
+      className="h-4 w-4 rounded-control border border-dashed border-current opacity-60"
+    />
+  )
 }

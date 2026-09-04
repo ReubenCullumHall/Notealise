@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import logoLight from './assets/logo/notealise-mark-circle-light.svg'
 import logoDark from './assets/logo/notealise-mark-circle-dark.svg'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
-import { activeSpace, type AppSettings, type Space } from '../../shared/settings'
+import { activeSpace, withoutSpace, type AppSettings, type Space } from '../../shared/settings'
 import type { UpdateStatus } from '../../shared/update'
 import { UpdateBanner } from './update/UpdateBanner'
 import { ArchiveIcon, BinIcon, Icon } from './icons'
@@ -12,10 +13,11 @@ import { heldPath, TRASH_DIR } from '../../shared/workspace'
 import { createEdgeScroller } from './edgeScroll'
 import { mediaIcon } from './mediaKind'
 import { SettingsButton, type SectionId } from './settings/Settings'
-import type { SpaceActions } from './settings/Spaces'
+import { SpaceDeleteConfirm, type SpaceActions } from './settings/Spaces'
 import type { PresetActions } from './settings/Presets'
 import type { SpacePreset } from '../../shared/presets'
 import { ancestorsOf } from './links/model'
+import { ContextMenu } from './ContextMenu'
 import { SearchBar, SearchResults, type SearchHit } from './Search'
 import { TreeView, type Selection, type TreeActions } from './TreeView'
 import {
@@ -339,6 +341,16 @@ export function Sidebar({
   useEffect(() => {
     if (!dragging) clearSpaceHover()
   }, [dragging])
+  // Right-click on a space tab, and the confirm dialog it can open. Testers
+  // didn't find Settings → Spaces' own delete control, so the same action is
+  // offered from where they were actually looking. Both a portalled
+  // <ContextMenu> and the confirm dialog below, same as Settings.tsx's own
+  // modal — the sidebar's backdrop-blur makes it a containing block for any
+  // `position: fixed` inside it (CLAUDE.md), so neither can render in place.
+  const [spaceMenu, setSpaceMenu] = useState<{ x: number; y: number; space: Space } | null>(null)
+  const [spaceDeleteTarget, setSpaceDeleteTarget] = useState<Space | null>(null)
+  const [keepSpacePreset, setKeepSpacePreset] = useState(false)
+  const [deletingSpace, setDeletingSpace] = useState(false)
   const [dropZone, setDropZone] = useState<'archive' | 'trash' | null>(null)
   const [lidClick, setLidClick] = useState(false)
   const [archiveLidClick, setArchiveLidClick] = useState(false)
@@ -840,6 +852,15 @@ export function Sidebar({
                     setDragging(null)
                     clearSel()
                   }}
+                  onContextMenu={(e) => {
+                    // The vault-fallback space (folder === '') has nothing to
+                    // delete — Settings → Spaces hides its own Delete control
+                    // for the same reason.
+                    if (!s.folder) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setSpaceMenu({ x: e.clientX, y: e.clientY, space: s })
+                  }}
                   className={
                     'flex h-8 w-8 items-center justify-center rounded-lg border text-[15px] leading-none outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
                     // btn-edge only on the inactive ones: the selected space
@@ -861,6 +882,58 @@ export function Sidebar({
             })}
           </div>
         )}
+
+        {spaceMenu &&
+          createPortal(
+            <ContextMenu
+              x={spaceMenu.x}
+              y={spaceMenu.y}
+              items={[
+                {
+                  label: 'Delete space…',
+                  danger: true,
+                  onClick: () => {
+                    setKeepSpacePreset(false)
+                    setSpaceDeleteTarget(spaceMenu.space)
+                  }
+                }
+              ]}
+              onClose={() => setSpaceMenu(null)}
+            />,
+            document.body
+          )}
+
+        {spaceDeleteTarget &&
+          createPortal(
+            <SpaceDeleteConfirm
+              space={spaceDeleteTarget}
+              hasPreset={presets.some(
+                (p) => p.name === spaceDeleteTarget.folder && p.origin === vaultName
+              )}
+              keepPreset={keepSpacePreset}
+              onToggleKeepPreset={() => setKeepSpacePreset((v) => !v)}
+              busy={deletingSpace}
+              onCancel={() => setSpaceDeleteTarget(null)}
+              onConfirm={async () => {
+                setDeletingSpace(true)
+                try {
+                  const folder = spaceDeleteTarget.folder
+                  const ok = await spaceActions.onDeleteSpace(folder)
+                  if (ok) {
+                    onChangeSettings(withoutSpace(settings, folder))
+                    if (!keepSpacePreset) {
+                      const own = presets.find((p) => p.name === folder && p.origin === vaultName)
+                      if (own) presetActions.onDelete(own.id)
+                    }
+                    setSpaceDeleteTarget(null)
+                  }
+                } finally {
+                  setDeletingSpace(false)
+                }
+              }}
+            />,
+            document.body
+          )}
 
         {/* "Switch folder" and the "Editing real .md files on disk" line used to
             sit here. Both were permanent furniture for something you do once:
@@ -922,7 +995,7 @@ export function Sidebar({
           data-tip={inBin ? 'Back to your notes' : 'Bin — deleted notes wait here'}
           aria-pressed={inBin}
           className={
-            'btn-edge pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
+            'btn-edge pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
             (inBin || dropZone === 'trash'
               ? 'bg-brand-500/15 text-brand-600'
               : 'bg-surface/90 text-ink-500')
@@ -961,7 +1034,7 @@ export function Sidebar({
           data-tip={inArchive ? 'Back to your notes' : 'Archived notes'}
           aria-pressed={inArchive}
           className={
-            'btn-edge pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
+            'btn-edge pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
             (inArchive || dropZone === 'archive'
               ? 'bg-brand-500/15 text-brand-600'
               : 'bg-surface/90 text-ink-500')

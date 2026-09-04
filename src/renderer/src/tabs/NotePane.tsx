@@ -36,7 +36,7 @@ interface Props {
    *  filesystem doesn't record it (see TreeNode) */
   createdAt?: number
   updatedAt?: number
-  /** show those two beside the word count (Settings → Linking content) */
+  /** show those two beside the word count (Settings → Note extras) */
   showNoteInfo: boolean
   dateFormat: AppSettings['dateFormat']
   timezone: string
@@ -56,13 +56,22 @@ interface Props {
   revealHeading: string | null
   /** vault path of a photo/video to scroll to — the delete dialog's jump */
   revealEmbed: string | null
-  /** show the strip of this note's links at all (Settings → Linking content) */
+  /** show the strip of this note's links at all (Settings → Links) */
   showLinks: boolean
   /** and keep it on screen while the note scrolls, instead of letting it go.
    *  Ignored when `linksPosition` is 'bottom' — that spot is always fixed. */
   pinLinks: boolean
   /** top (under the format bar) or fixed to the bottom of the note */
   linksPosition: LinksPosition
+  /** keep the heading row (Bold/Italic/custom buttons, title, stats, split
+   *  view) on screen while the note scrolls, instead of letting it go */
+  pinNoteHeader: boolean
+  /** Report this pane's own scroll position — true once scrolled past the
+   *  very top — to whoever is driving the shared tab strip / path bar hide
+   *  state. Only ever passed for the FOCUSED pane (App.tsx passes `undefined`
+   *  to every other one), since those two bars render once for the whole
+   *  editor area and follow whichever column has the keyboard. */
+  onScrollTopChange?: (scrolledPastTop: boolean) => void
   /** Markdown pro is on for this space: show the corner button at all */
   markdownPro: boolean
   /** this note is currently showing its raw Markdown */
@@ -153,6 +162,8 @@ export function NotePane({
   showLinks,
   pinLinks,
   linksPosition,
+  pinNoteHeader,
+  onScrollTopChange,
   markdownPro,
   raw,
   onToggleRaw,
@@ -198,29 +209,59 @@ export function NotePane({
     [blank, path, linkIndex, env.notes, env.spaces]
   )
 
-  // Scroll-away: the block is absolutely positioned over the top of the editor
-  // and slides up as you read, revealing the text underneath. CodeMirror keeps
-  // its own scroller (touching that would change scrolling for every note), so
-  // the block is translated by the scroll offset instead and the editor carries
-  // matching top padding — the text starts below the block and stays clear of it.
+  // Hide-on-scroll, shared by the links block (floating) and the heading row
+  // (in flow): visible only at the very top of the note, and disappears the
+  // instant you scroll away from it — not a slide tied to scroll position.
+  // Neither one collapses its own layout space when hidden — the note
+  // underneath does not reflow to fill the gap, same as this already worked
+  // for the links block before the tab strip / path bar / heading row grew
+  // the same behaviour (SpaceForm's "While scrolling"). The links block's
+  // spot is fixed (`--links-inset` below), a floating box over the editor;
+  // the heading row is an ordinary flex child that just fades in place.
   //
-  // Pinned, or at the bottom, none of that happens: it is an ordinary row
-  // instead (above the editor when pinned, below it at the bottom — see the
-  // sibling rows around `.pane-body` below).
+  // Deliberately NOT "hide on scroll down, reveal on scroll up": that pattern
+  // (common in mobile browsers) would flicker it in and out on ordinary
+  // up/down reading anywhere in the middle of a long note. Reappearing is
+  // reserved for actually being back at scrollTop 0.
+  //
+  // Replaced 2026-08-29: the links block used to slide continuously instead
+  // (`transform: translateY(-scrolled)`, clamped to LINKS_BLOCK_HEIGHT) — and
+  // that clamped resting position landed exactly on top of the heading row
+  // sitting above `.pane-body`, its near-opaque background painting over that
+  // row's own content. The row was never actually scrolling away; this was
+  // silently hiding it. See CLAUDE.md's Gotchas.
+  //
+  // Pinned, or at the bottom, none of that happens for the links block: it is
+  // an ordinary row instead (above the editor when pinned, below it at the
+  // bottom — see the sibling rows around `.pane-body` below).
   const floatingTop = showLinks && linksPosition === 'top' && !pinLinks
-  const [scrolled, setScrolled] = useState(0)
+  const [scrolledPastTop, setScrolledPastTop] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (blank || !floatingTop) return
+    // A blank pane has no CodeMirror to scroll — permanently "at the top",
+    // so its heading row never has reason to hide.
+    if (blank) {
+      setScrolledPastTop(false)
+      return
+    }
     const scroller = bodyRef.current?.querySelector<HTMLElement>('.cm-scroller')
     if (!scroller) return
-    const onScroll = (): void => setScrolled(Math.min(scroller.scrollTop, LINKS_BLOCK_HEIGHT))
+    const onScroll = (): void => setScrolledPastTop(scroller.scrollTop > 0)
     onScroll()
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => scroller.removeEventListener('scroll', onScroll)
     // `version` re-runs this after a note switch, when CodeMirror has a new
     // scroll position but the same scroller element.
-  }, [blank, floatingTop, path, version])
+  }, [blank, path, version])
+  // Reported separately from the effect above so a focus change (App.tsx
+  // flips which pane's `onScrollTopChange` isn't undefined) reports this
+  // pane's CURRENT position immediately, without waiting for its next scroll
+  // event.
+  useEffect(() => {
+    onScrollTopChange?.(scrolledPastTop)
+  }, [scrolledPastTop, onScrollTopChange])
+  const linksHidden = scrolledPastTop
+  const headerHidden = scrolledPastTop && !pinNoteHeader
 
   // Only "last edited" is on the row — it is the one that changes, and the one
   // you look for. When it was CREATED is a thing you want occasionally, so it
@@ -291,6 +332,8 @@ export function NotePane({
         onDragEnd={onDragEnd}
         className={
           ROW_CLASS +
+          ' transition-[opacity,transform] duration-150' +
+          (headerHidden ? ' pointer-events-none -translate-y-1 opacity-0' : ' translate-y-0 opacity-100') +
           (split ? ' cursor-grab active:cursor-grabbing' : '') +
           // In a split, the accent line is how you can see which column the
           // keyboard is pointing at. A single pane has nothing to distinguish
@@ -298,42 +341,13 @@ export function NotePane({
           (split && focused ? ' border-t-brand-400/70' : '')
         }
       >
-        {blank ? (
-          <span
-            className={
-              'min-w-0 truncate font-note font-semibold text-ink-300 ' +
-              (split ? 'w-[5.5rem] shrink-0 text-[15px] ' : 'flex-1 text-lg ')
-            }
-          >
-            Select a note
-          </span>
-        ) : (
-        <input
-          className={
-            'min-w-0 truncate bg-transparent font-note font-semibold text-ink-900 outline-none placeholder:text-ink-300 ' +
-            // Which element is elastic flips with the width. Wide: the title
-            // grows and the commands sit centred at their natural size. Narrow:
-            // the title is fixed and the COMMANDS take what's left — leave the
-            // title elastic there and its `flex-1` swallows the row, squeezing
-            // the bar down to two buttons and a scrollbar.
-            (split ? 'w-[5.5rem] shrink-0 text-[15px] ' : 'flex-1 text-lg ')
-          }
-          value={titleDraft}
-          placeholder="Untitled"
-          data-tip={path}
-          onChange={(e) => setTitleDraft(e.target.value)}
-          onBlur={commitTitle}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              ;(e.target as HTMLInputElement).blur()
-            } else if (e.key === 'Escape') {
-              setTitleDraft(stripMd(nameOf(path)))
-              ;(e.target as HTMLInputElement).blur()
-            }
-          }}
-        />
-        )}
+        {/* The title used to live HERE, and moved into the text column on
+            2026-09-04 — see `.note-title-row` below. What is left is a spacer
+            that mirrors the stats block at the other end, which is what keeps
+            the format bar centred over the column now that nothing elastic sits
+            on the left. In a split there is no spacer and no centring: the bar
+            takes the whole row and scrolls, exactly as it did before. */}
+        {!split && <span className="min-w-0 flex-1" aria-hidden />}
 
         <div className={blank ? 'pointer-events-none flex min-w-0 flex-1 opacity-40' : 'contents'}>
           <FormatToolbar viewRef={viewRef} slots={slots} onSetSlot={onSetSlot} compact={split} />
@@ -431,13 +445,61 @@ export function NotePane({
           </div>
         ) : (
           <div
-            className="edit-layer"
+            className="edit-layer has-title"
             // The editor's own top padding, so the first line starts below the
             // block rather than underneath it. A CSS variable rather than a
             // style on .cm-scroller: the scroller is CodeMirror's DOM, and
             // reaching into it from React is how these two stop agreeing.
             style={{ '--links-inset': floatingTop ? `${LINKS_BLOCK_HEIGHT}px` : '0px' } as React.CSSProperties}
           >
+            {/* The note's title, in the note's own column.
+                It sat in the command row above until 2026-09-04, where it was
+                `flex-1` from the pane's left edge while the body is a centred
+                `--editor-max-width` column — so the two started at different x
+                and the gap GREW with the window: 176px at 1400px, ~450px
+                maximised. A document's title belongs over the document.
+
+                `.note-title-row` reproduces `.cm-content`'s geometry exactly
+                (same max-width, same auto margins, the same 28px gutter
+                `.cm-line` carries), which is what lands the title's first
+                letter on the note's first letter. Those numbers live in
+                `editor/highlight.ts` — if they move, this moves with them.
+
+                It is PINNED rather than scrolling away with the text, which is
+                the same choice `pinNoteHeader` already makes for the rest of
+                this chrome. */}
+            <div className="note-title-row">
+              <input
+                className={
+                  'w-full min-w-0 truncate bg-transparent font-note font-semibold text-ink-900 outline-none placeholder:text-ink-300 ' +
+                  // 30px, which is deliberately ABOVE the note's own `# heading`
+                  // (`heading1` is 1.7em of the editor's fixed 16px base =
+                  // 27.2px — editor/highlight.ts). A great many notes open with
+                  // an H1 repeating their own name, and a title that renders
+                  // SMALLER than the first line of the document it names reads
+                  // as a mistake. 24px was tried first and lost that comparison.
+                  // If the editor's base size ever stops being fixed at 16px,
+                  // this has to become relative to it.
+                  // A split column drops to 20px — still above its body text,
+                  // but a third of the window is not a reading view.
+                  (split ? 'text-[20px]' : 'text-[30px]')
+                }
+                value={titleDraft}
+                placeholder="Untitled"
+                data-tip={path}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    ;(e.target as HTMLInputElement).blur()
+                  } else if (e.key === 'Escape') {
+                    setTitleDraft(stripMd(nameOf(path)))
+                    ;(e.target as HTMLInputElement).blur()
+                  }
+                }}
+              />
+            </div>
             <CodeEditor
               path={path}
               doc={doc}
@@ -459,6 +521,12 @@ export function NotePane({
                 what it contains on every render — the button is 8px of chrome,
                 and a fixed-height row that never appears or disappears is worth
                 more than hiding it (CLAUDE.md: nothing may shift the text). */}
+            {/* Hidden in raw view: the markdown behind every photo and video is
+                already on screen there, so the eye has nothing left to reveal.
+                Reuben's call, 2026-08-29. Safe against the "nothing may change
+                the row's height" rule because this button is absolutely
+                positioned inside `.edit-layer` and costs no layout either way. */}
+            {!raw && (
             <button
               onClick={onToggleMediaSource}
               aria-pressed={mediaSource}
@@ -480,6 +548,7 @@ export function NotePane({
             >
               <Icon name="eye" className="h-4 w-4" />
             </button>
+            )}
             {/* Markdown pro's switch. Absolutely positioned inside `.edit-layer`
                 (which is already `position: absolute`), so it costs no layout at
                 all — the editor chrome is fixed-height rows and nothing may
@@ -507,12 +576,17 @@ export function NotePane({
 
         {!blank && floatingTop && (
           <div
-            className="pointer-events-none absolute inset-x-0 top-0 z-10"
-            // Slides out of the way as the note scrolls, so the connections are
-            // there when you arrive and out of the way once you're reading.
-            style={{ transform: `translateY(${-scrolled}px)` }}
+            // pointer-events-none out here regardless of hidden state, so the
+            // padding this box reserves never blocks a click meant for the
+            // text below it — only the inner wrapper (sized to the block
+            // itself) re-enables clicking, and only while visible: an
+            // invisible chip must not still be clickable.
+            className={
+              'pointer-events-none absolute inset-x-0 top-0 z-10 transition-[opacity,transform] duration-150 ' +
+              (linksHidden ? '-translate-y-1 opacity-0' : 'translate-y-0 opacity-100')
+            }
           >
-            <div className="pointer-events-auto">
+            <div className={linksHidden ? 'pointer-events-none' : 'pointer-events-auto'}>
               <LinksBlock
                 outgoing={outgoing}
                 incoming={incoming}

@@ -190,8 +190,13 @@ export function Swatch({
       aria-label={label}
       aria-pressed={on}
       className={
-        'h-6 w-6 shrink-0 rounded-md border-none outline-none transition duration-150 hover:scale-110 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-        (on ? 'ring-2 ring-brand-500 ring-offset-1 ring-offset-surface' : 'ring-1 ring-ink-300/30')
+        'h-6 w-6 shrink-0 rounded-md border-none outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+        // Hover is a ring change, not a scale: a swatch that grows under the
+        // cursor nudges its neighbours' apparent position in a tight grid, and
+        // the 10% jump was the loudest of the app's bounce-y hovers.
+        (on
+          ? 'ring-2 ring-brand-500 ring-offset-1 ring-offset-surface'
+          : 'ring-1 ring-ink-300/30 hover:ring-brand-300')
       }
       style={{ background: `rgb(${rgbChannels(hex)})` }}
     >

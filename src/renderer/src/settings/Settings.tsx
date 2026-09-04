@@ -448,9 +448,20 @@ export function SettingsButton({
     <>
       <button
         ref={btn}
+        // A GHOST button, not a card (2026-09-04). It used to carry the exact
+        // dressing of the Bin and Archive buttons beside it — same height, same
+        // border, fill, card shadow and backdrop-blur — which said "these three
+        // are peers". They are not: Bin and Archive are DROP TARGETS (drag a
+        // note onto them, see Sidebar.tsx's onDrop) and switch the sidebar's
+        // view; this opens a window and accepts no drop at all. Dressing it like
+        // them invited a drag that can never land.
+        //
+        // `rounded-lg` to match the sidebar's other ghost icon buttons rather
+        // than the control radius — those are its real peers now. `btn-edge` is
+        // gone with the border it used to colour.
         className={
-          'btn-edge pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-ink-300/30 shadow-card outline-none backdrop-blur transition duration-200 spring hover:-translate-y-0.5 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
-          (open ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500')
+          'pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border-none bg-transparent outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+          (open ? 'text-brand-600' : 'text-ink-500')
         }
         data-tip="Settings"
         aria-label="Settings"

@@ -68,7 +68,7 @@ const editorTheme = EditorView.theme({
   // grey-and-square baseTheme into one of this app's floating panels.
   '.cm-tooltip.cm-tooltip-autocomplete': {
     border: `1px solid ${c('--wash', 0.14)}`,
-    borderRadius: '12px',
+    borderRadius: 'var(--r-surface)',
     background: c('--surface', 0.97),
     boxShadow: 'var(--shadow-float)',
     overflow: 'hidden',
@@ -77,7 +77,7 @@ const editorTheme = EditorView.theme({
   },
   '.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
     padding: '6px 10px',
-    borderRadius: '8px',
+    borderRadius: 'var(--r-control)',
     fontFamily: 'var(--note-font-sans)',
     color: c('--ink-800')
   },
@@ -125,7 +125,7 @@ const editorTheme = EditorView.theme({
     minWidth: '140px',
     flex: '1 1 160px',
     border: `1px solid ${c('--ink-300', 0.3)}`,
-    borderRadius: '999px',
+    borderRadius: 'var(--r-pill)',
     background: c('--paper', 0.4),
     padding: '5px 12px',
     color: c('--ink-900'),
@@ -156,7 +156,7 @@ const editorTheme = EditorView.theme({
   '.cm-search input[type=checkbox]': { accentColor: c('--brand-500'), margin: '0' },
   '.cm-search button.cm-button': {
     border: 'none',
-    borderRadius: '999px',
+    borderRadius: 'var(--r-pill)',
     background: c('--wash', 0.08),
     color: c('--ink-700'),
     padding: '5px 12px',

@@ -41,7 +41,7 @@ body {
 }
 ::-webkit-scrollbar-thumb {
   background: rgb(var(--wash) / 0.16);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 2px solid transparent;
   background-clip: content-box;
 }
@@ -80,7 +80,7 @@ button {
   font: inherit;
   padding: 6px 12px;
   border: 1px solid rgb(var(--wash) / 0.14);
-  border-radius: 8px;
+  border-radius: var(--r-control);
   background: rgb(var(--wash) / 0.04);
   color: inherit;
   cursor: pointer;
@@ -150,9 +150,25 @@ button.icon:hover {
 }
 
 /* --- animation (legacy/src/index.css) --- */
-.spring {
-  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
-}
+/* `.spring` (cubic-bezier(0.34, 1.56, 0.64, 1)) was REMOVED on 2026-09-04, with
+   the `hover:-translate-y-0.5` lifts and the three `hover:scale-110` swatches
+   that went with it. That curve overshoots its destination by 56% and springs
+   back — the house style of playful consumer apps, and on a monochrome writing
+   tool it was the single loudest wrong note in the chrome.
+
+   Hover feedback in this app is now a COLOUR or RING change, never a size or
+   position change. Nothing that sits still on the page may move under the
+   cursor. If a control needs more emphasis than a tint, give it a ring, not a
+   transform.
+
+   DRAG-STATE feedback is the deliberate exception, and the overshoot curve is
+   right for it — a drop target that springs is telling you the drop is armed,
+   which is information rather than decoration. Four survive on purpose; do not
+   "finish the job" by removing them:
+     · `line-in`      the drop indicator between two rows (below)
+     · `.bin-lid`     the bin's lid hinging open as a note comes over it
+     · `.archive-lid` the same cue on the archive chest
+     · `scale-105`    on the space switcher, Sidebar.tsx, same meaning */
 @keyframes fade-in {
   from { opacity: 0; transform: translate3d(0, 5px, 0); }
   to { opacity: 1; transform: translate3d(0, 0, 0); }
@@ -184,7 +200,7 @@ button.icon:hover {
 .tree-root.drop-root {
   outline: 2px dashed rgb(var(--wash) / 0.18);
   outline-offset: -4px;
-  border-radius: 8px;
+  border-radius: var(--r-surface);
 }
 
 .tree-row {
@@ -353,7 +369,7 @@ button.icon:hover {
   opacity: 1;
   background: rgb(var(--row-rgb));
   color: rgb(var(--row-ink));
-  border-radius: 5px;
+  border-radius: var(--r-control);
   box-shadow: 0 0 0 1px rgb(var(--wash) / 0.12);
 }
 .tree-row.tint-tag:hover .grip:hover { color: rgb(var(--row-ink) / 0.7); }
@@ -486,7 +502,7 @@ button.icon:hover {
 .color-sv {
   position: relative;
   height: 108px;
-  border-radius: 8px;
+  border-radius: var(--r-surface);
   cursor: crosshair;
   touch-action: none;
   outline: none;
@@ -498,7 +514,7 @@ button.icon:hover {
 .color-hue {
   position: relative;
   height: 12px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   cursor: ew-resize;
   touch-action: none;
   outline: none;
@@ -519,7 +535,7 @@ button.icon:hover {
   width: 12px;
   height: 12px;
   margin: -6px 0 0 -6px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   pointer-events: none;
   background: rgb(var(--handle-rgb));
   box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(0, 0, 0, 0.35);
@@ -853,6 +869,37 @@ button.icon:hover {
   inset: 0;
   display: flex;
 }
+/* A pane that carries the note's title above CodeMirror stacks the two instead
+   of letting the editor fill the layer (NotePane.tsx, 2026-09-04). */
+.edit-layer.has-title {
+  flex-direction: column;
+}
+/* THE NOTE'S TITLE, sitting in the text column rather than in the command row.
+   The three geometry values here are a deliberate copy of `.cm-content` and
+   `.cm-line` in editor/highlight.ts — max-width, auto margins, and the 28px
+   gutter — because matching them is the entire point: it is what puts the
+   title's first letter directly above the note's first letter. Change one of
+   the three there and change it here too; nothing enforces the pairing.
+
+   The top padding takes over the job the scroller's used to do, including
+   clearing a floating links strip via --links-inset, since the title is now the
+   topmost thing in the column. */
+.note-title-row {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: var(--editor-max-width, 46rem);
+  margin: 0 auto;
+  padding: calc(24px + var(--links-inset, 0px)) 28px 0;
+}
+/* With a title above it the scroller keeps only the gap between the title and
+   the first line — the 24px that used to hold line 1 clear of the top now sits
+   on `.note-title-row` instead. The ruled-paper background stays in phase
+   automatically: it is `background-origin: content-box`, so rule 1 is drawn at
+   the top of the content box whatever this padding is, and line 1's baseline
+   lands on it exactly as before. */
+.edit-layer.has-title .cm-scroller {
+  padding-top: 14px;
+}
 .read-layer {
   position: absolute;
   inset: 0;
@@ -1028,7 +1075,7 @@ button.icon:hover {
 .look-tile {
   position: relative;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: var(--r-surface);
   background: rgb(var(--paper));
   border: 1px solid rgb(var(--wash) / 0.12);
 }
@@ -1074,7 +1121,7 @@ button.icon:hover {
 }
 .look-card {
   padding: 10px;
-  border-radius: 14px;
+  border-radius: var(--r-surface);
   border: 1px solid rgb(var(--wash) / 0.12);
   background: transparent;
   min-width: 0;
@@ -1095,7 +1142,7 @@ button.look-card:hover {
   display: inline-flex;
   gap: 2px;
   padding: 3px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: rgb(var(--wash) / 0.06);
 }
 .explore-tab {
@@ -1104,7 +1151,7 @@ button.look-card:hover {
   gap: 6px;
   padding: 6px 14px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: transparent;
   color: rgb(var(--ink-500));
   font-size: 12.5px;
@@ -1131,7 +1178,7 @@ button.look-card:hover {
 .tint-alpha {
   position: relative;
   height: 12px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   cursor: ew-resize;
   touch-action: none;
   outline: none;
@@ -1217,7 +1264,7 @@ button.look-card:hover {
   vertical-align: -0.12em;
   cursor: default;
   border: 1px solid rgb(var(--ink-300));
-  border-radius: 4px;
+  border-radius: var(--r-control);
   background: rgb(var(--wash) / 0.04);
 }
 .prose-note li input[type='checkbox']:checked {
@@ -1247,14 +1294,14 @@ button.look-card:hover {
   font-size: 0.86em;
   background: rgb(var(--wash) / 0.07);
   padding: 0.15em 0.4em;
-  border-radius: 6px;
+  border-radius: var(--r-control);
   color: rgb(var(--ink-800));
 }
 .prose-note pre {
   background: rgb(var(--code-bg));
   color: rgb(var(--ink-800));
   padding: 1em 1.15em;
-  border-radius: 14px;
+  border-radius: var(--r-surface);
   overflow-x: auto;
   margin: 0.9em 0;
   border: 1px solid rgb(var(--wash) / 0.09);
@@ -1290,7 +1337,7 @@ button.look-card:hover {
 }
 .prose-note img {
   max-width: 100%;
-  border-radius: 12px;
+  border-radius: var(--r-surface);
 }
 
 /* --- colour palette classes (values live in theme.css) --- */
@@ -1313,7 +1360,7 @@ button.look-card:hover {
 /* highlight gets a little breathing room without shifting layout */
 [class^='hl-'],
 [class*=' hl-'] {
-  border-radius: 3px;
+  border-radius: var(--r-control);
   padding: 0.06em 0.12em;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
@@ -1344,7 +1391,7 @@ button.look-card:hover {
 }
 :root[data-raw-marks='colour'] .cm-raw-mark {
   font-family: var(--font-mono);
-  border-radius: 3px;
+  border-radius: var(--r-control);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
@@ -1366,7 +1413,7 @@ button.look-card:hover {
   align-items: center;
   gap: 8px;
   padding: 5px 7px;
-  border-radius: 10px;
+  border-radius: var(--r-surface);
   background: rgb(var(--surface));
   border: 1px solid rgb(var(--wash) / 0.1);
   box-shadow: var(--shadow-float);
@@ -1436,12 +1483,12 @@ button.look-card:hover {
   background: rgb(var(--surface));
   color: rgb(var(--ink-900));
   border: 1px solid rgb(var(--wash) / 0.1);
-  border-radius: 10px;
+  border-radius: var(--r-surface);
   box-shadow: var(--shadow-float);
 }
 .menu-item {
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--r-control);
   cursor: default;
 }
 .menu-item:hover {
@@ -1466,7 +1513,7 @@ button.look-card:hover {
   background: rgb(var(--surface));
   color: rgb(var(--ink-900));
   border: 1px solid rgb(var(--wash) / 0.1);
-  border-radius: 12px;
+  border-radius: var(--r-surface);
   box-shadow: var(--shadow-float);
 }
 .prompt-title {
@@ -1480,7 +1527,7 @@ button.look-card:hover {
   color: inherit;
   background: rgb(var(--wash) / 0.05);
   border: 1px solid rgb(var(--wash) / 0.14);
-  border-radius: 8px;
+  border-radius: var(--r-control);
 }
 .prompt input:focus {
   outline: none;
@@ -1503,7 +1550,7 @@ button.look-card:hover {
   gap: 14px;
   max-width: 80%;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--r-surface);
   font-size: 13px;
   background: rgb(var(--brand-600));
   color: rgb(var(--paper));
@@ -1553,7 +1600,7 @@ button.look-card:hover {
   background: rgb(var(--surface));
   color: rgb(var(--ink-900));
   border: 1px solid rgb(var(--wash) / 0.1);
-  border-radius: 12px;
+  border-radius: var(--r-surface);
   box-shadow: var(--shadow-float);
   z-index: 200;
 }
@@ -1568,7 +1615,7 @@ button.look-card:hover {
   font-weight: 600;
   line-height: 1.2;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--r-control);
   background: rgb(var(--brand-600));
   color: rgb(var(--paper));
 }
@@ -1581,7 +1628,7 @@ button.look-card:hover {
   margin: -3px -3px 0 0;
   padding: 3px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--r-control);
   background: none;
   color: rgb(var(--ink-400));
 }
@@ -1605,7 +1652,7 @@ button.look-card:hover {
    follows the button, and rounding the button's bottom then cuts a notch
    above content that continues below it. */
 .disclosure-group {
-  border-radius: 12px;
+  border-radius: var(--r-surface);
   border: 1px solid rgb(var(--ink-300) / 0.2);
 }
 .disclosure-group > * + * {
@@ -1648,7 +1695,7 @@ button.look-card:hover {
    only the animation lives here. */
 .genie {
   opacity: 0;
-  border-radius: 20px;
+  border-radius: var(--r-surface);
   will-change: transform, opacity;
   backface-visibility: hidden;
 }
@@ -1742,7 +1789,7 @@ button.look-card:hover {
 .confirm-warn {
   margin-top: 10px;
   padding: 8px 11px;
-  border-radius: 8px;
+  border-radius: var(--r-surface);
   background: rgb(229 72 77 / 0.1);
   color: rgb(var(--ink-700));
   font-size: 12.5px;
@@ -1773,7 +1820,7 @@ button.look-card:hover {
   text-underline-offset: 2px;
   cursor: pointer;
   outline: none;
-  border-radius: 4px;
+  border-radius: var(--r-control);
 }
 .confirm-notes button:hover {
   color: rgb(var(--brand-500));
@@ -1788,7 +1835,7 @@ button.look-card:hover {
 .confirm .prompt-actions button {
   flex: 1;
   padding: 9px 12px;
-  border-radius: 10px;
+  border-radius: var(--r-control);
   font-size: 13px;
 }
 /* Cancel is focused the moment this opens (App.tsx: it has to be, or keystrokes
@@ -1848,7 +1895,7 @@ button.look-card:hover {
 .theme-card {
   flex: 1;
   padding: 10px;
-  border-radius: 14px;
+  border-radius: var(--r-surface);
   border: 1px solid rgb(var(--wash) / 0.12);
   background: transparent;
   cursor: pointer;
@@ -1860,7 +1907,7 @@ button.look-card:hover {
 }
 .theme-card .preview {
   height: 46px;
-  border-radius: 9px;
+  border-radius: var(--r-surface);
   margin-bottom: 8px;
   overflow: hidden;
   display: flex;
@@ -1929,7 +1976,7 @@ button.look-card:hover {
   flex: 1;
   text-align: left;
   padding: 8px 12px;
-  border-radius: 10px;
+  border-radius: var(--r-control);
   border: 1px solid rgb(var(--wash) / 0.12);
   background: transparent;
   cursor: pointer;
@@ -1960,7 +2007,7 @@ button.look-card:hover {
 }
 .font-card {
   padding: 9px 11px;
-  border-radius: 12px;
+  border-radius: var(--r-surface);
   border: 1px solid rgb(var(--wash) / 0.12);
   background: transparent;
   cursor: pointer;
@@ -2003,7 +2050,7 @@ button.look-card:hover {
   align-items: center;
   gap: 14px;
   padding: 8px 12px;
-  border-radius: 12px;
+  border-radius: var(--r-surface);
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
@@ -2051,7 +2098,7 @@ button.look-card:hover {
   padding: 3px 8px;
   font-size: 12px;
   line-height: 1;
-  border-radius: 7px;
+  border-radius: var(--r-surface);
   border: 1px solid rgb(var(--wash) / 0.12);
   background: transparent;
   color: rgb(var(--ink-500));
@@ -2103,7 +2150,7 @@ button.look-card:hover {
   min-width: 38px;
   max-width: 170px;
   padding: 7px 11px;
-  border-radius: 11px;
+  border-radius: var(--r-surface);
   border: 1px solid rgb(var(--wash) / 0.12);
   background: transparent;
   cursor: pointer;
@@ -2136,7 +2183,7 @@ button.look-card:hover {
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 11px;
+  border-radius: var(--r-surface);
   border: 1px dashed rgb(var(--wash) / 0.2);
   background: transparent;
   cursor: pointer;
@@ -2170,7 +2217,7 @@ button.look-card:hover {
   align-items: center;
   gap: 9px;
   padding: 7px 10px;
-  border-radius: 11px;
+  border-radius: var(--r-surface);
   border: 1px solid rgb(var(--wash) / 0.12);
   background: transparent;
   cursor: grab;
@@ -2214,7 +2261,7 @@ button.look-card:hover {
   padding: 3px 7px;
   overflow-x: auto;
   white-space: pre;
-  border-radius: 6px;
+  border-radius: var(--r-control);
   background: rgb(var(--wash) / 0.05);
   color: rgb(var(--ink-500));
   font-family: var(--font-mono);
@@ -2233,7 +2280,7 @@ button.look-card:hover {
   display: block;
   max-width: 100%;
   height: auto;
-  border-radius: 8px;
+  border-radius: var(--r-surface);
   /* A picture that hasn't loaded yet must not collapse to nothing, or the text
      below it jumps as each one arrives. */
   min-height: 1.2em;
@@ -2260,7 +2307,7 @@ button.look-card:hover {
 .cm-video-el {
   display: block;
   max-width: 100%;
-  border-radius: 8px;
+  border-radius: var(--r-surface);
   min-height: 1.2em;
 }
 .cm-video-missing .cm-video-el {
@@ -2294,7 +2341,7 @@ button.look-card:hover {
   height: 14px;
   padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   /* Overlaying arbitrary photo/video content, not the app's own surface, so
      this leans on --wash (the token for "reads on top of anything") rather
      than an ink-* step — those are calibrated for text against paper. Kept
@@ -2325,7 +2372,7 @@ button.look-card:hover {
 .cm-attach-selected {
   outline: 2px solid rgb(var(--brand-500) / 0.85);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: var(--r-control);
 }
 /* CodeMirror also paints its own selection layer across the range. Over a
    picture that reads as a wash of colour on top of the thing being looked at —
@@ -2358,7 +2405,7 @@ button.look-card:hover {
   position: fixed;
   height: 2px;
   margin-top: -1px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: rgb(var(--brand-400) / 0.85);
   pointer-events: none;
   z-index: 50;
@@ -2489,7 +2536,7 @@ button.look-card:hover {
   height: 14px;
   padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: rgb(var(--wash) / 0.14);
   color: rgb(var(--ink-500));
   opacity: 0;
@@ -2517,7 +2564,7 @@ button.look-card:hover {
   bottom: 16px; /* stop short of the row-add bar along the bottom */
   width: 3px;
   margin-left: -1.5px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: rgb(var(--brand-500));
   pointer-events: none;
 }
@@ -2529,7 +2576,7 @@ button.look-card:hover {
   justify-content: center;
   padding: 0;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   background: rgb(var(--wash) / 0.07);
   color: rgb(var(--ink-400));
   font-size: 12px;
@@ -2584,7 +2631,7 @@ button.look-card:hover {
   margin: -0.32em -0.6em;
   padding: 0.32em 0.6em;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--r-control);
   outline: 2px solid rgb(var(--brand-400));
   background: rgb(var(--surface));
   color: inherit;
@@ -2605,7 +2652,7 @@ button.look-card:hover {
   height: 13px;
   padding: 0;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--r-control);
   background: transparent;
   color: rgb(var(--ink-400) / 0.5);
   font-size: 9px;
@@ -2630,7 +2677,7 @@ button.look-card:hover {
 /* A <mark> with no palette class — colorPass owns the classed ones. */
 .cm-mark {
   background: rgb(var(--hl-amber) / 0.85);
-  border-radius: 3px;
+  border-radius: var(--r-control);
   padding: 0 0.15em;
 }
 
@@ -2655,7 +2702,7 @@ button.look-card:hover {
   height: 0.95em;
   margin-right: 0.15em;
   vertical-align: -0.1em;
-  border-radius: 4px;
+  border-radius: var(--r-control);
   border: 1.5px solid rgb(var(--ink-400) / 0.7);
   cursor: pointer;
 }
@@ -2789,7 +2836,7 @@ body.pane-resizing * {
   background-color: transparent;
   border: 3px solid transparent;
   background-clip: content-box;
-  border-radius: 99px;
+  border-radius: var(--r-pill);
 }
 .cm-scroller.cm-near-scrollbar::-webkit-scrollbar-thumb {
   background-color: rgb(var(--ink-300) / 0.55);
@@ -2816,7 +2863,7 @@ body.pane-resizing * {
   height: 14px;
   padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: transparent;
   color: rgb(var(--ink-400) / 0.55);
   opacity: 0;

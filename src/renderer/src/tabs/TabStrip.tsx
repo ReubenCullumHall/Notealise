@@ -18,6 +18,10 @@ interface Props {
   /** open an empty tab ("+"), which asks you to pick a note */
   onNewTab: () => void
   dragging: Drag | null
+  /** fade this out of the way (Settings → While scrolling → "Keep the tab
+   *  strip on screen", off). Its layout space stays reserved — nothing below
+   *  it reflows — same as the links block and the note's own heading row. */
+  hidden: boolean
 }
 
 const nameOf = (p: string): string => p.slice(p.lastIndexOf('/') + 1)
@@ -50,7 +54,8 @@ export function TabStrip({
   onReorder,
   onDragTab,
   onNewTab,
-  dragging
+  dragging,
+  hidden
 }: Props): React.JSX.Element {
   // The gap the dragged tab would land in: the path it goes before, or null for
   // "the end". `undefined` means no indicator at all (not over the strip).
@@ -87,7 +92,10 @@ export function TabStrip({
 
   return (
     <div
-      className="tab-strip flex shrink-0 items-center gap-1 overflow-x-auto border-b border-ink-300/25 bg-surface/40 px-2 py-1.5 backdrop-blur"
+      className={
+        'tab-strip flex shrink-0 items-center gap-1 overflow-x-auto border-b border-ink-300/25 bg-surface/40 px-2 py-1.5 backdrop-blur transition-[opacity,transform] duration-150 ' +
+        (hidden ? 'pointer-events-none -translate-y-1 opacity-0' : 'translate-y-0 opacity-100')
+      }
       role="tablist"
       aria-label="Open notes"
       onDragOver={(e) => over(e, null)}

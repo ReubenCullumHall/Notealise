@@ -47,6 +47,7 @@ import { seedWelcomeNotes } from './onboarding/welcomeNotes'
 import { STEPS, type StepId } from './onboarding/model'
 import { LinkInspector, type Inspect } from './links/LinkInspector'
 import { rewriteLinks, titleOf, type LinkRow } from '../../shared/links'
+import { countWords } from '../../shared/plainText'
 import type { LinkEnv, LinkHandlers, MediaDelete, OpenHow } from './editor/linkEnv'
 import {
   type MediaLanding,
@@ -116,7 +117,8 @@ const spaceFolderOf = (path: string, spaces: Space[]): string => {
 }
 const baseName = (osPath: string): string => osPath.split(/[\\/]/).filter(Boolean).pop() ?? osPath
 const stripMd = (s: string): string => (s.toLowerCase().endsWith('.md') ? s.slice(0, -3) : s)
-const countWords = (t: string): number => (t.trim().match(/\S+/g) ?? []).length
+// Counts what a reader sees, not what the file holds — see shared/plainText.ts
+// for why every markdown mark used to score as a word.
 /** What to call a column out loud — the pane divider's `aria-label` names the two
  *  it sits between, so "Resize Meeting notes and Ideas" tells a screen reader
  *  which seam it has landed on. Matches the name `NotePane` puts on its own
@@ -266,6 +268,15 @@ export default function App(): React.JSX.Element {
   const openPath = activePath(layout) // the focused pane's note
   const layoutRef = useRef(layout)
   layoutRef.current = layout
+  // The FOCUSED pane's own scroll position, true once scrolled past the very
+  // top — the tab strip and path bar each render once for the whole editor
+  // area, so they follow whichever column has the keyboard rather than
+  // tracking their own scroll. Each NotePane reports this via
+  // `onScrollTopChange`, passed only to the one at `layout.focus`; switching
+  // focus to an already-open pane reports its current position immediately
+  // (see NotePane.tsx). Reading it while nothing is open would be stale, so
+  // both uses below also require `openPath`.
+  const [focusedScrolledPastTop, setFocusedScrolledPastTop] = useState(false)
   // What is being dragged, if anything — a tab out of the strip or a whole
   // column by its row. The panes show their drop zones for either.
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -379,24 +390,46 @@ export default function App(): React.JSX.Element {
   const dirtyRef = useRef<Map<string, string>>(new Map())
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const flush = useCallback(async (): Promise<void> => {
+  /** The flush currently in flight, if any. Two of these must never overlap.
+   *
+   *  Each pass takes a SNAPSHOT of the dirty map and then clears it, so two
+   *  running at once is a lost update, not just wasted work: blur starts pass A
+   *  holding note 2's text as it was; while A is awaiting note 1's write the
+   *  user types into note 2; a second blur starts pass B, which writes the NEW
+   *  text; A then reaches its own snapshot of note 2 and writes the OLD text
+   *  over it. The map is empty by then, so disk keeps the stale version and the
+   *  newer one survives only in the editor buffer — until the user quits. */
+  const flushing = useRef<Promise<void> | null>(null)
+
+  const flush = useCallback((): Promise<void> => {
     if (saveTimer.current) {
       clearTimeout(saveTimer.current)
       saveTimer.current = null
     }
-    const pending = [...dirtyRef.current]
-    if (!pending.length) return
-    dirtyRef.current.clear()
-    for (const [path, text] of pending) {
-      try {
-        await window.api.writeNote(path, text)
-      } catch (e) {
-        // Keep the buffer for a later retry — unless typing has already put a
-        // newer one in its place, which must not be overwritten by this one.
-        if (!dirtyRef.current.has(path)) dirtyRef.current.set(path, text)
-        flash(`Save failed: ${(e as Error).message}`)
+    const run = async (): Promise<void> => {
+      const pending = [...dirtyRef.current]
+      if (!pending.length) return
+      dirtyRef.current.clear()
+      for (const [path, text] of pending) {
+        try {
+          await window.api.writeNote(path, text)
+        } catch (e) {
+          // Keep the buffer for a later retry — unless typing has already put a
+          // newer one in its place, which must not be overwritten by this one.
+          if (!dirtyRef.current.has(path)) dirtyRef.current.set(path, text)
+          flash(`Save failed: ${(e as Error).message}`)
+        }
       }
     }
+    // Queue behind whatever is already running, rather than starting a second
+    // pass beside it. `then(run, run)` so a rejected predecessor still lets the
+    // next one go — a failed save must not wedge every save after it.
+    const next = flushing.current ? flushing.current.then(run, run) : run()
+    flushing.current = next
+    void next.finally(() => {
+      if (flushing.current === next) flushing.current = null
+    })
+    return next
   }, [flash])
 
   const onDocChange = useCallback(
@@ -1608,7 +1641,11 @@ export default function App(): React.JSX.Element {
     if (!opts?.established) {
       try {
         welcomeNotePath = await seedWelcomeNotes(homeSpaceFolder)
-        await loadTree()
+        // seedWelcomeNotes writes a sidebar order (demo folder first, then
+        // "Start here") straight to workspace.json — pull it into state now so
+        // the sidebar the hand-off reveals is already in that order, not the
+        // alphabetical one it would show from an unreloaded workspace.
+        await Promise.all([loadTree(), loadWorkspace()])
       } catch (e) {
         // A first-run nicety, not a load-bearing feature — a failure here must
         // not strand the user mid-onboarding with no way into their own app.
@@ -1925,9 +1962,36 @@ export default function App(): React.JSX.Element {
   // drop it beside the spaces; that's the whole point of the hierarchy.
   const inSpace = (dir: string): string => (dir === '' ? space.folder : dir)
 
+  /** Drop a just-created note or folder at the bottom of its level, then leave
+   *  it draggable anywhere. The filesystem alone is only alphabetical, so a new
+   *  "Aardvark" would otherwise jump to the top of a folder that had never been
+   *  arranged. Re-sequencing the WHOLE level (not just stamping the newcomer) is
+   *  what makes it land last there: those siblings had no saved order at all, so
+   *  there was no number to beat. That freezes the level's current on-screen
+   *  order into the sidecar — the same trade `move()` makes for a cross-space
+   *  drop, and fine now that a hand-arranged sidebar is the default (freeArrange).
+   *  Only the explicit New note / New folder actions call this; a note created by
+   *  following an unwritten [[link]] is left where it lands. */
+  const placeAtBottom = async (rel: string): Promise<void> => {
+    const dir = parentOf(rel)
+    const fresh = await window.api.listTree()
+    const siblings = dir === '' ? fresh : (findNode(fresh, dir)?.children ?? [])
+    if (siblings.length < 2) return // nothing to sit at the bottom of
+    const owner =
+      settingsRef.current.spaces.find(
+        (s) => s.folder === spaceFolderOf(dir, settingsRef.current.spaces)
+      ) ?? space
+    const ws = await window.api.getWorkspace()
+    const ordered = sortSiblings(siblings, ws, owner.freeArrange)
+      .map((n) => n.path)
+      .filter((p) => p !== rel)
+    setWorkspace(await window.api.reorderEntries([...ordered, rel]))
+  }
+
   const newNote = (dir: string): Promise<void> =>
     run(async () => {
       const rel = await window.api.createNote(inSpace(dir))
+      await placeAtBottom(rel)
       await loadTree()
       await openNote(rel)
     })
@@ -1935,6 +1999,7 @@ export default function App(): React.JSX.Element {
   const newFolder = (dir: string): Promise<void> =>
     run(async () => {
       const rel = await window.api.createFolder(inSpace(dir))
+      await placeAtBottom(rel)
       await loadTree()
       // Auto-colour, if the space asks for it: a new folder comes out a colour
       // its siblings aren't already using, so a sidebar of folders reads as
@@ -2425,6 +2490,7 @@ export default function App(): React.JSX.Element {
           onDragTab={(path) => setDrag(path === null ? null : { kind: 'tab', path })}
           onNewTab={() => applyLayout(openTab(layoutRef.current, BLANK))}
           dragging={drag}
+          hidden={!!openPath && !space.pinTabs && focusedScrolledPastTop}
         />
         {/* Between the tabs and the format bar, on a line of its own. The tabs
             are which notes are open; this is where THE one you're in lives;
@@ -2438,6 +2504,7 @@ export default function App(): React.JSX.Element {
             path={openPath ?? ''}
             spaces={linkEnvBase.spaces}
             onReveal={(folder) => void reveal(folder)}
+            hidden={!!openPath && !space.pinPath && focusedScrolledPastTop}
           />
         )}
         {layout.panes.length > 0 ? (
@@ -2479,6 +2546,8 @@ export default function App(): React.JSX.Element {
                   showLinks={space.showLinks}
                   pinLinks={space.pinLinks}
                   linksPosition={space.linksPosition}
+                  pinNoteHeader={space.pinNoteHeader}
+                  onScrollTopChange={i === layout.focus ? setFocusedScrolledPastTop : undefined}
                   markdownPro={space.markdownPro}
                   // Which notes are RAW is a property of each note, so it sits
                   // in workspace.json beside its pin and its colour — not in the

@@ -26,7 +26,15 @@ DEST="${NOTES_MAC_COPY:-$HOME/notes-app-mac}"
 # a stale extra module is inert), and it is the flag that turns a mistyped
 # destination into data loss.
 rsync -a "$SRC/src/" "$DEST/src/"
+# tailwind.config.js and postcss.config.js were MISSING from this list until
+# 2026-09-04, and the failure was silent in the worst way: theme.css lives under
+# src/ and synced fine, so a change that added tokens there AND remapped the
+# utilities that read them arrived half-applied — the variables were defined in
+# the running app and every `rounded-*` class still emitted the old values. The
+# tree reported "identical" the whole time, because the check below only ever
+# diffed src/. If you add a build-time config at the repo root, add it here too.
 rsync -a "$SRC/package.json" "$SRC/electron.vite.config.ts" \
+         "$SRC/tailwind.config.js" "$SRC/postcss.config.js" \
          "$SRC/tsconfig.json" "$SRC/tsconfig.web.json" "$SRC/tsconfig.node.json" "$DEST/"
 
 if diff -rq "$SRC/src" "$DEST/src" >/dev/null; then

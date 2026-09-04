@@ -55,6 +55,35 @@ module.exports = {
       boxShadow: {
         card: 'var(--shadow-card)',
         float: 'var(--shadow-float)'
+      },
+      /* Corner radius is three ROLES, not a scale — see theme.css's
+         "corner radius" block for what each one means and why.
+
+         `control` / `surface` / `pill` are the names to use in new code. The v3
+         scale names below are kept as ALIASES onto the same three tokens: there
+         were 157 `rounded-*` call sites across 43 files when this landed, and a
+         mechanical sweep could not tell which of them meant "button" and which
+         meant "popover" — the class name records the old size, not the role. So
+         the VALUES collapse here and the call sites keep working. `rounded-lg`,
+         `rounded-xl` and `rounded-2xl` all resolve to --r-surface deliberately.
+
+         This is the one place the config knowingly departs from legacy's ported
+         scale (see the file header): legacy is reference-only and not built, and
+         the v3 pin is about `outline-none` / ring width / shadow names, none of
+         which this touches. */
+      borderRadius: {
+        none: '0px',
+        control: 'var(--r-control)',
+        surface: 'var(--r-surface)',
+        pill: 'var(--r-pill)',
+        sm: 'var(--r-control)',
+        DEFAULT: 'var(--r-control)',
+        md: 'var(--r-control)',
+        lg: 'var(--r-surface)',
+        xl: 'var(--r-surface)',
+        '2xl': 'var(--r-surface)',
+        '3xl': 'var(--r-surface)',
+        full: 'var(--r-pill)'
       }
     }
   },
