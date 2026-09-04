@@ -18,11 +18,10 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - Corners are consistent throughout: one shape for things you click, one for things that hold
   other things, one for pills and counts. There were twenty different corner sizes in the app
   before this, and nothing said which meant what
-- The foot of the sidebar is one control, not three floating ones. Settings is quieter and no
-  longer dressed like the bin and the archive beside it — it was the only one of the three you
-  could not drag a note onto — and the bin and archive are now two halves of a single button with
-  a line between them, sitting flat on the panel instead of casting a shadow. Dragging a note onto
-  either still works exactly as before
+- The foot of the sidebar reads as one row instead of three floating cards. The bin and the archive
+  are now two halves of a single button with a line between them, and the settings cog sits beside
+  them in the same colours — all of it flat on the panel instead of casting a shadow. Dragging a
+  note onto the bin or the archive still works exactly as before
 - A note with no links says just "No links yet", with no rule under it, instead of a full-width
   line of instructions above every unlinked note. The hint about typing `[[` is on the tooltip
 - Pictures in a note now only come from your own vault. A note that points at a picture on the
