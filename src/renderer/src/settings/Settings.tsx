@@ -972,18 +972,74 @@ function VaultReset(): React.JSX.Element {
   )
 }
 
-/** The no-warranty notice and the open-source licences link — last on the
- *  General page. `onOpenLicences` is owned by SettingsWindow, not local state,
- *  so opening the list replaces the whole General page rather than stacking
- *  under the sections above it. */
+/** The canonical legal text is the website (site/terms.html, site/privacy.html);
+ *  the section below is the in-app summary of it. Keep the two in step when
+ *  either changes. `openExternal` hands the URL to the system browser
+ *  (main/externalLinks.ts allows http/https/mailto). */
+const TERMS_URL = 'https://notealise.com/terms.html'
+const PRIVACY_URL = 'https://notealise.com/privacy.html'
+const LEGAL_LINK =
+  'rounded border-none bg-transparent p-0 font-medium text-brand-600 underline underline-offset-2 outline-none transition-colors hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand-300'
+
+/** The plain-English legal summary and the open-source licences link — last on
+ *  the General page. `onOpenLicences` is owned by SettingsWindow, not local
+ *  state, so opening the list replaces the whole General page rather than
+ *  stacking under the sections above it. */
 function Legal({ onOpenLicences }: { onOpenLicences: () => void }): React.JSX.Element {
+  const point = 'text-[12px] leading-relaxed text-ink-500'
   return (
     <>
       <h3 className="font-display text-[15px] font-semibold text-ink-900">Legal</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
-        Notealise is provided as-is, with no warranty of any kind. Back up anything important —
-        software can have bugs, and the app's author is not liable for lost data.
+        The essentials are below. The full terms of use and privacy policy are on the
+        website.
       </p>
+
+      <div className="mt-3 flex flex-col gap-2.5">
+        <div className={point}>
+          <span className="font-medium text-ink-700">Your notes are yours.</span> They are
+          plain files in the folder you chose. Notealise never uploads them and cannot read
+          them remotely. Delete the app and they stay exactly where they are.
+        </div>
+        <div className={point}>
+          <span className="font-medium text-ink-700">What the app sends.</span> It asks
+          GitHub whether a newer version exists a few times a day &mdash; that tells GitHub
+          your device&rsquo;s IP address and a short app-version and operating-system string.
+          Nothing else is sent unless you download an optional font. No account, no
+          analytics, no tracking.
+        </div>
+        <div className={point}>
+          <span className="font-medium text-ink-700">No warranty.</span> Notealise is
+          provided as-is, with no warranty of any kind. Software can have bugs &mdash; back
+          up anything important. The author is not liable for lost data, and nothing here
+          affects your statutory consumer rights.
+        </div>
+        <div className={point}>
+          <span className="font-medium text-ink-700">Governing law.</span> These terms are
+          governed by the law of England and Wales.
+        </div>
+      </div>
+
+      <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
+        Full text:{' '}
+        <button
+          type="button"
+          className={LEGAL_LINK}
+          onClick={() => void window.api.openExternal(TERMS_URL)}
+        >
+          Terms of use
+        </button>
+        {' · '}
+        <button
+          type="button"
+          className={LEGAL_LINK}
+          onClick={() => void window.api.openExternal(PRIVACY_URL)}
+        >
+          Privacy policy
+        </button>
+        <span className="text-ink-400"> &mdash; opens notealise.com in your browser.</span>
+      </p>
+
       <button
         type="button"
         onClick={onOpenLicences}

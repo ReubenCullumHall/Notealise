@@ -790,6 +790,28 @@ every session — see the table in **Folder structure** above for the full list.
   fine as understood, and last-write-wins is fine as long as it never corrupts — which the atomic
   rename guarantees. No dedicated test was written for this; it was reasoned from the write path
   instead. Ruling recorded in `docs/product-rulings.md`.
+- **A Tailwind class that isn't used anywhere ELSE in `src/` is silently dropped by the JIT scan,
+  even in your own new code, with no error at any layer.** Building Settings → Legal's expanded
+  copy (2026-09-04), `space-y-2.5` on the wrapper around four summary paragraphs produced no gap
+  between them at all — `grep -rho 'space-y-[0-9.]\+' src/renderer` matched only that one new
+  line, and `grep -o 'space-y-' out/.../*.css` on the last built bundle matched nothing: the class
+  was never emitted, because nothing else in the codebase uses `space-y-*` for Tailwind to find.
+  Typecheck and lint both stay clean — neither knows what a Tailwind class does — and the bug is
+  invisible unless the page is actually rendered. Caught only by an isolated render against a real
+  built CSS bundle (see the note below), not by reading the JSX. **Fixed by using a utility already
+  proven elsewhere in this codebase** (`flex flex-col gap-2.5`, since `gap-*` is used all over) —
+  the general rule is: before reaching for a Tailwind utility that "should" work, grep the rest of
+  `src/` for another instance of it, or check it's present in a recent build's CSS output; don't
+  trust the class name alone.
+- **When the Electron window and the shared `:5173` dev server both belong to someone else, verify
+  a presentational component by rendering its exact JSX/classes as static HTML against the last
+  *built* CSS bundle** (`~/notes-app-mac/out/renderer/assets/index-*.css`, from whoever's most
+  recent `npm run package:dir` or `electron-vite build`) via Playwright, rather than either
+  guessing from the source or commandeering a dev server that is mid-use by another session. This
+  is what caught the `space-y-2.5` bug above: the classes, tokens (`--paper`/`--ink-*`/`--brand-*`)
+  and computed styles all resolve for real, just outside the running app. It doesn't exercise
+  click handlers or IPC — pair it with typecheck (proves the wiring compiles) for anything that
+  also has behaviour, not just layout.
 
 ### Tooltips are `data-tip`, never `title`
 

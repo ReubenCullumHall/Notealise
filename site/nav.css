@@ -241,6 +241,31 @@ body.page * { box-sizing: border-box; }
 }
 .page-back:hover { color: var(--ink); }
 
+/* Long-form pages (privacy.html / terms.html) — lists, inline links and inline
+   code inside .page-main. Running <p> text is left to inherit body.page's own
+   size/line-height, so nothing here can reach .page-eyebrow / .page-lede. */
+.page-meta {
+  margin: -4px 0 32px;
+  font: var(--eyebrow); letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.page-main ul { margin: 0 0 16px; padding-left: 1.3em; }
+.page-main li { margin: 5px 0; }
+.page-main h2 + p, .page-main h2 + ul { margin-top: 0; }
+.page-main p a, .page-main li a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+.page-main p a:hover, .page-main li a:hover { text-decoration-color: currentColor; }
+.page-main code {
+  font: 500 0.88em/1 var(--mono);
+  padding: 0.12em 0.36em;
+  background: oklch(24% 0.02 50 / 0.07);
+  border-radius: 4px;
+}
+
 /* ── Bottom bar — same as index.html / guide.css ─────────────────────── */
 .footer {
   flex: none;
@@ -252,6 +277,11 @@ body.page * { box-sizing: border-box; }
 }
 .footer-brand { color: var(--ink); font-weight: 600; letter-spacing: -0.01em; }
 .footer-est { color: var(--muted); font-weight: 400; letter-spacing: 0.06em; }
+/* Inner-page footer nav — the legal links (index.html carries its own copy of
+   these rules in landing.css, with the explore links alongside). */
+.footer-links { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.footer-links a { color: var(--muted); text-decoration: none; }
+.footer-links a:hover { color: var(--ink); }
 
 @media (max-width: 480px) {
   .footer { justify-content: center; text-align: center; }

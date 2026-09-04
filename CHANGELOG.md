@@ -144,6 +144,12 @@ enough for a solo project). History before this file existed lives in the `v*` g
   with no matches keeps the page list on screen instead of replacing it with one sentence, and a
   result that lives inside a folded section (most of Customisation) now opens that section and
   scrolls to it, instead of landing you on a page of closed rows with the answer still hidden
+- Notealise now has a Privacy page and Terms of use, linked from the foot of every page on
+  notealise.com. Between them they say plainly what the app does and doesn't send — the update
+  check, and nothing else unless you ask for a font — and that your notes stay yours
+- Settings → Legal now says the same thing in the app itself: what stays on your computer, what
+  the app sends, that there's no warranty, and the law it's governed by — with a link out to the
+  full pages for whoever wants them
 
 ## [1.0.1] - 2026-08-29
 - New, in Settings → Transfer data: move the parts of your setup that live on one computer and
