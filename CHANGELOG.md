@@ -7,6 +7,13 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- The download page reads as a page now, not just a button. Under the wordmark sits a strip of
+  four facts — $0 forever, plain `.md` files, any typeface or colour, spaces you name yourself
+  — then three short sections on what Notealise is, what it isn't and who it's for, then the
+  real app running inline to try before downloading, then a path that draws itself down to the
+  Windows and macOS buttons. The look you pick in the inline app carries through to the end
+- Pages on notealise.com now carry share metadata, so a pasted or posted link shows its title
+  and a one-line description instead of a bare address
 - A tagline now writes itself in under the wordmark on the download page — "the bridge between
   complexity and constraint", starting once the wordmark settles. `bridge` is drawn along an arch
   and drops onto the line, `complexity` is bold with small oxblood marks orbiting it, and

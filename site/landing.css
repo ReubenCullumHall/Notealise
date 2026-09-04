@@ -1,0 +1,773 @@
+/* landing.css — the home page's scrolling narrative, below the hero.
+
+   Loaded by index.html only. nav.css owns the tokens (--ink / --soft / --muted /
+   --line, --serif / --sans / --mono, --eyebrow) and the top bar; index.html's own
+   <style> block owns the hero, the wordmark and the download buttons. This file
+   adds only what sits between them.
+
+   Layout (Reuben, 2026-09-02): one centred reading column at --col, everything
+   down the page centre-aligned. Notes that used to hang in a right-hand gutter
+   now sit quietly under the paragraph they belong to. Section order is What it
+   is → What it isn't → Who it's for → Try it → download.
+
+   Rules this obeys (site/DESIGN.md): light only, monochrome ink on white,
+   hairline rules, no gradient, no shadow, no glow, no accent colour. */
+
+/* Lives on :root, not on .landing — .try and .walk sit outside
+   <main class="landing"> and still need the same measure. */
+:root {
+  --col: 40rem;        /* the reading measure, centred */
+}
+
+.landing {
+  max-width: var(--col);
+  margin: 0 auto;
+  padding: 0 clamp(20px, 5vw, 32px);
+}
+
+/* ── A beat: one centred column (Reuben, 2026-09-02). ── */
+.beat {
+  max-width: var(--col);
+  margin: 0 auto;
+  padding: clamp(50px, 8vh, 92px) 0;
+  text-align: center;
+}
+.beat > * + * { margin-top: 20px; }
+
+.beat-eyebrow {
+  font: var(--eyebrow);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0;
+}
+.beat h2 {
+  font-family: var(--serif);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 2.6rem);
+  letter-spacing: -0.021em;
+  line-height: 1.1;
+  text-wrap: balance;
+  color: var(--ink);
+  margin: 0;
+}
+.beat-eyebrow + h2 { margin-top: 14px; }
+.beat p {
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.68;
+  color: var(--soft);
+}
+.beat h2 + p { margin-top: 24px; }
+/* `.beat p { margin: 0 }` (specificity 0,1,1) outranks `.beat > * + *` (0,1,0),
+   so consecutive paragraphs in a beat had a 0px gap and read as one block.
+   This is 0,1,2 and wins. ~1.4em ≈ the 24px break between h2 and the first p. */
+.beat p + p { margin-top: 1.4em; }
+
+/* ── Notes. Once a right-hand gutter, now a quiet aside centred under its
+   block. class="anchor" stays on the paragraph/figure; <aside class="m-note">
+   sits inside it. `.lead` used to draw a leader across the gutter — there is no
+   gutter now, so lead and plain read the same. */
+.anchor { position: relative; }
+.m-note {
+  position: relative;
+  max-width: 34rem;
+  margin: 18px auto 0;
+  padding-top: 15px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  font-style: italic;
+  color: var(--muted);
+}
+.m-note::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 1px;
+  background: var(--line);
+}
+.m-note .m-label {
+  display: block;
+  font: var(--eyebrow);
+  font-size: 10.5px;
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+/* .lead no longer differs from .m-note — the leader was gutter-specific. */
+
+/* ── The folder of plain files (§ "what it isn't"). ───────────────────────── */
+.disk {
+  margin: 32px auto 0;
+  max-width: 22rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 18px 20px;
+  font: 400 13.5px/2 var(--mono);
+  color: var(--muted);
+  text-align: left;
+}
+.disk-dir { display: block; color: var(--ink); }
+.disk-file { display: block; padding-left: 22px; position: relative; }
+.disk-file::before {
+  content: "└";
+  position: absolute;
+  left: 6px;
+  color: var(--line);
+}
+.disk-file:not(:last-child)::before { content: "├"; }
+
+/* ── The redrawn app (§ "what it is"). Hairline frame, no window chrome.
+   Not a screenshot — rebuilt so pieces can be isolated and animated later.
+   Plain bars stand in for the note text on purpose: this page shows what the
+   app IS, not what a note says. Feature specifics live on the info pages. ── */
+.app {
+  margin: 36px auto 0;
+  max-width: 34rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 138px 1fr;
+  min-height: 226px;
+  text-align: left;
+}
+.app-side {
+  border-right: 1px solid var(--line);
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.app-search {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: 400 11px/1.3 var(--sans);
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.app-space {
+  font: 500 12px/1.3 var(--sans);
+  color: var(--muted);
+  padding: 5px 8px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.app-space::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 2px;
+  border: 1px solid var(--muted);
+}
+.app-space.is-on {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.app-space.is-on::before { background: var(--ink); border-color: var(--ink); }
+.app-tree {
+  margin-top: 6px;
+  padding-left: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.app-tree span {
+  height: 5px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.app-notes { display: grid; grid-template-columns: 1fr 1fr; }
+.app-note {
+  padding: 14px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.app-note + .app-note { border-left: 1px solid var(--line); }
+.app-note .bar {
+  height: 5px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.22;
+}
+.app-note .bar.title { height: 10px; width: 58%; opacity: 0.5; margin-bottom: 6px; }
+/* a "bullet" line: a small dot, then a short bar */
+.app-note .li { display: flex; align-items: center; gap: 7px; }
+.app-note .li::before {
+  content: "";
+  width: 4px; height: 4px; border-radius: 50%;
+  background: currentColor; opacity: 0.4; flex: none;
+}
+.app-cap {
+  margin-top: auto;
+  padding-top: 12px;
+  font: 500 10px/1.4 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+/* Look A — Journal: light ground, serif, generous leading. */
+.app-note.look-a {
+  background: #ffffff;
+  color: var(--ink);
+  gap: 11px;
+  font-family: var(--serif);
+}
+/* Look B — Study: dark ground, mono, packed tight. */
+.app-note.look-b {
+  background: oklch(26% 0.018 55);
+  color: oklch(93% 0.012 70);
+  gap: 6px;
+  font-family: var(--mono);
+}
+.app-note.look-b .bar { opacity: 0.3; }
+.app-note.look-b .bar.title { opacity: 0.55; }
+
+/* inline links out to the sub-pages: quiet, firm up on hover */
+.landing a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+.landing a:hover { text-decoration-color: currentColor; }
+
+/* ── The ending: "Now it's time to walk the path" then the two buttons.
+   An ink line starts at the foot of the "h" in "path" and, as the reader
+   scrolls down into this section, draws itself down the page: a gentle wave
+   for the first half, then it splits and the two halves straighten out into
+   the top of the Windows button (left) and the macOS button (right). The line
+   is not there until you scroll to it, and it stays once drawn.
+
+   landing.js measures the real positions of the "h" and the two buttons and
+   writes the path shapes in; it also sets --draw from 0 to 100 as you descend.
+   CSS below only turns --draw into how much of each line is inked. ────────── */
+.walk {
+  position: relative;
+  min-height: calc(100dvh - var(--footer-h));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(64px, 12vh, 130px) 20px clamp(56px, 10vh, 110px);
+}
+.walk-line {
+  margin: 0;
+  font-family: var(--serif);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: clamp(1.6rem, 1.1rem + 2.4vw, 2.5rem);
+  letter-spacing: -0.021em;
+  line-height: 1.15;
+  color: var(--ink);
+  text-align: center;
+  text-wrap: balance;
+}
+/* Reuben's pick: the heading crosses in left→right, and the ink line draws out
+   of the final "h" the instant the sweep lands on it (landing.js arms the draw
+   on animationend). A soft-edged gradient mask, 4× the text width, slides left
+   across it — a wide fade edge makes it read as a crossfade, not a hard wipe.
+   (mask-position animates in every engine; mask-size percentages do not.)
+   JS adds .sweep on reveal, motion only — no .sweep (no JS / reduced motion)
+   and the line is simply there. */
+.walk-line.sweep {
+  -webkit-mask-image: linear-gradient(90deg, #000 42%, transparent 58%);
+          mask-image: linear-gradient(90deg, #000 42%, transparent 58%);
+  -webkit-mask-repeat: no-repeat;  mask-repeat: no-repeat;
+  -webkit-mask-size: 280% 100%;    mask-size: 280% 100%;
+  -webkit-mask-position: 100% 0;   mask-position: 100% 0;
+  /* LINEAR on purpose: landing.js solves for the exact millisecond the mask's
+     edge clears the "h" so the ink can start from that pixel, and that solve
+     assumes a constant-rate sweep. Change the easing here and the handover
+     drifts. Duration must stay in step with SWEEP_MS in landing.js. */
+  animation: walkLineSweep 0.9s linear forwards;
+}
+@keyframes walkLineSweep {
+  from { -webkit-mask-position: 100% 0; mask-position: 100% 0; }
+  to   { -webkit-mask-position: 0% 0;   mask-position: 0% 0; }
+}
+/* room for the line to travel between the words and the buttons */
+.walk-spacer { height: clamp(240px, 38vh, 420px); flex: none; }
+/* A zero-size inline box sitting on the text baseline, right after "path".
+   Its rect gives the exact x at the end of the h and the exact baseline y —
+   the h's right leg ends there, so that is where the ink line leaves it.
+   Measuring the span instead put the start below the baseline (the span box
+   includes descender space) and out at the advance width. */
+.walk-anchor { display: inline-block; width: 0; height: 0; vertical-align: baseline; }
+
+/* the ink line, drawn over the whole section; shapes come from landing.js */
+.walk-strand {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.walk-strand path {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* pathLength is normalised to 1, so dashoffset 1->0 inks the line in. The
+   trunk fills over --draw 0..58 and the two halves over 54..100 — they OVERLAP
+   by four points on purpose: the branches leave the fork on the trunk's own
+   tangent, so starting them a hair early means the split has already begun by
+   the time the trunk's head arrives, and the tip never visibly stops. */
+.walk-strand .trunk {
+  stroke-dasharray: 1;
+  stroke-dashoffset: calc(1 - clamp(0, var(--draw, 0) / 58, 1));
+}
+/* Same weight as the trunk, not thinner: at a tangent-continuous join a change
+   of width is a visible step, and this is meant to read as one line dividing. */
+.walk-strand .fork {
+  stroke-dasharray: 1;
+  stroke-dashoffset: calc(1 - clamp(0, (var(--draw, 0) - 54) / 46, 1));
+}
+/* ── The ending picks up the look the reader left the "Try it" note in.
+   landing.js part 3 sets data-carry-theme + --carry-accent on :root. With the
+   default Journal preset (light, no accent) none of this changes anything.
+   FLAG for Reuben: this is the one spot page colour / a dark ground can appear,
+   and it does so only off a choice the reader made.
+
+   What a chosen tint touches down here: the drawn line, and the BORDER of both
+   download buttons — so the line looks like it runs straight into them. It
+   does NOT fill either button, tint the labels, or touch the wordmark; those
+   stay ink. Both buttons are identical — the .primary OS hint no longer sets
+   one apart. --carry-accent is the exact colour of the tint swatch in the
+   "Try it" controls (landing.js), so the line matches what the reader
+   picked. ──────────────────────────────────────────────────────────────── */
+.walk {
+  transition: background-color .45s ease, color .45s ease;
+}
+:root[data-carry-theme="dark"] .walk {
+  background-color: oklch(0.20 0.014 60);
+  color: oklch(0.93 0.012 70);
+}
+:root[data-carry-theme="dark"] .walk-line { color: oklch(0.93 0.012 70); }
+:root[data-carry-theme="dark"] .walk .btn {
+  border-color: oklch(0.86 0.012 70);
+  color: oklch(0.93 0.012 70);
+}
+
+/* The OS hint stays as a class on one button (it still governs nothing visual
+   here) but must not fill it — both buttons read as the same plain outline. */
+.walk .btn.primary { background: transparent; color: var(--ink); }
+.walk .btn.primary:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+:root[data-carry-theme="dark"] .walk .btn.primary { color: oklch(0.93 0.012 70); }
+
+/* theme-following (no accent): ink line + buttons track light/dark */
+.walk-strand path { stroke: var(--ink); transition: stroke .45s ease; }
+:root[data-carry-theme="dark"] .walk-strand path { stroke: oklch(0.90 0.012 70); }
+
+/* accent picked: the line takes it, and so does the border of BOTH buttons —
+   nothing else. Labels and icons keep the ink/dark-carry colour set above. */
+:root[data-carry-accent]:not([data-carry-accent="none"]) .walk-strand path {
+  stroke: var(--carry-accent);
+}
+:root[data-carry-accent]:not([data-carry-accent="none"]) .walk .btn {
+  border-color: var(--carry-accent);
+  transition: border-color .45s ease;
+}
+
+
+.walk .btns { position: relative; }
+
+/* ── The hands-on stop ("Try it"): a working miniature of Notealise.
+   Every colour, metric and typeface below is lifted from the app itself —
+   src/renderer/src/theme.css (the R G B ramps, the hl/tc palette) and app.css
+   (the cozy row metrics, .space-tab). Kept as plain values here rather than
+   imported, because the site must not depend on the app's build.
+
+   If the app's tokens change, these are what falls out of step. ──────────── */
+.try {
+  max-width: var(--col);
+  margin: 0 auto;
+  padding: clamp(56px, 10vh, 110px) clamp(20px, 5vw, 32px);
+  text-align: center;
+}
+.try h2 {
+  font-family: var(--serif); font-optical-sizing: auto; font-weight: 500;
+  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 2.6rem);
+  letter-spacing: -0.021em; line-height: 1.1; text-wrap: balance;
+  color: var(--ink); margin: 14px 0 18px;
+}
+.try-lede { max-width: var(--col); margin: 0 auto 30px; font-size: 1.0625rem; line-height: 1.68; color: var(--soft); }
+
+/* full-bleed: the app window ignores the page's margins entirely */
+.nl-wrap {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  padding: 0 clamp(0px, 2vw, 28px);
+}
+
+/* ---- the app window ------------------------------------------------------ */
+.nl {
+  /* light is the app's [data-theme='light'] ramp; dark is its default :root */
+  --paper: 247 247 246;  --surface: 255 255 255;
+  --brand-200: 210 210 208; --brand-300: 176 176 173; --brand-400: 138 138 135;
+  --brand-500: 106 106 104; --brand-600: 29 29 28;
+  --ink-900: 26 26 25;   --ink-700: 68 68 66;
+  --ink-500: 117 117 114; --ink-400: 140 140 137; --ink-300: 163 163 160;
+  --wash: 0 0 0;
+  --hl: transparent;
+
+  --nl-font: "Fraunces", Georgia, serif;
+  --nl-lh: 1.75;
+
+  display: grid;
+  grid-template-columns: 288px 1fr;
+  height: min(82vh, 780px);
+  min-height: 520px;
+  border: 1px solid rgb(var(--brand-200));
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgb(var(--paper));
+  color: rgb(var(--ink-900));
+  font-family: "Inter", system-ui, sans-serif;
+  transition: background-color .3s ease, color .3s ease, border-color .3s ease;
+}
+.nl[data-theme="dark"] {
+  --paper: 0 0 0;        --surface: 22 22 22;
+  --brand-200: 43 43 43; --brand-300: 74 74 74; --brand-400: 92 92 92;
+  --brand-500: 143 143 143; --brand-600: 216 216 216;
+  --ink-900: 214 214 214; --ink-700: 184 184 184;
+  --ink-500: 140 140 140; --ink-400: 118 118 118; --ink-300: 97 97 97;
+  --wash: 255 255 255;
+}
+
+/* ---- sidebar ------------------------------------------------------------- */
+/* the app’s own sidebar: a 45% surface veil over the paper, with the
+   ink-300/25 hairline. The veil is what makes the row hover read — rows
+   lift to surface/70, i.e. OUT of the sidebar rather than off the page. */
+.nl-side {
+  background: rgb(var(--surface) / 0.45);
+  border-right: 1px solid rgb(var(--ink-300) / 0.25);
+  padding: 14px 12px;
+  display: flex; flex-direction: column; gap: 10px;
+  min-width: 0; overflow: hidden;
+}
+.nl-top { display: flex; align-items: center; gap: 9px; padding: 2px 4px 2px; }
+.nl-brand {
+  font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 17px;
+  letter-spacing: -0.01em; color: rgb(var(--ink-900));
+}
+.nl-search {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid rgb(var(--brand-200)); border-radius: 12px;
+  padding: 8px 11px; font-size: 13px; color: rgb(var(--ink-400));
+  background: rgb(var(--surface) / 0.45);
+}
+.nl-search svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; flex: none; }
+
+.nl-label {
+  margin: 6px 4px 0;
+  font: 500 10.5px/1.4 var(--mono);
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: rgb(var(--ink-400));
+}
+
+/* the space switcher — .space-tab in app.css */
+.nl-spaces { display: flex; flex-wrap: wrap; gap: 6px; }
+.nl-space {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 11px; border-radius: 999px;
+  border: 1px solid rgb(var(--brand-200));
+  background: transparent; color: rgb(var(--ink-500));
+  font: 500 12.5px/1 "Inter", system-ui, sans-serif;
+  cursor: pointer; transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.nl-space i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .5; flex: none; }
+.nl-space:hover { background: rgb(var(--brand-500) / 0.08); color: rgb(var(--brand-600)); }
+.nl-space.on {
+  background: rgb(var(--brand-500) / 0.12);
+  border-color: rgb(var(--brand-400) / 0.6);
+  color: rgb(var(--brand-600));
+}
+.nl-space.on i { opacity: 1; background: var(--hl, currentColor); }
+
+/* note rows — cozy density from theme.css */
+.nl-tree { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.nl-row {
+  display: flex; align-items: flex-start; gap: 6px;
+  padding: 8px; border-radius: 12px; min-width: 0; width: 100%;
+  border: 0; background: transparent; text-align: left; cursor: pointer;
+  color: rgb(var(--ink-700)); font: inherit;
+  transition: background-color .15s ease;
+}
+/* hover + selected copied from the app: rows lift onto --surface on hover
+   (TreeView.tsx `hover:bg-surface/70`), and the open row takes a wash fill
+   with an inset hairline ring (.tree-row.row-picked in app.css). */
+/* Straight off TreeView.tsx. An unopened row takes `hover:bg-surface/70` —
+   it lifts out of the sidebar veil rather than off the page, which is why
+   the veil above matters. The row you are READING is
+   `bg-brand-500/12 ring-1 ring-brand-300/50` (NOT .row-picked — that is the
+   ctrl-click multi-select state), and the component switches its hover off
+   entirely, so the open row never moves under the cursor. */
+.nl-row:not(.on):hover { background: rgb(var(--surface) / 0.7); }
+.nl-row.on {
+  background: rgb(var(--brand-500) / 0.12);
+  box-shadow: 0 0 0 1px rgb(var(--brand-300) / 0.5);
+}
+.nl-row:focus-visible { outline: 2px solid rgb(var(--brand-500)); outline-offset: -2px; }
+.nl-row svg { width: 16px; height: 16px; flex: none; margin-top: 1px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: .6; }
+.nl-row span { min-width: 0; }
+.nl-row b { display: block; font-size: 14px; line-height: 1.35; font-weight: 500; color: rgb(var(--ink-900)); }
+.nl-row em {
+  display: block; font-size: 12px; line-height: 1.35; font-style: normal;
+  color: rgb(var(--ink-400));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* the controls, sitting where the app keeps its space settings */
+.nl-ctl {
+  margin-top: auto; padding-top: 12px;
+  border-top: 1px solid rgb(var(--brand-200));
+  display: flex; flex-direction: column; gap: 9px;
+}
+.nl-row-ctl { display: flex; flex-direction: column; gap: 6px; }
+.nl-row-ctl > span:first-child {
+  font: 500 10px/1.4 var(--mono); letter-spacing: 0.13em;
+  text-transform: uppercase; color: rgb(var(--ink-400)); padding-left: 4px;
+}
+.nl-seg { display: flex; gap: 4px; }
+.nl-seg button {
+  flex: 1; padding: 6px 4px; border-radius: 8px;
+  border: 1px solid rgb(var(--brand-200)); background: transparent;
+  color: rgb(var(--ink-500)); cursor: pointer;
+  font: 500 11px/1 "Inter", system-ui, sans-serif;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.nl-seg button:hover { color: rgb(var(--brand-600)); }
+.nl-seg button.on {
+  background: rgb(var(--brand-500) / 0.12);
+  border-color: rgb(var(--brand-400) / 0.6);
+  color: rgb(var(--brand-600));
+}
+.nl-tints { display: flex; gap: 6px; padding-left: 2px; }
+.nl-tints button {
+  width: 20px; height: 20px; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 1px solid rgb(var(--brand-200)); background: var(--sw, transparent);
+}
+.nl-tints button.on { outline: 2px solid rgb(var(--brand-400)); outline-offset: 2px; }
+
+/* ---- main pane ----------------------------------------------------------- */
+.nl-main { display: flex; flex-direction: column; min-width: 0; background: rgb(var(--paper)); }
+.nl-tabs { display: flex; padding: 8px 14px 0; }
+.nl-tab {
+  font-size: 12.5px; padding: 6px 12px; border-radius: 9px 9px 0 0;
+  background: rgb(var(--surface)); color: rgb(var(--ink-900));
+  border: 1px solid rgb(var(--brand-200)); border-bottom: none;
+}
+.nl-path {
+  padding: 7px 16px; font-size: 11.5px; color: rgb(var(--ink-400));
+  border-top: 1px solid rgb(var(--brand-200));
+  border-bottom: 1px solid rgb(var(--brand-200));
+  background: rgb(var(--surface) / 0.4);
+}
+.nl-bar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 9px 16px; border-bottom: 1px solid rgb(var(--brand-200));
+  color: rgb(var(--ink-400)); font-size: 13px;
+}
+.nl-bar b, .nl-bar i, .nl-bar u, .nl-bar s { font-style: normal; font-weight: 400; }
+.nl-bar b { font-weight: 700; }
+.nl-bar i { font-style: italic; }
+.nl-bar-sep { width: 1px; height: 14px; background: rgb(var(--brand-200)); }
+.nl-bar-a { border-bottom: 2px solid var(--hl, currentColor); line-height: 1.1; }
+
+.nl-scroll { flex: 1; overflow: hidden; position: relative; }
+/* the tint: a wash over the whole writing surface, the way a space's tint sits
+   on .cm-scroller in the app. Strong enough to read as a choice, light enough
+   that the text keeps its contrast. */
+.nl-note {
+  position: relative;
+  padding: clamp(22px, 3.4vw, 46px) clamp(20px, 4vw, 56px);
+  max-width: 46rem;
+  font-family: var(--nl-font);
+  font-size: 17px;
+  line-height: var(--nl-lh);
+  color: rgb(var(--ink-800, var(--ink-900)));
+  transition: line-height .25s ease;
+}
+.nl-note h4 {
+  margin: 0 0 .6em; font-family: inherit; font-weight: 600;
+  font-size: 1.55em; line-height: 1.2; color: rgb(var(--ink-900));
+}
+.nl-note p { margin: 0 0 .9em; color: rgb(var(--ink-700)); }
+.nl-note ul { margin: 0 0 .9em; padding-left: 1.3em; color: rgb(var(--ink-700)); }
+.nl-note li { margin: .25em 0; }
+.nl-note > :last-child { margin-bottom: 0; }
+.nl-note mark { background: var(--hl, transparent); color: inherit; padding: 0 .12em; border-radius: 2px; }
+.nl-note .tc { color: var(--tc, inherit); }
+.nl-note code {
+  font: 0.88em var(--mono); padding: .08em .35em; border-radius: 4px;
+  background: rgb(var(--wash) / 0.06);
+}
+
+@media (max-width: 62rem) {
+  .nl { grid-template-columns: 1fr; height: auto; min-height: 0; }
+  .nl-side { border-right: 0; border-bottom: 1px solid rgb(var(--brand-200)); }
+  .nl-tree { display: none; }
+  .nl-scroll { max-height: 46vh; overflow-y: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nl, .nl-note, .nl-seg button, .nl-space { transition: none; }
+}
+
+/* ── Scroll reveals: fade and a small rise. ──────────────────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.62s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.62s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.is-in { opacity: 1; transform: none; }
+
+/* ── The plain-English line under the tagline. It is the LAST thing in the
+   hero, so it waits for the tagline to finish typing (5026ms) and fades in on
+   the beat after. It used to fire at 3.6s, which — measured — landed it on the
+   word "bridge", three words into a sentence it is supposed to follow. Order
+   top to bottom: wordmark, tagline, this. Only under html.wm-motion; reduced
+   motion or no JS shows it immediately, like everything else here. ── */
+.hero-plain {
+  margin: clamp(14px, 2vh, 22px) 0 0;
+  padding: 0 20px;
+  max-width: 34rem;
+  font-size: clamp(0.92rem, 1.5vw, 1.02rem);
+  line-height: 1.6;
+  color: var(--muted);
+  text-wrap: balance;
+}
+.wm-motion .hero-plain {
+  opacity: 0;
+  animation: heroPlainIn 0.62s ease 5.1s forwards;
+}
+@keyframes heroPlainIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── At a glance: four claims under the hero copy. Reuben, 2026-09-02 — the
+   hero was a whole screen of white with a wordmark in it and nothing to hold
+   anyone there. Vertical hairlines only, no outer box and no rule top or
+   bottom: a boxed block competes with the wordmark for weight, and DESIGN.md
+   is hairlines all the way down.
+
+   The big token is Fraunces like the section headings, so the strip reads as
+   part of the page rather than a widget bolted on. It sits in normal flow (the
+   hero is a centred column), so adding it lifts the wordmark instead of
+   floating over it — which is the point: the screen is no longer empty. ── */
+.hero-stats {
+  display: flex;
+  width: 100%;
+  max-width: 46rem;
+  margin: clamp(26px, 4.5vh, 48px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.hero-stats li {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 clamp(8px, 1.8vw, 22px);
+}
+.hero-stats li + li { border-left: 1px solid var(--line); }
+.hero-stats b {
+  display: block;
+  font-family: var(--serif);
+  font-optical-sizing: auto;
+  font-weight: 500;
+  font-size: clamp(1.3rem, 0.9rem + 1.5vw, 1.85rem);
+  letter-spacing: -0.018em;
+  line-height: 1.05;
+  color: var(--ink);
+}
+.hero-stats li > span {
+  display: block;
+  margin-top: 8px;
+  font-size: clamp(0.72rem, 0.62rem + 0.34vw, 0.815rem);
+  line-height: 1.45;
+  color: var(--muted);
+  /* Swept 46-58rem strip width against 15-21ch here: nothing makes all four
+     captions the same height, because the copy is 31/49/34/46 characters and
+     the cell width binds long before the cap does. So rather than padding the
+     copy to match, each caption is CENTRED inside a fixed three-line box — the
+     short ones sit even top and bottom instead of hanging from the top, and
+     the hairlines stay level either way.
+
+     17ch is the widest cap that still keeps the longest caption to three
+     lines. Note the box must stay a single text node: an earlier attempt put
+     <i class="nb"> around "AI-compatible" to stop it breaking at the hyphen,
+     and because this rule is display:flex that <i> became a FLEX ITEM — the
+     caption blew out to five lines. The non-breaking hyphen (&#8209;) in the
+     markup does the same job with nothing to turn into an item. */
+  max-width: 17ch;
+  margin-inline: auto;
+  min-height: calc(1.45em * 3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-wrap: balance;
+}
+/* Staggered in last, after .hero-plain (5.1s), so the hero still resolves
+   strictly top to bottom. 70ms apart — enough to read as a sweep left to
+   right, not enough to feel like a queue. */
+.wm-motion .hero-stats li {
+  opacity: 0;
+  animation: heroStatIn 0.55s ease forwards;
+}
+.wm-motion .hero-stats li:nth-child(1) { animation-delay: 5.62s; }
+.wm-motion .hero-stats li:nth-child(2) { animation-delay: 5.69s; }
+.wm-motion .hero-stats li:nth-child(3) { animation-delay: 5.76s; }
+.wm-motion .hero-stats li:nth-child(4) { animation-delay: 5.83s; }
+@keyframes heroStatIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Four cells will not survive a phone: at 390px each one is under 90px wide and
+   "typefaces, five for dyslexia" breaks to four lines. Two by two instead: the
+   divider between the columns carries straight through both rows and the
+   between-row rule crosses it, so it reads as a quartered grid rather than
+   four loose captions. Still no outer box. */
+@media (max-width: 40rem) {
+  .hero-stats { flex-wrap: wrap; max-width: 22rem; }
+  .hero-stats li { flex: 0 0 50%; padding: 12px clamp(10px, 4vw, 18px); }
+  .hero-stats li:nth-child(odd) { border-left: 0; }
+  .hero-stats li:nth-child(n + 3) { border-top: 1px solid var(--line); }
+}
+
+
+/* ── Footer links. ───────────────────────────────────────────────────────── */
+.footer-links { display: flex; flex-wrap: wrap; gap: 6px 20px; }
+.footer-links a { color: var(--muted); text-decoration: none; }
+.footer-links a:hover { color: var(--ink); }
+
+@media (max-width: 34rem) {
+  .app { grid-template-columns: 104px 1fr; }
+  .app-notes { grid-template-columns: 1fr; }
+  .app-note + .app-note { border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* ── Reduced motion: nothing animates. Everything is simply already there,
+   including the whole drawn path. ───────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .walk, .walk-strand path { transition: none; }
+  .walk-strand path { stroke-dashoffset: 0; }
+  .wm-motion .hero-plain { opacity: 1; animation: none; }
+  .wm-motion .hero-stats li { opacity: 1; animation: none; }
+  .walk-line.sweep { -webkit-mask: none; mask: none; animation: none; }
+}

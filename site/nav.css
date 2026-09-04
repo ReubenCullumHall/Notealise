@@ -123,6 +123,10 @@
   transition: color .14s ease;
 }
 .topbar-links a:hover { color: var(--ink); }
+/* The Students link reads "Notealise for students" on desktop; at the mobile
+   breakpoint that label overflows the crammed nav, so it shortens to
+   "Students" (the label the footer keeps in full). */
+.topbar-links .tb-narrow { display: none; }
 .topbar-links a.is-active { color: var(--ink); font-weight: 600; }
 
 .topbar-social {
@@ -152,6 +156,8 @@ html.topbar-in .mark { opacity: 0; pointer-events: none; }
   .topbar-links { justify-self: end; gap: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .topbar-links::-webkit-scrollbar { display: none; }
   .topbar-social { display: none; }
+  .topbar-links .tb-wide { display: none; }
+  .topbar-links .tb-narrow { display: inline; }
 }
 
 @media (prefers-reduced-motion: reduce) {
