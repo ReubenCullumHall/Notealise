@@ -254,3 +254,35 @@ Settings), and none of it in a packaged build or against a real vault.
 that name twice, stacked. It was always duplicated; moving the title into the column is what made it
 obvious. Suppressing a leading H1 that matches the title is possible but it is content-mangling —
 rule 4's territory — so it is Reuben's call, not a silent fix.
+
+### The sidebar foot, and a decision that was un-made (2026-09-04, same day)
+
+Where it ended up: the **space chips**, then a row of the same material — the **settings cog** as a
+40×40 button, and beside it **one control holding bin and archive as two halves**. Everything flat;
+those two were the last things in the sidebar carrying `shadow-card`. Both halves are still separate
+`<button>`s with their own `onDrop` and their own drop tint, so the grouping is purely visual and
+dragging a note onto either is unchanged. Still icon-only, with a count beside the icon when the bin
+or archive is not empty — Reuben's explicit call.
+
+**The seam is the archive half's own `border-l`, not a divider element.** A 1px `<span>` with
+`pointer-events: none` was tried first and measured wrong; the full explanation is in CLAUDE.md's
+Gotchas, because it generalises to any segmented control. Verified after the change: bin owns every
+pixel to x=166, archive from x=167, nothing between.
+
+**The part worth remembering is that a decision was reversed within the day, correctly.** Finding 05
+had made the cog a *ghost* button — no border, no fill — because dressing it identically to bin and
+archive implied you could drop a note on it, which you cannot. Hours later the cog was given the
+group's material back. That is not a flip-flop: **the semantic signal moved.** Once bin and archive
+became two halves of one wrapper, *being outside that wrapper* is what marks the cog as the odd one
+out, so the fill was no longer carrying the claim and was free to return. Reuben asked for the
+matching colours and the answer was yes because of the regrouping, not in spite of it.
+
+The generalisable rule: **when a visual treatment is removed in order to carry a distinction, and
+that distinction later gets carried some other way, go back and check whether the treatment can
+return.** A withdrawn decision is contingent on the structure that forced it, and structure changes.
+What must NOT happen is the cog moving *inside* the bin/archive wrapper — that would put it back
+among the drop targets with nothing left to distinguish it, and the original problem returns. There
+is a comment in `settings/Settings.tsx` saying exactly that; nothing enforces it.
+
+Verified in dark, light and Extra dark: the cog's computed `background-color` and `border-color` are
+identical to the group's in all three, not merely similar.

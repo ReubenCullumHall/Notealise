@@ -588,6 +588,21 @@ every session — see the table in **Folder structure** above for the full list.
   One trap to remember when portalling a panel out of a toolbar: **the `onMouseDown`
   preventDefault that kept the editor's selection alive does not come with it**, so the panel has
   to carry its own or every colour swatch applies to a collapsed selection.
+- **A decorative element sitting BETWEEN two interactive siblings owns pixels neither of them
+  does — and `pointer-events: none` does not give them back.** Building the sidebar foot's grouped
+  bin/archive control (2026-09-04) the seam went in as a 1px `<span>` divider with
+  `pointer-events: none`, on the reasoning that ignoring the pointer would let events fall through
+  to whichever half was underneath. Nothing is underneath: the span is a flex *sibling*, so the
+  pointer falls through to the flex **container**, and `document.elementFromPoint` at the seam
+  returned the wrapper `<div>`. That 1px column belonged to no button, so a note dragged across it
+  fired a `dragLeave` on the half it was leaving and flickered the drop tint at exactly the moment
+  the user is aiming. **Make a separator part of one of the two elements' own boxes** — here, a
+  `border-l` on the right-hand button, which is hit-testable as that button — so the pair tiles with
+  no dead pixel. Note `border-none` cannot simply be extended with `border-l`: it sets
+  border-*style*, so the result is a 1px invisible border; zero the other three sides explicitly
+  (`border-y-0 border-r-0 border-l border-solid`). **The check is one line and worth running on any
+  segmented control, split handle or overlay:** probe `elementFromPoint` across the seam and assert
+  every x lands on a real target.
 - **A component that `return (<>…</>)`s straight into a `flex flex-col gap-N` container has every
   fragment child become a flex item — so `gap-N` lands between each heading and its own subtitle,
   not just between sections.** A fragment isn't a real DOM node, so the parent's flex layout sees
