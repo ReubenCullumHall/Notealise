@@ -967,6 +967,23 @@ export function Sidebar({
             jumpToSection={settingsJumpToSection}
             onJumpHandled={onSettingsJumpHandled}
           />
+        {/* ONE control holding two drop targets (2026-09-04). Bin and Archive
+            used to be two separate bordered, shadowed cards sitting next to the
+            Settings gear — three floating objects, which is most of what read as
+            "cartoony" down here. They are grouped now: this wrapper owns the
+            border, the radius, the surface and the blur, and each half keeps its
+            own button, its own onDrop and its own drop tint, so nothing about
+            dragging a note onto either changes.
+
+            The shadow is gone with the grouping. These two were the last things
+            in the sidebar still carrying `shadow-card`, and a control that sits
+            flat on the panel is what the rest of this pass left everywhere else.
+
+            `btn-edge` is on the WRAPPER, because the wrapper is what has a border
+            for the button-definition setting to firm up. The divider keeps its
+            own fixed colour — it is internal, and giving it `btn-edge` too would
+            make it flicker on hover, since that rule carries a `:not(:hover)`. */}
+        <div className="btn-edge pointer-events-auto flex h-10 flex-1 overflow-hidden rounded-lg border border-ink-300/30 bg-surface/90 backdrop-blur">
         <button
           onClick={() => {
             setView((v) => (v === 'bin' ? 'notes' : 'bin'))
@@ -995,10 +1012,15 @@ export function Sidebar({
           data-tip={inBin ? 'Back to your notes' : 'Bin — deleted notes wait here'}
           aria-pressed={inBin}
           className={
-            'btn-edge pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
+            // No border, radius, shadow or blur of its own any more: the group
+            // around both buttons owns all four (2026-09-04). What stays here is
+            // this half's own state — it is still a separate button with its own
+            // onDrop, so the drop tint has to land on the half you are actually
+            // over, not on the pair.
+            'flex h-full flex-1 items-center justify-center gap-1.5 border-none px-2 text-[12px] font-medium tabular-nums outline-none transition duration-200 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ' +
             (inBin || dropZone === 'trash'
               ? 'bg-brand-500/15 text-brand-600'
-              : 'bg-surface/90 text-ink-500')
+              : 'bg-transparent text-ink-500 hover:bg-brand-500/10')
           }
         >
           <span className={lidOpen ? 'lid-open' : ''}>
@@ -1034,10 +1056,23 @@ export function Sidebar({
           data-tip={inArchive ? 'Back to your notes' : 'Archived notes'}
           aria-pressed={inArchive}
           className={
-            'btn-edge pointer-events-auto flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-ink-300/30 px-2 text-[12px] font-medium tabular-nums shadow-card outline-none backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 ' +
+            // No border, radius, shadow or blur of its own any more: the group
+            // around both buttons owns all four (2026-09-04). What stays here is
+            // this half's own state — it is still a separate button with its own
+            // onDrop, so the drop tint has to land on the half you are actually
+            // over, not on the pair.
+            // The seam is this half's own LEFT BORDER, not a separate divider
+            // element. A 1px <span> between the two was tried first and left a
+            // 1px column belonging to neither button: `elementFromPoint` at the
+            // seam returned the wrapper, so a note dragged across it fired a
+            // dragLeave and flickered the drop tint. A border is part of the
+            // button's own box, so the two halves tile with no dead pixel.
+            // `border-none` is replaced rather than added to — it sets
+            // border-style, which would leave a 1px-wide invisible border.
+            'flex h-full flex-1 items-center justify-center gap-1.5 border-y-0 border-r-0 border-l border-solid border-ink-300/30 px-2 text-[12px] font-medium tabular-nums outline-none transition duration-200 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ' +
             (inArchive || dropZone === 'archive'
               ? 'bg-brand-500/15 text-brand-600'
-              : 'bg-surface/90 text-ink-500')
+              : 'bg-transparent text-ink-500 hover:bg-brand-500/10')
           }
         >
           <span className={archiveLidOpen ? 'lid-open' : ''}>
@@ -1045,6 +1080,7 @@ export function Sidebar({
           </span>
           {archivedNodes.length > 0 && <span>{archivedNodes.length}</span>}
         </button>
+        </div>
       </div>
     </aside>
     {/* A sibling of <aside>, not a fixed descendant of it: the aside's own
