@@ -448,20 +448,24 @@ export function SettingsButton({
     <>
       <button
         ref={btn}
-        // A GHOST button, not a card (2026-09-04). It used to carry the exact
-        // dressing of the Bin and Archive buttons beside it — same height, same
-        // border, fill, card shadow and backdrop-blur — which said "these three
-        // are peers". They are not: Bin and Archive are DROP TARGETS (drag a
-        // note onto them, see Sidebar.tsx's onDrop) and switch the sidebar's
-        // view; this opens a window and accepts no drop at all. Dressing it like
-        // them invited a drag that can never land.
+        // Same material as the Bin/Archive control beside it — border, surface,
+        // blur, radius — but a SEPARATE object from it, and flat like it.
         //
-        // `rounded-lg` to match the sidebar's other ghost icon buttons rather
-        // than the control radius — those are its real peers now. `btn-edge` is
-        // gone with the border it used to colour.
+        // This went ghost (no border, no fill) earlier on 2026-09-04, because
+        // dressing it identically to Bin and Archive implied you could drop a
+        // note on it, which you cannot. That reasoning is now carried by the
+        // GROUPING instead: those two became two halves of one control, and
+        // being outside that control is what marks this as the odd one out. So
+        // the fill can come back — it makes the foot of the sidebar read as one
+        // row of the same stuff, which is what Reuben asked for — without
+        // re-implying a drop target. Keep it OUT of that wrapper; the moment it
+        // moves inside, the old problem is back.
+        //
+        // No `shadow-card`: nothing in the sidebar floats any more (app.css).
+        // `btn-edge` returns with the border it colours.
         className={
-          'pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border-none bg-transparent outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-          (open ? 'text-brand-600' : 'text-ink-500')
+          'btn-edge pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-ink-300/30 outline-none backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+          (open ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500 hover:bg-brand-500/10')
         }
         data-tip="Settings"
         aria-label="Settings"
