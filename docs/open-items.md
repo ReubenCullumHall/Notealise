@@ -15,11 +15,16 @@ has been answered; move its line into `[Unreleased]` if it earns one.
 
 ## From the tester-feedback pass (2026-09-05)
 
-The other twelve items from that pass are logged. These three are not.
+The other twelve items from that pass are logged. These two are not.
 
 **Closed 2026-09-06:** shift+scroll's two tuning numbers (`THRESHOLD` 80 px, `IDLE_MS` 220). They
 were chosen against synthetic `WheelEvent`s and needed a real hand on a real device. Reuben checked
 it live and passed it, so they stand — do not re-tune them without a reason and a device.
+
+**Closed 2026-09-06:** the custom-highlight render gap. `d80f0c6` landed the colour-tags refactor,
+so `<mark style="background-color: #hex">` is recognised. Proved by reading computed styles out of
+a running build of that exact tree: custom highlight `rgb(255, 59, 48)`, custom text colour
+`rgb(52, 199, 89)`, a named `hl-amber` control unchanged. **`main` is releasable again.**
 
 ### The colour bar's mid-drag suppression was never observed
 
@@ -32,25 +37,6 @@ selection at all — so nothing ever exercised it.
 **To close it:** drag slowly across a sentence with the button held. Nothing should appear until
 you let go. (This is the same class of problem CLAUDE.md already records about synthetic input and
 CodeMirror — the instrument, not the code, was the thing that failed.)
-
-### A custom HIGHLIGHT does not render at 535afae
-
-Not a defect in the colour work — a consequence of where the commit boundary had to fall.
-
-A custom highlight writes `<mark style="background-color: #hex">`. The renderer at this commit is
-`livePreview.ts`'s own `OPEN_BG`, which matches `<span style="background-color: …">` only, so the
-tags show as raw text instead of colouring the words. A custom **text** colour
-(`<span style="color: …">`) renders correctly, as do all ten presets in both layers.
-
-The fix already exists and is not mine to commit: another session's `editor/colorTags.ts` (still
-untracked) carries the widened `OPEN_BG` that accepts `<mark` as well, and `livePreview.ts` in the
-working tree already delegates to it. `535afae` deliberately left those files alone.
-
-**To close it:** nothing to write — it closes itself the moment that session commits its
-colour-tags refactor. Worth re-checking then, because it is the one part of the colour feature no
-test covers (the rendering is CodeMirror decorations, not `colorModel`).
-
-**Do not cut a release from `535afae` alone** without either that commit landing or checking this.
 
 ### Windows is entirely untested
 
