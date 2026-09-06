@@ -28,6 +28,7 @@ export type IconName =
   | 'sun'
   | 'panelLeft'
   | 'splitView'
+  | 'swapColumns'
   | 'flag'
   | 'spaces'
   | 'library'
@@ -179,6 +180,17 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     <>
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <path d="M12 3v18" />
+    </>
+  ),
+  // The pane header's "put this column on the other side" button. Deliberately
+  // NOT a variant of splitView above: that one is about how many columns there
+  // are, this one is about which order they are in.
+  swapColumns: (
+    <>
+      <path d="M8 4 4 8l4 4" />
+      <path d="M4 8h16" />
+      <path d="M16 20l4-4-4-4" />
+      <path d="M20 16H4" />
     </>
   ),
   flag: (

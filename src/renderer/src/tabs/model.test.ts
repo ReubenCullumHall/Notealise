@@ -18,6 +18,7 @@ import {
   showInPane,
   splitAt,
   splitBlank,
+  splitWith,
   swapPanes,
   equalisePanes,
   MIN_PANE_PX,
@@ -541,5 +542,62 @@ describe('column widths', () => {
     // is), but the NUMBER is the model's — it rests on the same judgement
     // MAX_PANES does, and a divider that let a pane below it would undo that cap.
     expect(MIN_PANE_PX).toBeGreaterThanOrEqual(300)
+  })
+})
+
+describe('splitting two tabs against each other', () => {
+  it('puts the tab you dropped ONTO on the left and the dragged one on its right', () => {
+    // The same left-to-right rule as Cmd/Ctrl+\: what you were reading stays
+    // put and the arrival comes in beside it.
+    const l = splitWith(opened('a.md', 'b.md', 'c.md'), 'a.md', 'b.md')
+    expect(l.panes).toEqual(['a.md', 'b.md'])
+    expect(activePath(l)).toBe('b.md')
+    expect(l.tabs).toEqual(['a.md', 'b.md', 'c.md']) // the strip order is untouched
+    invariants(l)
+  })
+
+  it('opens a tab that was not on screen, without disturbing the strip order', () => {
+    const l = splitWith(opened('a.md', 'b.md', 'c.md'), 'c.md', 'a.md')
+    expect(l.panes).toEqual(['c.md', 'a.md'])
+    expect(l.tabs).toEqual(['a.md', 'b.md', 'c.md'])
+    invariants(l)
+  })
+
+  it('reorders the columns when both notes are already on screen', () => {
+    // b.md | a.md, dropped so that a.md leads: nothing opens or closes, the two
+    // columns simply trade places.
+    const two = splitAt(opened('a.md', 'b.md'), 'a.md', 0) // a.md | b.md
+    const l = splitWith(two, 'b.md', 'a.md')
+    expect(l.panes).toEqual(['b.md', 'a.md'])
+    expect(l.tabs).toHaveLength(2)
+    invariants(l)
+  })
+
+  it('is a no-op on itself — one note cannot fill both halves', () => {
+    const l = opened('a.md', 'b.md')
+    expect(splitWith(l, 'a.md', 'a.md')).toBe(l)
+  })
+
+  it('refuses as a whole at the pane cap rather than moving the target alone', () => {
+    // Three columns already, and d.md has no column to arrive in. The earlier
+    // shape of this would have left c.md pulled into the focused pane with
+    // nothing beside it — a rearrangement nobody asked for.
+    const three = threeCols()
+    const l = { ...three, tabs: [...three.tabs, 'd.md'] }
+    expect(splitWith(l, 'a.md', 'd.md')).toBe(l)
+  })
+
+  it('still splits at the cap when the dragged note is already a column', () => {
+    // Nothing new has to fit: c.md just moves to sit beside a.md.
+    const l = splitWith(threeCols(), 'a.md', 'c.md')
+    expect(l.panes).toEqual(['a.md', 'c.md', 'b.md'])
+    invariants(l)
+  })
+
+  it('splits a single pane in two', () => {
+    const l = splitWith(opened('a.md', 'b.md'), 'b.md', 'a.md')
+    expect(l.panes).toEqual(['b.md', 'a.md'])
+    expect(paneSizes(l)).toEqual([0.5, 0.5])
+    invariants(l)
   })
 })

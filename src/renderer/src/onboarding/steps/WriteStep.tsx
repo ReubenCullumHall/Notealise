@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { CodeEditor } from '../../editor/CodeEditor'
+import { ToggleRow } from '../../settings/primitives'
 import { EMPTY_ENV, type LinkHandlers } from '../../editor/linkEnv'
 import type { OnboardingStepProps } from '../Onboarding'
 
@@ -30,6 +31,13 @@ interface Props extends OnboardingStepProps {
    *  behind and create a second one (see `commit` below) */
   savedPath: string | null
   onSaved: (path: string) => void
+  /** whether finishing seeds the curated welcome notes. On by default, and it
+   *  rides on THIS step rather than a page of its own: onboarding stays thin,
+   *  and the question "should the app put some notes in for you" belongs
+   *  beside the first note you write yourself, not on a screen that asks
+   *  nothing else. */
+  seedWelcome: boolean
+  onSeedWelcome: (on: boolean) => void
 }
 
 /** First line, Markdown-stripped, as a filename stem — same idea as
@@ -47,6 +55,8 @@ export function WriteStep({
   onTextChange,
   savedPath,
   onSaved,
+  seedWelcome,
+  onSeedWelcome,
   onReady
 }: Props): React.JSX.Element {
   // onReady's `commit` closes over `text`, so it has to be rebuilt whenever
@@ -85,7 +95,31 @@ export function WriteStep({
         </p>
       </div>
 
-      <div className="h-[190px] w-full max-w-[480px] overflow-y-auto rounded-2xl bg-surface/70 px-4 py-3 text-left shadow-card">
+      {/* `flex flex-col` + `overflow-hidden`, NOT `overflow-y-auto`.
+          Measured 2026-09-05 on the real step: the box was 190px tall with a
+          scrollHeight of 422 and a 10px scrollbar showing — on an EMPTY editor,
+          which is exactly what a tester reported. The cause is the chain
+          `.cm-host { flex: 1; min-height: 0 }` → `.cm-mount { height: 100% }` →
+          `.cm-editor { height: 100% }` (editor/highlight.ts): every one of
+          those needs a FLEX parent with a definite height to resolve against,
+          and this box was neither, so the editor sized itself to something far
+          taller than the box and the box grew a bar to reach it.
+
+          Making the box a flex column gives `.cm-host` its `flex: 1` to fill
+          and its `min-height: 0` to shrink against, so the editor lands at
+          exactly 166px (190 minus `py-3`). Scrolling then belongs to
+          CodeMirror's own `.cm-scroller`, which is the app's normal behaviour
+          everywhere else: no bar until the text is longer than the box, and
+          then only once the pointer comes near it (editor/scrollbarReveal.ts).
+          `overflow-hidden` on the wrapper guarantees it can never grow a second
+          one of its own.
+
+          `.onb-write-box` then undoes the editor theme's `40vh` bottom padding
+          — see app.css. That padding is the real reason a scrollbar was there
+          on an EMPTY box: it is scroll-past-the-end room for a full-window
+          note, and 40vh of a 900px window is 360px of guaranteed overflow
+          inside a 166px box. */}
+      <div className="onb-write-box flex h-[190px] w-full max-w-[480px] flex-col overflow-hidden rounded-2xl bg-surface/70 px-4 py-3 text-left shadow-card">
         <CodeEditor
           path="onboarding-demo"
           doc={text}
@@ -101,6 +135,23 @@ export function WriteStep({
         That&rsquo;s Markdown. The app hides the symbols while you&rsquo;re not on that line, so it stays
         readable. Now hit Enter and see how it formats.
       </p>
+
+      {/* On by default. Off leaves the vault holding exactly the note above and
+          nothing else — which the hint says out loud, because "no welcome
+          notes" and "empty app" are the same screen and only one of them is
+          what you chose. */}
+      <div className="w-full max-w-[480px]">
+        <ToggleRow
+          on={seedWelcome}
+          onClick={() => onSeedWelcome(!seedWelcome)}
+          label="Start me off with a few welcome notes"
+          hint={
+            seedWelcome
+              ? 'A short set showing how the app is organised and what you can change. Delete them any time.'
+              : 'Off — you\u2019ll land in the app with just the note you wrote above.'
+          }
+        />
+      </div>
     </div>
   )
 }

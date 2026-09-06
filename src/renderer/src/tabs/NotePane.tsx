@@ -96,6 +96,12 @@ interface Props {
   /** false at the column cap — the only thing that can stop a new column now */
   canSplit: boolean
   onClosePane: () => void
+  /** swap this column with the one on its LEFT — the button beside the split
+   *  control. Undefined for the leftmost column, which has nothing to its left
+   *  to trade with; every other column can reach any position by repeating it.
+   *  Redundant with dragging the header row (`onDragPane`) and deliberately so:
+   *  the drag was there first and stays, but nothing on screen said it existed. */
+  onSwapLeft?: () => void
   /** what is being dragged right now, or null */
   dragging: Drag | null
   /** start dragging THIS column (only offered in a split — one column has no
@@ -129,7 +135,7 @@ export const ROW_CLASS =
 // Icon buttons at the right-hand end (split, close pane). Quiet until hovered,
 // like the sidebar's own collapse control, which is the pair this reads with.
 export const ROW_BTN =
-  'flex shrink-0 items-center justify-center rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300'
+  'press flex shrink-0 items-center justify-center rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300'
 
 /** One column of the editor area: its title, its commands and its CodeMirror.
  *
@@ -179,6 +185,7 @@ export function NotePane({
   onSplit,
   canSplit,
   onClosePane,
+  onSwapLeft,
   dragging,
   onDragPane,
   onDragEnd,
@@ -342,12 +349,51 @@ export function NotePane({
         }
       >
         {/* The title used to live HERE, and moved into the text column on
-            2026-09-04 — see `.note-title-row` below. What is left is a spacer
-            that mirrors the stats block at the other end, which is what keeps
-            the format bar centred over the column now that nothing elastic sits
-            on the left. In a split there is no spacer and no centring: the bar
+            2026-09-04 — see `.note-title-row` below. What took its place was a
+            bare spacer mirroring the block at the other end, which is what
+            keeps the format bar centred over the column now that nothing
+            elastic sits on the left.
+
+            The word count moved INTO that spacer on 2026-09-05 (Reuben, from
+            tester feedback: "word count goes next to the note name on the top
+            bar, to the left, fixed next to the top bar controls despite the
+            note name length — not next to the split view"). It reads as a
+            property of the note, and beside the split-view and close buttons it
+            read as a third control. `flex-1` on both ends is still what centres
+            the toolbar: the count is short and fixed-width enough not to eat
+            its share, and `whitespace-nowrap` keeps it one line.
+
+            In a split there is no spacer, no centring and no count: the bar
             takes the whole row and scrolls, exactly as it did before. */}
-        {!split && <span className="min-w-0 flex-1" aria-hidden />}
+        {!split && (
+          <span className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap pr-4 text-xs text-ink-300">
+            {!blank && (
+              <>
+                {/* The count first, then the date — the date is optional
+                    (Settings → Note extras) and appending it must not shift
+                    the count, which is the thing being pinned here. */}
+                <span>
+                  {formatNumber(wordCount, numberFormat)} {wordCount === 1 ? 'word' : 'words'}
+                </span>
+                {edited && (
+                  <span
+                    // The same "hover for detail" gesture the links use, and the
+                    // same card — not a native tooltip, which the OS parks at
+                    // the cursor after a delay of its choosing.
+                    className="hidden truncate sm:block"
+                    onMouseEnter={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect()
+                      setTimesAt({ left: r.left, top: r.top, bottom: r.bottom })
+                    }}
+                    onMouseLeave={() => setTimesAt(null)}
+                  >
+                    Edited {edited}
+                  </span>
+                )}
+              </>
+            )}
+          </span>
+        )}
 
         <div className={blank ? 'pointer-events-none flex min-w-0 flex-1 opacity-40' : 'contents'}>
           <FormatToolbar viewRef={viewRef} slots={slots} onSetSlot={onSetSlot} compact={split} />
@@ -362,34 +408,22 @@ export function NotePane({
             (split ? 'shrink-0' : 'min-w-0 flex-1')
           }
         >
-          {/* The word count is the first thing to go when the column narrows —
-              Tailwind's `sm:` is viewport-width, which says nothing about a
-              third of the window, so the split decides it instead. */}
-          {/* The word count and, optionally, when the note was written. Both go
-              when the column narrows: Tailwind's `sm:` is viewport width, which
-              says nothing about a third of the window, so the split decides.
-              Dates are only ever ADDED beside the count, never in place of it —
-              the row's height is fixed either way. */}
-          {!split && !blank && (
-            <span className="hidden shrink-0 items-center gap-2 whitespace-nowrap pl-6 pr-1 text-xs text-ink-300 sm:flex">
-              {edited && (
-                <span
-                  // The same "hover for detail" gesture the links use, and the
-                  // same card — not a native tooltip, which the OS parks at the
-                  // cursor after a delay of its choosing.
-                  onMouseEnter={(e) => {
-                    const r = e.currentTarget.getBoundingClientRect()
-                    setTimesAt({ left: r.left, top: r.top, bottom: r.bottom })
-                  }}
-                  onMouseLeave={() => setTimesAt(null)}
-                >
-                  Edited {edited}
-                </span>
-              )}
-              <span>
-                {formatNumber(wordCount, numberFormat)} {wordCount === 1 ? 'word' : 'words'}
-              </span>
-            </span>
+          {/* The word count and the edit stamp used to sit HERE, immediately
+              left of the split-view button — which is what put them "next to
+              the split view". They are now at the other end of the row; see the
+              spacer above. */}
+          {/* Only in a split, and never on the leftmost column. Same reasoning
+              as the cap-hidden split button below: a control that can do
+              nothing is dead weight in a row this narrow. */}
+          {onSwapLeft && (
+            <button
+              className={ROW_BTN}
+              data-tip="Move this column to the left  ·  or drag this row"
+              aria-label="Move this column to the left"
+              onClick={onSwapLeft}
+            >
+              <Icon name="swapColumns" className="h-4 w-4" />
+            </button>
           )}
           {/* Hidden rather than disabled at the cap: in a split the row is
               ~80px of commands wide, and a button that can do nothing is dead
@@ -543,7 +577,7 @@ export function NotePane({
               className={
                 'btn-edge absolute right-3 z-20 flex h-8 w-8 items-center justify-center rounded-lg border border-ink-300/30 p-0 shadow-card outline-none backdrop-blur transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
                 (markdownPro ? 'bottom-[52px] ' : 'bottom-3 ') +
-                (mediaSource ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500 hover:text-brand-600')
+                (mediaSource ? 'bg-brand-500/12 text-brand-600' : 'bg-surface/90 text-ink-500 hover:text-ink-900')
               }
             >
               <Icon name="eye" className="h-4 w-4" />
@@ -565,7 +599,7 @@ export function NotePane({
                 aria-label={raw ? 'Show the formatted view' : 'Show the raw Markdown'}
                 className={
                   'btn-edge absolute bottom-3 right-3 z-20 flex h-8 w-8 items-center justify-center rounded-lg border border-ink-300/30 p-0 shadow-card outline-none backdrop-blur transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-                  (raw ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500 hover:text-brand-600')
+                  (raw ? 'bg-brand-500/12 text-brand-600' : 'bg-surface/90 text-ink-500 hover:text-ink-900')
                 }
               >
                 <Icon name="code" className="h-4 w-4" />

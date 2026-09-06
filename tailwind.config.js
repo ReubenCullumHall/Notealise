@@ -43,13 +43,23 @@ module.exports = {
         },
         paper: rgb('--paper'),
         surface: rgb('--surface'),
-        /* Not in legacy: the active space's colour, injected as R G B channels on
-           the .app wrapper (see spaces/). Falls back to the brand ramp when no
-           space is active, so `bg-accent/12` works either way. */
+        /* The picked accent, whatever `accentMode` is set to.
+           `accentMode: 'text'` (the default) recolours only the ink ramp, so a
+           control painted from `brand` stayed the theme's neutral grey however
+           bright an accent you chose. These three carry the hue in both modes —
+           see ACCENT_KEYS in settings/model.ts, and theme.css for the defaults
+           that make 'Default' identical to the brand ramp.
+
+           They are for controls whose on-state IS the accent (the pill switch,
+           the tick box) — NOT a general replacement for `brand`. Reaching for
+           `bg-accent-500` on a surface would undo the whole point of the
+           'Text only' mode.
+
+           This block replaced a `--space-accent` variable that nothing in the
+           app ever set, so `bg-accent` had silently been `bg-brand-500` since
+           it was written. */
         accent: {
-          DEFAULT: 'rgb(var(--space-accent, var(--brand-500)) / <alpha-value>)',
-          soft: 'rgb(var(--space-accent, var(--brand-300)) / <alpha-value>)',
-          strong: 'rgb(var(--space-accent, var(--brand-600)) / <alpha-value>)'
+          400: rgb('--accent-400'), 500: rgb('--accent-500'), 600: rgb('--accent-600')
         }
       },
       boxShadow: {

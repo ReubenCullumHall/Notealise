@@ -11,7 +11,8 @@ import {
   type AppSettings,
   type Space
 } from '../../../shared/settings'
-import { ACCENT_MODES, ACCENTS, DENSITIES, EDITOR_WIDTHS, resolveTheme, TEXT_TONES, THEMES } from './model'
+import { ACCENT_MODES, DENSITIES, EDITOR_WIDTHS, resolveTheme, TEXT_TONES, THEMES } from './model'
+import { AccentPicker } from './AccentPicker'
 import { Icon } from '../icons'
 import { SettingRow, ToggleRow } from './primitives'
 import { useArmed } from './useArmed'
@@ -565,7 +566,7 @@ function NameField({
           ;(e.target as HTMLInputElement).blur()
         }
       }}
-      className="w-44 rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400 focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-40"
+      className="w-44 rounded-lg bg-ink-300/8 px-2.5 py-1.5 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400 focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-40"
     />
   )
 }
@@ -631,7 +632,7 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
         aria-expanded={open}
         className={
           'flex items-center gap-1.5 rounded-lg border border-ink-300/30 px-2.5 py-1.5 text-[12.5px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-          (open ? 'bg-brand-500/12 text-brand-600' : 'btn-edge bg-surface/70 text-ink-700 hover:text-brand-600')
+          (open ? 'bg-brand-500/12 text-brand-600' : 'btn-edge bg-surface/70 text-ink-700 hover:text-ink-900')
         }
       >
         <span className="text-[15px] leading-none">{value || '🙂'}</span>
@@ -671,7 +672,7 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
                     }}
                     className={
                       'flex h-7 w-7 items-center justify-center rounded-md border-none text-[15px] leading-none outline-none transition duration-150 ' +
-                      (e === value ? 'bg-brand-500/15 ring-1 ring-brand-400' : 'bg-transparent hover:bg-brand-500/10')
+                      (e === value ? 'bg-brand-500/12 ring-1 ring-brand-400' : 'bg-transparent hover:bg-ink-300/15')
                     }
                   >
                     {e}
@@ -685,7 +686,7 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
               onPick('')
               setOpen(false)
             }}
-            className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border-none bg-transparent py-1.5 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-brand-500/10 hover:text-brand-600"
+            className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border-none bg-transparent py-1.5 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-ink-300/15 hover:text-ink-900"
           >
             <Icon name="x" className="h-3.5 w-3.5" />
             <span>No emoji</span>
@@ -733,7 +734,7 @@ function DeleteSpace({
               'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-[11.5px] outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
               (keepPreset
                 ? 'text-brand-600'
-                : 'text-ink-500 hover:bg-brand-500/8 hover:text-ink-700')
+                : 'text-ink-500 hover:bg-ink-300/12 hover:text-ink-700')
             }
           >
             {keepPreset ? (
@@ -835,13 +836,15 @@ export function SpaceDeleteConfirm({
             role="checkbox"
             aria-checked={keepPreset}
             onClick={onToggleKeepPreset}
-            className="mt-3 flex items-center gap-2 rounded-lg border-none bg-transparent px-1.5 py-1.5 text-left text-[12.5px] outline-none transition duration-150 hover:bg-brand-500/10 focus-visible:ring-2 focus-visible:ring-brand-300"
+            className="mt-3 flex items-center gap-2 rounded-lg border-none bg-transparent px-1.5 py-1.5 text-left text-[12.5px] outline-none transition duration-150 hover:bg-ink-300/15 focus-visible:ring-2 focus-visible:ring-brand-300"
           >
             <span
               aria-hidden="true"
               className={
                 'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ' +
-                (keepPreset ? 'border-brand-400 bg-brand-500/25 text-brand-600' : 'border-ink-300/50')
+                // accent-*, matching App.tsx's TickRow — see ACCENT_KEYS in
+                // settings/model.ts for why brand-* does not follow the accent.
+                (keepPreset ? 'border-accent-400 bg-accent-500/25 text-accent-600' : 'border-ink-300/50')
               }
             >
               {keepPreset && <Icon name="check" className="h-3 w-3" />}
@@ -912,7 +915,7 @@ export function Disclosure({
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-3 py-2 text-left outline-none transition duration-200 hover:bg-brand-500/8 focus-visible:ring-2 focus-visible:ring-brand-300"
+        className="flex w-full items-center gap-3 px-3 py-2 text-left outline-none transition duration-200 hover:bg-ink-300/12 focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         <span className="min-w-0 flex-1">
           <span className={'block text-[13px] font-medium ' + (open ? 'text-brand-600' : 'text-ink-700')}>
@@ -1049,28 +1052,16 @@ export function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Elem
       <section className="settings-group">
         <h3>Accent</h3>
         <p className="hint">Pick a colour, then choose how far it reaches. Works with either theme.</p>
-        <div className="accent-dots">
-          {ACCENTS.map((a) => {
-            const on = space.accent === a.id
-            const bg =
-              a.hue == null
-                ? resolveTheme(space.theme) === 'light'
-                  ? '#1a1a1a'
-                  : '#e8e8e8'
-                : `hsl(${a.hue} 50% 55%)`
-            return (
-              <button
-                key={a.id}
-                className={'accent-dot' + (on ? ' on' : '')}
-                data-tip={a.label}
-                aria-label={a.label}
-                aria-pressed={on}
-                style={{ background: bg }}
-                onClick={() => onChange({ accent: a.id })}
-              />
-            )
-          })}
-        </div>
+        {/* The canonical ten, plus "Default", plus any colour at all — the
+            same component onboarding's Fonts step uses, so the two cannot drift
+            apart again (they had). `accent` stores a palette name, 'default',
+            or a literal `#rrggbb`; `accentHue` in model.ts resolves all three,
+            and the five legacy ids from before the palettes were unified. */}
+        <AccentPicker
+          accent={space.accent}
+          theme={resolveTheme(space.theme)}
+          onPick={(value) => onChange({ accent: value })}
+        />
         <div className="mode-row">
           {ACCENT_MODES.map((m) => {
             const on = space.accentMode === m.id
@@ -1210,10 +1201,10 @@ export function SpaceShortcuts({ space, onChange }: SpaceProps): React.JSX.Eleme
         className={
           'flex h-7 w-7 items-center justify-center rounded-md border-none p-0 outline-none transition duration-150 ' +
           (on
-            ? 'bg-brand-500/15 text-brand-600 ring-2 ring-brand-400'
+            ? 'bg-brand-500/12 text-brand-600 ring-2 ring-brand-400'
             : slots[i]
-              ? 'bg-transparent text-ink-500 hover:bg-brand-500/10'
-              : 'bg-transparent text-ink-300 hover:bg-brand-500/10')
+              ? 'bg-transparent text-ink-500 hover:bg-ink-300/15'
+              : 'bg-transparent text-ink-300 hover:bg-ink-300/15')
         }
       >
         <SlotFace id={slots[i] ?? ''} />

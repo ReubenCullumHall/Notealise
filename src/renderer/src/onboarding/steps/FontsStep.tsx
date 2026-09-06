@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { DOWNLOADABLE_FONTS, FONTS, fontCssValue, type FontOption } from '../../settings/fonts'
-import { ACCENTS } from '../../settings/model'
+import { AccentPicker } from '../../settings/AccentPicker'
 import type { ResolvedThemeId } from '../../../../shared/settings'
 import type { OnboardingStepProps } from '../Onboarding'
 
@@ -140,29 +140,15 @@ export function FontsStep({ theme, value, onPick, accent, onPickAccent, onReady 
 
       <div className="flex flex-col items-center gap-2.5 border-t border-ink-300/15 pt-5">
         <p className="text-[12.5px] font-medium text-ink-700">And a colour, if you want one</p>
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {ACCENTS.map((a) => {
-            const on = accent === a.id
-            const bg = a.hue == null ? (theme === 'light' ? '#1a1a1a' : '#e8e8e8') : `hsl(${a.hue} 50% 55%)`
-            return (
-              <button
-                key={a.id}
-                type="button"
-                data-tip={a.label}
-                aria-label={a.label}
-                aria-pressed={on}
-                onClick={() => onPickAccent(a.id)}
-                style={{ background: bg }}
-                className={
-                  'h-7 w-7 shrink-0 rounded-full transition duration-150 ' +
-                  (on
-                    ? 'ring-2 ring-brand-500 ring-offset-2 ring-offset-paper'
-                    : 'ring-1 ring-ink-300/25 hover:ring-ink-400/40')
-                }
-              />
-            )
-          })}
-        </div>
+        {/* The same control as Settings → Appearance → Accent, component and
+            all (2026-09-05). It was a second hand-rolled copy of the same map
+            over ACCENTS, and the two had already drifted. */}
+        <AccentPicker
+          accent={accent}
+          theme={theme}
+          onPick={onPickAccent}
+          size="onboarding"
+        />
         <p className="text-[11.5px] text-ink-400">
           Leave it on Default and the app stays neutral. Every space can have its own later.
         </p>

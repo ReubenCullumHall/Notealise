@@ -1,3 +1,5 @@
+import { PALETTE_HEXES } from './palette'
+
 // Entry colours: the hex a note or folder is tagged with in the sidebar, and
 // the maths the picker needs. Pure — no fs, no DOM — so main validates with the
 // same code the renderer paints with (mirrors shared/links.ts's reason for
@@ -20,17 +22,18 @@ export const PALETTE_MAX = 12
  *  immediately instead of first demanding you build a palette. Mid saturation
  *  and mid lightness on purpose: each one has to read against the near-black
  *  dark themes AND against light's white, and a colour that is only correct on
- *  one of them is a colour the user has to re-pick when they switch theme. */
-export const DEFAULT_PALETTE = [
-  '#e0605e',
-  '#e08b4a',
-  '#d4b13f',
-  '#7cb356',
-  '#46b39a',
-  '#4f9ee0',
-  '#8a7fe0',
-  '#d472ac'
-]
+ *  one of them is a colour the user has to re-pick when they switch theme.
+ *
+ *  Since 2026-09-05 this IS the canonical palette (`shared/palette.ts`) rather
+ *  than a second, unrelated set of eight hexes — the same ten colours the text
+ *  picker, the accent picker and the tint maker offer, so "sage" is one colour
+ *  in this app rather than three. Re-exported here because `settings.ts` and
+ *  the colour utilities already import from this file, and a `palette.ts`
+ *  import in main would otherwise be a new edge for the sake of a rename.
+ *
+ *  A space that already has a `colorPalette` keeps it: this is only the SEED
+ *  for a new one, and for the "reset the palette" button. */
+export const DEFAULT_PALETTE: readonly string[] = PALETTE_HEXES
 
 const HEX_RE = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i
 

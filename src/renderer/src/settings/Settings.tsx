@@ -134,7 +134,7 @@ interface SearchEntry {
 // on, not to the control itself. Keep this in sync as settings move or get
 // added; nothing enforces that automatically.
 const SEARCH_INDEX: SearchEntry[] = [
-  { section: 'general', label: 'Start empty', hint: 'Open on the blank screen and pick a note.', keywords: 'blank new launch open' },
+  { section: 'general', label: 'Start with nothing open', hint: 'Opens on the blank screen — your notes are all still in the sidebar.', keywords: 'blank new launch open empty start' },
   { section: 'general', label: 'Reopen your tabs', hint: 'Come back to the notes you left open, split the way you left them.', keywords: 'resume restore session continue last open tabs' },
   { section: 'general', label: 'Play startup animation', hint: 'A short wordmark animation while a vault opens.', keywords: 'splash screen logo boot launch intro' },
   { section: 'general', label: 'Check before deleting', hint: 'Ask first when a photo or video is deleted from a note.', keywords: 'photo video image media delete remove confirm ask undo picture attachment' },
@@ -464,8 +464,8 @@ export function SettingsButton({
         // No `shadow-card`: nothing in the sidebar floats any more (app.css).
         // `btn-edge` returns with the border it colours.
         className={
-          'btn-edge pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-ink-300/30 outline-none backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-          (open ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500 hover:bg-brand-500/10')
+          'btn-edge pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-ink-300/30 outline-none backdrop-blur transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+          (open ? 'bg-brand-500/12 text-brand-600' : 'bg-surface/90 text-ink-500 hover:bg-ink-300/15')
         }
         data-tip="Settings"
         aria-label="Settings"
@@ -642,7 +642,7 @@ function SettingsWindow({
           onClick={onClose}
           data-tip="Close (Esc)"
           aria-label="Close"
-          className="rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"
+          className="rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
         >
           <Icon name="x" className="h-4 w-4" />
         </button>
@@ -670,7 +670,7 @@ function SettingsWindow({
                 onClick={() => setQuery('')}
                 data-tip="Clear"
                 aria-label="Clear search"
-                className="shrink-0 rounded-full border-none bg-transparent p-1 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
+                className="shrink-0 rounded-full border-none bg-transparent p-1 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
               >
                 <Icon name="x" className="h-3.5 w-3.5" />
               </button>
@@ -687,7 +687,7 @@ function SettingsWindow({
                 <button
                   key={m.section + m.label + i}
                   onClick={() => jumpTo(m)}
-                  className="flex w-full flex-col items-start gap-0.5 rounded-xl border-none px-2.5 py-2 text-left outline-none transition duration-200 hover:bg-brand-500/8 focus-visible:ring-2 focus-visible:ring-brand-300"
+                  className="flex w-full flex-col items-start gap-0.5 rounded-xl border-none px-2.5 py-2 text-left outline-none transition duration-200 hover:bg-ink-300/12 focus-visible:ring-2 focus-visible:ring-brand-300"
                 >
                   <span className="text-[12.5px] font-medium text-ink-700">{m.label}</span>
                   <span className="text-[11px] text-ink-400">{SECTION_LABEL[m.section]}</span>
@@ -710,7 +710,7 @@ function SettingsWindow({
                     'flex w-full items-center gap-2 rounded-xl border-none px-2.5 py-2 text-left text-[13px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
                     (section === s.id
                       ? 'bg-brand-500/12 text-brand-600'
-                      : 'bg-transparent text-ink-500 hover:bg-brand-500/8 hover:text-brand-600')
+                      : 'bg-transparent text-ink-500 hover:bg-ink-300/12 hover:text-ink-900')
                   }
                 >
                   <Icon name={s.icon} className="h-4 w-4" />
@@ -742,7 +742,7 @@ function SettingsWindow({
                 <div>
                   <Formatting settings={settings} onChange={onChange} />
                 </div>
-                <p className="rounded-xl bg-brand-500/8 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-500 ring-1 ring-brand-300/40">
+                <p className="rounded-xl bg-ink-300/8 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-500 ring-1 ring-ink-300/25">
                   <span className="font-medium text-brand-600">Looking for the theme, colours or
                   the sidebar?</span>{' '}
                   Those belong to a space, not to the app — see{' '}
@@ -789,7 +789,7 @@ function SettingsWindow({
               <button
                 type="button"
                 onClick={() => goTo('transferData')}
-                className="btn-edge flex w-full items-center gap-2.5 rounded-xl border border-ink-300/30 bg-brand-500/6 px-3.5 py-2.5 text-left outline-none transition duration-200 hover:border-brand-300 focus-visible:ring-4 focus-visible:ring-brand-100"
+                className="btn-edge flex w-full items-center gap-2.5 rounded-xl border border-ink-300/30 bg-ink-300/8 px-3.5 py-2.5 text-left outline-none transition duration-200 hover:border-ink-300/60 focus-visible:ring-2 focus-visible:ring-brand-300"
               >
                 <Icon name="export" className="h-4 w-4 shrink-0 text-brand-500" />
                 <span className="min-w-0 flex-1">
@@ -1047,7 +1047,7 @@ function Legal({ onOpenLicences }: { onOpenLicences: () => void }): React.JSX.El
       <button
         type="button"
         onClick={onOpenLicences}
-        className="mt-2 flex items-center gap-1 rounded-lg border-none bg-transparent px-2 py-1 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"
+        className="mt-2 flex items-center gap-1 rounded-lg border-none bg-transparent px-2 py-1 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         Open source licences
         <Icon name="chevron" className="h-3.5 w-3.5" />

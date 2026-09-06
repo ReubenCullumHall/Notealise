@@ -30,7 +30,11 @@ export interface TreeActions {
   /** `newTab` — Cmd/Ctrl+click: open beside what's already open instead of
    *  replacing it. A plain click behaves as it always has. */
   onOpen: (path: string, newTab?: boolean) => void
-  onContext: (e: React.MouseEvent, node: TreeNode | null) => void
+  /** `targets` is what a colour or a bin action should act on: Sidebar widens
+   *  it to the whole selection when the right-clicked row is part of one, and
+   *  leaves it undefined otherwise. TreeView itself only ever reports the row
+   *  it was clicked on — it does not build the menu. */
+  onContext: (e: React.MouseEvent, node: TreeNode | null, targets?: string[]) => void
   /** Move entries into `toDir`, optionally positioned around `anchor`. */
   onMove: (paths: string[], toDir: string, anchor: string | null, after: boolean) => void
   onTogglePin: (paths: string[], pinned: boolean) => void
@@ -42,7 +46,12 @@ export interface TreeActions {
   /** Open the colour picker for these rows, anchored to `at`. The popover
    *  itself lives in App, not here: there are four TreeViews on screen and a
    *  per-instance one could put two pickers up at once — the same reason
-   *  HoverCard and ContextMenu are single and portalled. */
+   *  HoverCard and ContextMenu are single and portalled.
+   *
+   *  No row calls this any more (2026-09-05): the swatch left the hover
+   *  actions, and the two ways in are the row's context menu and the
+   *  selection bar. It stays on `TreeActions` because Sidebar builds both of
+   *  those out of the same action bag. */
   onPickColor: (paths: string[], at: { left: number; top: number; bottom: number }) => void
 }
 
@@ -113,9 +122,14 @@ const marginFor = (depth: number): string | undefined =>
 const MOVED_LABEL_CLASS =
   'select-none pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-300'
 
+/** No plate behind them since 2026-09-05 (tester feedback: the little card
+ *  reads as a popup that has opened, not as buttons belonging to the row).
+ *  What used to keep the icons legible was `bg-surface/95` + `shadow-card`;
+ *  what does it now is `.tree-row.acts-open`'s mask in app.css, which fades
+ *  the row's own text out under them instead of covering it. */
 const ROW_ACTIONS_CLASS =
-  'absolute right-1.5 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md ' +
-  'bg-surface/95 px-1 py-0.5 opacity-0 shadow-card backdrop-blur-sm pointer-events-none ' +
+  'absolute right-1.5 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 ' +
+  'px-1 py-0.5 opacity-0 pointer-events-none ' +
   'transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto ' +
   'focus-within:opacity-100 focus-within:pointer-events-auto'
 
@@ -141,7 +155,7 @@ function RowBtn({
       className={
         'inline-flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0.5 outline-none transition-colors hover:bg-transparent ' +
         (always ? 'opacity-100 ' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 ') +
-        (tone === 'brand' ? 'text-brand-500 hover:text-brand-600' : 'text-ink-300 hover:text-brand-600')
+        (tone === 'brand' ? 'text-brand-500 hover:text-ink-900' : 'text-ink-300 hover:text-ink-900')
       }
     >
       {children}
@@ -174,8 +188,7 @@ export function TreeView({
   onRestore,
   onNewNoteIn,
   onNewFolderIn,
-  onRename,
-  onPickColor
+  onRename
 }: Props): React.JSX.Element {
   const [hint, setHint] = useState<Hint>(null)
   const shelved = mode === 'archive'
@@ -301,17 +314,6 @@ export function TreeView({
         } as React.CSSProperties)
       : {}
 
-  /** Colouring acts on the whole selection when the row is part of it — the
-   *  same rule dragging follows, so "select three, colour them" works. */
-  const colorTargets = (path: string): string[] =>
-    picked(path) ? [...selection.paths] : [path]
-
-  const openColor = (e: React.MouseEvent, path: string): void => {
-    e.stopPropagation()
-    const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    onPickColor(colorTargets(path), { left: box.left, top: box.top, bottom: box.bottom })
-  }
-
   // ----- row renderers -----
   const rowClass = (node: TreeNode, c: ReturnType<typeof colorOf>): string => {
     const isPicked = picked(node.path)
@@ -339,7 +341,7 @@ export function TreeView({
         ? 'tint-tag '
         : `tint-${colorStyle}${open ? ' is-open' : ''} `
     return (
-      'tree-row group flex cursor-pointer items-center pr-1.5 text-left ' +
+      'tree-row press-row group flex cursor-pointer items-center pr-1.5 text-left ' +
       paint +
       tone +
       (tone && hover ? ' ' : '') +
@@ -352,25 +354,6 @@ export function TreeView({
   /** The row's colour control: a swatch when it has one, an outline when it
    *  doesn't. In the hover-action group beside pin and bin, because that is
    *  where the app already puts "do something to this row". */
-  const colorBtn = (path: string): React.JSX.Element => {
-    const c = rowColor(path)
-    return (
-      <RowBtn
-        title={c ? (c.own ? `Colour · ${c.hex}` : `Colour · inherited from ${c.from}`) : 'Set a colour'}
-        onClick={(e) => openColor(e, path)}
-      >
-        <span
-          aria-hidden="true"
-          className={
-            'block h-3.5 w-3.5 rounded-full ' +
-            (c ? 'ring-1 ring-wash/25' : 'border border-dashed border-current')
-          }
-          style={c ? { background: `rgb(${rgbChannels(c.hex)})` } : undefined}
-        />
-      </RowBtn>
-    )
-  }
-
   const grip = (path: string): React.JSX.Element => (
     <span
       role="button"
@@ -474,7 +457,6 @@ export function TreeView({
               </RowBtn>
             )}
             <div className={ROW_ACTIONS_CLASS}>
-              {colorBtn(node.path)}
               {!isPinned && (
                 <RowBtn
                   title="Pin to favourites"
@@ -548,7 +530,7 @@ export function TreeView({
                 toggle(node.path)
               }}
               data-tip={expandedNow ? 'Collapse' : 'Expand'}
-              className="inline-flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0.5 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
+              className="inline-flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0.5 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
             >
               <span className={'chev inline-flex' + (expandedNow ? ' open' : '')}>
                 <Icon name="chevron" />
@@ -574,7 +556,13 @@ export function TreeView({
           >
             {node.name}
           </button>
-          {count > 0 && <span className="shrink-0 px-0.5 text-xs text-ink-300">{count}</span>}
+          {/* `.tree-count` — app.css hides it while the hover actions are up,
+              since it sits in flow right where they land. */}
+          {count > 0 && (
+            <span className="tree-count shrink-0 px-0.5 text-xs text-ink-300 transition-opacity duration-150">
+              {count}
+            </span>
+          )}
 
           {shelved ? (
             <RowBtn
@@ -603,7 +591,6 @@ export function TreeView({
                 </RowBtn>
               )}
               <div className={ROW_ACTIONS_CLASS}>
-                {colorBtn(node.path)}
                 <RowBtn
                   title="New note in folder"
                   onClick={(e) => {
@@ -669,7 +656,12 @@ export function TreeView({
                 }
                 style={{ paddingLeft: padFor(depth + 1) }}
               >
-                {shelved ? 'Empty' : 'Empty — drop items here'}
+                {/* "Empty — drop items here" read as an instruction about
+                    something you had to do, and the leading "Empty" as the
+                    folder's name. The state is stated plainly; the drop hint
+                    only appears when there is actually something in hand
+                    (Reuben, 2026-09-05, from tester feedback). */}
+                {!shelved && dragging ? 'Drop items here' : 'This folder is currently empty'}
               </p>
             )}
           </div>

@@ -22,14 +22,42 @@ interface Span {
   name: string
 }
 
+/** The CSS property each layer paints with, for the custom-colour form. */
+const propFor = (tag: 'mark' | 'span'): string =>
+  tag === 'mark' ? 'background-color' : 'color'
+
+/** A colour is either a palette NAME (`sage`) or a literal `#rrggbb`. The two
+ *  are told apart by the `#`, everywhere, and nothing else in this file needs
+ *  to know which it is holding. */
+const isHex = (colour: string): boolean => colour.startsWith('#')
+
+/** The opening tag for a colour on this layer. The two forms are not
+ *  interchangeable: a NAME resolves through `--tc-NAME` / `--hl-NAME`, which
+ *  have separate light and dark values, while a hex is the same colour on every
+ *  theme — which is exactly what the user asked for when they typed one. */
+const openTagFor = (tag: 'mark' | 'span', colour: string): string =>
+  isHex(colour)
+    ? '<' + tag + ' style="' + propFor(tag) + ': ' + colour + '">'
+    : '<' + tag + ' class="' + (tag === 'mark' ? 'hl' : 'tc') + '-' + colour + '">'
+
 function parseSpans(text: string, tag: 'mark' | 'span'): Span[] {
   const prefix = tag === 'mark' ? 'hl' : 'tc'
-  const re = new RegExp('<' + tag + ' class="' + prefix + '-([a-z]+)">', 'g')
+  // One regex over both forms, so a run of text carrying a named colour and one
+  // carrying a custom hex are the same kind of thing to everything below — that
+  // is what makes "select across both and recolour" work rather than splitting
+  // into two passes that disagree about the region.
+  const re = new RegExp(
+    '<' + tag + ' (?:class="' + prefix + '-([a-z]+)"|style="' + propFor(tag) +
+      ': *(#[0-9a-fA-F]{3,8}) *;?")>',
+    'g'
+  )
   const closeTag = '</' + tag + '>'
   const spans: Span[] = []
   let m: RegExpExecArray | null
   while ((m = re.exec(text)) !== null) {
-    if (!COLOR_NAMES.has(m[1])) continue
+    // Exactly one of the two alternatives matched.
+    const name = m[1] !== undefined ? m[1] : (m[2] as string).toLowerCase()
+    if (m[1] !== undefined && !COLOR_NAMES.has(m[1])) continue
     const contentStart = m.index + m[0].length
     const close = text.indexOf(closeTag, contentStart)
     if (close === -1) continue
@@ -38,7 +66,7 @@ function parseSpans(text: string, tag: 'mark' | 'span'): Span[] {
       contentStart,
       contentEnd: close,
       closeEnd: close + closeTag.length,
-      name: m[1]
+      name
     })
     re.lastIndex = close + closeTag.length
   }
@@ -50,6 +78,17 @@ function parseSpans(text: string, tag: 'mark' | 'span'): Span[] {
  * becomes colour `name`. If `name` is null — or the whole selection is already
  * `name` — the selection is cleared instead (toggle off). A span the selection
  * only partially overlaps is split; equal-coloured neighbours merge.
+ *
+ * `name` is either a palette name (`sage`) or a literal `#rrggbb`. Callers must
+ * pass a hex that `normalizeHex` has already accepted — this writes it straight
+ * into the user's file and into a `style` attribute, so it is the caller's job
+ * to make sure nothing else can get there (`colorCommands.applyColor` does it).
+ *
+ * NOT handled, and pre-existing: a highlight in the LEGACY `<span
+ * style="background-color: …">` form, which `colorTags` reads for display but
+ * which this cannot see while looking for `<mark>`. Recolouring over one leaves
+ * it in place rather than replacing it. Notes written by this app never contain
+ * one — only imports and pre-2026 files do.
  */
 export function recolor(
   text: string,
@@ -58,7 +97,6 @@ export function recolor(
   tag: 'mark' | 'span',
   name: string | null
 ): RegionChange {
-  const prefix = tag === 'mark' ? 'hl' : 'tc'
   const spans = parseSpans(text, tag)
 
   // Grow the working region to fully contain any span touching the selection.
@@ -103,7 +141,7 @@ export function recolor(
     const colour = chars[i].colour
     let j = i
     while (j < chars.length && chars[j].colour === colour) j++
-    if (colour !== null) out += '<' + tag + ' class="' + prefix + '-' + colour + '">'
+    if (colour !== null) out += openTagFor(tag, colour)
     for (let k = i; k < j; k++) {
       outPos[k] = out.length
       out += chars[k].ch

@@ -65,7 +65,7 @@ interface Props {
    *  instead of the welcome note every other first run opens on. */
   onFinished: (
     importNotePath: string | null,
-    opts?: { established?: boolean }
+    opts?: { established?: boolean; welcomeNotes?: boolean; writtenNotePath?: string | null }
   ) => Promise<void>
   /** Called after onFinished resolves AND the closing fade has played —
    *  THIS is what App.tsx uses to flip `hasOnboarded` and unmount Onboarding.
@@ -144,6 +144,11 @@ export function Onboarding({
   // steps need it, and re-reading it off disk would race the autosave.
   const [notePath, setNotePath] = useState<string | null>(null)
   const [noteText, setNoteText] = useState('')
+  // The Write step's welcome-notes opt-in, lifted here for the same reason
+  // `notePath` is: the step that ASKS is not the step that acts on it —
+  // finishing does, at the end of the flow. On by default, and it survives
+  // stepping Back and forward again because it lives out here.
+  const [seedWelcome, setSeedWelcome] = useState(true)
   // Set once, by Import, only if a real import actually ran this session —
   // handed to onFinished so App can open the workspace on it. Not reset by
   // going Back into Import and skipping instead: re-importing overwrites it
@@ -231,7 +236,15 @@ export function Onboarding({
     navLock.current = true
     setBusy(true)
     try {
-      await onFinished(finishNow ? null : importNotePath, finishNow ? { established: true } : undefined)
+      await onFinished(
+        finishNow ? null : importNotePath,
+        finishNow
+          ? { established: true }
+          : // `writtenNotePath` is what the app opens on when the welcome notes
+            // were declined: the vault still has the note this flow wrote, and
+            // landing on it beats landing on a blank pane.
+            { welcomeNotes: seedWelcome, writtenNotePath: notePath }
+      )
     } finally {
       navLock.current = false
       setBusy(false)
@@ -274,19 +287,34 @@ export function Onboarding({
           aria-hidden={step === 'welcome'}
           tabIndex={step === 'welcome' ? -1 : 0}
           className={
-            'absolute left-4 top-10 flex h-9 w-9 items-center justify-center rounded-full text-ink-400 transition duration-150 hover:bg-brand-500/10 hover:text-ink-700 sm:left-6 ' +
+            'absolute left-4 top-10 flex h-9 w-9 items-center justify-center rounded-full text-ink-400 transition duration-150 hover:bg-ink-300/15 hover:text-ink-700 sm:left-6 ' +
             (step === 'welcome' ? 'pointer-events-none opacity-0' : 'opacity-100')
           }
         >
           <Icon name="chevron" className="h-4 w-4 rotate-180" />
         </button>
 
-        <div className="flex w-full flex-1 flex-col items-center justify-center overflow-hidden">
+        {/* Scrolls rather than clips. Measured 2026-09-05, when the Fonts step
+            gained the accent picker's "any colour" field: the step's content
+            was 869px inside a 679px box, so 95px was cut off the TOP and 95 off
+            the bottom — including the heading. `overflow-hidden` had been fine
+            while every step fitted, and silently stopped being fine.
+
+            `justify-start` + `m-auto` on the child, NOT `justify-center`:
+            centred flex content that overflows is cut off at the start and
+            cannot be scrolled back to. `margin: auto` centres exactly the same
+            way when there IS room, and gives way to scrolling when there is
+            not. `overflow-x: hidden` is explicit because setting only
+            `overflow-y` makes x compute to `auto` too (see the note in
+            app.css), and the fade animation's transform would then put a
+            horizontal bar under every step. */}
+        <div className="flex w-full flex-1 flex-col items-center justify-start overflow-y-auto overflow-x-hidden">
           <div
             key={animKey}
             style={{ width: '100%' }}
             className={
-              !animationsEnabled ? undefined : exiting ? 'onboarding-fade-out' : 'onboarding-fade-in'
+              'm-auto ' +
+              (!animationsEnabled ? '' : exiting ? 'onboarding-fade-out' : 'onboarding-fade-in')
             }
           >
             {step === 'welcome' && <WelcomeStep {...stepProps} theme={theme} />}
@@ -317,6 +345,8 @@ export function Onboarding({
                 onTextChange={setNoteText}
                 savedPath={notePath}
                 onSaved={setNotePath}
+                seedWelcome={seedWelcome}
+                onSeedWelcome={setSeedWelcome}
               />
             )}
             {step === 'diskProof' && <DiskProofStep {...stepProps} notePath={notePath} noteText={noteText} />}
@@ -338,7 +368,7 @@ export function Onboarding({
             type="button"
             disabled={!ready.ready || busy || exiting || closing}
             onClick={() => void onContinue()}
-            className="rounded-full bg-brand-600 px-7 py-2.5 text-[14px] font-medium text-paper transition duration-150 hover:bg-brand-700 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-brand-600"
+            className="press rounded-full bg-brand-600 px-7 py-2.5 text-[14px] font-medium text-paper transition duration-150 hover:bg-brand-700 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-brand-600"
           >
             {busy ? 'One moment…' : (ready.continueLabel ?? 'Continue')}
           </button>

@@ -42,13 +42,34 @@ than loaded every session — see "Where the rest of it lives" near the end of t
 4. **Markdown must degrade.** Any file this app writes must open sensibly in Obsidian, VS Code,
    and GitHub. Custom syntax dialects are forbidden. Where Markdown lacks a feature (e.g. text
    colour), use inline HTML — valid CommonMark — never an invented delimiter.
-   **Colour is the one place this app deliberately diverges from legacy.** Legacy writes
-   `<span style="color:#d0574a">`; this app writes `<mark class="hl-NAME">` /
-   `<span class="tc-NAME">` against the named palette in `editor/palette.ts`. Class names are
-   theme-aware — `--hl-NAME` / `--tc-NAME` have separate light and dark values, so a note stays
-   legible on both themes, which a baked-in hex cannot do. The trade is that another editor
-   renders `<mark>` but drops the text colour. Do not "restore" the hex form: it would break
-   `colorModel.ts` and orphan the colours in every note already written.
+   **Colour writes TWO forms, and which one is not a free choice.**
+   - **A palette colour writes a class** — `<mark class="hl-NAME">` / `<span class="tc-NAME">`
+     against the canonical palette in `shared/palette.ts`. This is the default and it is what
+     every preset click produces. Class names are theme-aware: `--hl-NAME` / `--tc-NAME` have
+     separate light and dark values, so the note stays legible on both themes, which a baked-in
+     hex cannot do.
+   - **A custom colour writes an inline style** — `<mark style="background-color: #rrggbb">` /
+     `<span style="color: #rrggbb">`. Added 2026-09-05, at Reuben's explicit request, with the
+     theme trade-off put to him first: a hex is the same colour on every theme, so one picked in
+     dark mode may read poorly in light. That is the user's call to make, and the picker says so.
+
+   Until 2026-09-05 this rule read "do not restore the hex form — it would break `colorModel.ts`
+   and orphan the colours in every note already written." **That consequence is what must not
+   happen; the hex form itself was never the point.** It does not happen now, and any future
+   change here has to keep all three true — verified in the packaged app, not reasoned about:
+   a note written by an older build still renders (`hl-amber` / `tc-sky` checked live), a preset
+   click still emits a CLASS and not a hex, and `colorModel.ts` parses both forms as one kind of
+   thing so a selection spanning both recolours correctly (`colorModel.test.ts`, 21 cases, 10 of
+   them the hex form). `editor/colorTags.ts` reads both for display, including the legacy
+   `<span style="background-color:…">` an import can produce.
+
+   **The hex is normalised in exactly one place** — `applyColor` in `editor/colorCommands.ts`,
+   through `normalizeHex`, which returns the long lowercase form or null. `recolor` writes what
+   it is given straight into a `style` attribute in the user's file, so anything reaching it
+   unvalidated is arbitrary text inside `style="…"`. Do not add a second caller that skips it.
+
+   The trade against other editors is unchanged and worth restating: another editor renders
+   `<mark>` but drops a `class`-based text colour, while it *will* honour an inline style.
 
 5. **Colours are CSS custom properties; layout is Tailwind.** No hardcoded hex and no hardcoded
    box-shadow anywhere in component code. The token layer is `src/renderer/src/theme.css` (ramps,
@@ -133,6 +154,20 @@ Ships on Windows + macOS; a vault must survive moving between them. All of this 
   UNC network drives.
 - **Menus/shortcuts:** `CommandOrControl` in every accelerator; macOS app menu + stays running
   when the last window closes; Windows menu bar + quits.
+- **A `showOpenDialog` cannot take BOTH a file and a folder on Windows or Linux — and Electron
+  degrades it silently.** `properties: ['openFile', 'openDirectory']` shows a *directory* selector
+  there and simply drops the file half; only macOS's NSOpenPanel does both. Nothing warns you, and
+  the dialog still shows whatever `title` you wrote, so the copy goes on promising the thing the
+  dialog can no longer do. Found 2026-09-05: `PICKER` in `ipc.ts` declared Notion as
+  `['openDirectory', 'openFile']`, so on Windows a user could not select their Notion `.zip` at
+  all — typing its path in answered *"The folder name is not valid"* under a dialog headed
+  "Choose your Notion export (.zip or an already-unzipped folder)". Markdown and HTML had the same
+  shape and so lost single-file imports too. It had been that way in **every** Windows build, and
+  no test, typecheck or lint can see it — the options object is valid, and the platform quietly
+  reinterprets it. **So: never declare both. Offer the two dialogs separately where a format
+  genuinely accepts either, and decide which to offer in MAIN, not in the renderer** — same
+  principle as `listImporters` (see rule 7 and the settings rule): what main can do and what the UI
+  offers must not be able to drift apart.
 
 ## Stack
 
@@ -179,6 +214,8 @@ notes-app/
     feature-organise.md     pins/archive/bin, the theme/token system's build state
     feature-editor.md       format buttons, command registry, note links, entry colours, tables
     feature-updates.md      the launch check, the update toast, and the macOS unsigned workaround
+    open-items.md           built but NOT signed off — the holding area for anything that has no
+                            CHANGELOG line yet, and what has to happen before it earns one
     product-rulings.md      decisions from the 2026-08-09 interview that the code has to honour
     onboarding-plan.md      the first-run onboarding plan — READ THE FLAGGED CONFLICT AT ITS TOP
     transfer-data.md        Settings → Transfer data: moving the preset library / custom fonts /
@@ -442,6 +479,9 @@ every session — see the table in **Folder structure** above for the full list.
   model (there is no network attacker — the doors are a note, an import, and the update channel),
   what each boundary is actually for, **what is deliberately left open and why**, and the traps
   that a green test suite cannot see.
+- **Wondering what is built but not yet logged** → `docs/open-items.md`. Read it before writing a
+  CHANGELOG line for anything in this area, and before assuming an untested thing was forgotten
+  rather than deliberately held back
 - A **product decision that isn't in the code** → `docs/product-rulings.md`
 - **UI copy** → `docs/voice.md`
 
@@ -474,6 +514,26 @@ every session — see the table in **Folder structure** above for the full list.
   `document.execCommand('insertText', …)` to type into CodeMirror (it handles `beforeinput`).
   React delegates `onMouseEnter`/`onBlur` from **`mouseover`/`focusout`**, so dispatching
   `mouseenter`/`blur` silently does nothing.
+- **The PACKAGED app can be driven over CDP, and that is the only harness that reaches main.**
+  `npm run dev` opens no debugging port and `localhost:5173` stubs `window.api` — so neither can
+  test IPC, native dialogs, the fuses or anything else that lives in main. But
+  `release\win-unpacked\Notealise.exe --remote-debugging-port=9222` **works** (the
+  `enableNodeCliInspectArguments` fuse blocks Node's `--inspect`, not Chromium's remote-debugging
+  switch), and `playwright.chromium.connect_over_cdp` then drives the real renderer against the
+  real main process. Used on 2026-09-05 to verify the whole import path end to end in a packaged
+  build. Two things it needs:
+  **(a) native dialogs are not in the DOM.** `showOpenDialog` opens a Win32 `#32770` window that
+  CDP cannot see or touch. Start the pick without awaiting it (stash the promise on `window`), then
+  drive the dialog from PowerShell — `EnumWindows` for class `#32770`, `SetForegroundWindow`, and
+  `[System.Windows.Forms.SendKeys]` to type the path — then read the stashed result back over CDP.
+  Poll for the dialog rather than sleeping a fixed time; it can take >2s to appear, and a scan that
+  races it reports "no dialog" for a pick that is about to succeed.
+  **(b) a folder picker takes TWO Enters** — the first navigates into the highlighted folder, the
+  second accepts it. One Enter looks like a hang.
+  Keep it out of the user's way: it is a second instance, so the single-instance lock will focus
+  *their* window instead of opening yours if one is already running. Close the debugging instance
+  and relaunch plainly when you are done — do not leave a remote-debugging port open on the app
+  Reuben is using.
 - **When the Electron window has no debugging port, verify the component at localhost:5173
   instead — including screens `browserApi` hardcodes its way past.** `npm run dev` does not open a
   CDP port, so the window Reuben is actually using can't be driven or screenshotted; relaunching
@@ -738,8 +798,15 @@ every session — see the table in **Folder structure** above for the full list.
   Same OneDrive cause as the vault's rename problem, but on electron-builder's own output: it drops
   a ~215 MB tree into `release/`, OneDrive starts syncing it, and the final rename hits a held
   handle. `release/` is gitignored but **gitignore means nothing to OneDrive.** Fix: delete
-  `release/` and re-run (`Remove-Item release -Recurse -Force`). Proper fix: exclude `release/` and
-  `node_modules/` from OneDrive sync, or move the project off OneDrive.
+  `release/` and re-run (`Remove-Item release -Recurse -Force`) — removing just `win-unpacked.tmp`
+  is enough and spares any installer already sitting in `release/`. Proper fix: exclude `release/`
+  and `node_modules/` from OneDrive sync, or move the project off OneDrive.
+  **And when it fails this way it still EXITS 0** (confirmed 2026-09-05): the `⨯ EPERM` goes to the
+  log, `npm` reports success, and the only thing that says otherwise is that
+  `release/win-unpacked/` does not exist. So `package:dir` returning 0 is not evidence it packaged —
+  the second run in a session is the one that bites, because the first left `win-unpacked/` behind
+  and a stale directory looks exactly like a fresh one. **Always assert the artefact, not the exit
+  code:** `ls release/win-unpacked/Notealise.exe` and check its mtime is from *this* run.
 - Browser-era gotchas (File System Access API, `localhost` vs `file://`, Vite dev port) now
   apply only to `legacy/`. The **legacy app is the canonical look** the Electron UI is kept in
   sync with; the user runs it as a local live server. Launch it with `notes-app/run-legacy.bat`
@@ -827,6 +894,21 @@ every session — see the table in **Folder structure** above for the full list.
   and computed styles all resolve for real, just outside the running app. It doesn't exercise
   click handlers or IPC — pair it with typecheck (proves the wiring compiles) for anything that
   also has behaviour, not just layout.
+
+- **`overflow: hidden` on a `justify-center` flex container CLIPS at both ends and gives you no way
+  to reach what it cut — and it fails silently the first time content outgrows the box.** The
+  onboarding step shell had been `flex flex-col items-center justify-center overflow-hidden` since
+  it was written, and was fine while every step fitted. Adding the accent picker's colour field to
+  the Fonts step made that step's content 869 px inside a 679 px box, so 95 px was cut off the top
+  and 95 off the bottom — **including the step's own heading** — with no scrollbar and nothing in
+  any console. Centred flex content that overflows is cut off at the *start*, which is the half you
+  cannot scroll back to. Fix: `justify-start` on the container plus **`m-auto` on the child**, which
+  centres identically when there is room and yields to scrolling when there is not, and set
+  `overflow-x: hidden` explicitly beside `overflow-y: auto` (setting only `overflow-y` makes x
+  compute to `auto` too — the same spec coupling `app.css` already notes — and the fade animation's
+  transform then puts a horizontal bar under every step). **Measure the container against its
+  content whenever you add anything to a fixed-height centred box**; `scrollHeight` vs
+  `clientHeight` is the one-line check.
 
 ### Tooltips are `data-tip`, never `title`
 
@@ -925,6 +1007,19 @@ it tests green, and it looks implemented:
 - Anything you add that the accent also writes has the same problem. Check `ALL_KEYS` first.
 - `--btn-edge` is deliberately *outside* the accent — a tinted accent leaves button edges neutral.
   Accepted, not overlooked: `RAMP`'s ink tint is 8% saturation, invisible on a hairline border.
+- **`accentMode` decides WHICH ramp the accent writes, and `'text'` — the default — does not touch
+  `--brand-*` at all.** `TEXT_RAMP` contains only `--ink-*` keys. So every control painted from the
+  brand ramp stayed the theme's neutral grey however loud an accent was picked, in the mode almost
+  everyone is in: the settings pill switches and the tick boxes were grey for a year and read as
+  broken (Reuben, 2026-09-05: "all toggles should follow the accent colour when on"). The fix was
+  NOT to make `'text'` mode write the brand ramp — that is what `'tint'` means, and doing it would
+  delete the distinction between the two modes. It was a third, small set of variables:
+  **`--accent-400/500/600`, written by `applyAccent` in BOTH modes**, seeded in `theme.css` to each
+  theme's own brand values so the `Default` accent is byte-identical to what shipped before them.
+  **Reach for `accent-*` only where the on-state IS the accent** (a switch, a tick box); using it
+  on a surface would undo the whole point of "Text only". The trap generalises: before assuming a
+  token follows the accent, check whether the ACTIVE mode's ramp actually lists that key —
+  `ALL_KEYS` is the union of the ramps, not a promise that every mode writes every one of them.
 - The aliases (`--ed-muted: rgb(var(--ink-500))`) track the tone only because **every one of these
   blocks targets `:root`**. A custom property's `var()` is substituted at computed-value time *on the
   element that declares it*, so `--ed-muted` computes on `:root` from whichever `--ink-500` won the

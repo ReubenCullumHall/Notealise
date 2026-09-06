@@ -34,6 +34,7 @@ import {
   showInPane,
   splitAt,
   splitBlank,
+  splitWith,
   swapPanes,
   type TabLayout
 } from './tabs/model'
@@ -173,16 +174,20 @@ function TickRow({
       onClick={onClick}
       className={
         'flex items-center gap-2 rounded-lg border-none bg-transparent px-1.5 py-1.5 text-left ' +
-        'text-[12.5px] outline-none transition duration-150 hover:bg-brand-500/10 ' +
+        'text-[12.5px] outline-none transition duration-150 hover:bg-ink-300/15 ' +
         'hover:text-ink-700 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
         (on ? 'text-ink-700' : 'text-ink-500')
       }
     >
+      {/* Accent, not brand — same reason as the pill Switch (primitives.tsx):
+          the default accent mode never touches the brand ramp, so a ticked box
+          stayed the theme's grey whatever accent was picked. Unticked stays on
+          the ink ramp, faded. */}
       <span
         aria-hidden="true"
         className={
           'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ' +
-          (on ? 'border-brand-400 bg-brand-500/25 text-brand-600' : 'border-ink-300/50')
+          (on ? 'border-accent-400 bg-accent-500/25 text-accent-600' : 'border-ink-300/50')
         }
       >
         {on && <Icon name="check" className="h-3 w-3" />}
@@ -191,6 +196,14 @@ function TickRow({
     </button>
   )
 }
+
+/** How long each half of the space-switch slide runs. These MUST match
+ *  `space-slide-*` in app.css: the out phase is a timer that decides when the
+ *  content is swapped, and the in phase is a timer that decides when the class
+ *  comes back off. A CSS-only change to either keyframe leaves the swap landing
+ *  mid-animation, which looks like a flicker rather than a slide. */
+const SPACE_SLIDE_OUT_MS = 130
+const SPACE_SLIDE_IN_MS = 240
 
 /** The placeholder command row has no editor behind it; its buttons are inert
  *  and it is only there to hold the space open. */
@@ -230,6 +243,16 @@ export default function App(): React.JSX.Element {
   // hasOnboarded, so a quit mid-flow resumes instead of always restarting at
   // 'welcome'. Only ever read; Onboarding.tsx itself persists further changes.
   const [onboardingResumeStep, setOnboardingResumeStep] = useState<StepId>('welcome')
+
+  /** The space-switch slide (see `switchSpace`). `n` only exists to make each
+   *  phase a distinct object, so re-entering the same phase re-fires the
+   *  animation rather than React seeing an unchanged value. */
+  const [spaceSlide, setSpaceSlide] = useState<{
+    dir: 1 | -1
+    phase: 'out' | 'in'
+    n: number
+  } | null>(null)
+  const spaceSlideN = useRef(0)
   // Set once, the moment a vault becomes active from a cold boot or a first-run
   // folder pick (never from a mid-session "Switch folder") — see the two call
   // sites below. StartupSplash reads `settings.playStartupAnimation` itself at
@@ -336,6 +359,9 @@ export default function App(): React.JSX.Element {
   // The sidebar's "open this folder, close the rest", handed up so the path bar
   // can drive it. Imperative on purpose — see Sidebar's `revealRef` prop.
   const revealRef = useRef<((folder: string) => void) | null>(null)
+  // Collapse/expand the sidebar from the View menu (Cmd/Ctrl+S). Imperative for
+  // the same reason `revealRef` is — see Sidebar's `collapseRef` prop.
+  const collapseSidebarRef = useRef<(() => void) | null>(null)
   // Each space's own tabs. A note opened in one space stays open when you go
   // elsewhere — it just isn't on screen, because a strip showing notes you
   // can't see in the sidebar is the confusing part. Swapped explicitly by
@@ -800,17 +826,146 @@ export default function App(): React.JSX.Element {
    *  root, which belongs to no space and so shows in all of them. */
   const spaceOf = (p: string): string => (p.includes('/') ? p.slice(0, p.indexOf('/')) : '')
 
-  /** Move to another space, taking this one's tabs with you. */
+  /** Move to another space, taking this one's tabs with you.
+   *
+   *  Slides, macOS-Spaces style (Reuben, 2026-09-05). Two phases on one
+   *  element, because there is only ever one: the outgoing space is pushed off
+   *  in the direction of travel and faded, the content is swapped while nothing
+   *  is on screen, and the incoming space arrives from the opposite side. A
+   *  cross-fade of two live copies would mean rendering two sidebars and two
+   *  sets of panes — two CodeMirrors — for the duration, which is not worth it
+   *  for 380ms of motion.
+   *
+   *  The swap is therefore DELAYED by the out phase. That is the point: an
+   *  instant swap followed by a slide-in reads as the new space arriving late,
+   *  not as the old one leaving.
+   *
+   *  Chrome that is not part of a space does not move — the search bar, the
+   *  space switcher itself, the sidebar footer. You are still holding those. */
   const switchSpace = useCallback(
     async (folder: string): Promise<void> => {
       const from = settingsRef.current.activeSpaceFolder
       if (from === folder) return
-      spaceTabs.current.set(from, layoutRef.current)
-      await changeSettings({ activeSpaceFolder: folder })
-      applyLayout(spaceTabs.current.get(folder) ?? EMPTY_LAYOUT)
+
+      const swap = async (): Promise<void> => {
+        spaceTabs.current.set(from, layoutRef.current)
+        await changeSettings({ activeSpaceFolder: folder })
+        applyLayout(spaceTabs.current.get(folder) ?? EMPTY_LAYOUT)
+      }
+
+      if (!settingsRef.current.animationsEnabled) {
+        await swap()
+        return
+      }
+
+      // Direction of travel: later in the list slides the same way a later
+      // desktop does. A space that is not in the list (a link into somewhere
+      // unreconciled) gets `1`, which is a direction rather than a guess about
+      // one.
+      const list = settingsRef.current.spaces
+      const a = list.findIndex((sp) => sp.folder === from)
+      const b = list.findIndex((sp) => sp.folder === folder)
+      const dir: 1 | -1 = b >= 0 && a >= 0 && b < a ? -1 : 1
+
+      setSpaceSlide({ dir, phase: 'out', n: spaceSlideN.current++ })
+      await new Promise((r) => setTimeout(r, SPACE_SLIDE_OUT_MS))
+      await swap()
+      setSpaceSlide({ dir, phase: 'in', n: spaceSlideN.current++ })
     },
     [changeSettings, applyLayout]
   )
+
+  // Clear the class once the entry animation is over, so the next switch gets a
+  // fresh one to fire (an element already carrying the class does not replay
+  // it) and nothing is left holding a transform.
+  useEffect(() => {
+    if (spaceSlide?.phase !== 'in') return
+    const t = setTimeout(() => setSpaceSlide(null), SPACE_SLIDE_IN_MS)
+    return () => clearTimeout(t)
+  }, [spaceSlide])
+
+  /**
+   * Shift+wheel slides between spaces (Reuben, 2026-09-05: "shift and scroll
+   * slides between spaces for quick movability"). Live over the whole window.
+   *
+   * Shift+wheel is also the platform gesture for scrolling something sideways,
+   * so this has to give way to anything that actually scrolls sideways or it
+   * would break the tab strip, the format toolbar's scroller, the path bar, and
+   * every wide table and code block in a note. It is checked by MEASURING the
+   * ancestor chain — `scrollWidth` against `clientWidth`, plus the computed
+   * `overflow-x` — rather than by listing selectors: a class list goes stale the
+   * first time someone adds a scroller, and the failure (a table that silently
+   * jumps space instead of scrolling) is exactly the kind nobody reports.
+   *
+   * The wheel is accumulated rather than acted on per event: one flick of a
+   * trackpad is dozens of events, and one space per event would fly past every
+   * space in the vault. THRESHOLD is the distance that counts as a flick, and
+   * the accumulator resets on every switch and after a pause.
+   *
+   * It clamps at both ends rather than wrapping. Wrapping makes the gesture
+   * unpredictable at speed — you cannot tell whether you have gone one space
+   * forward or all the way round — and "the last space" is a useful wall.
+   */
+  useEffect(() => {
+    const THRESHOLD = 80
+    /** a pause this long starts a fresh flick, so a slow drift never adds up */
+    const IDLE_MS = 220
+    let travel = 0
+    let last = 0
+
+    const scrollsSideways = (start: EventTarget | null): boolean => {
+      let el = start instanceof HTMLElement ? start : null
+      while (el && el !== document.body) {
+        if (el.scrollWidth - el.clientWidth > 1) {
+          const ox = getComputedStyle(el).overflowX
+          if (ox === 'auto' || ox === 'scroll') return true
+        }
+        el = el.parentElement
+      }
+      return false
+    }
+
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return
+      // Any modal owns the whole screen while it is up (Settings, the delete
+      // prompts, onboarding), and sliding the space out from under one is not a
+      // thing to do. `[aria-modal="true"]` is the marker every one of them
+      // already carries — the colour popover is `role="dialog"` WITHOUT it, and
+      // is deliberately not caught here. Onboarding is gated by
+      // `hasOnboardedRef` rather than by a selector — it has no modal marker of
+      // its own, and the ref is what this listener can read (it is bound once).
+      if (!hasOnboardedRef.current) return
+      if (document.querySelector('[aria-modal="true"]')) return
+      if (scrollsSideways(e.target)) return
+
+      const list = settingsRef.current.spaces
+      if (list.length < 2) return
+      const i = list.findIndex((sp) => sp.folder === settingsRef.current.activeSpaceFolder)
+      if (i < 0) return
+
+      // Chromium turns a mouse wheel's deltaY into deltaX while Shift is held,
+      // but a trackpad's horizontal swipe arrives as deltaX with no Shift at
+      // all — so take whichever axis actually moved, and only once Shift says
+      // this was meant as the gesture.
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+      if (d === 0) return
+      const now = e.timeStamp
+      if (now - last > IDLE_MS || Math.sign(d) !== Math.sign(travel)) travel = 0
+      last = now
+      travel += d
+      if (Math.abs(travel) < THRESHOLD) return
+
+      const next = i + (travel > 0 ? 1 : -1)
+      travel = 0
+      if (next < 0 || next >= list.length) return // clamped, not wrapped
+      void switchSpace(list[next].folder)
+    }
+
+    // Passive: nothing here calls preventDefault — when the gesture is not
+    // taken, the browser's own horizontal scroll must still happen.
+    window.addEventListener('wheel', onWheel, { passive: true })
+    return () => window.removeEventListener('wheel', onWheel)
+  }, [switchSpace])
 
   /** switchSpace, but only for a folder `settings.spaces` has actually
    *  reconciled as a space. That check is not optional and is why this exists:
@@ -1630,15 +1785,20 @@ export default function App(): React.JSX.Element {
    *  Report a bug, Request a feature) now live in that note's own text. */
   const finishOnboarding = async (
     importNotePath: string | null,
-    opts?: { established?: boolean }
+    opts?: { established?: boolean; welcomeNotes?: boolean; writtenNotePath?: string | null }
   ): Promise<void> => {
     const homeSpaceFolder = settingsRef.current.activeSpaceFolder
     let welcomeNotePath: string | null = null
     // `established` means the Vault step recognised an existing setup and skipped
     // the rest of the flow — there is a real vault behind this overlay already,
     // with its own notes, so seeding the curated welcome notes on top would be
-    // litter.
-    if (!opts?.established) {
+    // litter. `welcomeNotes: false` is the Write step's toggle turned off — the
+    // same outcome by choice rather than by inference, and the note that flow
+    // wrote is what opens instead of a blank pane (see the tail of this
+    // function; `welcomeNotePath` is "what to land on", however it was chosen).
+    if (!opts?.established && opts?.welcomeNotes === false) {
+      welcomeNotePath = opts.writtenNotePath ?? null
+    } else if (!opts?.established) {
       try {
         welcomeNotePath = await seedWelcomeNotes(homeSpaceFolder)
         // seedWelcomeNotes writes a sidebar order (demo folder first, then
@@ -2072,28 +2232,40 @@ export default function App(): React.JSX.Element {
         flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
     })
 
-  const openMenu = (e: React.MouseEvent, node: TreeNode | null): void => {
+  const openMenu = (e: React.MouseEvent, node: TreeNode | null, targets?: string[]): void => {
     e.preventDefault()
     e.stopPropagation()
     const dir = node == null ? '' : node.type === 'dir' ? node.path : parentOf(node.path)
-    const items: MenuItem[] = [
-      { label: 'New note', onClick: () => void newNote(dir) },
-      { label: 'New folder', onClick: () => void newFolder(dir) }
-    ]
-    if (node) {
-      items.push({ label: 'Rename', onClick: () => void rename(node) })
-      // The row's hover swatch opens the same picker. Both, deliberately and to
-      // the same pattern "Move to bin" already follows: the hover button is the
-      // fast path once you know it's there, the menu is where you look when you
-      // don't. The menu has no anchor element to measure, so it points at the
-      // click — which is where you are looking anyway.
-      items.push({
-        label: 'Colour…',
-        onClick: () =>
-          pickColor([node.path], { left: e.clientX, top: e.clientY, bottom: e.clientY })
-      })
-      items.push({ label: 'Move to bin', danger: true, onClick: () => trash([node.path]) })
-    }
+    // "New note" / "New folder" are BACKGROUND actions and now appear only on
+    // the sidebar's empty space. Right-clicking a note and being offered to
+    // make a different one read as a mis-hit — the menu is about the thing you
+    // pointed at (tester feedback, 2026-09-05). Making one inside a folder is
+    // still on the folder row's own hover buttons, which is where it belongs.
+    const items: MenuItem[] = node
+      ? [
+          { label: 'Rename', onClick: () => void rename(node) },
+          // Since 2026-09-05 this is the ONLY way in besides the selection
+          // bar: the row's hover swatch is gone (see TreeView's
+          // ROW_ACTIONS). The menu has no anchor element to measure, so it
+          // points at the click — which is where you are looking anyway.
+          {
+            // `targets` when the row is part of a selection, so "select three,
+            // right-click one, colour them" still works now that the hover
+            // swatch (which had the same rule) is gone. Sidebar decides.
+            label: targets && targets.length > 1 ? `Colour ${targets.length} items…` : 'Colour…',
+            onClick: () =>
+              pickColor(targets ?? [node.path], {
+                left: e.clientX,
+                top: e.clientY,
+                bottom: e.clientY
+              })
+          },
+          { label: 'Move to bin', danger: true, onClick: () => trash([node.path]) }
+        ]
+      : [
+          { label: 'New note', onClick: () => void newNote(dir) },
+          { label: 'New folder', onClick: () => void newFolder(dir) }
+        ]
     setMenu({ x: e.clientX, y: e.clientY, items })
   }
 
@@ -2106,9 +2278,15 @@ export default function App(): React.JSX.Element {
   const menuHandler = useRef<(cmd: string) => void>(() => {})
   menuHandler.current = (cmd: string): void => {
     if (!vault || splashActive) return
+    // Nothing may move the note out from under a delete waiting to be
+    // confirmed — the same guard the tab keyboard below applies, and it has to
+    // be here too now that two layout commands arrive through the menu.
+    if (mediaConfirmRef.current) return
     if (cmd === 'new-note') void newNote('')
     else if (cmd === 'new-folder') void newFolder('')
     else if (cmd === 'import-notes') setSettingsJumpTo('import')
+    else if (cmd === 'toggle-sidebar') collapseSidebarRef.current?.()
+    else if (cmd === 'split-pane') applyLayout(splitBlank(layoutRef.current))
   }
   useEffect(() => window.api.onMenuCommand((cmd) => menuHandler.current(cmd)), [])
 
@@ -2118,6 +2296,10 @@ export default function App(): React.JSX.Element {
   // main/menu.ts moves "Close Window" to Shift+Cmd+W (VS Code's arrangement);
   // without that the macOS Window menu would eat the key and shut the window.
   // Capture phase, so a keystroke is decided here before CodeMirror sees it.
+  //
+  // Cmd/Ctrl+\ (split) and Cmd/Ctrl+S (sidebar) are NOT here: they are View
+  // menu items, which is what makes them findable, and a menu accelerator is
+  // consumed before this listener ever runs. See main/menu.ts.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       // Nothing may move the note out from under a delete that is waiting to be
@@ -2138,9 +2320,6 @@ export default function App(): React.JSX.Element {
         if (p == null) return // '' is a blank tab, and closing that is the point
         e.preventDefault()
         closeNote(p)
-      } else if (e.key === '\\') {
-        e.preventDefault()
-        applyLayout(splitBlank(layoutRef.current))
       } else if (!e.altKey && /^[1-9]$/.test(e.key)) {
         e.preventDefault()
         applyLayout(selectTab(layoutRef.current, Number(e.key) - 1))
@@ -2394,6 +2573,13 @@ export default function App(): React.JSX.Element {
     )
   }
 
+  /** '' when nothing is sliding. Shared by the sidebar's list and <main>, so
+   *  both halves of the space move as one surface rather than as two panels
+   *  that happen to animate at the same time. */
+  const spaceSlideClass = spaceSlide
+    ? `space-slide-${spaceSlide.phase}-${spaceSlide.dir > 0 ? 'next' : 'prev'}`
+    : ''
+
   return (
     <>
       {!hasOnboarded && (
@@ -2422,6 +2608,8 @@ export default function App(): React.JSX.Element {
       {vault && (
       <div className="flex h-full w-full">
       <Sidebar
+        collapseRef={collapseSidebarRef}
+        spaceSlideClass={spaceSlideClass}
         vaultName={baseName(vault)}
         vaultPath={vault}
         tree={spaceTree}
@@ -2475,7 +2663,7 @@ export default function App(): React.JSX.Element {
         }}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className={'flex min-w-0 flex-1 flex-col overflow-hidden ' + spaceSlideClass}>
         {/* The strip and the command row are ALWAYS on screen, empty or not.
             They're the app's fixed chrome: rows that appear when you open a
             second note would shove the text down mid-work, and the whole reason
@@ -2487,6 +2675,10 @@ export default function App(): React.JSX.Element {
           onSelect={(p) => void openNote(p)}
           onClose={closeNote}
           onReorder={(p, before) => applyLayout(moveTab(layoutRef.current, p, before))}
+          // A tab dropped on the MIDDLE of another tab. The strip only offers
+          // the gesture where the model can honour it, so this is never a
+          // silent no-op — see TabStrip's `canSplitOnto`.
+          onSplitWith={(target, dragged) => applyLayout(splitWith(layoutRef.current, target, dragged))}
           onDragTab={(path) => setDrag(path === null ? null : { kind: 'tab', path })}
           onNewTab={() => applyLayout(openTab(layoutRef.current, BLANK))}
           dragging={drag}
@@ -2600,6 +2792,10 @@ export default function App(): React.JSX.Element {
                   onSplit={() => applyLayout(splitBlank({ ...layoutRef.current, focus: i }))}
                   canSplit={canSplit}
                   onClosePane={() => applyLayout(closePane(layoutRef.current, i))}
+                  // Leftmost column has nothing to trade with; every other one
+                  // can walk left a step at a time. Same op the drag performs
+                  // when a column is dropped on its neighbour's middle.
+                  onSwapLeft={i > 0 ? () => applyLayout(swapPanes(layoutRef.current, i - 1, i)) : undefined}
                   dragging={drag}
                   onDragPane={() => setDrag({ kind: 'pane', path: p, from: i })}
                   onDragEnd={() => setDrag(null)}

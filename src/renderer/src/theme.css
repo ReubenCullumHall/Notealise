@@ -97,6 +97,16 @@
   --brand-500: 143 143 143;
   --brand-600: 216 216 216;
   --brand-700: 228 228 228;
+  /* The accent as a colour in its own right — see ACCENT_KEYS in
+     settings/model.ts. Seeded to the brand values so the 'Default' accent
+     renders exactly as it did before these existed; applyAccent overwrites
+     them inline the moment a real accent is picked, in BOTH accent modes.
+     Only a control whose on-state IS the accent should read these: the pill
+     switch and the tick box. Everything else stays on the brand ramp, which is
+     what 'Text only' vs 'Tinted' is still about. */
+  --accent-400: 92 92 92;
+  --accent-500: 143 143 143;
+  --accent-600: 216 216 216;
   --ink-900: 214 214 214;
   --ink-800: 202 202 202;
   --ink-700: 184 184 184;
@@ -129,6 +139,12 @@
   --hl-teal: hsl(178 44% 27%);   --tc-teal: hsl(178 60% 62%);
   --hl-sage: hsl(140 38% 27%);   --tc-sage: hsl(140 52% 64%);
   --hl-slate: hsl(218 20% 36%);  --tc-slate: hsl(218 26% 74%);
+  /* Added 2026-09-05 with the canonical palette (shared/palette.ts). Sized off
+     their nearest neighbours rather than a formula — lime sits between amber
+     and sage, indigo between sky and violet — so the row still steps evenly
+     when you look at all ten together. Hues match `PALETTE`'s. */
+  --hl-lime: hsl(96 40% 27%);    --tc-lime: hsl(96 52% 62%);
+  --hl-indigo: hsl(250 42% 40%); --tc-indigo: hsl(250 74% 80%);
 }
 
 /* ---- extra dark ----------------------------------------------------------
@@ -148,6 +164,7 @@
   --brand-200: 28 28 28;
   --brand-300: 58 58 58;
   --brand-400: 78 78 78;
+  --accent-400: 78 78 78;
   /* ink-300 carries every divider and border; a touch brighter than dark's,
      because there is no surface contrast left to help them read. */
   --ink-300: 108 108 108;
@@ -167,6 +184,9 @@
   --brand-400: 138 138 135;
   --brand-500: 106 106 104;
   --brand-600: 29 29 28;
+  --accent-400: 138 138 135;
+  --accent-500: 106 106 104;
+  --accent-600: 29 29 28;
   --brand-700: 15 15 15;
   --ink-900: 26 26 25;
   --ink-800: 44 44 43;
@@ -196,6 +216,8 @@
   --hl-teal: hsl(178 62% 80%);   --tc-teal: hsl(178 66% 32%);
   --hl-sage: hsl(140 55% 83%);   --tc-sage: hsl(140 46% 36%);
   --hl-slate: hsl(218 30% 87%);  --tc-slate: hsl(218 18% 44%);
+  --hl-lime: hsl(96 58% 82%);    --tc-lime: hsl(96 48% 33%);
+  --hl-indigo: hsl(250 74% 91%); --tc-indigo: hsl(250 54% 56%);
 }
 
 /* ---- text tone ------------------------------------------------------------

@@ -7,6 +7,42 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- One set of colours, everywhere. The colours you can put on text, on a highlight, on a note or
+  folder, on the accent, and under a page are now the same ten, in the same order, in a picker
+  that looks the same in every one of those places — the first-run intro included. There were
+  three unrelated sets before, so "violet" meant one colour as an accent and a different one on
+  text. Every picker also has **Any colour** behind it now: a saturation square, a hue slider and
+  a hex field, so you are never held to the ten. One thing worth knowing about the difference: a
+  preset colour adjusts itself to light and dark so your writing stays readable on both, while a
+  colour you type stays exactly the colour you typed
+- Hold **Shift** and scroll to slide between spaces. The space you are leaving pushes off and the
+  next one arrives from the other side, the way switching desktops does; the search bar, the space
+  buttons and the footer stay where they are. It gives way to anything that genuinely scrolls
+  sideways, so a wide table or a long code block still scrolls instead of changing space
+- Every switch and tick box takes your accent colour when it is on, and the theme's own grey when
+  it is off. They stayed grey before unless you had also set the accent to reach surfaces — which
+  is not the default, so for most people the accent never reached them at all
+- The colour bar over selected text waits for you to finish choosing. It no longer chases the
+  pointer across the words you are selecting: it appears when you let go, or when the selection
+  has stopped moving
+- Hovering a note or a folder no longer opens a little card over the row. The buttons sit on the
+  row itself, and the row's own text fades out beneath them rather than being covered up
+- Right-clicking a note or a folder now offers only what belongs to it — rename, colour, move to
+  bin. **New note** and **New folder** moved to where they mean something: the empty part of the
+  sidebar, and a folder row's own buttons. Colour is on that menu and on the selection bar, where
+  it colours everything you have picked at once
+- The word count moved to the left-hand end of the toolbar, away from the split-screen button, and
+  stays put however long the note's name is
+- The search bar's magnifier and the divider before the filters sit back into the panel instead of
+  reading as controls, and the three filters group together rather than spreading along the pill.
+  The border still lights up when you click in to type
+- An open folder with nothing in it says "This folder is currently empty". It only offers "Drop
+  items here" while you are actually holding something
+- **Start empty** is now **Start with nothing open**, and says outright that your notes are all
+  still in the sidebar. The old wording read as though the vault itself would be empty
+- The writing box in the first-run intro no longer shows a scrollbar before you have typed
+  anything, and the font step no longer cuts off its own heading when you open the colour field
+- The sidebar's edge no longer explains that you can drag it
 - A note's title now sits above the note, in the same column as the words, instead of away in the
   toolbar. It used to start further and further from your writing the wider you opened the window;
   now the title and the first line share an edge. Click it to rename, exactly as before
@@ -25,6 +61,11 @@ enough for a solo project). History before this file existed lives in the `v*` g
   note onto the bin or the archive still works exactly as before
 - A note with no links says just "No links yet", with no rule under it, instead of a full-width
   line of instructions above every unlinked note. The hint about typing `[[` is on the tooltip
+- Fixed on Windows: importing from Notion, Markdown or HTML offered a folder picker only, so a
+  `.zip` could not be chosen at all — typing its path in answered "The folder name is not valid",
+  under a dialog headed "Choose your Notion export (.zip or an already-unzipped folder)". Windows
+  cannot show one dialog that takes either, so those three formats now offer two buttons — choose a
+  file, or choose a folder. It had been that way in every Windows build
 - Pictures in a note now only come from your own vault. A note that points at a picture on the
   web, or at a file elsewhere on your computer, shows the same placeholder as one whose file has
   gone. This closes something worth naming plainly: a note someone else wrote could quietly tell

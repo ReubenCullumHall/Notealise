@@ -109,7 +109,7 @@ export function Select({
         className={
           'flex items-center gap-1.5 rounded-lg border border-ink-300/30 font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
           (size === 'lg' ? 'px-3 py-2 text-[13px] ' : 'px-2.5 py-1.5 text-[12.5px] ') +
-          (open ? 'bg-brand-500/12 text-brand-600' : 'btn-edge bg-surface/70 text-ink-700 hover:text-brand-600')
+          (open ? 'bg-brand-500/12 text-brand-600' : 'btn-edge bg-surface/70 text-ink-700 hover:text-ink-900')
         }
       >
         <span className={(size === 'lg' ? 'max-w-[200px]' : 'max-w-[150px]') + ' truncate'}>
@@ -134,7 +134,7 @@ export function Select({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search…"
-              className="mb-1 w-full rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-[12px] text-ink-900 outline-none placeholder:text-ink-400"
+              className="mb-1 w-full rounded-lg bg-ink-300/8 px-2.5 py-1.5 text-[12px] text-ink-900 outline-none placeholder:text-ink-400"
             />
           )}
           <div className="max-h-64 overflow-y-auto">
@@ -149,7 +149,7 @@ export function Select({
                 className={
                   'flex w-full items-start gap-2 rounded-lg text-left transition duration-150 ' +
                   (size === 'lg' ? 'px-3 py-2.5 ' : 'px-2.5 py-1.5 ') +
-                  (o.id === value ? 'bg-brand-500/12' : 'hover:bg-brand-500/8')
+                  (o.id === value ? 'bg-brand-500/12' : 'hover:bg-ink-300/12')
                 }
               >
                 <span className="min-w-0 flex-1">
@@ -181,12 +181,18 @@ export function Select({
 }
 
 /** Knob is bg-surface so it contrasts with the track in both themes: dark knob
- *  on a grey track in dark mode, white knob on grey in light. */
+ *  on a grey track in dark mode, white knob on grey in light.
+ *
+ *  The ON track is `accent-500`, not `brand-500`. They are the same colour
+ *  until an accent is picked, and then they part company: `accentMode: 'text'`
+ *  (the default) leaves the brand ramp alone, so a brand-painted switch stayed
+ *  grey in the mode almost everyone is in. See ACCENT_KEYS in settings/model.ts.
+ *  The OFF track stays on the ink ramp — the theme's own colour, faded. */
 export function Switch({ on }: { on: boolean }): React.JSX.Element {
   return (
     <span
       className={
-        'relative h-5 w-9 shrink-0 rounded-full transition duration-200 ' + (on ? 'bg-brand-500' : 'bg-ink-300/40')
+        'relative h-5 w-9 shrink-0 rounded-full transition duration-200 ' + (on ? 'bg-accent-500' : 'bg-ink-300/40')
       }
     >
       <span
@@ -215,8 +221,8 @@ export function ToggleRow({
       onClick={onClick}
       aria-pressed={on}
       className={
-        'flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-        (on ? 'bg-brand-500/12 ring-1 ring-brand-300/60' : 'btn-edge ring-1 ring-ink-300/20 hover:bg-brand-500/8')
+        'press-row flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+        (on ? 'bg-brand-500/12 ring-1 ring-brand-300/60' : 'btn-edge ring-1 ring-ink-300/20 hover:bg-ink-300/12')
       }
     >
       <span className="min-w-0 flex-1">

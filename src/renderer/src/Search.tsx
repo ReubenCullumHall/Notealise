@@ -49,8 +49,8 @@ function SearchToggle({
       className={
         'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-none p-0 outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
         (on
-          ? 'bg-brand-500/15 text-brand-600 hover:bg-brand-500/15'
-          : 'bg-transparent text-ink-400 hover:bg-brand-500/10 hover:text-brand-600')
+          ? 'bg-brand-500/12 text-brand-600 hover:bg-brand-500/12'
+          : 'bg-transparent text-ink-400 hover:bg-ink-300/15 hover:text-ink-900')
       }
     >
       {children}
@@ -74,7 +74,13 @@ export function SearchBar({
   return (
     <div className="px-3 pb-2">
       <div className="btn-edge flex items-center gap-1.5 rounded-full border border-ink-300/30 bg-surface/70 py-1.5 pl-3 pr-1.5 focus-within:border-brand-300 focus-within:ring-4 focus-within:ring-brand-100">
-        <span className="shrink-0 text-ink-300">
+        {/* Quieter than the ink ramp's own floor: at full --ink-300 the glyph
+            and the divider read as controls you were meant to do something
+            with. They are furniture, so they sit back into the pill and let
+            the placeholder and the filters carry the row. The focus ring on
+            the pill itself is untouched — that is the one signal here that
+            IS meant to be seen (tester feedback, 2026-09-05). */}
+        <span className="shrink-0 text-ink-300/55">
           <Icon name="search" className="h-4 w-4" />
         </span>
         <input
@@ -86,7 +92,7 @@ export function SearchBar({
         />
         {query && (
           <button
-            className="shrink-0 rounded-full border-none bg-transparent p-1 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
+            className="shrink-0 rounded-full border-none bg-transparent p-1 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
             data-tip="Clear"
             aria-label="Clear search"
             onClick={() => onQuery('')}
@@ -94,28 +100,35 @@ export function SearchBar({
             <Icon name="x" className="h-4 w-4" />
           </button>
         )}
-        <span className="h-4 w-px shrink-0 bg-ink-300/25" />
-        <SearchToggle
-          on={deep}
-          onClick={onToggleDeep}
-          title={deep ? 'Searching titles and note contents' : 'Searching titles only'}
-        >
-          <Icon name="text" className="h-4 w-4" />
-        </SearchToggle>
-        <SearchToggle
-          on={withArchived}
-          onClick={onToggleWithArchived}
-          title={withArchived ? 'Including archived notes' : 'Archived notes hidden'}
-        >
-          <Icon name="archive" className="h-4 w-4" />
-        </SearchToggle>
-        <SearchToggle
-          on={allSpaces}
-          onClick={onToggleAllSpaces}
-          title={allSpaces ? 'Searching every space' : 'Searching this space only'}
-        >
-          <Icon name="spaces" className="h-4 w-4" />
-        </SearchToggle>
+        <span className="h-4 w-px shrink-0 bg-ink-300/15" />
+        {/* The three filters are one group, so they sit tighter to each other
+            than to the divider and the input: the row's own `gap-1.5` still
+            separates the group from everything left of it, and `gap-0.5`
+            closes the space INSIDE it. They were reading as three unrelated
+            buttons spread along the pill. */}
+        <div className="flex shrink-0 items-center gap-0.5">
+          <SearchToggle
+            on={deep}
+            onClick={onToggleDeep}
+            title={deep ? 'Searching titles and note contents' : 'Searching titles only'}
+          >
+            <Icon name="text" className="h-4 w-4" />
+          </SearchToggle>
+          <SearchToggle
+            on={withArchived}
+            onClick={onToggleWithArchived}
+            title={withArchived ? 'Including archived notes' : 'Archived notes hidden'}
+          >
+            <Icon name="archive" className="h-4 w-4" />
+          </SearchToggle>
+          <SearchToggle
+            on={allSpaces}
+            onClick={onToggleAllSpaces}
+            title={allSpaces ? 'Searching every space' : 'Searching this space only'}
+          >
+            <Icon name="spaces" className="h-4 w-4" />
+          </SearchToggle>
+        </div>
       </div>
     </div>
   )

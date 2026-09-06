@@ -1,5 +1,7 @@
 import { useState } from 'react'
-import { PALETTE, type Layer } from './palette'
+import { ColorField } from '../color/Picker'
+import { Icon } from '../icons'
+import { getLastLayer, PALETTE, setLastLayer, type Layer } from './palette'
 
 interface Props {
   left: number
@@ -13,8 +15,21 @@ interface Props {
 // prevented across the whole bar so clicking a swatch never blurs the editor or
 // collapses the selection the command needs to act on.
 export function SelectionToolbar({ left, top, onPick, onClear }: Props): React.JSX.Element {
-  const [layer, setLayer] = useState<Layer>('hl')
+  // Seeded from the last layer used anywhere, not from a fixed default — see
+  // `lastLayer` in palette.ts for why this component cannot hold it itself.
+  const [layer, setLayerState] = useState<Layer>(getLastLayer())
+  const setLayer = (l: Layer): void => {
+    setLayerState(l)
+    setLastLayer(l)
+  }
   const swatchPrefix = layer === 'hl' ? 'hl-' : 'tc-'
+  // The custom colour is per-toolbar state and deliberately not remembered
+  // across selections: unlike the LAYER (see palette.ts's `lastLayer`), a
+  // one-off colour is a decision about this phrase, and a bar that reopened
+  // holding the last arbitrary colour someone tried would be offering it as a
+  // default it never earned.
+  const [open, setOpen] = useState(false)
+  const [hex, setHex] = useState('#e07b5c')
   return (
     <div className="sel-toolbar" style={{ left, top }} onMouseDown={(e) => e.preventDefault()}>
       <div className="sel-mode">
@@ -43,10 +58,35 @@ export function SelectionToolbar({ left, top, onPick, onClear }: Props): React.J
             onClick={() => onPick(layer, c.name)}
           />
         ))}
+        {/* "Any colour", the same custom path the sidebar's picker and the
+            accent and tint pickers offer (Reuben, 2026-09-05 — the pickers were
+            to be universal). It stays COLLAPSED by default: the ten presets are
+            the fast path over a selection, and a saturation square unfurling
+            over the words you have just selected would be in the way of the one
+            thing you can see. The trigger wears the current custom colour, so
+            reaching for the same one twice is one click the second time. */}
+        <button
+          className={'swatch swatch-custom' + (open ? ' is-on' : '')}
+          style={{ background: hex }}
+          aria-expanded={open}
+          data-tip="Any colour"
+          onClick={() => setOpen((o) => !o)}
+        >
+          <Icon name="plus" className="h-3 w-3" />
+        </button>
       </div>
       <button className="sel-clear" data-tip="Remove colour" onClick={onClear}>
         ✕
       </button>
+
+      {open && (
+        <div className="sel-custom">
+          <ColorField value={hex} onChange={setHex} />
+          <button className="mini mt-2 w-full" onClick={() => onPick(layer, hex)}>
+            Apply to {layer === 'hl' ? 'highlight' : 'text'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

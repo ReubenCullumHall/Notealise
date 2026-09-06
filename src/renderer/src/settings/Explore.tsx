@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon, type IconName } from '../icons'
-import { ColorField } from '../color/Picker'
+import { PalettePicker } from '../color/Picker'
+import { PALETTE } from '../../../shared/palette'
 import { useDragTrack } from '../color/dragTrack'
 import { LookTile } from './LookTile'
 import { RequestForm } from './RequestForm'
@@ -264,7 +265,25 @@ function Tints({ settings, onChange }: LookProps): React.JSX.Element {
 
         <div className="mt-1 flex flex-wrap items-start gap-4">
           <div className="w-[236px] shrink-0">
-            <ColorField value={hex} onChange={setHex} />
+            {/* Presets, then the hex square — the same shape every colour
+                control in the app takes since 2026-09-05. This was the one
+                picker with NO presets at all: it opened on a saturation square
+                and a hex field, so making a tint that matched a colour already
+                used elsewhere in the app meant knowing its hex by heart.
+                A tint is a wash under text, so the palette's mid-tones are
+                loud for the job — but they are the right STARTING points, and
+                the strength slider below is what takes them down. */}
+            <PalettePicker
+              heading="Palette"
+              swatches={PALETTE.map((c) => ({
+                key: c.hex,
+                label: c.label,
+                css: c.hex,
+                on: hex.toLowerCase() === c.hex
+              }))}
+              onPick={setHex}
+              custom={{ hex, onChange: setHex }}
+            />
 
             <label className="mt-3 block text-[11.5px] font-medium text-ink-700" htmlFor="tint-strength">
               Strength — {opacity}%

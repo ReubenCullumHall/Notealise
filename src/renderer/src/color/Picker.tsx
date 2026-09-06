@@ -22,6 +22,11 @@ import { useDragTrack } from './dragTrack'
 // square's two axes ARE saturation and value. The conversion is in
 // shared/color.ts with its round-trip pinned by a test.
 
+/** The small caps heading over each block. One constant so every picker's
+ *  headings are literally the same string of utilities, not four that happen to
+ *  agree today. */
+const HEAD = 'pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400'
+
 /**
  * The picker holds HSV; the outside world holds hex. Keeping the HSV is not an
  * optimisation, it is the only way the control behaves:
@@ -164,14 +169,22 @@ export function ColorField({
               setTyped(null)
             }
           }}
-          className="w-full rounded-lg bg-brand-500/8 px-2.5 py-1.5 font-mono text-[12px] lowercase text-ink-900 outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+          className="w-full rounded-lg bg-ink-300/8 px-2.5 py-1.5 font-mono text-[12px] lowercase text-ink-900 outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
         />
       </label>
     </div>
   )
 }
 
-/** One palette colour as a clickable swatch. `on` marks the current one. */
+/** One palette colour as a clickable swatch. `on` marks the current one.
+ *
+ *  `hex` is any CSS colour: a literal `#rrggbb` (a sidebar row, a tint, an
+ *  accent), or a custom property like `var(--tc-sage)` (text colour and
+ *  highlight, which have separate light and dark values and so cannot be a
+ *  hex — see shared/palette.ts). The tick inside is drawn only for a literal
+ *  hex, because `inkOn` needs actual channels to decide black or white on it;
+ *  a token swatch is marked by the ring alone, which is the louder of the two
+ *  signals anyway. */
 export function Swatch({
   hex,
   on,
@@ -183,6 +196,7 @@ export function Swatch({
   label: string
   onClick: () => void
 }): React.JSX.Element {
+  const literal = hex.startsWith('#')
   return (
     <button
       onClick={onClick}
@@ -196,16 +210,124 @@ export function Swatch({
         // the 10% jump was the loudest of the app's bounce-y hovers.
         (on
           ? 'ring-2 ring-brand-500 ring-offset-1 ring-offset-surface'
-          : 'ring-1 ring-ink-300/30 hover:ring-brand-300')
+          : 'ring-1 ring-ink-300/30 hover:ring-ink-300/60')
       }
-      style={{ background: `rgb(${rgbChannels(hex)})` }}
+      style={{ background: literal ? `rgb(${rgbChannels(hex)})` : hex }}
     >
-      {on && (
+      {on && literal && (
         <span className={inkOn(hex) === 'dark' ? 'text-black' : 'text-white'}>
           <Icon name="check" className="mx-auto h-3.5 w-3.5" />
         </span>
       )}
     </button>
+  )
+}
+
+/** One preset in `PalettePicker`. `css` is any CSS colour string, so a surface
+ *  can hand over `var(--tc-sage)` (theme-aware, what a highlight paints) or a
+ *  literal `#hex` (what a row or a tint paints) without this knowing which. */
+export interface PickerSwatch {
+  /** what `onPick` receives — a palette NAME, a hex, whatever the surface stores */
+  key: string
+  label: string
+  css: string
+  on: boolean
+}
+
+/**
+ * THE colour control. Presets, then "Any colour" behind a disclosure.
+ *
+ * Reuben, 2026-09-05: "make sure the colour picker is universal — has the same
+ * preset colours and a custom hex colour interface if you want, in onboarding,
+ * on text select and in accent colours and tints". Before this there were four
+ * different controls: a hex square here, eight token swatches in the selection
+ * toolbar, eleven bare dots for the accent, and a hex square with no presets at
+ * all in the tint maker.
+ *
+ * It takes rendered swatches rather than the palette itself, because the four
+ * callers genuinely do store different things — a name (`sage`, written into a
+ * note), an accent id, a raw hex — and a component that tried to own all three
+ * would need a mode flag per caller, which is the same four controls again with
+ * extra steps. What is shared is the PRESENTATION and the custom-colour path,
+ * and those are the two things that were different everywhere.
+ *
+ * The disclosure starts open when the current value is not one of the presets:
+ * that means a custom colour is already in force, and hiding the field that set
+ * it would leave no way to see what it is.
+ */
+export function PalettePicker({
+  swatches,
+  onPick,
+  custom,
+  heading = 'Presets',
+  footer
+}: {
+  swatches: PickerSwatch[]
+  onPick: (key: string) => void
+  /** omit to offer presets only */
+  custom?: {
+    hex: string
+    onChange: (hex: string) => void
+    /** one line under the field — e.g. what the app does with the colour */
+    note?: string
+  }
+  heading?: string
+  footer?: React.ReactNode
+}): React.JSX.Element {
+  const anyOn = swatches.some((s) => s.on)
+  const [open, setOpen] = useState(!anyOn && !!custom)
+
+  return (
+    <div>
+      <p className={HEAD}>{heading}</p>
+      {/* Five columns, matching the format bar's colour menu — the canonical
+          palette is ten, and a wrapping row broke 8 + 2 at every width these
+          pickers are used at. A space's own palette can be any length up to
+          PALETTE_MAX (12), and the grid handles that without a second rule. */}
+      <div className="grid grid-cols-5 gap-1.5">
+        {swatches.map((s) => (
+          <Swatch key={s.key} hex={s.css} on={s.on} label={s.label} onClick={() => onPick(s.key)} />
+        ))}
+      </div>
+
+      {custom && (
+        <>
+          <button
+            type="button"
+            aria-expanded={open}
+            onClick={() => setOpen((o) => !o)}
+            className={
+              'mt-2.5 flex w-full items-center gap-1.5 rounded-lg border-none bg-transparent px-1 py-1 text-left outline-none transition-colors hover:bg-transparent focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+              (open ? 'text-brand-600' : 'text-ink-400 hover:text-ink-900')
+            }
+          >
+            <span className={'inline-flex transition-transform duration-150 ' + (open ? 'rotate-90' : '')}>
+              <Icon name="chevron" className="h-3 w-3" />
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em]">Any colour</span>
+            {/* The current custom colour, shown on the closed row — otherwise a
+                collapsed disclosure gives no clue that one is set. */}
+            {!anyOn && (
+              <span
+                aria-hidden="true"
+                className="ml-auto h-3.5 w-3.5 shrink-0 rounded-full ring-1 ring-ink-300/40"
+                style={{ background: custom.hex }}
+              />
+            )}
+          </button>
+          {open && (
+            <div className="pt-1">
+              <ColorField value={custom.hex} onChange={custom.onChange} />
+              {custom.note && (
+                <p className="mt-2 text-[11px] leading-relaxed text-ink-400">{custom.note}</p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {footer}
+    </div>
   )
 }
 
@@ -299,36 +421,23 @@ export function ColorPopover({
       }}
       className="fade-in z-[80] rounded-xl border border-ink-300/30 bg-surface p-2.5 shadow-float"
     >
-      {palette.length > 0 && (
-        <>
-          <p className="pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400">
-            Your palette
-          </p>
-          <div className="flex flex-wrap gap-1.5 pb-2.5">
-            {palette.map((hex) => (
-              <Swatch
-                key={hex}
-                hex={hex}
-                on={value === hex}
-                label={hex}
-                onClick={() => {
-                  setDraft(hex)
-                  onPick(hex)
-                }}
-              />
-            ))}
-          </div>
-        </>
-      )}
-
-      <p className="pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400">
-        Any colour
-      </p>
-      <ColorField
-        value={draft}
-        onChange={(hex) => {
+      {/* The same control as the text picker, the accent picker and the tint
+          maker (2026-09-05) — the only difference is that the presets here are
+          the SPACE's palette, which is itself seeded from the canonical one and
+          which you can add to. */}
+      <PalettePicker
+        heading="Your palette"
+        swatches={palette.map((hex) => ({ key: hex, label: hex, css: hex, on: value === hex }))}
+        onPick={(hex) => {
           setDraft(hex)
           onPick(hex)
+        }}
+        custom={{
+          hex: draft,
+          onChange: (hex) => {
+            setDraft(hex)
+            onPick(hex)
+          }
         }}
       />
 

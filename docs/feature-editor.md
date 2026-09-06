@@ -560,3 +560,85 @@ just gone. The padding is what buys room for the chrome, and the top had 10px wh
 `positionChrome` puts the column handle at `cellTop - 18px`. Exactly 8px of every column grip was
 sliced off. Any future control that overhangs an edge has to be measured against those four
 padding numbers.
+
+
+## Colour, concealed — and Markdown pro (2026-08-29)
+
+Three bugs and two features, all from one session with Reuben, all verified in the live app except
+where noted.
+
+**The format bar's dropdowns opened behind the note.** The `?` slot picker and the colour menu
+were absolutely-positioned children of the command row; `document.elementFromPoint` on the first
+command in the picker returned `div.cm-content`, so every click landed in CodeMirror. Cause is
+paint order, not z-index: the command row (`ROW_CLASS`) is `position: static`, its later sibling
+`.pane-body` is `position: relative`, and a positioned element paints over a static one — while
+the row's `backdrop-filter` and `translate-y-0` transform make it a stacking context that traps
+its descendants' `z-index` inside it. Proven by isolating it: `transform: none` and
+`backdrop-filter: none` on the row changed nothing; `position: relative; z-index: 50` on the row,
+or `z-index: -1` on `.pane-body`, each fixed it. Fix is `editor/AnchoredPopover.tsx` — one
+portalled, fixed-position, viewport-clamped popover shared by both, which also clears the second
+version of this in a split column, where the toolbar itself is `overflow-x-auto` and would clip a
+child panel whatever paints where. It carries its own `onMouseDown` preventDefault, because out in
+a portal it is no longer inside the toolbar's guard and every colour swatch would apply to a
+collapsed selection. Centred under the trigger rather than edge-aligned (Reuben's call — a 268px
+panel hanging off one side of a 28px icon button reads as belonging to whatever it covers).
+
+**Colour tags are never revealed now.** `colorPass` used to un-hide `<mark class="hl-…">` whenever
+the selection overlapped the pair, which is the ordinary live-preview behaviour and was wrong
+here: that HTML is a storage format, not markdown anyone hand-edits, and Reuben's verdict was that
+it "looks so janky". The reveal is gone; **Markdown pro remains the one way to see the source**.
+That made three follow-ons necessary, all in `colorCommands.ts` and all off in raw view:
+
+- `mendColorPairs` — a `transactionFilter` that keeps a pair whole across an edit. A selection
+  swallowing one tag but not the other left an unmatched tag, which can never be paired and so is
+  never concealed: raw HTML in the middle of the note. It was easy to hit by accident (select a
+  highlighted word *plus the trailing space*), and including the space in FRONT was fine, which is
+  exactly the asymmetry that gives it away. Only pairs whole in `startState` are touched, so a
+  stray tag the file already had stays visible — Reuben's call: that is broken markup, and showing
+  it is the only way anyone learns to fix it.
+- Backspace/Delete at a tag edge removes BOTH tags rather than eating one atomically.
+- A surviving fragment keeps its colour (the pair is re-closed around it) rather than going plain.
+
+**Highlights sized to the body text, not the heading.** See `docs/decorations.md` — the colour
+mark was nesting OUTSIDE the highlighter's heading span, so its background box took its height
+from 16px metrics around 27.2px glyphs. Fixed by giving only the colour marks `Prec.highest`.
+Verified across 162 characters × 12 contexts (H1–H6, body, bold, italic, list, quote, inline code).
+
+**Markdown pro gained a look of its own.** `rawMarkStyle` ('faded' | 'colour') plus `rawMarkTint`
+(an `hl-`/`tc-` palette token) on `Space`. Faded greys the revealed marks so the eye runs past
+them; coloured gives them monospace plus one of the same eight palette colours, in either of the
+same two layers, as colouring a phrase in a note. The first attempt used a neutral grey wash and
+Reuben could not pick it out on either theme, which is why the colour is a real palette choice.
+The colour NAMES moved to `shared/palette.ts` for this — they are a storage format (they end up in
+the file) and main has to validate a setting that names one; `editor/palette.ts` re-exports, so
+there is still one list. The eye button hides itself in raw view, where the markdown behind a
+photo is already on screen.
+
+**The word count was counting markdown.** `shared/plainText.ts` is now the single definition of
+"what counts as text", used by the renderer's count and by main's sidebar preview line (which had
+its own copy of the strip list). A word must carry a letter or digit — stripping a tag leaves a
+space behind, and that space strands the punctuation after it, so `now</span>,` was scoring the
+comma as a word.
+
+**The editor theme's `40vh` scroller padding makes any SMALL CodeMirror box permanently
+scrollable.** `editorTheme` in `editor/highlight.ts` sets `.cm-scroller { padding: 24px 0 40vh }` —
+room to scroll past the end of a real note in a full-height pane. That is right for the note and
+wrong for every other place an editor is embedded: in the intro's 190px demo box (`onboarding/
+steps/WriteStep.tsx`) 40vh of a 900px window is ~360px of guaranteed overflow, so the box had a
+scrollbar down it **before a single character was typed** — reported by a tester, and measured at
+`clientHeight 190 / scrollHeight 422` on an empty document (2026-09-05).
+
+Two things had to change and both were needed. **The padding** is undone by
+`.onb-write-box .cm-editor .cm-scroller { padding-top: 0; padding-bottom: 0 }` — three selectors
+deep on purpose, because CodeMirror injects its theme through StyleModule as
+`.ͼ1 .cm-scroller { … }`, specificity (0,2,0), at a position in `<head>` this stylesheet does not
+control; a two-class rule ties and is decided by source order, which is exactly the rule that looks
+right and silently loses. **The height chain** needed the wrapper to become a flex column:
+`.cm-host { flex: 1; min-height: 0 }` → `.cm-mount { height: 100% }` → `.cm-editor { height: 100% }`
+each need a flex parent with a definite height to resolve against, and the box was neither, so the
+editor sized itself far taller than the box regardless of padding.
+
+**If you embed the editor anywhere that is not a full-height pane, check both.** The measurement to
+take is `.cm-scroller`'s `scrollHeight` against its `clientHeight` on an EMPTY document — they
+should be equal. Verified afterwards at 166/166 empty (no bar) and 166/381 with ten lines typed
+(scrolls, bar revealed only near the edge by `scrollbarReveal`).

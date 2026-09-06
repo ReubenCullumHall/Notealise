@@ -10,6 +10,13 @@ import { recolor } from './colorModel'
 
 const M = (name: string, inner: string): string => `<mark class="hl-${name}">${inner}</mark>`
 const S = (name: string, inner: string): string => `<span class="tc-${name}">${inner}</span>`
+/** The custom-colour form, added 2026-09-05 when the picker gained "any
+ *  colour". A hex is the same colour on every theme; a NAME resolves through
+ *  `--hl-NAME` / `--tc-NAME`, which differ per theme. */
+const MH = (hex: string, inner: string): string =>
+  `<mark style="background-color: ${hex}">${inner}</mark>`
+const SH = (hex: string, inner: string): string =>
+  `<span style="color: ${hex}">${inner}</span>`
 
 /** Apply a RegionChange to the document, the way colorCommands dispatches it. */
 function applyTo(text: string, from: number, to: number, name: string | null, tag: 'mark' | 'span' = 'mark'): string {
@@ -85,5 +92,76 @@ describe('recolor', () => {
     const doc = '<mark class="hl-chartreuse">hello</mark>'
     // not a known name, so it is not parsed as a span and the text is wrapped as-is
     expect(applyTo(doc, ...sel(doc, 'hello'), 'amber')).toContain(M('amber', 'hello'))
+  })
+})
+
+// --- custom colours -------------------------------------------------------
+// The hex form has to be a first-class citizen of the same model, not a second
+// path bolted beside it: the region-growing, the toggle-off, the split and the
+// merge all have to treat "this run is #ff0000" exactly as they treat "this run
+// is amber", or selecting across one of each and recolouring produces a
+// document that no longer parses back to what is on screen.
+describe('recolor with a custom hex', () => {
+  it('wraps an uncoloured selection in the style form', () => {
+    const doc = 'hello world'
+    expect(applyTo(doc, ...sel(doc, 'hello'), '#ff0000')).toBe(MH('#ff0000', 'hello') + ' world')
+  })
+
+  it('uses color: for text and background-color: for highlight', () => {
+    const doc = 'hello world'
+    expect(applyTo(doc, ...sel(doc, 'hello'), '#00ff00', 'span')).toBe(
+      SH('#00ff00', 'hello') + ' world'
+    )
+  })
+
+  it('toggles off when the selection is already that hex', () => {
+    const doc = MH('#ff0000', 'hello') + ' world'
+    expect(applyTo(doc, ...sel(doc, 'hello'), '#ff0000')).toBe('hello world')
+  })
+
+  it('replaces a named colour with a hex, without nesting', () => {
+    const doc = M('amber', 'hello') + ' world'
+    expect(applyTo(doc, ...sel(doc, 'hello'), '#ff0000')).toBe(MH('#ff0000', 'hello') + ' world')
+  })
+
+  it('replaces a hex with a named colour, without nesting', () => {
+    const doc = MH('#ff0000', 'hello') + ' world'
+    expect(applyTo(doc, ...sel(doc, 'hello'), 'amber')).toBe(M('amber', 'hello') + ' world')
+  })
+
+  it('does not merge two different hexes into one run', () => {
+    const doc = MH('#ff0000', 'aa') + MH('#00ff00', 'bb')
+    // Recolouring only the first pair leaves the second alone.
+    expect(applyTo(doc, ...sel(doc, 'aa'), '#0000ff')).toBe(
+      MH('#0000ff', 'aa') + MH('#00ff00', 'bb')
+    )
+  })
+
+  it('merges neighbours that are the same hex', () => {
+    const doc = MH('#ff0000', 'aa') + 'bb'
+    expect(applyTo(doc, ...sel(doc, 'bb'), '#ff0000')).toBe(MH('#ff0000', 'aabb'))
+  })
+
+  it('splits a hex span the selection only partly covers', () => {
+    const doc = MH('#ff0000', 'abcd')
+    const out = applyTo(doc, ...sel(doc, 'bc'), '#00ff00')
+    expect(out).toBe(MH('#ff0000', 'a') + MH('#00ff00', 'bc') + MH('#ff0000', 'd'))
+  })
+
+  it('clears a hex span like any other', () => {
+    const doc = MH('#ff0000', 'hello') + ' world'
+    expect(applyTo(doc, ...sel(doc, 'hello'), null)).toBe('hello world')
+  })
+
+  it('treats a hex and a name as different colours when merging', () => {
+    const doc = M('amber', 'aa') + MH('#ff0000', 'bb')
+    // Nothing to change: the two runs stay two runs.
+    expect(applyTo(doc, ...sel(doc, 'aa'), 'amber')).toBe('aa' + MH('#ff0000', 'bb'))
+  })
+
+  it('is case-insensitive about a hex already in the document', () => {
+    const doc = '<mark style="background-color: #FF0000">hello</mark> world'
+    // Same colour in a different case must toggle OFF, not wrap again.
+    expect(applyTo(doc, ...sel(doc, 'hello'), '#ff0000')).toBe('hello world')
   })
 })

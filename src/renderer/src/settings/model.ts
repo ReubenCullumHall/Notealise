@@ -3,9 +3,9 @@
 // place that touches the DOM (applying settings as data-* attributes and inline
 // accent variables on <html>); persistence goes through IPC (window.api).
 
-import { rgbChannels } from '../../../shared/color'
+import { hexToHsv, normalizeHex, rgbChannels } from '../../../shared/color'
 import { findPageLook, parseTint } from '../../../shared/looks'
-import { splitToken } from '../../../shared/palette'
+import { PALETTE, paletteEntry, splitToken } from '../../../shared/palette'
 import { activeSpace, type AppSettings, type ResolvedThemeId, type Space } from '../../../shared/settings'
 import { findFont, fontCssValue, type FontFallback } from './fonts'
 import { ensureInstalledFontsLoaded, findInstalledFont } from './fontLoader'
@@ -86,7 +86,14 @@ export const LINKS_POSITIONS: { id: Space['linksPosition']; label: string; hint:
 ]
 
 export const STARTUPS: { id: AppSettings['startup']; label: string; hint: string }[] = [
-  { id: 'empty', label: 'Start empty', hint: 'Open on the blank screen and pick a note.' },
+  // "Start empty" read as "your vault will be empty" rather than "no note will
+  // be open" (tester feedback, 2026-09-05). The label now names the SCREEN, and
+  // the hint says outright that the notes are still there.
+  {
+    id: 'empty',
+    label: 'Start with nothing open',
+    hint: 'Opens on the blank screen — your notes are all still in the sidebar.'
+  },
   {
     id: 'last',
     label: 'Reopen your tabs',
@@ -94,19 +101,71 @@ export const STARTUPS: { id: AppSettings['startup']; label: string; hint: string
   }
 ]
 
-export const ACCENTS: { id: string; label: string; hue: number | null }[] = [
-  { id: 'default', label: 'Default', hue: null },
-  { id: 'red', label: 'Red', hue: 6 },
-  { id: 'orange', label: 'Orange', hue: 26 },
-  { id: 'amber', label: 'Amber', hue: 45 },
-  { id: 'lime', label: 'Lime', hue: 96 },
-  { id: 'green', label: 'Green', hue: 150 },
-  { id: 'teal', label: 'Teal', hue: 182 },
-  { id: 'blue', label: 'Blue', hue: 214 },
-  { id: 'indigo', label: 'Indigo', hue: 250 },
-  { id: 'violet', label: 'Violet', hue: 278 },
-  { id: 'pink', label: 'Pink', hue: 328 }
+/**
+ * The accent presets — the canonical palette (shared/palette.ts) plus "no
+ * accent", so the accent picker offers exactly the colours the text picker, the
+ * sidebar picker and the tint maker do (Reuben, 2026-09-05).
+ *
+ * It used to be its OWN eleven hues, none of which lined up with either of the
+ * other two sets, so "violet" was one colour as an accent, a slightly different
+ * one as a text colour, and absent entirely from the sidebar's palette.
+ *
+ * `hue` is what the ramps are built from; `hex` is what the swatch is painted
+ * with. They are not the same number dressed up — the swatch is a single
+ * mid-tone and the ramp is nine stops derived per theme, so showing the ramp's
+ * own mid would misrepresent what picking it does on a light theme.
+ */
+export const ACCENTS: { id: string; label: string; hue: number | null; hex: string | null }[] = [
+  { id: 'default', label: 'Default', hue: null, hex: null },
+  ...PALETTE.map((c) => ({ id: c.name, label: c.label, hue: c.hue, hex: c.hex }))
 ]
+
+/**
+ * Accent ids that no longer exist, mapped to the nearest one that does.
+ *
+ * NOT a migration: nothing rewrites settings.json. An `accent: 'blue'` written
+ * by an older build is resolved here, every time, forever — which costs a map
+ * lookup and means a downgrade to an older build still finds a value it
+ * understands. A migration would have had to run before the first paint of the
+ * first space, and would have been one more thing that can half-happen.
+ *
+ * The five absent ones are matched by hue, not by name: `blue` was 214 and
+ * `sky` is 205, `pink` was 328 and `rose` is 342. The other five old ids
+ * (amber, lime, teal, indigo, violet) are names the palette still has, so they
+ * resolve directly and are deliberately not listed.
+ */
+const LEGACY_ACCENTS: Record<string, string> = {
+  red: 'coral',
+  orange: 'amber',
+  green: 'sage',
+  blue: 'sky',
+  pink: 'rose'
+}
+
+/**
+ * An accent value → the hue its ramps are built from, or null for no accent.
+ *
+ * Three forms reach this, and they all have to work:
+ *   • `'default'` or anything unrecognised → null, i.e. the theme's own ramp.
+ *   • a palette name (`'sage'`), or a legacy id resolved through the map above.
+ *   • a literal `'#rrggbb'` — a custom accent (2026-09-05).
+ *
+ * A custom accent contributes its HUE only; saturation and lightness still come
+ * from the per-theme ramp. That is not a shortcut, it is the whole reason the
+ * ramp exists: nine stops from `--brand-50` to `--brand-700` have to stay
+ * legible against near-black, black and white pages, and a single hex cannot be
+ * all nine. The picker says so in as many words, because "I chose #ff0000 and
+ * the buttons are not #ff0000" is otherwise a bug report.
+ */
+export function accentHue(accent: string): number | null {
+  if (!accent || accent === 'default') return null
+  if (accent.startsWith('#')) {
+    const hex = normalizeHex(accent)
+    return hex ? hexToHsv(hex).h : null
+  }
+  const entry = paletteEntry(accent) ?? paletteEntry(LEGACY_ACCENTS[accent] ?? '')
+  return entry ? entry.hue : null
+}
 
 // [saturation, lightness] per token. The brand ramp carries the accent at full
 // strength (selection, active states); the ink ramp is only lightly tinted, so
@@ -172,7 +231,38 @@ const WHITE_LIFT: Record<string, number> = {
   '--ink-500': 10, '--ink-400': 8, '--ink-300': 6
 }
 
-const ALL_KEYS = [...new Set([...Object.keys(DARK_RAMP), ...Object.keys(DARK_TEXT_RAMP)])]
+/** The accent AS A COLOUR, independent of how far it reaches.
+ *
+ *  `accentMode` decides what the accent recolours: 'tint' rewrites the whole
+ *  brand ramp (surfaces, controls, washes), 'text' rewrites only the ink ramp.
+ *  'text' is the default — which meant that in the mode almost everyone is in,
+ *  a control painted `bg-brand-500` (the settings pill switch, the tick box)
+ *  stayed the theme's neutral grey no matter which accent was picked. Reuben,
+ *  2026-09-05: "all toggles should follow the accent colour when on and the
+ *  theme colour when off".
+ *
+ *  So: three variables that carry the picked hue in BOTH modes, for the handful
+ *  of controls whose on-state IS "the accent". They deliberately do not touch
+ *  the brand ramp — 'Text only' still means surfaces are left alone, and a
+ *  toggle is not a surface.
+ *
+ *  The values are lifted straight out of the tinted mode's brand ramp rather
+ *  than invented, so an accent looks the same on a switch whichever mode you
+ *  are in, and theme.css seeds the same three at each theme's own brand values
+ *  so the 'Default' accent is byte-identical to what shipped before this. */
+const ACCENT_KEYS = {
+  '--accent-400': '--brand-400',
+  '--accent-500': '--brand-500',
+  '--accent-600': '--brand-600'
+} as const
+
+const ALL_KEYS = [
+  ...new Set([
+    ...Object.keys(DARK_RAMP),
+    ...Object.keys(DARK_TEXT_RAMP),
+    ...Object.keys(ACCENT_KEYS)
+  ])
+]
 
 /** HSL -> the bare "R G B" channels the CSS variables expect. */
 function channels(h: number, s: number, l: number): string {
@@ -197,7 +287,7 @@ function applyAccent(
   }
 ): void {
   ALL_KEYS.forEach((k) => el.style.removeProperty(k))
-  const hue = ACCENTS.find((a) => a.id === opts.accent)?.hue
+  const hue = accentHue(opts.accent)
   if (!opts.active || hue == null) return
   const ramp = opts.mode === 'text' ? TEXT_RAMP[opts.theme] : RAMP[opts.theme]
   // the light theme has no white to give — see the tone block in theme.css
@@ -205,6 +295,13 @@ function applyAccent(
   Object.entries(ramp).forEach(([k, [s, l]]) =>
     el.style.setProperty(k, channels(hue, s, Math.min(100, l + (lift ? (WHITE_LIFT[k] ?? 0) : 0))))
   )
+  // Outside the mode branch on purpose — see ACCENT_KEYS. Read from the TINTED
+  // ramp in both modes, so a switch is the same colour either way.
+  const tinted = RAMP[opts.theme]
+  Object.entries(ACCENT_KEYS).forEach(([key, from]) => {
+    const stop = tinted[from]
+    if (stop) el.style.setProperty(key, channels(hue, stop[0], stop[1]))
+  })
 }
 
 /** Write (or clear) the font variables onto `el`. Four variables, three

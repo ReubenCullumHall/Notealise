@@ -39,6 +39,12 @@ import {
 // Pinned section, the tree, and the archive and bin shelf views.
 
 interface Props {
+  /** The space-switch slide's current animation class, or '' — see App's
+   *  `switchSpace`. Applied to the list region only: the search bar, the space
+   *  switcher and the footer are chrome you are still holding, and chrome that
+   *  slid away under the cursor that had just clicked it would be worse than no
+   *  animation at all. */
+  spaceSlideClass: string
   vaultName: string
   /** the vault's absolute path, for Settings → Source folder */
   vaultPath: string | null
@@ -88,6 +94,11 @@ interface Props {
    *  App and the tree state lives here, and passing the state up instead would
    *  make every expand/collapse a re-render of the whole window. */
   revealRef?: React.MutableRefObject<((folder: string) => void) | null>
+  /** Collapse/expand this sidebar from outside — the View menu's Toggle
+   *  Sidebar (Cmd/Ctrl+S). Imperative for the same reason `revealRef` is: the
+   *  collapsed flag is this component's own local state and lifting it into App
+   *  would make every expand and collapse re-render the whole window. */
+  collapseRef?: React.MutableRefObject<(() => void) | null>
 
   actions: TreeActions & {
     onNewNote: () => void
@@ -121,10 +132,10 @@ function TB({
       data-tip={title}
       aria-pressed={active}
       className={
-        'flex items-center gap-1.5 rounded-lg border-none px-2 py-1 text-[12px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+        'press flex items-center gap-1.5 rounded-lg border-none px-2 py-1 text-[12px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
         (active
-          ? 'bg-brand-500/15 text-brand-600 hover:bg-brand-500/15'
-          : 'bg-transparent text-ink-500 hover:bg-brand-500/10 hover:text-brand-600')
+          ? 'bg-brand-500/12 text-brand-600 hover:bg-brand-500/12'
+          : 'bg-transparent text-ink-500 hover:bg-ink-300/15 hover:text-ink-900')
       }
     >
       {children}
@@ -147,7 +158,7 @@ function SortMenu({
       <button
         onClick={() => setOpen((o) => !o)}
         data-tip="Sort the archive"
-        className="flex items-center gap-1 rounded border-none bg-transparent px-1 py-0.5 text-[11px] font-medium normal-case tracking-normal text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
+        className="flex items-center gap-1 rounded border-none bg-transparent px-1 py-0.5 text-[11px] font-medium normal-case tracking-normal text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
       >
         <Icon name="sort" className="h-3.5 w-3.5" />
         <span>{current.short}</span>
@@ -167,7 +178,7 @@ function SortMenu({
                   'flex w-full items-center gap-2 rounded-lg border-none px-2 py-1.5 text-left text-[12px] outline-none ' +
                   (o.id === value
                     ? 'bg-brand-500/12 text-brand-600 hover:bg-brand-500/12'
-                    : 'bg-transparent text-ink-600 hover:bg-brand-500/[0.08] hover:text-brand-600')
+                    : 'bg-transparent text-ink-600 hover:bg-brand-500/[0.08] hover:text-ink-900')
                 }
               >
                 <span className={o.id === value ? 'opacity-100' : 'opacity-0'}>
@@ -211,6 +222,7 @@ function stillInside(e: React.DragEvent<HTMLElement>): boolean {
 }
 
 export function Sidebar({
+  spaceSlideClass,
   vaultName,
   vaultPath,
   tree,
@@ -243,6 +255,7 @@ export function Sidebar({
   onPurgeRecovery,
   onTransferChanged,
   revealRef,
+  collapseRef,
   actions
 }: Props): React.JSX.Element {
   const [view, setView] = useState<View>('notes')
@@ -364,6 +377,10 @@ export function Sidebar({
   const SIDEBAR_DEFAULT = 288
   const SIDEBAR_NARROW = 220
   const [collapsed, setCollapsed] = useState(false)
+  // Assigned on every render, like `revealRef` above — the ref is only ever
+  // read from an event (a menu command), never during one of these renders, so
+  // it is always the current setter by the time anything calls it.
+  if (collapseRef) collapseRef.current = () => setCollapsed((c) => !c)
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
   const [resizing, setResizing] = useState(false)
   const narrow = !collapsed && sidebarWidth <= SIDEBAR_NARROW
@@ -445,7 +462,20 @@ export function Sidebar({
     return sortArchived(roots, workspace, archiveSort)
   }, [tree, workspace, archiveSort])
 
-  const treeActions: TreeActions = actions
+  // Sidebar owns the selection, so it is the only place that can answer "is the
+  // row you right-clicked part of a set?" — App builds the menu and TreeView
+  // renders the row, and neither of them knows. Colouring has acted on the whole
+  // selection since the hover swatch existed; widening here is what keeps that
+  // true now that the menu is the way in (see App's `openMenu`).
+  const treeActions: TreeActions = {
+    ...actions,
+    onContext: (e, node) =>
+      actions.onContext(
+        e,
+        node,
+        node && selection.paths.has(node.path) ? [...selection.paths] : undefined
+      )
+  }
 
   const commonTreeProps = {
     expanded,
@@ -484,7 +514,6 @@ export function Sidebar({
       {!collapsed && (
         <div
           onMouseDown={startResize}
-          data-tip="Drag to resize"
           className={
             'absolute right-0 top-0 z-40 h-full w-1.5 cursor-col-resize select-none ' +
             (resizing ? 'bg-brand-400/60' : 'hover:bg-brand-400/40')
@@ -502,8 +531,8 @@ export function Sidebar({
         </p>
         <button
           onClick={() => setCollapsed(true)}
-          data-tip="Collapse sidebar"
-          className="flex shrink-0 items-center justify-center rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"
+          data-tip={'Collapse sidebar  (Cmd/Ctrl+S)'}
+          className="press flex shrink-0 items-center justify-center rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
         >
           <Icon name="panelLeft" className="h-4 w-4" />
         </button>
@@ -541,24 +570,51 @@ export function Sidebar({
           opens — and it carries the only way out besides Escape. Showing it
           only at two left the one-item state looking like nothing had
           happened, with clicking around silently building a set. */}
+      {/* Two rows, not one. The count and the actions share the top line and the
+          hint sits under it — a single flex line put "N selected · click rows to
+          add · drag to move them together" beside two buttons, which wrapped at
+          any count above one, and wrapped at ONE the moment the Colour button
+          joined Clear (2026-09-05). Splitting it fixes the bar's height at two
+          lines whatever is selected, instead of it growing under your cursor as
+          you add rows. */}
       {selCount > 0 && (
-        <div className="fade-in mx-3 mb-1.5 flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] text-brand-600">
-          <span className="flex-1">
-            {selCount} selected · click rows to add
-            {selCount > 1 ? ' · drag to move them together' : ''}
-          </span>
-          <button
-            onClick={clearSel}
-            data-tip="Leave selection mode (Esc)"
-            className="rounded border-none bg-transparent px-1.5 py-0.5 text-ink-500 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
-          >
-            Clear
-          </button>
+        <div className="fade-in mx-3 mb-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] text-brand-600">
+          <div className="flex items-center gap-2">
+            <span className="flex-1 truncate font-medium">{selCount} selected</span>
+            {/* The second way to a colour, and the only one that reaches a whole
+                set in one gesture now that the row's hover swatch is gone.
+                Anchored to the button, which is what the popover measures
+                against. */}
+            <button
+              onClick={(e) => {
+                const box = e.currentTarget.getBoundingClientRect()
+                actions.onPickColor([...selection.paths], {
+                  left: box.left,
+                  top: box.top,
+                  bottom: box.bottom
+                })
+              }}
+              data-tip={selCount > 1 ? `Colour these ${selCount}` : 'Colour this one'}
+              className="shrink-0 rounded border-none bg-transparent px-1.5 py-0.5 text-ink-500 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
+            >
+              Colour
+            </button>
+            <button
+              onClick={clearSel}
+              data-tip="Leave selection mode (Esc)"
+              className="shrink-0 rounded border-none bg-transparent px-1.5 py-0.5 text-ink-500 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
+            >
+              Clear
+            </button>
+          </div>
+          <p className="pt-0.5 text-ink-500">
+            Click rows to add{selCount > 1 ? ' · drag to move them together' : ''}
+          </p>
         </div>
       )}
 
       {/* ---- the list ---- */}
-      <div className="relative min-h-0 flex-1">
+      <div className={'relative min-h-0 flex-1 overflow-hidden ' + spaceSlideClass}>
         <div
           ref={listRef}
           className={
@@ -647,21 +703,21 @@ export function Sidebar({
                         )
                       }
                       data-tip="Show me this file on my computer"
-                      className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-300 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
+                      className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-300 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
                     >
                       <Icon name="folder" />
                     </button>
                     <button
                       onClick={() => actions.onRestoreFromBin([item.id])}
                       data-tip="Put back"
-                      className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-300 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
+                      className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-300 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
                     >
                       <Icon name="restore" />
                     </button>
                     <button
                       onClick={() => actions.onPurge([item.id])}
                       data-tip="Delete permanently"
-                      className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-300 outline-none transition-colors hover:bg-transparent hover:text-brand-600"
+                      className="shrink-0 rounded border-none bg-transparent p-0.5 text-ink-300 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
                     >
                       <Icon name="trash" />
                     </button>
@@ -763,7 +819,7 @@ export function Sidebar({
               // look at. Go back to whichever space's notes you were in.
               setView('notes')
             }}
-            className="fade-in absolute inset-x-2 bottom-full z-30 mb-2 flex items-center justify-center gap-2 rounded-xl border border-brand-400/70 bg-surface px-3 py-3 text-[12px] font-semibold text-brand-600 outline-none ring-2 ring-brand-500/15 transition duration-200 hover:bg-brand-500/10 hover:ring-4 hover:ring-brand-500/25"
+            className="fade-in absolute inset-x-2 bottom-full z-30 mb-2 flex items-center justify-center gap-2 rounded-xl border border-brand-400/70 bg-surface px-3 py-3 text-[12px] font-semibold text-brand-600 outline-none ring-2 ring-brand-500/15 transition duration-200 hover:bg-ink-300/15 hover:ring-4 hover:ring-ink-300/60/25"
           >
             <span className={lidOpen ? 'lid-open' : ''}>
               <BinIcon className="h-4 w-4" />
@@ -782,7 +838,7 @@ export function Sidebar({
               flipLid()
               clearSel()
             }}
-            className="fade-in absolute inset-x-2 bottom-full z-30 mb-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-ink-300/40 bg-surface px-3 py-3 text-[12px] font-medium text-ink-400 outline-none transition-all duration-200 hover:border-brand-300 hover:text-brand-600"
+            className="fade-in absolute inset-x-2 bottom-full z-30 mb-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-ink-300/40 bg-surface px-3 py-3 text-[12px] font-medium text-ink-400 outline-none transition-all duration-200 hover:border-ink-300/60 hover:text-ink-900"
           >
             <span className={lidOpen ? 'lid-open' : ''}>
               <BinIcon className="h-4 w-4" />
@@ -867,10 +923,10 @@ export function Sidebar({
                     // keeps its accent border, which is how you can see which
                     // space you're in
                     (on
-                      ? 'border-brand-400/60 bg-brand-500/15 text-brand-600'
+                      ? 'border-brand-400/60 bg-brand-500/12 text-brand-600'
                       : arming
                         ? 'scale-105 border-brand-400/70 bg-brand-500/20 text-brand-600 ring-2 ring-brand-400/50'
-                        : 'btn-edge border-ink-300/25 bg-transparent text-ink-500 hover:bg-brand-500/10 hover:text-brand-600')
+                        : 'btn-edge border-ink-300/25 bg-transparent text-ink-500 hover:bg-ink-300/15 hover:text-ink-900')
                   }
                 >
                   {/* pointer-events-none as well as the stillInside() guard: the
@@ -1017,10 +1073,10 @@ export function Sidebar({
             // this half's own state — it is still a separate button with its own
             // onDrop, so the drop tint has to land on the half you are actually
             // over, not on the pair.
-            'flex h-full flex-1 items-center justify-center gap-1.5 border-none px-2 text-[12px] font-medium tabular-nums outline-none transition duration-200 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ' +
+            'flex h-full flex-1 items-center justify-center gap-1.5 border-none px-2 text-[12px] font-medium tabular-nums outline-none transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ' +
             (inBin || dropZone === 'trash'
-              ? 'bg-brand-500/15 text-brand-600'
-              : 'bg-transparent text-ink-500 hover:bg-brand-500/10')
+              ? 'bg-brand-500/12 text-brand-600'
+              : 'bg-transparent text-ink-500 hover:bg-ink-300/15')
           }
         >
           <span className={lidOpen ? 'lid-open' : ''}>
@@ -1069,10 +1125,10 @@ export function Sidebar({
             // button's own box, so the two halves tile with no dead pixel.
             // `border-none` is replaced rather than added to — it sets
             // border-style, which would leave a 1px-wide invisible border.
-            'flex h-full flex-1 items-center justify-center gap-1.5 border-y-0 border-r-0 border-l border-solid border-ink-300/30 px-2 text-[12px] font-medium tabular-nums outline-none transition duration-200 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ' +
+            'flex h-full flex-1 items-center justify-center gap-1.5 border-y-0 border-r-0 border-l border-solid border-ink-300/30 px-2 text-[12px] font-medium tabular-nums outline-none transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ' +
             (inArchive || dropZone === 'archive'
-              ? 'bg-brand-500/15 text-brand-600'
-              : 'bg-transparent text-ink-500 hover:bg-brand-500/10')
+              ? 'bg-brand-500/12 text-brand-600'
+              : 'bg-transparent text-ink-500 hover:bg-ink-300/15')
           }
         >
           <span className={archiveLidOpen ? 'lid-open' : ''}>
@@ -1089,8 +1145,8 @@ export function Sidebar({
     {collapsed && (
       <button
         onClick={() => setCollapsed(false)}
-        data-tip="Show sidebar"
-        className="btn-edge fixed left-2 top-3 z-40 flex items-center justify-center rounded-lg border border-ink-300/30 bg-surface/90 p-1.5 text-ink-500 shadow-card backdrop-blur transition duration-200 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
+        data-tip={'Show sidebar  (Cmd/Ctrl+S)'}
+        className="press btn-edge fixed left-2 top-3 z-40 flex items-center justify-center rounded-lg border border-ink-300/30 bg-surface/90 p-1.5 text-ink-500 shadow-card backdrop-blur transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         <Icon name="panelLeft" className="h-4 w-4" />
       </button>

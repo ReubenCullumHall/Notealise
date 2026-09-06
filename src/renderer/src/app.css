@@ -169,6 +169,45 @@ button.icon:hover {
      · `.bin-lid`     the bin's lid hinging open as a note comes over it
      · `.archive-lid` the same cue on the archive chest
      · `scale-105`    on the space switcher, Sidebar.tsx, same meaning */
+/* --- press feedback (added 2026-09-05, at Reuben's request) ----------------
+   "Micro animations for clicks". Read this against the hover rule directly
+   above, which it does NOT contradict — the two are about different events:
+
+     hover  the pointer merely passing over something. Colour or ring only.
+            Nothing may move under the cursor, because you did not ask it to.
+     press  you pushing the control. A 1.5-4% squash, held for exactly as long
+            as the button is held and gone the instant you let go, is the
+            control acknowledging YOUR action. Nothing moves uncaused.
+
+   `transform` only — no shadow, no width — so the whole effect stays on the
+   compositor and can never reflow a neighbour.
+
+   No `transition` is declared here on purpose. Every control this class goes on
+   already carries Tailwind's `transition` utility, whose property list includes
+   `transform`; declaring one here would outrank that utility and silently
+   re-time the colour fade with it. If you add `.press` to something with no
+   transition of its own, add `transition duration-150` to its class string too
+   — the squash will otherwise snap.
+
+   Two sizes, because the same percentage does not read the same at both ends:
+   4% on a 28px icon button is a click, 4% on a 280px sidebar row is a shove. */
+.press:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.press-row:active:not(:disabled) {
+  transform: scale(0.985);
+}
+/* Both opt-outs, and both total rather than shortened: a squash IS the motion,
+   so there is no smaller version of it to fall back to. `data-motion='off'`
+   (Settings -> General -> Interface animations) would otherwise leave the
+   scale snapping on and off with no transition, which is worse than nothing. */
+@media (prefers-reduced-motion: reduce) {
+  .press:active:not(:disabled),
+  .press-row:active:not(:disabled) { transform: none; }
+}
+:root[data-motion='off'] .press:active,
+:root[data-motion='off'] .press-row:active { transform: none; }
+
 @keyframes fade-in {
   from { opacity: 0; transform: translate3d(0, 5px, 0); }
   to { opacity: 1; transform: translate3d(0, 0, 0); }
@@ -222,6 +261,41 @@ button.icon:hover {
 /* `.tree-row svg` outranks Tailwind's `.h-4 .w-4` on specificity, so every icon
    in a row (doc, folder, chevron, grip) scales together */
 .tree-row svg { width: var(--row-icon); height: var(--row-icon); }
+
+/* Hover actions with nothing behind them.
+   ---------------------------------------
+   The buttons used to sit on a small `bg-surface/95` card with a shadow
+   (TreeView's ROW_ACTIONS_CLASS), which is what kept them legible over the
+   row's own name and preview. Testers read that card as a popup that had
+   opened rather than as part of the row, so it is gone (2026-09-05) — and the
+   text underneath is faded out instead of covered.
+
+   A MASK on the text, not a gradient overlay: an overlay would have to paint
+   the row's background to hide anything, which is the rectangle being removed,
+   and it would have to know which of the three colour styles (tag / row /
+   solid, and the selected and open variants) had painted it. A mask needs to
+   know none of that — it just stops drawing the glyphs.
+
+   96px is sized for the WIDEST action group, the folder row's four buttons at
+   `--row-icon` + `p-0.5` each plus `gap-0.5`, `px-1` and `right-1.5`. The note
+   row's is narrower and simply fades a little earlier than it needs to, which
+   is invisible. If a fifth button is ever added here, this number moves with
+   it — measure the group, don't guess.
+
+   The folder's child count is hidden outright rather than masked: it sits IN
+   FLOW at the right-hand end, so a mask would leave a half-faded digit under
+   the first button rather than removing it. */
+.tree-row:hover .tree-title,
+.tree-row:hover .tree-sub,
+.tree-row:focus-within .tree-title,
+.tree-row:focus-within .tree-sub {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 96px), rgb(0 0 0 / 0) calc(100% - 28px));
+  mask-image: linear-gradient(90deg, #000 calc(100% - 96px), rgb(0 0 0 / 0) calc(100% - 28px));
+}
+.tree-row:hover .tree-count,
+.tree-row:focus-within .tree-count {
+  opacity: 0;
+}
 
 /* Rows inside an open folder run smaller than top-level rows, so a folder's
    contents read as a distinct, tucked-away group instead of the same-size
@@ -1411,6 +1485,10 @@ button.look-card:hover {
   z-index: 50;
   display: flex;
   align-items: center;
+  /* Wraps so the "any colour" panel can drop onto a second line beneath the
+     swatch row (2026-09-05). Closed, nothing wraps and the bar is the same
+     single row it always was. */
+  flex-wrap: wrap;
   gap: 8px;
   padding: 5px 7px;
   border-radius: var(--r-surface);
@@ -1452,6 +1530,31 @@ button.look-card:hover {
 }
 .swatch:hover {
   transform: scale(1.15);
+}
+/* The "any colour" trigger. It wears the colour currently in the field, so the
+   second use of a one-off colour is a single click — which is why the glyph on
+   top has to survive being drawn on ANY colour the user picks, hence a white
+   plus with a dark halo rather than a token that only reads on some of them. */
+.swatch-custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  filter: drop-shadow(0 0 1.2px rgb(0 0 0 / 0.85));
+}
+.swatch-custom.is-on {
+  outline: 2px solid rgb(var(--brand-500));
+  outline-offset: 1px;
+}
+/* Full width of the bar, so it starts a new flex line rather than stretching
+   the row. 208px matches the picker's own square + slider + hex field, which is
+   the narrowest it stays usable at. */
+.sel-custom {
+  flex-basis: 100%;
+  width: 208px;
+  margin-top: 2px;
+  padding-top: 7px;
+  border-top: 1px solid rgb(var(--wash) / 0.1);
 }
 .sel-clear {
   width: 24px;
@@ -2812,6 +2915,85 @@ body.pane-resizing {
 }
 body.pane-resizing * {
   cursor: col-resize !important;
+}
+
+/* The space switch, macOS-Spaces style (App.tsx's `switchSpace`).
+   ---------------------------------------------------------------------------
+   Two phases on ONE element rather than a cross-fade of two: `out` pushes the
+   space you are leaving off in the direction of travel, App swaps the content
+   while nothing is visible, and `in` brings the new one on from the other side.
+   The durations below are duplicated in App.tsx as SPACE_SLIDE_OUT_MS /
+   SPACE_SLIDE_IN_MS, and the out one decides WHEN the swap happens — change one
+   and change the other, or the content changes mid-slide and reads as a
+   flicker rather than as motion.
+
+   `translateX` in percent, so the sidebar's 288px and a maximised editor travel
+   proportionally rather than the sidebar barely moving. 7% is short on purpose:
+   a full screen-width slide is right on a desktop you look at whole, and wrong
+   inside a window where the chrome around it is standing still.
+
+   Different curves for the two halves, which is what makes it read as one
+   gesture rather than two: leaving accelerates away (ease-in), arriving decays
+   into place (the app's standard ease-out). The whole thing is skipped when
+   `animationsEnabled` is off — App returns before ever setting a class. */
+@keyframes space-slide-out-next {
+  from { transform: none; opacity: 1; }
+  to { transform: translateX(-7%); opacity: 0; }
+}
+@keyframes space-slide-in-next {
+  from { transform: translateX(7%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes space-slide-out-prev {
+  from { transform: none; opacity: 1; }
+  to { transform: translateX(7%); opacity: 0; }
+}
+@keyframes space-slide-in-prev {
+  from { transform: translateX(-7%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.space-slide-out-next,
+.space-slide-out-prev {
+  animation: space-slide-out-next 130ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+.space-slide-out-prev {
+  animation-name: space-slide-out-prev;
+}
+.space-slide-in-next,
+.space-slide-in-prev {
+  animation: space-slide-in-next 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.space-slide-in-prev {
+  animation-name: space-slide-in-prev;
+}
+
+/* Onboarding's "try writing something" demo box (onboarding/steps/WriteStep).
+   ---------------------------------------------------------------------------
+   The editor theme gives every `.cm-scroller` `padding: 24px 0 40vh` — room to
+   scroll past the end of a real note in a full-height pane. In a 166px demo box
+   that 40vh is ~360px of guaranteed overflow, so the box had a scrollbar down
+   it before a single character was typed. A tester reported exactly that, and
+   the measurement confirmed it: clientHeight 190, scrollHeight 422, a 10px bar,
+   empty document (2026-09-05).
+
+   THREE selectors deep on purpose. CodeMirror injects its theme through
+   StyleModule as `.ͼ1 .cm-scroller { … }` — specificity (0,2,0), and inserted
+   into <head> at a position this stylesheet does not control. A two-class rule
+   would tie on specificity and be decided by source order, which is exactly the
+   kind of rule that looks correct and silently loses. `.onb-write-box
+   .cm-editor .cm-scroller` is (0,3,0) and wins outright, order or no order.
+
+   Top padding goes too: the box has its own `py-3`, and 24px more on top of
+   that inside 166px is a third of the box spent before the first line. */
+.onb-write-box .cm-editor .cm-scroller {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+/* The demo box is 480px wide, not a `--editor-max-width` reading column, so the
+   28px line gutter that centres a real note just eats into it. */
+.onb-write-box .cm-editor .cm-line {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* The note's scrollbar, hidden until the pointer comes near it

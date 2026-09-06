@@ -337,6 +337,30 @@ export function splitAt(l: TabLayout, path: string, at: number): TabLayout {
   return { tabs, panes, focus: index, sizes }
 }
 
+/** Split two OPEN NOTES side by side — a tab dropped on the middle of another
+ *  tab in the strip. The tab you drop ONTO takes the left column and the one
+ *  you dragged lands to its right, which is the same left-to-right rule as
+ *  `splitBlank` and Cmd/Ctrl+\: the note you were already reading stays where
+ *  you were reading it, and the new arrival comes in beside it.
+ *
+ *  Built from `openTab` + `splitAt` rather than rearranging `panes` here, so
+ *  the pane cap, the widths and invariant 2 stay decided in one place. It
+ *  refuses AS A WHOLE when the split can't be made — at MAX_PANES with a note
+ *  that isn't on screen yet, `splitAt` has nowhere to put it, and moving the
+ *  target into the focused pane while nothing arrives beside it would be a
+ *  rearrangement nobody asked for.
+ *
+ *  A tab dropped on ITSELF is a no-op rather than a split: invariant 2 forbids
+ *  one note in two panes, so there is nothing this could mean. */
+export function splitWith(l: TabLayout, target: string, dragged: string): TabLayout {
+  if (target === dragged) return l
+  const shown = openTab(l, target)
+  const at = shown.panes.indexOf(target)
+  if (at === -1) return l
+  const next = splitAt(shown, dragged, at + 1)
+  return next === shown ? l : next
+}
+
 /** Open a new EMPTY column beside the focused one — the split button and
  *  `Cmd/Ctrl+\`. It asks which note you want rather than guessing: the earlier
  *  version moved the focused note across and backfilled the pane it left with

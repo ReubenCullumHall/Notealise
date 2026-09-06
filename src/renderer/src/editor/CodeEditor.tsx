@@ -58,6 +58,23 @@ interface TbState {
   top: number
 }
 
+/** How long the selection has to sit still before the colour bar appears.
+ *
+ *  It used to appear on the very first selected character, which meant it
+ *  followed the pointer across a drag-select and flashed on every Shift+Arrow —
+ *  a panel jumping about over the words you are trying to look at. Reuben,
+ *  2026-09-05: "add a slight natural delay ... like when your cursor stops
+ *  moving or when you let go of the selection click".
+ *
+ *  So there are two triggers, and they are different lengths on purpose:
+ *  releasing the mouse is a deliberate "I have finished choosing" and gets the
+ *  short one, while a selection still being extended (keyboard, or the pointer
+ *  mid-drag) has to go quiet for the long one. Both are debounced — each
+ *  further change restarts the clock, which is what makes it read as "when you
+ *  stop" rather than "220ms after you start". */
+const SETTLE_MS = 220
+const RELEASE_MS = 60
+
 // The single most common CM6-in-React bug is recreating the EditorView when the
 // content changes, which jumps the cursor. So: create the view ONCE (empty deps),
 // and switch notes by dispatching a full-document replace — never a remount.
@@ -97,21 +114,43 @@ export function CodeEditor({
   const programmatic = useRef(false) // true while we replace the doc ourselves
 
   const [tb, setTb] = useState<TbState | null>(null)
+  // `refreshToolbar` is built once (empty deps) and called from the update
+  // listener inside a view that is also built once, so anything it needs to
+  // read has to be a ref — a captured `tb` would be the value from first paint
+  // forever.
+  const tbRef = useRef<TbState | null>(null)
+  tbRef.current = tb
+  /** true between pointerdown and pointerup anywhere — i.e. a drag-select is
+   *  still in progress and the selection is not finished being made. */
+  const dragSelecting = useRef(false)
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Stable, because `refreshToolbar` below is built once and calls it.
+  const cancelSettle = useCallback((): void => {
+    if (settle.current) clearTimeout(settle.current)
+    settle.current = null
+  }, [])
+  /** Take the panel down and abandon any pending appearance. */
+  const hideToolbar = useCallback((): void => {
+    cancelSettle()
+    setTb(null)
+  }, [cancelSettle])
 
   // Position the selection toolbar over the current selection (or hide it).
-  const refreshToolbar = useCallback((view: EditorView): void => {
+  const refreshToolbar = useCallback((view: EditorView, now = false): void => {
     const sel = view.state.selection.main
     const box = container.current
     // A selected EMBED is not selected text: the grip selects a photo or video
     // as one object (attachSelect), and offering to bold or highlight it makes
     // no sense. Its own affordance is the ring plus Backspace.
     if (sel.empty || !box || selectionIsEmbed(view.state)) {
+      cancelSettle()
       setTb(null)
       return
     }
     const a = view.coordsAtPos(sel.from)
     const b = view.coordsAtPos(sel.to)
     if (!a || !b) {
+      cancelSettle()
       setTb(null)
       return
     }
@@ -122,8 +161,78 @@ export function CodeEditor({
     const left = Math.max(6, Math.min(centerX - rect.left - width / 2, rect.width - width - 6))
     const above = a.top - rect.top - height - 8
     const top = above < 4 ? b.bottom - rect.top + 8 : above // flip below if no room
-    setTb({ left, top })
-  }, [])
+    const at = { left, top }
+
+    // Mid-drag: stay away entirely. The panel would otherwise be chasing the
+    // pointer across the very text being selected.
+    if (dragSelecting.current) {
+      cancelSettle()
+      setTb(null)
+      return
+    }
+    // Already up: follow the selection with no delay. The wait is about not
+    // INTERRUPTING; once the panel is on screen, lagging behind the text it is
+    // pointing at is just wrong.
+    if (tbRef.current) {
+      cancelSettle()
+      setTb(at)
+      return
+    }
+    cancelSettle()
+    // `now` is the release path: the wait it already served was RELEASE_MS, and
+    // stacking SETTLE_MS on top of that is what made "let go and it appears"
+    // feel like "let go, wait, and it appears".
+    if (now) {
+      setTb(at)
+      return
+    }
+    settle.current = setTimeout(() => {
+      settle.current = null
+      setTb(at)
+    }, SETTLE_MS)
+  }, [cancelSettle])
+
+  // Pointer state is tracked on the window, not the editor: a drag-select
+  // very often ends with the pointer outside the pane it started in (past the
+  // last line, or over the sidebar), and a `mouseup` bound to the editor never
+  // hears about that — leaving `dragSelecting` stuck true and the toolbar
+  // permanently suppressed.
+  useEffect(() => {
+    const down = (e: PointerEvent): void => {
+      if (e.button !== 0) return
+      // `view.dom`, NOT the `.cm-host` container — the toolbar is a child of
+      // the container, so testing against that would treat a click on a swatch
+      // as the start of a new drag-select and unmount the panel from under the
+      // pointer before the click could land on it.
+      const view = viewRef.current
+      if (!view || !view.dom.contains(e.target as Node)) return
+      dragSelecting.current = true
+      cancelSettle()
+      setTb(null)
+    }
+    const up = (): void => {
+      if (!dragSelecting.current) return
+      dragSelecting.current = false
+      const view = viewRef.current
+      if (!view) return
+      // Let CodeMirror commit the selection this release finishes before
+      // measuring it — on mouseup the state has not been updated yet.
+      cancelSettle()
+      settle.current = setTimeout(() => {
+        settle.current = null
+        refreshToolbar(view, true)
+      }, RELEASE_MS)
+    }
+    window.addEventListener('pointerdown', down, true)
+    window.addEventListener('pointerup', up, true)
+    window.addEventListener('pointercancel', up, true)
+    return () => {
+      window.removeEventListener('pointerdown', down, true)
+      window.removeEventListener('pointerup', up, true)
+      window.removeEventListener('pointercancel', up, true)
+      cancelSettle()
+    }
+  }, [refreshToolbar, cancelSettle])
 
   // Markdown pro lives in a Compartment because the view is created ONCE (the
   // effect below has empty deps, so the editor is never torn down and rebuilt
@@ -209,7 +318,7 @@ export function CodeEditor({
     programmatic.current = false
     view.scrollDOM.scrollTop = saved ? saved.scrollTop : 0
     prevPath.current = path
-    setTb(null)
+    hideToolbar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [path, version])
 
@@ -264,11 +373,11 @@ export function CodeEditor({
   useEffect(() => {
     if (!tb) return
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setTb(null)
+      if (e.key === 'Escape') hideToolbar()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [tb])
+  }, [tb, hideToolbar])
 
   const pick = (layer: Layer, name: string): void => {
     if (viewRef.current) applyColor(viewRef.current, layer, name)
