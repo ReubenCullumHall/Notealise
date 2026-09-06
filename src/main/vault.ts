@@ -1,8 +1,9 @@
-import { promises as fs } from 'node:fs'
+import { promises as fs, realpathSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { randomBytes } from 'node:crypto'
 import type { TreeNode } from '../shared/types'
+import { toPreviewLine } from '../shared/plainText'
 import { indexLinks, stripMd, type LinkRow } from '../shared/links'
 import { sanitizeFilename } from './filenames'
 import { indexEmbeds } from '../shared/attachments'
@@ -14,7 +15,21 @@ import { heldPath, RECOVERY_DIR, TRASH_DIR } from '../shared/workspace'
 let vaultRoot: string | null = null
 
 export function setVaultRoot(root: string): void {
-  vaultRoot = path.resolve(root)
+  const abs = path.resolve(root)
+  // Store the root with its own symlinks already resolved, because the boundary
+  // check below compares against it in real-path space. Both sides have to be
+  // resolved or neither: on macOS the root itself is routinely behind a link
+  // (/tmp is really /private/tmp, and that is where the onboarding test vault
+  // lives), so resolving only the incoming path would reject every path in a
+  // perfectly ordinary vault.
+  try {
+    vaultRoot = realpathSync(abs)
+  } catch {
+    // Not there yet — a folder picked in the dialog and created on the way in.
+    // The lexical path is still a correct boundary; `realInVault` re-resolves
+    // per call once the folder exists.
+    vaultRoot = abs
+  }
 }
 export function getVaultRoot(): string | null {
   return vaultRoot
@@ -37,9 +52,23 @@ const key = (abs: string): string => foldCase(path.normalize(abs))
 // refuse anything that escapes the vault root (../ traversal, absolute paths,
 // Windows drive hops). THIS CHECK LIVES ONLY HERE, IN MAIN.
 // ---------------------------------------------------------------------------
+/** Does `rel` — the output of `path.relative(root, abs)` — leave the vault?
+ *
+ *  The first SEGMENT is compared against `..`, not the string's prefix. A prefix
+ *  test also matches a file legitimately named `..todo.md`, which resolves to a
+ *  perfectly ordinary path inside the vault: `path.relative` returns it as
+ *  `..todo.md`, `startsWith('..')` says true, and the note becomes unopenable
+ *  with a message claiming it escapes. It fails closed, so it was never a hole
+ *  — but a note synced in from another tool, or made in Finder, could not be
+ *  read at all. */
+function escapesVault(rel: string): boolean {
+  if (rel === '') return false // the root itself; individual callers decide
+  if (path.isAbsolute(rel)) return true // a different drive, or a UNC path
+  return rel.split(path.sep)[0] === '..'
+}
+
 function assertInVault(abs: string): void {
-  const rel = path.relative(requireVault(), abs)
-  if (rel !== '' && (rel.startsWith('..') || path.isAbsolute(rel))) {
+  if (escapesVault(path.relative(requireVault(), abs))) {
     throw new Error(`Path escapes the vault: ${abs}`)
   }
 }
@@ -47,6 +76,75 @@ function resolveInVault(relPath: string): string {
   const abs = path.resolve(requireVault(), relPath)
   assertInVault(abs)
   return abs
+}
+
+/** Is `abs` the vault root itself? The boundary lets the root through by design
+ *  — `listTree` and `scanLinks` need it — so every operation that WRITES or
+ *  DELETES has to exclude it separately. This is that check, in one place,
+ *  because having it spelled out per call site is how `purgeRecoveryItem` came
+ *  to be the one destructive function without it. */
+function isVaultRoot(abs: string): boolean {
+  return path.relative(requireVault(), abs) === ''
+}
+
+/** The in-vault config folder is written by `settings.ts`, `workspace.ts` and
+ *  the bin — each through its own validated shape. `writeNote` is a general
+ *  "put this text at this path" primitive the renderer drives, so pointing it
+ *  at `.mdnotes/` lets note-shaped input rewrite the organisation sidecar and
+ *  the recovery records. That is not hypothetical plumbing: a recovery record
+ *  is what aims the app's only hard delete (`purgeRecoveryItem`). `.mdnotes/`
+ *  is also skipped by `ignored()` and by the watcher, so such a write shows up
+ *  nowhere in the tree and raises no change event. */
+function assertNotConfig(abs: string): void {
+  const first = path.relative(requireVault(), abs).split(path.sep)[0]
+  if (foldCase(first) === '.mdnotes') {
+    throw new Error('That folder belongs to the app — notes cannot be written into it.')
+  }
+}
+
+/** Resolve symlinks, then check the boundary.
+ *
+ *  `assertInVault` is lexical, and a lexical check cannot see a link: one at
+ *  `<vault>/Attachments/id_rsa` pointing at `~/.ssh/id_rsa` reads as an ordinary
+ *  in-vault path, and both reads and writes follow it straight out of the vault.
+ *  Nothing in the app creates such a link, and the tree walks skip them
+ *  (`isFile()`/`isDirectory()` are both false for a symlink) — but naming one is
+ *  enough, and a note that merely says `![](Attachments/id_rsa)` does.
+ *
+ *  A path being CREATED does not exist yet and `realpath` would throw on it, so
+ *  walk up to the deepest ancestor that DOES exist, resolve that, and re-attach
+ *  the tail. That is sufficient: a path component that isn't there yet cannot
+ *  itself be a link, and every directory it will be created under has been
+ *  resolved and checked. */
+async function realInVault(abs: string): Promise<string> {
+  const tail: string[] = []
+  let head = abs
+  for (;;) {
+    try {
+      const real = await fs.realpath(head)
+      const out = tail.length ? path.join(real, ...tail) : real
+      assertInVault(out)
+      return out
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException
+      // Anything other than "not there" is a real error — a permission problem
+      // must surface, not be retried against the parent until it looks like an
+      // escape. `assertInVault`'s own throw carries no `code`, so it lands here
+      // and is re-thrown unchanged, which is what we want.
+      if (err.code !== 'ENOENT') throw e
+      const parent = path.dirname(head)
+      if (parent === head) throw new Error(`Path escapes the vault: ${abs}`)
+      tail.unshift(path.basename(head))
+      head = parent
+    }
+  }
+}
+
+/** The whole boundary in one call: lexical check first (cheap, and it catches
+ *  the `../` that never needs a stat), then symlink resolution. Every fs
+ *  operation on a renderer-supplied path goes through this. */
+async function resolveReal(relPath: string): Promise<string> {
+  return realInVault(resolveInVault(relPath))
 }
 
 /** vault-relative, POSIX-style path for an absolute path inside the vault. */
@@ -199,21 +297,13 @@ const PREVIEW_BYTES = 400
 const PREVIEW_CHARS = 90
 
 /** Strip the markdown that would read as noise in a one-line preview, then
- *  collapse whitespace. Mirrors legacy's `preview()` (legacy/src/App.jsx:66). */
-function toPreview(raw: string): string {
-  return raw
-    .replace(/^---\r?\n[\s\S]*?\r?\n---/, '') // frontmatter block
-    .replace(/^#{1,6}\s+/gm, '') // heading marks
-    .replace(/^\s{0,3}>\s?/gm, '') // blockquote marks
-    .replace(/^\s*[-*+]\s+(\[[ xX]\]\s*)?/gm, '') // bullets + task boxes
-    .replace(/`{1,3}/g, '')
-    .replace(/[*_~]/g, '')
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1') // links/images → their text
-    .replace(/<[^>]+>/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, PREVIEW_CHARS)
-}
+ *  collapse whitespace.
+ *
+ *  This used to carry its own copy of the strip list (ported from legacy's
+ *  `preview()`, legacy/src/App.jsx:66). It now shares one with the renderer's
+ *  word count — two answers to "what counts as text" is how the count came to
+ *  disagree with the page (shared/plainText.ts). */
+const toPreview = (raw: string): string => toPreviewLine(raw, PREVIEW_CHARS)
 
 /** Read just the head of a note for its preview. Never throws — an unreadable
  *  file must not fail the whole tree, it just gets no second line. */
@@ -325,7 +415,7 @@ export async function scanLinks(paths?: string[]): Promise<LinkRow[]> {
 // File operations
 // ---------------------------------------------------------------------------
 export async function readNote(relPath: string): Promise<string> {
-  const abs = resolveInVault(relPath)
+  const abs = await resolveReal(relPath)
   const content = await fs.readFile(abs, 'utf8')
   crlfByPath.set(key(abs), isCrlfDominant(content))
   return content
@@ -336,8 +426,13 @@ export async function readNote(relPath: string): Promise<string> {
  *  ending is restored. The temp name is a dotfile, so the watcher and tree never
  *  see it. */
 export async function writeNote(relPath: string, content: string): Promise<void> {
-  const abs = resolveInVault(relPath)
-  if (path.relative(requireVault(), abs) === '') throw new Error('Cannot write the vault root')
+  const abs = await resolveReal(relPath)
+  if (isVaultRoot(abs)) throw new Error('Cannot write the vault root')
+  assertNotConfig(abs)
+  // The only creating write that was missing this. A deep imported tree can
+  // otherwise produce a note that writes on macOS and cannot be opened on
+  // Windows, which is the exact case the check exists to prevent (rule 7).
+  assertPathLength(abs)
   const data = applyEol(content, await resolveEol(abs))
   const dir = path.dirname(abs)
   const tmp = path.join(dir, `.${path.basename(abs)}.${randomBytes(6).toString('hex')}.tmp`)
@@ -363,8 +458,9 @@ export async function writeNote(relPath: string, content: string): Promise<void>
 /** Atomic binary write: temp file + fsync + rename, same shape as writeNote but
  *  no EOL handling (binary data). Used by importers for images/attachments. */
 export async function writeAsset(relPath: string, data: Buffer): Promise<void> {
-  const abs = resolveInVault(relPath)
-  if (path.relative(requireVault(), abs) === '') throw new Error('Cannot write the vault root')
+  const abs = await resolveReal(relPath)
+  if (isVaultRoot(abs)) throw new Error('Cannot write the vault root')
+  assertNotConfig(abs)
   assertPathLength(abs)
   const dir = path.dirname(abs)
   await fs.mkdir(dir, { recursive: true })
@@ -431,7 +527,7 @@ export async function setNoteTimes(relPath: string, modifiedMs: number): Promise
  *  dev the renderer is served over http and can't load one, so an image would
  *  work in the packaged app and silently not in dev (or the reverse). */
 export async function readAsset(relPath: string): Promise<Uint8Array> {
-  const abs = resolveInVault(relPath)
+  const abs = await resolveReal(relPath)
   return new Uint8Array(await fs.readFile(abs))
 }
 
@@ -457,10 +553,14 @@ async function uniqueName(dirAbs: string, stem: string, ext: string): Promise<st
  *  would be two fs operations, two watcher events, and a window in which the
  *  wrong filename is on disk. */
 export async function createNote(dirPath: string, name?: string): Promise<string> {
-  const dirAbs = resolveInVault(dirPath)
+  const dirAbs = await resolveReal(dirPath)
   const stem = name ? sanitizeFilename(stripMd(name)).name : 'Untitled'
   const fname = await uniqueName(dirAbs, stem, '.md')
   const abs = path.join(dirAbs, fname)
+  // Re-check after the join, the way `renameEntry` does. `sanitizeFilename` is
+  // what normally makes this redundant — but it is one function away, and a
+  // boundary that depends on a sanitiser staying correct is not a boundary.
+  assertInVault(abs)
   assertPathLength(abs)
   markWrite(abs)
   const fh = await fs.open(abs, 'wx') // 'wx' throws if the exact name already exists
@@ -481,10 +581,17 @@ export async function createNote(dirPath: string, name?: string): Promise<string
  *  which aborted an entire 150-page import. Creating with the final name in one
  *  `mkdir` removes both. */
 export async function createFolder(dirPath: string, name?: string): Promise<string> {
-  const dirAbs = resolveInVault(dirPath)
+  const dirAbs = await resolveReal(dirPath)
   const stem = name ? sanitizeFilename(name).name : 'New folder'
   const fname = await uniqueName(dirAbs, stem, '')
   const abs = path.join(dirAbs, fname)
+  // See createNote. This is the one that was actually reachable: `name` arrives
+  // over IPC, structured clone carries an ARRAY through intact, and
+  // `sanitizeFilename` iterating a non-string yields whole elements — so
+  // `['../../evil']` survived it with its separators, and the mkdir landed
+  // outside the vault. The type coercion in `filenames.ts` closes that too;
+  // this closes the class.
+  assertInVault(abs)
   assertPathLength(abs)
   markWrite(abs)
   await fs.mkdir(abs)
@@ -549,17 +656,23 @@ function trashAbs(id: string, name: string): string {
 }
 
 /** Move an entry into the bin. Returns the id needed to restore it. */
-export async function trashEntry(relPath: string): Promise<{ id: string; type: 'dir' | 'file' }> {
-  const abs = resolveInVault(relPath)
-  if (path.relative(requireVault(), abs) === '') throw new Error('Cannot delete the vault root')
+export async function trashEntry(
+  relPath: string
+): Promise<{ id: string; type: 'dir' | 'file'; name: string }> {
+  const abs = await resolveReal(relPath)
+  if (isVaultRoot(abs)) throw new Error('Cannot delete the vault root')
   const stat = await fs.stat(abs)
   const id = randomBytes(6).toString('hex')
-  const dest = trashAbs(id, path.basename(abs))
+  // Returned as well as used, so the bin record is keyed on the name the file
+  // actually landed under rather than on a second derivation from the caller's
+  // string. See `trashEntries` in workspace.ts.
+  const name = path.basename(abs)
+  const dest = trashAbs(id, name)
   await fs.mkdir(path.dirname(dest), { recursive: true })
   markWrite(abs)
   markWrite(dest)
   await renameWithRetry(abs, dest)
-  return { id, type: stat.isDirectory() ? 'dir' : 'file' }
+  return { id, type: stat.isDirectory() ? 'dir' : 'file', name }
 }
 
 /** Move a held-aside entry back to `to`, wherever it was being held. Its
@@ -572,7 +685,7 @@ export async function trashEntry(relPath: string): Promise<{ id: string; type: '
  *  holding folder. The collision handling and the Windows path-length check are
  *  both cross-platform-sensitive, so they get exactly one home. */
 async function restoreHeldEntry(src: string, name: string, to: string): Promise<string> {
-  const destRaw = resolveInVault(to)
+  const destRaw = await resolveReal(to)
   const dir = path.dirname(destRaw)
   await fs.mkdir(dir, { recursive: true })
 
@@ -629,8 +742,8 @@ export async function purgeTrashItem(id: string, name: string): Promise<boolean>
  *  or the 7-day recovery net below — a deliberate, product-level choice to
  *  keep deleting a whole space a heavier, differently-recoverable action. */
 export async function trashEntryToOS(relPath: string): Promise<void> {
-  const abs = resolveInVault(relPath)
-  if (path.relative(requireVault(), abs) === '') throw new Error('Cannot delete the vault root')
+  const abs = await resolveReal(relPath)
+  if (isVaultRoot(abs)) throw new Error('Cannot delete the vault root')
   markWrite(abs)
   const { shell } = await import('electron')
   await shell.trashItem(abs)
@@ -641,7 +754,7 @@ export async function trashEntryToOS(relPath: string): Promise<void> {
  *  every other path (rule 6): the renderer sends a vault-relative path, never
  *  one it constructed itself. */
 export async function revealInFolder(relPath: string): Promise<void> {
-  const abs = resolveInVault(relPath)
+  const abs = await resolveReal(relPath)
   const { shell } = await import('electron')
   shell.showItemInFolder(abs)
 }
@@ -669,7 +782,20 @@ export async function restoreFromRecovery(id: string, name: string, to: string):
 /** The real, permanent delete — called by the 7-day sweep, or by a manual
  *  "delete now" from the recovery panel in Settings. */
 export async function purgeRecoveryItem(id: string, name: string): Promise<void> {
-  const abs = recoveryAbs(id, name)
+  const abs = await realInVault(recoveryAbs(id, name))
+  // The one hard `fs.rm` in the app, and until 2026-09-04 the one destructive
+  // function with no root guard — every other one has carried its own since it
+  // was written. `heldPath` builds this path by interpolating `id` and `name`,
+  // the boundary lets the vault root through by design, and the sweep runs
+  // unattended at launch: a recovery record named `/../../..` therefore aimed a
+  // recursive delete at the whole vault. `isSafeHeldSegment` now stops such a
+  // record being built or read at all; this is the second lock on the same door,
+  // because the cost of it being wrong is every note the user has.
+  if (isVaultRoot(abs)) throw new Error('Cannot delete the vault root')
+  const rel = path.relative(requireVault(), abs)
+  if (foldCase(rel.split(path.sep).slice(0, 2).join('/')) !== RECOVERY_DIR) {
+    throw new Error(`Not a recovery file: ${rel}`)
+  }
   markWrite(abs)
   await fs.rm(abs, { recursive: true, force: true })
 }

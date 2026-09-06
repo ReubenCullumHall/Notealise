@@ -71,7 +71,11 @@ class VideoWidget extends WidgetType {
         })
       }
     } else {
-      video.src = this.src // remote URL — let <video> fetch it directly
+      // Not a vault file. Unlike the image widget there is no `data:` exception
+      // here — a data: URI large enough to be a video is not something anyone
+      // pastes into a note by hand. See `isInlineDataUrl` in
+      // shared/attachments.ts for why a remote or file:// src is refused.
+      wrap.classList.add('cm-video-missing')
     }
     video.onerror = (): void => {
       wrap.classList.add('cm-video-missing')

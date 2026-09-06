@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, session } from 'electron'
 import path from 'node:path'
 import { CH } from '../shared/channels'
+import { openAllowedExternal } from './externalLinks'
 import {
   getHasOnboarded,
   getOnboardingStep,
@@ -13,6 +14,20 @@ import { installMenu } from './menu'
 import { initUpdater } from './updater'
 import { stopWatching } from './watcher'
 import { startRecoverySweep } from './workspace'
+import { sweepStaleExtractions } from './importers/notionZip/extractZip'
+
+// The Content-Security-Policy is injected into the renderer's HTML at build
+// time — see the `csp` plugin in electron.vite.config.ts, which is also where
+// the policy itself and the reasoning for each directive live.
+//
+// It is a <meta> tag rather than a response header set here via
+// `session.webRequest.onHeadersReceived`, which was the first attempt: a
+// packaged build loads the renderer with `loadFile`, i.e. `file://`, and a
+// file:// request is served by Chromium's protocol handler rather than its
+// network stack, so webRequest listeners are not a reliable place to attach a
+// header to it. A header that fires in dev over http://localhost and silently
+// does nothing in the shipped app is the worst shape a security control can
+// have — it would test clean every time.
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -27,6 +42,26 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  // Neither of these has a live route into it today: the renderer contains no
+  // <a href> at all, the editor routes every link click through
+  // `openAllowedExternal`, and main.tsx already blocks drop-to-navigate. They
+  // are here because the preload bridge RE-ATTACHES on navigation — so the day
+  // any anchor becomes clickable, one link in a note would hand an attacker's
+  // page the whole window.api surface: readNote, writeNote, trashEntries,
+  // exportTransfer. This is the layer that contains that mistake instead of
+  // rewarding it.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void openAllowedExternal(url)
+    return { action: 'deny' }
+  })
+  win.webContents.on('will-navigate', (e, url) => {
+    // The renderer's own document reloading (dev-server HMR, and the in-app
+    // reload after a vault reset) is the one navigation that is legitimate.
+    if (url === win.webContents.getURL()) return
+    e.preventDefault()
+    void openAllowedExternal(url)
+  })
+
   win.on('ready-to-show', () => win.show())
 
   // electron-vite provides ELECTRON_RENDERER_URL in dev; load the built file otherwise.
@@ -39,7 +74,31 @@ function createWindow(): BrowserWindow {
   return win
 }
 
+// One instance per machine. Two copies open on the same vault are not two
+// readers — `workspace.json` is written whole, on a debounce, so the second one
+// to flush silently replaces the first's pins, ordering, bin and recovery net,
+// and both run their own watcher and their own hourly recovery sweep on the
+// same files. macOS refuses a second copy of the same .app on its own; Windows
+// will happily run the .exe twice, which is where this actually bites.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const existing = BrowserWindow.getAllWindows()[0]
+    if (!existing) return
+    if (existing.isMinimized()) existing.restore()
+    existing.focus()
+  })
+}
+
 app.whenReady().then(async () => {
+  // Nothing in this app asks for a camera, a microphone, a location or a
+  // notification, so every such request is either a mistake or someone else's
+  // idea. Deny by default rather than leaving Chromium to prompt.
+  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) =>
+    callback(false)
+  )
+
   installMenu()
 
   const saved = await getSavedVault()
@@ -81,6 +140,10 @@ app.whenReady().then(async () => {
   // to any one window.
   startRecoverySweep()
 
+  // Extraction folders from earlier Notion imports. Never blocks boot, and a
+  // failure here is not worth reporting to anyone.
+  void sweepStaleExtractions().catch(() => {})
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       const w = createWindow()
@@ -96,8 +159,18 @@ app.on('window-all-closed', () => {
 // Give the renderer a chance to flush unsaved edits before we exit. Hold the
 // quit until it reports back (or a short timeout), then let it through.
 let quitting = false
+let flushDone = false
 app.on('before-quit', (e) => {
   if (quitting) {
+    // A SECOND Cmd+Q while the first is still waiting must not overtake it.
+    // This used to fall straight through and let the process go — so an
+    // impatient double-press beat the very flush the first press was holding
+    // the quit open for, and the last few hundred milliseconds of typing were
+    // gone. `flushDone` is set by whichever of the two paths below wins.
+    if (!flushDone) {
+      e.preventDefault()
+      return
+    }
     void stopWatching()
     return
   }
@@ -106,6 +179,7 @@ app.on('before-quit', (e) => {
   e.preventDefault()
   quitting = true
   const finish = (): void => {
+    flushDone = true
     void stopWatching()
     app.quit()
   }

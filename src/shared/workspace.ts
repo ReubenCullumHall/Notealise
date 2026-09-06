@@ -314,9 +314,39 @@ export interface RecoveryItem {
 export const TRASH_DIR = '.mdnotes/trash'
 export const RECOVERY_DIR = '.mdnotes/recovery'
 
+/** Is this safe to interpolate into a held-file path?
+ *
+ *  `heldPath` builds a path by string concatenation, so an `id` or `name`
+ *  carrying a separator or a `..` does not name a file inside the holding
+ *  folder — it names one somewhere else. That mattered: the recovery sweep is
+ *  the app's only hard `fs.rm`, and a name of `/../../..` resolved to the vault
+ *  root itself, which the vault boundary allows through by design. Checking the
+ *  segment here, where the path is built, is the fix that covers every caller
+ *  rather than each one separately. */
+// A backslash and a NUL, built rather than typed. A literal of either is
+// exactly the byte that goes missing (or arrives uninvited) in an edit,
+// and vault.ts already writes its CR/LF constants the same way.
+const BACKSLASH = String.fromCharCode(92)
+const NUL = String.fromCharCode(0)
+
+export function isSafeHeldSegment(s: string): boolean {
+  if (!s || s === '.' || s === '..') return false
+  // Separators on either platform, and NUL. Everything else - spaces,
+  // unicode, a dot that is not the whole segment - is an ordinary filename.
+  return !s.includes("/") && !s.includes(BACKSLASH) && !s.includes(NUL)
+}
+
 /** Where a held item's file actually is, vault-relative. The id prefix is what
- *  keeps two same-named notes from colliding in one flat folder. */
+ *  keeps two same-named notes from colliding in one flat folder.
+ *
+ *  Throws rather than sanitising: a bad segment means the record is already
+ *  wrong, and quietly rewriting it would point Restore at a file that isn't
+ *  there. `normalizeHeldItem` drops such records on read, so a throw here means
+ *  a caller built one by hand. */
 export function heldPath(dir: string, id: string, name: string): string {
+  if (!isSafeHeldSegment(id) || !isSafeHeldSegment(name)) {
+    throw new Error(`Unsafe held-item path: ${id}-${name}`)
+  }
   return `${dir}/${id}-${name}`
 }
 
@@ -427,10 +457,18 @@ function normalizeHeldItem(
   // Without an id the file can't be found, and without `from` it can't go back;
   // without the timestamp the bin can't sort it and recovery can't expire it.
   if (!id || !from || stamp === undefined) return null
+  const name = str(v.name) ?? from.split('/').pop() ?? from
+  // Both halves are interpolated into a filesystem path by `heldPath`, so a
+  // separator or a `..` in either is not a held file at all — it aims the
+  // restore, and the recovery sweep's hard delete, somewhere else entirely.
+  // Dropping the record is the right failure: the file it describes cannot be
+  // found under a legitimate name anyway, and keeping it would leave a live
+  // row in the bin pointed at the wrong thing.
+  if (!isSafeHeldSegment(id) || !isSafeHeldSegment(name)) return null
   return {
     id,
     from,
-    name: str(v.name) ?? from.split('/').pop() ?? from,
+    name,
     type: v.type === 'dir' ? 'dir' : 'file',
     stamp,
     ...(media ? { media } : {})
@@ -495,6 +533,14 @@ export function normalizeWorkspace(raw: unknown): Workspace {
   if (rawEntries && typeof rawEntries === 'object') {
     for (const [key, val] of Object.entries(rawEntries as Record<string, unknown>)) {
       if (!key || !val || typeof val !== 'object') continue
+      // A vault-relative path is never one of these, and assigning them is not
+      // an assignment: `entries['__proto__'] = …` runs the setter and silently
+      // replaces this object's prototype with parsed file data instead of
+      // storing a record, and `constructor` lands as a real own key that then
+      // survives every later pass. Object.prototype itself was never reachable
+      // — the damage was confined to this map — but a map whose prototype came
+      // out of a file on disk is not a map any of this code is written against.
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue
       entries[key] = normalizeEntry(val)
     }
   }

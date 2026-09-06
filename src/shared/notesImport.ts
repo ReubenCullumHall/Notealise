@@ -9,6 +9,28 @@ export type ImportFormat =
   | 'googleKeep'
   | 'appleNotes'
 
+/** One entry per source-picking dialog the UI should offer for a format.
+ *
+ *  `both` is a single dialog that accepts either a file or a folder. Only macOS
+ *  can show one: on Windows and Linux Electron drops the file half whenever
+ *  `openDirectory` is present, so `['openFile', 'openDirectory']` silently
+ *  became folder-ONLY there — a Windows user could not select their Notion
+ *  `.zip` at all, against a dialog whose own title said a `.zip` was fine
+ *  (confirmed on Windows 11, 2026-09-05). Those platforms get `file` and
+ *  `folder` as two separate buttons instead.
+ *
+ *  Which modes a format offers is decided in main and sent to the renderer with
+ *  the format list, for the same reason the list itself is — see
+ *  `listImporters`. The renderer must not branch on `process.platform`. */
+export type ImportPickMode = 'both' | 'file' | 'folder'
+
+/** What `importFormats` reports: the formats this build can import, and how the
+ *  user names a source for each on THIS platform. */
+export interface ImportFormatInfo {
+  id: ImportFormat
+  pickModes: ImportPickMode[]
+}
+
 export type ImportPhase = 'scanning' | 'writing' | 'done' | 'error'
 
 export interface ImportProgress {

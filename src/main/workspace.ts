@@ -193,7 +193,7 @@ export async function trashEntries(
   for (const p of ordered) {
     // Skip anything already carried away by a folder trashed in this same batch.
     if (ordered.some((other) => other !== p && isSelfOrDescendant(p, other))) continue
-    let moved: { id: string; type: 'dir' | 'file' }
+    let moved: { id: string; type: 'dir' | 'file'; name: string }
     try {
       moved = await trashEntry(p)
     } catch (e) {
@@ -203,7 +203,14 @@ export async function trashEntries(
     trash.unshift({
       id: moved.id,
       from: p,
-      name: p.split('/').pop() ?? p,
+      // From the name the file ACTUALLY landed under, not from the raw request.
+      // Two derivations of one value is one too many: `trashEntry` uses
+      // `path.basename` of the resolved path, while this used the incoming
+      // string — so `trashEntries(['a/b/'])` recorded `name: ''` (the `??`
+      // doesn't catch an empty string), the file landed at `<id>-b`, and Restore
+      // looked for `<id>-` forever. A Windows backslash path diverged the same
+      // way. `heldPath` now also refuses an empty segment outright.
+      name: moved.name,
       type: moved.type,
       deletedAt: Date.now(),
       // Only after the move actually succeeded, so a bin row never promises to
@@ -345,7 +352,17 @@ export async function purgeRecoveryEntries(ids?: string[]): Promise<Workspace> {
       kept.push(item)
       continue
     }
-    await purgeRecoveryItem(item.id, item.name)
+    // Per item, like `restoreEntries`, `purgeEntries` and
+    // `restoreRecoveryEntries` all already do. Bare, one locked file — Windows
+    // or OneDrive, exactly what `renameWithRetry` exists for — aborted the whole
+    // loop: `latest` was never updated, so items already deleted stayed listed
+    // in Settings and "clear the safety net" appeared to do nothing.
+    try {
+      await purgeRecoveryItem(item.id, item.name)
+    } catch (e) {
+      console.error(`could not purge recovery item ${item.id}`, e)
+      kept.push(item) // still on disk, so it stays on the list
+    }
   }
   const next = { entries: ws.entries, trash: ws.trash, recovery: kept }
   latest = next
@@ -375,8 +392,13 @@ async function sweepExpiredRecovery(): Promise<void> {
  *  everything else here. */
 export function startRecoverySweep(): void {
   if (sweepTimer) return
-  void sweepExpiredRecovery()
-  sweepTimer = setInterval(() => void sweepExpiredRecovery(), 60 * 60 * 1000)
+  // Caught: recoveryAbs throws synchronously on a malformed record, and this
+  // runs unattended at launch and then hourly.
+  void sweepExpiredRecovery().catch((e) => console.error('recovery sweep failed', e))
+  sweepTimer = setInterval(
+    () => void sweepExpiredRecovery().catch((e) => console.error('recovery sweep failed', e)),
+    60 * 60 * 1000
+  )
 }
 
 /** Delete a space's folder straight to the OS trash — deliberately NEVER

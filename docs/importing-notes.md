@@ -89,3 +89,120 @@ guard (never registered off darwin) and `__MAC_BUILD__` in `electron.vite.config
 rollup drop the module from the Windows bundle. It IS dropped: verified by building with the flag
 false and confirming the chunk is not emitted. The dynamic `import()` is load-bearing — a static one
 would be hoisted and survive.
+
+---
+
+## Choosing the source: one dialog per mode, decided in main (2026-09-05)
+
+`PICKER` in `ipc.ts` is keyed by an `ImportPickMode` — `'both' | 'file' | 'folder'` — and
+`importFormats()` reports, per format, which of them to offer on *this* platform. The renderer draws
+one button per mode and never looks at `process.platform`, the same arrangement the format dropdown
+already uses (`listImporters`).
+
+It is shaped that way because **only macOS can show a dialog that accepts either a file or a
+folder.** On Windows and Linux, `properties: ['openFile', 'openDirectory']` silently becomes a
+directory selector — see the cross-platform rule in `CLAUDE.md`. Notion, Markdown and HTML were all
+declared that way, so on Windows none of them could take a file: a downloaded Notion `.zip` could
+not be selected at all, and the dialog went on advertising `.zip` in its own title. Every Windows
+build had shipped like that.
+
+So `both` is offered only where a combined dialog genuinely works, and Windows/Linux get `file` and
+`folder` as two buttons. `both`'s options object is kept **verbatim** — it is what macOS still uses,
+and the point of splitting was to change nothing there. `word` (file only) and `googleKeep` (folder
+only) were never ambiguous and are untouched.
+
+Two consequences worth remembering:
+
+- **Adding a format that accepts either means adding all three modes**, not just `both`, or it
+  offers nothing on Windows. `pickModesFor` falls back to `both` rather than dead-ending, but that
+  fallback is a safety net, not a design.
+- Until this landed, the Notion `.zip` path was **unreachable through the Windows UI**, which is
+  why the archive pre-flight below could only be exercised there by handing `importPrepare` a
+  dialog-chosen path directly. It is now reachable, and the traversal case was re-verified through
+  the real picker.
+
+---
+
+## The pre-flight on an archive (added 2026-09-04)
+
+`importers/notionZip/inspectZip.ts` reads a `.zip`'s central directory **before** anything is
+extracted, and `unzipTo` refuses the archive outright if it declares a traversal entry name, a
+symlink entry, more than 200,000 entries or more than 4 GiB of expansion. `extractZip` additionally
+polls the destination's size every 2s while the extractor runs and kills the child if it exceeds
+the cap, because a declared size is a claim and a hostile archive can lie.
+
+**Why it exists.** The original reasoning was that Windows `Expand-Archive` had no containment
+check and macOS `ditto` did — **and that turned out to be wrong**, so it is corrected here rather
+than quietly dropped.
+
+- macOS `ditto` sanitises hostile entry names. Tested directly with a seven-entry archive carrying
+  `../`, deep `../`, absolute, backslash and symlink entries: nothing landed outside the
+  destination, `ditto` materialised the symlink as a regular file and refused the write-through.
+- Windows `Expand-Archive` **also** refuses them, on current Windows. Tested 2026-09-05 on Windows
+  11 26200 / PowerShell 5.1.26100.9278 with seven hostile entry-name forms (backslash,
+  forward-slash, deep, mixed separators, drive-absolute, root-absolute, embedded): every one was
+  refused or rewritten inside the destination. The `Startup` folder was untouched.
+
+So traversal is not the reason to keep the pre-flight. **Three other reasons are, and they are
+better ones:**
+
+1. **`Expand-Archive` exits 0 while refusing an entry**, and `run()` in `extractZip.ts` resolves on
+   code 0. So before this landed, a hostile archive imported as a **silent partial success** —
+   entries quietly missing, no error, nothing in the Import Report to say so. That is arguably
+   worse than a loud refusal, because the user believes the import worked.
+2. **Neither extractor checks symlink entries or expansion size.** The zip-bomb and symlink cases
+   are entirely the pre-flight's own work.
+3. **It is version-dependent.** The containment behaviour above is a property of the PowerShell
+   module version on that machine, not a guarantee of the API. Relying on it means the app's safety
+   changes when someone else's OS does.
+
+The pre-flight is therefore the app's own answer, applies equally on both platforms, and — unlike
+the extractors — **fails loudly**. **It is new code sitting on the happy path**, so any change here needs a real
+Notion export imported afterwards, not just the unit tests (`inspectZip.test.ts`, 8 cases, which
+build hostile archives byte-by-byte because a zip tool rewrites `../` on the way in).
+
+Zip bombs were unbounded before this: a 204 KB archive of zero-bytes expanded to 200 MiB in 0.13 s
+through the exact `ditto` call this guards — a measured ratio of about 1028:1, so ten megabytes of
+zip is ten gigabytes on disk, with no progress, no cancel and no error until the volume filled.
+
+## An imported document cannot name a path outside the import folder
+
+`importers/assets.ts`'s `isInsideSource` is the check, and `copyLocalAsset` applies it **before**
+`fs.readFile`, not after. Two reasons it has to be before:
+
+1. `path.resolve(sourceDir, target)` **discards `sourceDir` when `target` is absolute** — specified
+   behaviour. So `<img src="/Users/you/.ssh/id_rsa">` in an imported `.html` resolved to exactly
+   that file, was read, and was copied into the vault beside the user's notes under its basename.
+   `isRemoteUrl` did not catch it: it only ever rejected `scheme://`.
+2. On Windows the same line accepted a UNC path, and `fs.readFile` on a UNC path **is** the network
+   request — an outbound SMB connection to a host the document chose, leaking the user's NTLMv2
+   challenge/response. Checking the bytes afterwards would be far too late.
+
+The Google Keep importer resolves its own `attachments[].filePath` and needed the same check
+separately.
+
+## The extraction folder is swept, not left
+
+`extractZip` used to remove only the intermediate peel levels; the final extraction was never
+cleaned up — not after preview, not after run, not on error. Every Notion import therefore left a
+complete second copy of the user's entire workspace in the OS temp directory, indefinitely. For a
+product whose promise is that notes are files in one folder you chose, that is a privacy point
+before it is a disk-space one. `sweepStaleExtractions()` runs at launch and removes
+`notes-import-*` folders older than an hour — swept at launch rather than deleted when an import
+ends, because the same extraction is used by `importPreview` and then again by `importRun`, so the
+moment it stops being needed is not a moment that module can see.
+
+## Cancel actually cancels
+
+`notionZip/run.ts`'s `createStructure` had **zero** `importCancelled()` checks, and it is the pass
+that creates every note and folder — so Stop left the button reading "Stopping…" while the app
+carried on building the whole tree. Extraction itself is still not cancellable, and the panel shows
+no Stop button during it; that is a known gap, not a fixed one.
+
+## The Import Report is data, not markup
+
+`report.ts` interpolates titles and reasons that came out of the archive. A title may legally
+contain a newline on macOS and is entirely free-form in a Google Keep JSON, so a raw interpolation
+let an entry close the list and write its own sections — including a convincing "Nothing was
+skipped or lossy." The report is the one surface telling the user what did *not* come across, so
+`oneLine()` collapses whitespace and escapes markdown emphasis characters.

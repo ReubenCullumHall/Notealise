@@ -90,6 +90,23 @@ export function encodeTarget(name: string): string {
  *  The exact counterpart of `encodeTarget` above, and kept beside it for that
  *  reason: one writes the destination, the other reads it, and a disagreement
  *  between them is a picture that silently won't load. */
+/** Is an embed target that ISN'T a vault file still safe to put in a `src`?
+ *
+ *  Only `data:` is. It carries its own bytes, so it reaches neither the network
+ *  nor the disk, and someone pasting a small inline image has done nothing
+ *  wrong. Everything else `resolveVaultPath` rejects is a request to somewhere:
+ *  `https:` fetched on scroll and told the note's author when it was opened,
+ *  and `file:` displayed any picture on the machine, past the boundary every
+ *  IPC read honours.
+ *
+ *  This mirrors `img-src`/`media-src` in the renderer's CSP (see
+ *  electron.vite.config.ts), deliberately. The CSP is the control — this is
+ *  what stops the app ASKING, so the reader gets the ordinary missing-picture
+ *  placeholder instead of a silent console violation. */
+export function isInlineDataUrl(target: string): boolean {
+  return /^data:/i.test(target)
+}
+
 export function resolveVaultPath(target: string, notePath: string): string | null {
   if (/^[a-z]+:\/\//i.test(target) || target.startsWith('data:') || target.startsWith('#')) return null
   let decoded: string

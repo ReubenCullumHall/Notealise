@@ -21,6 +21,36 @@ files:
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!{.oxlintrc.json,CLAUDE.md,PROJECT-CONTEXT-BRIEF.md,run-legacy.bat,vercel.json}'
+# Electron ships every fuse in its permissive default state, and the packaged
+# binary confirmed it: the fuse wire in release/win-unpacked/Notealise.exe read
+# 101100011, i.e. RunAsNode, NODE_OPTIONS and the --inspect CLI arguments all
+# enabled. That makes this app a general-purpose Node interpreter that happens
+# to be signed by nobody: `ELECTRON_RUN_AS_NODE=1 Notealise.exe -e "<anything>"`
+# runs arbitrary code, and NODE_OPTIONS=--require=./x.js does it via any launch.
+#
+# On an unsigned build an attacker with local write access could replace the
+# binary outright, so this is not the whole story — what it buys is stopping
+# malware that never touches the app's own files from borrowing it as a
+# living-off-the-land interpreter, which is a cheaper attack and a common one.
+#
+# enableEmbeddedAsarIntegrityValidation is deliberately NOT set: on macOS it
+# depends on a signed bundle to have anything to validate against, and this
+# build is unsigned by design. Turn it on with the signing work, not before.
+electronFuses:
+  # MUST be set, and this is not optional bookkeeping: flipping a fuse rewrites
+  # bytes inside the Electron Framework binary AFTER it has been ad-hoc signed,
+  # which invalidates that signature — and on Apple Silicon macOS refuses to
+  # exec a binary whose signature does not verify. Without this the packaged
+  # .app dies instantly, with no window, no crash dialog and nothing on stdout;
+  # the only tell is `spctl -a -vvv` reporting "code has no resources but
+  # signature indicates they must be present". Confirmed here 2026-09-04 by
+  # packaging it wrong first.
+  resetAdHocDarwinSignature: true
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
 win:
   target: nsis
   artifactName: ${productName}-Setup.${ext}
@@ -39,9 +69,18 @@ mac:
   identity: null
 dmg:
   writeUpdateInfo: false
-# owner/repo are inferred from the git remote in CI; GH_TOKEN authorises the upload.
+# owner/repo are PINNED rather than inferred from the git remote. Inference is
+# what an installer's update feed is built from, so a build made in a clone whose
+# `origin` points somewhere else produces installers that quietly update from
+# that other repo, with nothing failing loudly. It has already drifted once:
+# after the Notes-app -> Notealise rename, the last local build's app-update.yml
+# still read `repo: Notes-app`, and it only kept working because GitHub redirects
+# renamed repositories.
+#
 # releaseType: release publishes immediately (not a draft) so the download page's
 # /releases/latest/download/ links resolve without a manual "publish" click.
 publish:
   provider: github
+  owner: ReubenCullumHall
+  repo: Notealise
   releaseType: release

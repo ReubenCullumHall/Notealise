@@ -9,11 +9,18 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Nothing here writes anything. Stated rather than inherited, so it does not
+# depend on a repository-wide default nobody will think to re-check.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20

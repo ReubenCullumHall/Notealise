@@ -144,3 +144,61 @@ on a Mac — no "Install updates automatically" toggle, no "Restart & install" b
 - The 6h interval re-checks but the toast only appears when the version *changes*, since
   dismissal is keyed by version. That is intended; worth revisiting if someone dismisses at 09:00
   and wants reminding by 17:00.
+
+---
+
+## Security changes, 2026-09-04
+
+### The macOS download no longer reuses a file it did not write
+
+`downloadMacDmg` used to hand back any non-empty file already sitting at
+`~/Downloads/Notealise-<version>.dmg`, on the reasonable-sounding grounds that nobody should wait
+for 100 MB twice. The problem is that every part of that name is predictable — the version comes
+from the public releases feed, so an attacker knows the filename before the user does — and
+`~/Downloads` is writable by every process running as that user and is where every browser download
+lands.
+
+Planting a file there was enough to make the app report `ready`, tell the user **in its own voice**
+that the update had downloaded and was waiting to replace this copy, and open Finder on it. The
+app's own UI supplied the social engineering. There is nothing downstream to catch it: the build is
+unsigned, and the GitHub API publishes no digest for a release asset, so `macUpdate.ts`'s only
+integrity check is `seen === Content-Length`, which is a truncation check and not an authenticity
+one.
+
+`freeTargetPath` now picks the first free name, suffixing " (2)" like every other collision in the
+app, so the path handed back is always a file this download wrote. The cost is that clicking
+Download twice fetches twice.
+
+**Still open** (`docs/security.md` has the table): the file still lands in `~/Downloads`, so
+anything running as the user can still replace it between the app writing it and the user opening
+it. Closing that means downloading into `userData` instead — which changes the copy in
+`UpdateBanner.tsx` and `UpdateToast.tsx` ("It is in your Downloads folder…") **and** the website's
+`site/install/mac.html` guide. That is a product decision, not a code one.
+
+The best available fix short of code signing is to publish a `SHASUMS` asset from `release.yml` and
+verify it in `downloadMacDmg` — the workflow already has the file in hand.
+
+### `electronFuses`, and the trap that comes with them
+
+`electron-builder.yml` now sets `runAsNode: false`, `enableNodeOptionsEnvironmentVariable: false`,
+`enableNodeCliInspectArguments: false`, `enableCookieEncryption: true` and
+`onlyLoadAppFromAsar: true`. The fuse wire read out of the previously shipped `Notealise.exe` was
+`101100011` — every one of those at Electron's permissive default, which made the app a
+general-purpose Node interpreter signed by nobody. On an unsigned build an attacker with local
+write access could replace the binary outright, so this is not the whole story; what it buys is
+stopping malware that never touches the app's own files from borrowing it.
+
+`resetAdHocDarwinSignature: true` is **mandatory** alongside them — see the gotcha in `CLAUDE.md`.
+Without it the packaged macOS app does not launch at all, silently. Verified after the fix: wire
+`010001011`, app launches, `ELECTRON_RUN_AS_NODE` and `NODE_OPTIONS=--require` both refused.
+
+`enableEmbeddedAsarIntegrityValidation` is deliberately **not** set: on macOS it needs a signed
+bundle to have anything to validate against. It belongs with the signing work, and carries the
+`MAC_UNSIGNED_WORKAROUND` reasoning like the rest of this layer.
+
+### `publish.owner`/`publish.repo` are pinned
+
+They were inferred from the git remote at build time, and the evidence that this drifts was sitting
+in the repo: the last local build's `app-update.yml` still read `repo: Notes-app`, the pre-rename
+name, and only worked because GitHub redirects renamed repositories. A build made from a clone
+whose `origin` points elsewhere would ship installers that update from that other repo, silently.

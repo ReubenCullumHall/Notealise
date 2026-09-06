@@ -2,6 +2,7 @@ import { Decoration, EditorView, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { linkEnv } from './linkEnv'
 import { cachedUrl, loadImage, resolveVaultPath } from './imageAssets'
+import { isInlineDataUrl } from '../../../shared/attachments'
 import { type Pass } from './livePreview'
 import { insideEmbed, selectionCovers, selectionSwallows, embedSpanAt, remeasureWhenSized } from './attachSelect'
 import { attachDragHandle } from './attachMove'
@@ -79,8 +80,14 @@ class ImageWidget extends WidgetType {
           }
         })
       }
+    } else if (isInlineDataUrl(this.src)) {
+      img.src = this.src // self-contained bytes: no network, no disk
     } else {
-      img.src = this.src // remote URL — let the <img> fetch it
+      // A target that is neither a vault file nor inline data — an http(s) URL,
+      // a file:// path. Deliberately not fetched: see `isInlineDataUrl`. The
+      // reader gets the same placeholder as a picture whose file has gone,
+      // which is the honest answer, because from here it has.
+      wrap.classList.add('cm-image-missing')
     }
     img.onerror = (): void => {
       wrap.classList.add('cm-image-missing')

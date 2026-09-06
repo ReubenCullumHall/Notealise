@@ -7,6 +7,7 @@ import { buildImportReport } from '../report'
 import { createImportSpace } from '../space'
 import { duplicateWarning } from '../duplicates'
 import { collectFiles } from '../files'
+import { isInsideSource } from '../assets'
 
 // Google Keep comes out of Google Takeout as one .json PER NOTE, with any
 // images sitting beside them and referenced by `attachments[].filePath`.
@@ -171,6 +172,14 @@ async function run(
         if (!fp) continue
         const from = path.resolve(path.dirname(file), fp)
         const name = path.basename(fp)
+        // Same containment check the shared `copyLocalAsset` path applies, and
+        // for the same reason: `filePath` comes out of the Takeout JSON, which
+        // is a file someone else made. An absolute path here would discard the
+        // export folder entirely and read whatever it names.
+        if (!isInsideSource(from, path.dirname(file))) {
+          lossy.push({ path: relPath, note: `Picture "${name}" wasn’t in the export folder` })
+          continue
+        }
         try {
           await writeAsset(path.posix.join(path.posix.dirname(relPath), name), await fs.readFile(from))
           assetLinks.push(name)

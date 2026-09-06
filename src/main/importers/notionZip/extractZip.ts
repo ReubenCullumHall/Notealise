@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto'
 import { app } from 'electron'
 import { promises as fs } from 'fs'
 import path from 'path'
+import { ZIP_LIMITS, assertSafeZip } from './inspectZip'
 
 // A 6-second extraction hung for 30+ minutes the first time this ran for
 // real (2026-08-04). Root cause: `spawn`'s stdout/stdin default to pipes, and
@@ -14,28 +15,76 @@ import path from 'path'
 // nothing. `stdio: ['ignore', 'pipe', 'pipe']` plus actually consuming both
 // pipes (even by discarding the data) removes both traps, and the timeout
 // below is the backstop for whatever this reasoning missed.
-function run(cmd: string, args: string[], timeoutMs = 10 * 60_000): Promise<void> {
+function run(
+  cmd: string,
+  args: string[],
+  timeoutMs = 10 * 60_000,
+  /** Polled every 2s while the child runs. Return a reason to kill it. The
+   *  archive's declared sizes are a claim (`assertSafeZip` checks them, and a
+   *  hostile archive can simply lie), so this watches what is actually landing
+   *  on disk. */
+  guard?: () => Promise<string | null>
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     let stderr = ''
+    let failure: Error | null = null
     child.stdout.on('data', () => {}) // drain — unread output can block the child
     child.stderr.on('data', (d: Buffer) => {
       stderr += d.toString()
     })
     const timer = setTimeout(() => {
+      failure = new Error(`${cmd} timed out after ${Math.round(timeoutMs / 1000)}s`)
       child.kill()
-      reject(new Error(`${cmd} timed out after ${Math.round(timeoutMs / 1000)}s`))
     }, timeoutMs)
-    child.on('error', (e) => {
+    const watch = guard
+      ? setInterval(() => {
+          void guard().then((reason) => {
+            if (!reason || failure) return
+            failure = new Error(reason)
+            child.kill()
+          })
+        }, 2000)
+      : null
+    const done = (): void => {
       clearTimeout(timer)
+      if (watch) clearInterval(watch)
+    }
+    child.on('error', (e) => {
+      done()
       reject(e)
     })
     child.on('close', (code) => {
-      clearTimeout(timer)
-      if (code === 0) resolve()
+      done()
+      if (failure) reject(failure)
+      else if (code === 0) resolve()
       else reject(new Error(`${cmd} exited with code ${code}: ${stderr.trim()}`))
     })
   })
+}
+
+/** Bytes currently sitting under `dir`. Cheap enough to poll: it walks names
+ *  and stats, and stops counting once it is past the ceiling — the answer only
+ *  has to be "too much" or "not yet". */
+async function bytesUnder(dir: string, limit: number): Promise<number> {
+  let total = 0
+  const stack = [dir]
+  while (stack.length) {
+    const at = stack.pop() as string
+    const entries = await fs.readdir(at, { withFileTypes: true }).catch(() => [])
+    for (const e of entries) {
+      const p = path.join(at, e.name)
+      if (e.isDirectory()) stack.push(p)
+      else if (e.isFile()) {
+        total += await fs
+          .stat(p)
+          .then((s) => s.size)
+          .catch(() => 0)
+        if (total > limit) return total
+      }
+    }
+  }
+  return total
 }
 
 /** One extraction, using the OS's own tool — no bundled zip dependency.
@@ -47,16 +96,29 @@ function run(cmd: string, args: string[], timeoutMs = 10 * 60_000): Promise<void
  *  is what Finder itself uses to extract a double-clicked .zip and decoded
  *  the same file correctly. */
 async function unzipTo(zipPath: string, destDir: string): Promise<void> {
+  // Before a single byte is written. `ditto` sanitises hostile entry names on
+  // its own; `Expand-Archive` does not, and the app used to add nothing on
+  // either platform. See inspectZip.ts.
+  await assertSafeZip(zipPath)
   await fs.mkdir(destDir, { recursive: true })
+  const guard = async (): Promise<string | null> =>
+    (await bytesUnder(destDir, ZIP_LIMITS.MAX_TOTAL_BYTES)) > ZIP_LIMITS.MAX_TOTAL_BYTES
+      ? 'That archive is unpacking to more than this can import, so it was stopped.'
+      : null
   if (process.platform === 'win32') {
     const esc = (s: string): string => s.replace(/'/g, "''")
-    await run('powershell', [
-      '-NoProfile',
-      '-Command',
-      `Expand-Archive -LiteralPath '${esc(zipPath)}' -DestinationPath '${esc(destDir)}' -Force`
-    ])
+    await run(
+      'powershell',
+      [
+        '-NoProfile',
+        '-Command',
+        `Expand-Archive -LiteralPath '${esc(zipPath)}' -DestinationPath '${esc(destDir)}' -Force`
+      ],
+      10 * 60_000,
+      guard
+    )
   } else {
-    await run('ditto', ['-x', '-k', zipPath, destDir])
+    await run('ditto', ['-x', '-k', zipPath, destDir], 10 * 60_000, guard)
   }
 }
 
@@ -66,6 +128,33 @@ async function meaningfulEntries(dir: string): Promise<{ name: string; isDir: bo
   return entries
     .filter((e) => e.name !== '__MACOSX' && !e.name.startsWith('.'))
     .map((e) => ({ name: e.name, isDir: e.isDirectory() }))
+}
+
+/** Remove extraction folders left behind by earlier imports.
+ *
+ *  `extractZip` creates `<temp>/notes-import-<hex>/`, and only ever removed the
+ *  INTERMEDIATE peel levels — the final extraction was never cleaned up, not
+ *  after a preview, not after a run, not after a failure. So every Notion import
+ *  left a complete second copy of the user's whole workspace sitting in the OS
+ *  temp directory, indefinitely. For a product whose promise is that your notes
+ *  are files in one folder you chose, that is a privacy point at least as much
+ *  as a disk-space one.
+ *
+ *  Swept at launch rather than deleted when an import ends, because the same
+ *  extraction is used by `importPreview` and then again by `importRun` — the
+ *  moment it stops being needed is not a moment this module can see. An hour is
+ *  far longer than any import and far shorter than "forever". */
+export async function sweepStaleExtractions(maxAgeMs = 60 * 60_000): Promise<void> {
+  const dir = app.getPath('temp')
+  const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
+  const now = Date.now()
+  for (const e of entries) {
+    if (!e.isDirectory() || !e.name.startsWith('notes-import-')) continue
+    const p = path.join(dir, e.name)
+    const stat = await fs.stat(p).catch(() => null)
+    if (!stat || now - stat.mtimeMs < maxAgeMs) continue
+    await fs.rm(p, { recursive: true, force: true }).catch(() => {})
+  }
 }
 
 /** Extracts a Notion export .zip and returns the folder that should be

@@ -126,10 +126,19 @@ export function syncPresets(drafts: PresetDraft[]): Promise<SpacePreset[]> {
         // renderer, and a key-order difference between those two would make
         // every sync think every preset had changed.
         if (lookKey(list[at].look) === lookKey(draft.look)) continue
-        list[at] = { ...draft, id: list[at].id } // keep the id: it is the UI's key
+        // Normalised on the way IN, the way every read path already does. This
+        // was the one place a renderer-supplied object was written to disk
+        // exactly as it arrived: PRESET_CAP bounds how MANY presets there can
+        // be, and nothing bounded what any single one of them contained.
+        const kept = normalizePreset({ ...draft, id: list[at].id }, list[at].id) // keep the id: it is the UI's key
+        if (!kept) continue
+        list[at] = kept
       } else {
         if (list.length >= PRESET_CAP) continue
-        list.push({ ...draft, id: randomUUID() })
+        const id = randomUUID()
+        const made = normalizePreset({ ...draft, id }, id)
+        if (!made) continue
+        list.push(made)
       }
       changed = true
     }

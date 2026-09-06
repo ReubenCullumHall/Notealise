@@ -103,6 +103,33 @@ function targetPath(version: string): string {
   return path.join(app.getPath('downloads'), `Notealise-${version}.dmg`)
 }
 
+/** The first free name at `dest`, suffixing " (2)", " (3)"… like every other
+ *  collision in this app.
+ *
+ *  This exists so the path handed back is always a file THIS download wrote.
+ *  It used to hand back any non-empty file already sitting at `dest`, on the
+ *  reasonable-sounding grounds that nobody should wait for 100 MB twice — but
+ *  the name is fully predictable (the version comes from the public feed, so an
+ *  attacker knows it before the user does) and `~/Downloads` is writable by
+ *  every process running as that user and is where every browser download
+ *  lands. Planting a file there was enough to make the app report `ready`, tell
+ *  the user in its own voice that the update had downloaded, and open Finder on
+ *  it. There is no signature to catch that afterwards: the build is unsigned,
+ *  and the GitHub API publishes no digest for a release asset. */
+async function freeTargetPath(version: string): Promise<string> {
+  const first = targetPath(version)
+  const ext = path.extname(first)
+  const stem = first.slice(0, -ext.length)
+  for (let n = 1; ; n++) {
+    const candidate = n === 1 ? first : `${stem} (${n})${ext}`
+    try {
+      await fs.stat(candidate)
+    } catch {
+      return candidate // nothing there — this one is ours
+    }
+  }
+}
+
 /**
  * Fetch the .dmg into the user's Downloads folder.
  *
@@ -112,8 +139,9 @@ function targetPath(version: string): string {
  * until it fails to mount. A failure removes the partial rather than leaving
  * litter behind.
  *
- * If the finished file is already there, it is handed straight back — someone
- * who downloaded and then clicked again should not wait for 100 MB twice.
+ * A file already sitting at that name is NOT reused — see `freeTargetPath`. The
+ * cost is that clicking Download twice fetches twice; the alternative was
+ * trusting bytes the app did not write, at a path anyone could predict.
  */
 export async function downloadMacDmg(
   release: FeedRelease,
@@ -122,13 +150,7 @@ export async function downloadMacDmg(
   if (!release.dmgUrl || !isAllowedReleaseUrl(release.dmgUrl)) {
     throw new Error('that release has no macOS download')
   }
-  const dest = targetPath(release.version)
-  try {
-    const st = await fs.stat(dest)
-    if (st.isFile() && st.size > 0) return dest
-  } catch {
-    /* not there yet — the normal path */
-  }
+  const dest = await freeTargetPath(release.version)
 
   const part = `${dest}.part`
   await fs.rm(part, { force: true })

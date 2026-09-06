@@ -60,3 +60,17 @@ __pycache__/
 # workstations. They are conflict artefacts, never something to commit.
 *-MacBook Air.*
 *-MacBook Air
+
+# Credentials. Nothing of the sort has ever been committed here — this is
+# pre-emptive, because the repo is PUBLIC and signing is deferred rather than
+# cancelled: the day an Apple or Windows certificate arrives, a .p12 dropped in
+# the project root would otherwise be fully stageable.
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.cer
+*.pem
+*.key
+*.mobileprovision

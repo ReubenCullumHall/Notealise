@@ -128,6 +128,10 @@ export async function listInstalledFonts(): Promise<InstalledFont[]> {
   return out
 }
 
+/** A woff2 for one typeface. The largest in the catalogue is OpenDyslexic at
+ *  about 115 KB, so this is roughly forty times the biggest real answer. */
+const MAX_FONT_BYTES = 5 * 1024 * 1024
+
 /** Fetch a catalogue font's woff2 and cache it. Rejects nothing this build
  *  doesn't already validate — an unknown or already-bundled id is a bug in
  *  the caller, not a user-facing failure, so it comes back as `ok: false`
@@ -145,7 +149,25 @@ export async function downloadFont(id: string): Promise<
   try {
     const res = await fetch(entry.cdnUrl, { signal: controller.signal })
     if (!res.ok) return { ok: false, error: `Download failed (${res.status}).` }
+
+    // A declared length first, so an endless response is refused before it is
+    // read rather than after. `arrayBuffer()` on its own is unbounded, and
+    // macUpdate.ts already caps its download — the discipline existed, this
+    // path just never got it.
+    const declared = Number(res.headers.get('content-length') ?? 0)
+    if (declared > MAX_FONT_BYTES) return { ok: false, error: 'That font file is too big.' }
     const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length > MAX_FONT_BYTES) return { ok: false, error: 'That font file is too big.' }
+
+    // Is it actually a font? These bytes are fetched at runtime from a CDN and
+    // handed straight to Chromium's font parser via FontFace in the renderer —
+    // historically a rich source of CVEs — so "whatever came back" is not a
+    // good enough answer. wOF2 is the magic number for the format the catalogue
+    // asks for, and checking it also catches the ordinary case of a CDN
+    // returning an HTML error page with a 200.
+    if (buf.subarray(0, 4).toString('latin1') !== 'wOF2') {
+      return { ok: false, error: "That download wasn't a font file." }
+    }
 
     await fs.mkdir(downloadedDir(), { recursive: true })
     await fs.writeFile(path.join(downloadedDir(), `${id}.woff2`), buf)

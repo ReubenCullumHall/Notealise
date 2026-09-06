@@ -20,8 +20,16 @@ export interface SanitizeResult {
  *  empty string. A `/` or `\` in the input is treated as a forbidden character
  *  (replaced), not a directory boundary. */
 export function sanitizeFilename(raw: string): SanitizeResult {
+  // Coerce first, because this function is a security boundary reached over IPC
+  // and the type annotation is not one. `for (const ch of raw)` over a STRING
+  // yields characters; over an ARRAY it yields whole elements, and
+  // `FORBIDDEN.has('../../evil')` is false — so every separator in it survived
+  // untouched and `createFolder(['../../evil'])` made a directory outside the
+  // vault. Structured clone carries an array across the bridge intact, so the
+  // renderer could send one; nothing but the annotation said it couldn't.
+  const text = typeof raw === 'string' ? raw : String(raw)
   let out = ''
-  for (const ch of raw) {
+  for (const ch of text) {
     if (ch.charCodeAt(0) < 0x20) continue // strip control chars
     out += FORBIDDEN.has(ch) ? '-' : ch
   }
@@ -32,5 +40,5 @@ export function sanitizeFilename(raw: string): SanitizeResult {
 
   if (out === '') out = 'Untitled'
 
-  return { name: out, changed: out !== raw }
+  return { name: out, changed: out !== text }
 }

@@ -24,7 +24,7 @@ class BlockMathWidget extends WidgetType {
     const div = document.createElement('div')
     div.className = 'cm-math cm-math-display'
     try {
-      div.innerHTML = katex.renderToString(this.latex, { displayMode: true, throwOnError: false })
+      div.innerHTML = katex.renderToString(this.latex, { displayMode: true, throwOnError: false, maxSize: 100 })
     } catch {
       div.className = 'math-error'
       div.textContent = '$$' + this.latex + '$$'

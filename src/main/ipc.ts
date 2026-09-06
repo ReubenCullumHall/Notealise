@@ -67,7 +67,7 @@ import { htmlImporter } from './importers/html/run'
 import { markdownImporter } from './importers/markdown/run'
 import { googleKeepImporter } from './importers/googleKeep/run'
 import { wordImporter } from './importers/word/run'
-import type { ImportFormat } from '../shared/notesImport'
+import type { ImportFormat, ImportPickMode } from '../shared/notesImport'
 import type { AppSettings } from '../shared/settings'
 import type { PresetDraft } from '../shared/presets'
 import type { EntryMeta, MediaOrigin } from '../shared/workspace'
@@ -121,6 +121,43 @@ const attachmentKind = (abs: string): AttachmentKind | null => kindForFilename(p
 
 let win: BrowserWindow | null = null
 
+/** Have the `ipcMain.handle` registrations been done for this process?
+ *
+ *  `ipcMain.handle` THROWS on a second registration for the same channel, and
+ *  the handlers are process-wide, not per-window — so calling `registerIpc`
+ *  again for a second window is not "re-wiring the new window", it is an
+ *  uncaught exception in main, which Electron turns into a "A JavaScript error
+ *  occurred in the main process" dialog. On macOS that is an ordinary gesture:
+ *  close the window (the app stays running), then click the Dock icon. */
+let handlersRegistered = false
+
+/** The window IPC should talk to right now.
+ *
+ *  Handlers used to close over the `window` argument of the registration that
+ *  created them, which was fine while there was only ever one registration and
+ *  one window. Now that they are registered once for the life of the process,
+ *  a captured reference would still point at the FIRST window — so every file
+ *  dialog would be parented to a destroyed window (on macOS it opens as a
+ *  free-floating panel instead of a sheet) long after that window is gone. */
+function activeWindow(): BrowserWindow {
+  if (win && !win.isDestroyed()) return win
+  const fallback = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  if (!fallback) throw new Error('No window is open')
+  return fallback
+}
+
+/** Push to the renderer, or do nothing if there is no live window.
+ *
+ *  `win?.` alone was not enough: `win` was assigned once and never cleared, so
+ *  after the window closed it held a destroyed `BrowserWindow` and `.webContents`
+ *  threw `Object has been destroyed`. From the import-progress callback that
+ *  rejected `run()` mid-import; from the watcher callback — a plain chokidar
+ *  listener, not a promise chain — it was an uncaught exception in main. */
+function sendToWindow(channel: string, payload: unknown): void {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return
+  win.webContents.send(channel, payload)
+}
+
 /** Point the vault at `root`: set the boundary, then (re)start the watcher so
  *  external changes are pushed to the renderer. Used on launch and on pick. */
 export function activateVault(root: string): void {
@@ -128,19 +165,29 @@ export function activateVault(root: string): void {
   // state before repointing, so nothing leaks across a vault switch.
   void resetWorkspaceForVaultSwitch()
   setVaultRoot(root)
-  void ensureMdnotes(root) // create the hidden in-vault config folder (non-blocking)
+  // Non-blocking, but not unhandled: fs.mkdir rejects on a read-only or
+  // permission-denied vault folder, and an unhandled rejection in main is a
+  // process-level crash, not a log line.
+  void ensureMdnotes(root).catch((e) => console.error('could not create .mdnotes', e))
   startWatching(root, (change) => {
-    win?.webContents.send(CH.changed, change)
+    sendToWindow(CH.changed, change)
   })
 }
 
 export function registerIpc(window: BrowserWindow): void {
   win = window
+  // Drop the reference the moment the window goes, so `sendToWindow` and
+  // `activeWindow` can tell "no window" from "a window that used to exist".
+  window.on('closed', () => {
+    if (win === window) win = null
+  })
+  if (handlersRegistered) return
+  handlersRegistered = true
 
   ipcMain.handle(CH.getVault, () => getVaultRoot())
 
   ipcMain.handle(CH.pickVault, async () => {
-    const res = await dialog.showOpenDialog(window, {
+    const res = await dialog.showOpenDialog(activeWindow(), {
       title: 'Choose your vault folder',
       properties: ['openDirectory', 'createDirectory']
     })
@@ -165,7 +212,7 @@ export function registerIpc(window: BrowserWindow): void {
     return writeAssetUnique(dir, filename, Buffer.from(data))
   })
   ipcMain.handle(CH.pickAttachment, async (_e, dir: string) => {
-    const res = await dialog.showOpenDialog(window, {
+    const res = await dialog.showOpenDialog(activeWindow(), {
       title: 'Attach a photo or video',
       properties: ['openFile', 'multiSelections'],
       filters: [
@@ -212,12 +259,12 @@ export function registerIpc(window: BrowserWindow): void {
     renamePreset(from, to, origin)
   )
   ipcMain.handle(CH.deletePreset, (_e, id: string) => deletePreset(id))
-  ipcMain.handle(CH.exportPresets, (_e, ids: string[] | null) => exportPresets(window, ids))
-  ipcMain.handle(CH.importPresets, (_e, text?: string) => importPresets(window, text))
+  ipcMain.handle(CH.exportPresets, (_e, ids: string[] | null) => exportPresets(activeWindow(), ids))
+  ipcMain.handle(CH.importPresets, (_e, text?: string) => importPresets(activeWindow(), text))
 
   ipcMain.handle(CH.listInstalledFonts, () => listInstalledFonts())
   ipcMain.handle(CH.downloadFont, (_e, id: string) => downloadFont(id))
-  ipcMain.handle(CH.importCustomFont, () => importCustomFont(window))
+  ipcMain.handle(CH.importCustomFont, () => importCustomFont(activeWindow()))
   ipcMain.handle(CH.removeFont, (_e, id: string) => removeFont(id))
 
   ipcMain.handle(CH.getWorkspace, () => getWorkspace())
@@ -247,7 +294,11 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.setAutoUpdate, (_e, on: boolean) => setAutoUpdate(on))
   ipcMain.on(CH.installUpdate, () => installNow())
   ipcMain.handle(CH.revealUpdate, () => revealUpdate())
-  ipcMain.on(CH.openReleases, () => void openReleasesPage())
+  // ipcMain.on does NOT wrap its listener the way ipcMain.handle does, so a
+  // rejection from shell.openExternal here would be unhandled.
+  ipcMain.on(CH.openReleases, () =>
+    void openReleasesPage().catch((e) => console.error('could not open the releases page', e))
+  )
   ipcMain.handle(CH.sendBugReport, (_e, fromEmail: string, message: string) =>
     sendBugReport(fromEmail, message)
   )
@@ -255,8 +306,8 @@ export function registerIpc(window: BrowserWindow): void {
     sendFeatureRequest(fromEmail, message)
   )
   ipcMain.handle(CH.openExternal, (_e, url: string) => openAllowedExternal(url))
-  ipcMain.handle(CH.exportTransfer, () => exportTransfer(window))
-  ipcMain.handle(CH.importTransfer, (_e, text?: string) => importTransfer(window, text))
+  ipcMain.handle(CH.exportTransfer, () => exportTransfer(activeWindow()))
+  ipcMain.handle(CH.importTransfer, (_e, text?: string) => importTransfer(activeWindow(), text))
   ipcMain.handle(CH.transferInventory, () => transferInventory())
   ipcMain.handle(CH.vaultEstablished, () => {
     const root = getVaultRoot()
@@ -294,45 +345,153 @@ export function registerIpc(window: BrowserWindow): void {
   // `.doc` is deliberately absent from Word's list: the pre-2007 binary format
   // is a different thing entirely and can't be read, so the picker won't offer
   // a file that would only fail later.
-  const PICKER: Record<ImportFormat, Electron.OpenDialogOptions> = {
+  // One dialog per pick mode, rather than one options object per format.
+  //
+  // `both` is the combined dialog — a single "choose a file OR a folder"
+  // panel. macOS's NSOpenPanel does that; Windows and Linux cannot, and
+  // Electron resolves the conflict by SILENTLY dropping the file half whenever
+  // `openDirectory` is present. So the old combined-only table meant that on
+  // Windows the Notion picker was folder-only and typing a .zip path into it
+  // was answered with "The folder name is not valid" — against a dialog titled
+  // "Choose your Notion export (.zip or an already-unzipped folder)". Markdown
+  // and HTML had the same shape and so lost single-file imports too. Found on
+  // Windows 11, 2026-09-05; it had been that way in every Windows build.
+  //
+  // `both` is therefore offered ONLY where it actually works, and the two
+  // single-purpose dialogs stand in elsewhere. Keeping `both` verbatim matters:
+  // it is what macOS still gets, unchanged.
+  const PICKER: Record<
+    ImportFormat,
+    Partial<Record<ImportPickMode, Electron.OpenDialogOptions>>
+  > = {
     notion: {
-      title: 'Choose your Notion export (.zip or an already-unzipped folder)',
-      properties: ['openDirectory', 'openFile'],
-      filters: [{ name: 'Notion export', extensions: ['zip'] }]
+      both: {
+        title: 'Choose your Notion export (.zip or an already-unzipped folder)',
+        properties: ['openDirectory', 'openFile'],
+        filters: [{ name: 'Notion export', extensions: ['zip'] }]
+      },
+      file: {
+        title: 'Choose your Notion export .zip',
+        properties: ['openFile'],
+        filters: [{ name: 'Notion export', extensions: ['zip'] }]
+      },
+      folder: {
+        title: 'Choose your unzipped Notion export folder',
+        properties: ['openDirectory']
+      }
     },
     markdown: {
-      title: 'Choose Markdown files, or a folder of them',
-      properties: ['openFile', 'openDirectory', 'multiSelections'],
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }]
+      both: {
+        title: 'Choose Markdown files, or a folder of them',
+        properties: ['openFile', 'openDirectory', 'multiSelections'],
+        filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }]
+      },
+      file: {
+        title: 'Choose Markdown files',
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'txt'] }]
+      },
+      folder: {
+        title: 'Choose a folder of Markdown files',
+        properties: ['openDirectory']
+      }
     },
     html: {
-      title: 'Choose HTML files, or a folder of them',
-      properties: ['openFile', 'openDirectory', 'multiSelections'],
-      filters: [{ name: 'HTML', extensions: ['html', 'htm'] }]
+      both: {
+        title: 'Choose HTML files, or a folder of them',
+        properties: ['openFile', 'openDirectory', 'multiSelections'],
+        filters: [{ name: 'HTML', extensions: ['html', 'htm'] }]
+      },
+      file: {
+        title: 'Choose HTML files',
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'HTML', extensions: ['html', 'htm'] }]
+      },
+      folder: {
+        title: 'Choose a folder of HTML files',
+        properties: ['openDirectory']
+      }
     },
+    // These two were never ambiguous — one mode each, so they were correct on
+    // every platform already and are listed here unchanged.
     googleKeep: {
-      title: 'Choose the "Keep" folder from your Google Takeout',
-      properties: ['openDirectory']
+      folder: {
+        title: 'Choose the "Keep" folder from your Google Takeout',
+        properties: ['openDirectory']
+      }
     },
     word: {
-      title: 'Choose Word document(s) to import',
-      properties: ['openFile', 'multiSelections'],
-      filters: [{ name: 'Word document', extensions: ['docx'] }]
+      file: {
+        title: 'Choose Word document(s) to import',
+        properties: ['openFile', 'multiSelections'],
+        filters: [{ name: 'Word document', extensions: ['docx'] }]
+      }
     },
     // Apple Notes has nothing to pick — the notes come from the Notes app on
-    // this Mac, not from a file. Handled before the dialog ever opens.
-    appleNotes: { title: '', properties: ['openFile'] }
+    // this Mac, not from a file. Handled before the dialog ever opens, so it
+    // offers no modes at all.
+    appleNotes: {}
   }
 
-  ipcMain.handle(CH.importFormats, () => listImporters())
+  /** Which source-picking dialogs to offer for a format on THIS platform.
+   *
+   *  Sent to the renderer with the format list rather than recomputed there,
+   *  for the same reason `listImporters` is: "what main can do" and "what the
+   *  UI offers" must not be able to drift apart. A format that declares `both`
+   *  uses it only where a combined dialog really works. */
+  const pickModesFor = (format: ImportFormat): ImportPickMode[] => {
+    const spec = PICKER[format]
+    if (spec.both && process.platform === 'darwin') return ['both']
+    const modes: ImportPickMode[] = []
+    if (spec.file) modes.push('file')
+    if (spec.folder) modes.push('folder')
+    // A format that only declares `both` on a platform that cannot show one
+    // would otherwise offer nothing at all — fall back rather than dead-end.
+    return modes.length > 0 ? modes : spec.both ? ['both'] : []
+  }
 
-  ipcMain.handle(CH.importPickSource, async (_e, format: ImportFormat) => {
+  /** Paths the USER chose in a file dialog, plus the extraction folders derived
+   *  from them.
+   *
+   *  `importPreview` and `importRun` take a `paths` argument, and nothing tied
+   *  it to what the picker actually returned — so the renderer could name any
+   *  directory it liked and have main walk it. `importRun('markdown',
+   *  ['/Users/<you>/Documents'], 'x')` copied every .md, .txt, .png, .pdf under
+   *  ~/Documents into the vault, where `readNote` hands them straight back.
+   *  A dialog the user answered is the only thing that makes a path outside the
+   *  vault legitimate, so that answer is what gets remembered. */
+  const pickedSources = new Set<string>()
+  const assertPicked = (paths: string[]): void => {
+    for (const p of paths) {
+      if (!pickedSources.has(p)) throw new Error(`Not a chosen import source: ${p}`)
+    }
+  }
+
+  ipcMain.handle(CH.importFormats, () =>
+    listImporters().map((id) => ({ id, pickModes: pickModesFor(id) }))
+  )
+
+  ipcMain.handle(CH.importPickSource, async (_e, format: ImportFormat, mode: ImportPickMode) => {
     // Nothing to choose: the source is the Notes app itself. Returning a
     // non-empty array lets the panel's "have I got a source yet" check pass
     // without inventing a second notion of readiness.
-    if (format === 'appleNotes') return ['apple-notes']
-    const res = await dialog.showOpenDialog(window, PICKER[format] ?? PICKER.html)
+    if (format === 'appleNotes') {
+      // A sentinel, not a path — but it still has to pass `assertPicked`, and
+      // it is only reachable once the user has chosen the Apple Notes format.
+      pickedSources.add('apple-notes')
+      return ['apple-notes']
+    }
+    // The mode comes from the renderer, so it is checked against what this
+    // format actually offers rather than trusted — not a security boundary
+    // (the user still answers the dialog either way), but an unknown mode
+    // would otherwise open `undefined` options.
+    const offered = pickModesFor(format)
+    const chosen = offered.includes(mode) ? mode : offered[0]
+    const options = chosen ? PICKER[format][chosen] : undefined
+    if (!options) return null
+    const res = await dialog.showOpenDialog(activeWindow(), options)
     if (res.canceled || res.filePaths.length === 0) return null
+    for (const p of res.filePaths) pickedSources.add(p)
     return res.filePaths
   })
 
@@ -341,19 +500,24 @@ export function registerIpc(window: BrowserWindow): void {
   // picker the renderer had nothing to show a spinner around — the app just
   // sat silent after "Open" and looked broken.
   ipcMain.handle(CH.importPrepare, async (_e, format: ImportFormat, paths: string[]) => {
+    assertPicked(paths)
     if (format === 'notion' && paths.length === 1 && paths[0].toLowerCase().endsWith('.zip')) {
-      return [await extractZip(paths[0])]
+      // The unpacked folder stands in for the archive the user chose, so it is
+      // a legitimate source for the preview/run that follow.
+      const extracted = await extractZip(paths[0])
+      pickedSources.add(extracted)
+      return [extracted]
     }
     return paths
   })
-  ipcMain.handle(CH.importPreview, (_e, format: ImportFormat, paths: string[]) =>
-    getImporter(format).preview(paths)
-  )
+  ipcMain.handle(CH.importPreview, (_e, format: ImportFormat, paths: string[]) => {
+    assertPicked(paths)
+    return getImporter(format).preview(paths)
+  })
   ipcMain.handle(CH.importRun, (_e, format: ImportFormat, paths: string[], spaceName: string) => {
+    assertPicked(paths)
     beginImport()
-    return getImporter(format).run(paths, spaceName, (p) =>
-      win?.webContents.send(CH.importProgress, p)
-    )
+    return getImporter(format).run(paths, spaceName, (p) => sendToWindow(CH.importProgress, p))
   })
   ipcMain.handle(CH.importCancel, () => requestImportCancel())
 

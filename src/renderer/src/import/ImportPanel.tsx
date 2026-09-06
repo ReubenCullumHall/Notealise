@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { SettingRow, Select } from '../settings/primitives'
 import type {
   ImportFormat,
+  ImportFormatInfo,
+  ImportPickMode,
   ImportPreview,
   ImportProgress,
   ImportResult
@@ -12,7 +14,13 @@ interface FormatInfo {
   label: string
   hint: string
   helpUrl?: string
+  /** The label when ONE button is shown — either a combined file-or-folder
+   *  dialog (macOS) or a format that only ever had one mode (Word, Keep). */
   pickLabel: string
+  /** Labels for the two-button case, where a combined dialog is impossible —
+   *  see `ImportPickMode`. Only the three formats that accept both need them. */
+  fileLabel?: string
+  folderLabel?: string
   defaultSpaceName: string
   /** Formats whose source is an app on this machine, not files you choose. */
   noSourcePicker?: boolean
@@ -25,6 +33,8 @@ const FORMATS: FormatInfo[] = [
     hint: 'Export your workspace from Notion (Settings → Export → Markdown & CSV), then choose the downloaded .zip below — or an already-unzipped folder.',
     helpUrl: 'https://www.notion.so/help/export-your-content',
     pickLabel: 'Choose .zip or folder…',
+    fileLabel: 'Choose .zip…',
+    folderLabel: 'Choose folder…',
     defaultSpaceName: 'Notion Import'
   },
   {
@@ -32,6 +42,8 @@ const FORMATS: FormatInfo[] = [
     label: 'Markdown',
     hint: 'Choose .md files or a whole folder of them — an Obsidian vault, a Bear export, anything already in Markdown. Nothing is converted: the text is copied exactly as it is, folders and all, with any images beside it.',
     pickLabel: 'Choose files or folder…',
+    fileLabel: 'Choose files…',
+    folderLabel: 'Choose folder…',
     defaultSpaceName: 'Markdown Import'
   },
   {
@@ -39,6 +51,8 @@ const FORMATS: FormatInfo[] = [
     label: 'HTML',
     hint: 'Choose .html files, or a folder of them, and each page becomes a note. Folders inside are kept.',
     pickLabel: 'Choose files or folder…',
+    fileLabel: 'Choose files…',
+    folderLabel: 'Choose folder…',
     defaultSpaceName: 'HTML Import'
   },
   {
@@ -103,15 +117,26 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
   // Stopping is a request, not an instant: the run halts at the next note.
   const [stopping, setStopping] = useState(false)
 
-  // What main can ACTUALLY import. Apple Notes is only registered on macOS, so
-  // asking the registry keeps the dropdown honest without the renderer needing
-  // to know what platform it's on.
-  const [available, setAvailable] = useState<ImportFormat[] | null>(null)
+  // What main can ACTUALLY import, and how it can be picked. Apple Notes is
+  // only registered on macOS, and a combined "file or folder" dialog only
+  // exists there too, so asking the registry keeps both the dropdown and the
+  // buttons honest without the renderer needing to know what platform it's on.
+  const [available, setAvailable] = useState<ImportFormatInfo[] | null>(null)
   useEffect(() => {
     void window.api.importFormats().then(setAvailable)
   }, [])
-  const formats = available ? FORMATS.filter((f) => available.includes(f.id)) : FORMATS
+  const formats = available
+    ? FORMATS.filter((f) => available.some((a) => a.id === f.id))
+    : FORMATS
   const current = formats.find((f) => f.id === format) ?? formats[0] ?? FORMATS[0]
+
+  // Before the answer arrives, assume the single combined button: it is what
+  // macOS uses and what this panel has always rendered, so the row does not
+  // reshape itself under the user a moment after opening.
+  const pickModes: ImportPickMode[] = available?.find((a) => a.id === current.id)?.pickModes ?? [
+    'both'
+  ]
+  const twoButtons = pickModes.length > 1 && !current.noSourcePicker
 
   const chooseFormat = (id: string): void => {
     const info = formats.find((f) => f.id === id) ?? FORMATS[0]
@@ -125,9 +150,9 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
   // take minutes on a big export, so they get their own visible busy state —
   // without it the app looks like it ignored the file you just chose.
   const [picking, setPicking] = useState(false)
-  const pick = async (): Promise<void> => {
+  const pick = async (mode: ImportPickMode): Promise<void> => {
     setError('')
-    const picked = await window.api.importPickSource(format)
+    const picked = await window.api.importPickSource(format, mode)
     if (!picked) return
     setPicking(true)
     setPaths([])
@@ -305,9 +330,33 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
       <div className="border-t border-ink-300/15" />
 
       <div className="flex items-center gap-3 py-3.5">
-        <button className="mini shrink-0" disabled={picking} onClick={() => void pick()}>
-          {current.pickLabel}
-        </button>
+        {/* One button where a single dialog can accept whatever the format
+            takes; two where it cannot — see `ImportPickMode`. The pair is
+            deliberately two plain buttons rather than a segmented control:
+            they open different dialogs rather than switching a mode, and
+            nothing here stays selected afterwards. */}
+        {twoButtons ? (
+          pickModes.map((mode) => (
+            <button
+              key={mode}
+              className="mini shrink-0"
+              disabled={picking}
+              onClick={() => void pick(mode)}
+            >
+              {mode === 'folder'
+                ? (current.folderLabel ?? 'Choose folder…')
+                : (current.fileLabel ?? 'Choose files…')}
+            </button>
+          ))
+        ) : (
+          <button
+            className="mini shrink-0"
+            disabled={picking}
+            onClick={() => void pick(pickModes[0] ?? 'both')}
+          >
+            {current.pickLabel}
+          </button>
+        )}
         <span className="min-w-0 truncate text-[12px] text-ink-500">
           {picking
             ? current.noSourcePicker
@@ -326,7 +375,7 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
       </div>
 
       {preview && (
-        <div className="rounded-xl bg-brand-500/8 px-3 py-2.5 text-[12px] leading-relaxed text-ink-600 ring-1 ring-brand-300/40">
+        <div className="rounded-xl bg-ink-300/8 px-3 py-2.5 text-[12px] leading-relaxed text-ink-600 ring-1 ring-ink-300/25">
           <p>
             {preview.noteCount} note{preview.noteCount === 1 ? '' : 's'}
             {preview.folderCount > 0

@@ -138,7 +138,7 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
         </p>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-brand-500/6 px-3.5 py-2.5 text-[11.5px] text-ink-500 ring-1 ring-brand-300/30">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-ink-300/8 px-3.5 py-2.5 text-[11.5px] text-ink-500 ring-1 ring-ink-300/25">
         <span className="font-medium text-ink-600">On this computer now</span>
         <span>{inv.presets} {inv.presets === 1 ? 'preset' : 'presets'}</span>
         <span>{inv.customFonts} custom {inv.customFonts === 1 ? 'font' : 'fonts'}</span>
@@ -175,6 +175,14 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
           const file = e.dataTransfer.files[0]
           if (!file || busy) return
           e.preventDefault()
+          // A transfer file is a small JSON bundle — presets, font ids, a
+          // preference. Reading whatever was dropped in full, with no cap,
+          // meant one stray drag of a video onto this box stalled or killed the
+          // renderer. 32 MB is far above any real bundle and far below that.
+          if (file.size > 32 * 1024 * 1024) {
+            setNotice({ kind: 'error', message: 'That file is too big to be a transfer file.' })
+            return
+          }
           void file.text().then((text) => runImport(text))
         }}
         className={
@@ -186,7 +194,7 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
           <button
             onClick={() => void runExport()}
             disabled={busy !== null}
-            className="btn-edge flex items-center gap-2 rounded-lg border border-ink-300/35 bg-surface/70 px-3 py-2 text-[13px] font-medium text-ink-700 outline-none transition duration-200 hover:border-brand-300 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 disabled:opacity-50"
+            className="btn-edge flex items-center gap-2 rounded-lg border border-ink-300/35 bg-surface/70 px-3 py-2 text-[13px] font-medium text-ink-700 outline-none transition duration-200 hover:border-ink-300/60 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-50"
           >
             <Icon name="export" className="h-4 w-4" />
             {busy === 'export' ? 'Saving…' : 'Save a transfer file'}
@@ -194,7 +202,7 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
           <button
             onClick={() => void runImport()}
             disabled={busy !== null}
-            className="btn-edge flex items-center gap-2 rounded-lg border border-ink-300/35 bg-surface/70 px-3 py-2 text-[13px] font-medium text-ink-700 outline-none transition duration-200 hover:border-brand-300 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100 disabled:opacity-50"
+            className="btn-edge flex items-center gap-2 rounded-lg border border-ink-300/35 bg-surface/70 px-3 py-2 text-[13px] font-medium text-ink-700 outline-none transition duration-200 hover:border-ink-300/60 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-50"
           >
             <Icon name="import" className="h-4 w-4" />
             {busy === 'import' ? 'Opening…' : 'Open a transfer file'}

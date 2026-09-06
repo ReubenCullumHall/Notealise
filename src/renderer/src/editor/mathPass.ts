@@ -21,7 +21,11 @@ class MathWidget extends WidgetType {
     const span = document.createElement('span')
     span.className = this.display ? 'cm-math cm-math-display' : 'cm-math'
     try {
-      span.innerHTML = katex.renderToString(this.latex, { displayMode: this.display, throwOnError: false })
+      // maxSize caps any single element at 100em. Unset it defaults to
+      // Infinity, so `$\rule{500em}{500em}$` in a note produces an element that
+      // size — contained by the editor scroller, so a nuisance rather than an
+      // overlay attack, but nothing needs a glyph wider than the window.
+      span.innerHTML = katex.renderToString(this.latex, { displayMode: this.display, throwOnError: false, maxSize: 100 })
     } catch {
       span.className = 'math-error'
       const d = this.display ? '$$' : '$'

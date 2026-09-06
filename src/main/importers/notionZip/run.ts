@@ -136,6 +136,12 @@ async function run(
   // never depends on write order.
   async function createStructure(nodeList: ParsedNode[], vaultDir: string): Promise<void> {
     for (const node of nodeList) {
+      // Stop means stop. This pass had no cancel check at all — and it is the
+      // pass that creates EVERY note and folder, so pressing Stop left the
+      // button reading "Stopping…" while the app carried on building the whole
+      // tree. On an archive with hundreds of thousands of nested pages that is
+      // the difference between a cancel and a filesystem filling up.
+      if (importCancelled()) return
       if (node.kind === 'page') {
         const relPath = await createNote(vaultDir, node.title)
         createdNotes++

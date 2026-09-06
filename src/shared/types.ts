@@ -6,7 +6,14 @@ import type { PresetDraft, PresetImportResult, SpacePreset } from './presets'
 import type { EntryMeta, MediaOrigin, RestoreResult, Workspace } from './workspace'
 import type { LinkRow } from './links'
 import type { UpdatePrefs, UpdateStatus } from './update'
-import type { ImportFormat, ImportPreview, ImportProgress, ImportResult } from './notesImport'
+import type {
+  ImportFormat,
+  ImportFormatInfo,
+  ImportPickMode,
+  ImportPreview,
+  ImportProgress,
+  ImportResult
+} from './notesImport'
 import type { DownloadFontResult, ImportCustomFontResult, InstalledFont } from './fonts'
 import type {
   TransferExportSummary,
@@ -242,11 +249,13 @@ export interface VaultApi {
   onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
 
   // --- notes import ------------------------------------------------------
-  /** Formats this build can import — Apple Notes only exists on macOS. */
-  importFormats(): Promise<ImportFormat[]>
-  /** Opens a native picker scoped to the format (a folder for Notion's
-   *  unzipped export, one or more .html files for HTML). Null if cancelled. */
-  importPickSource(format: ImportFormat): Promise<string[] | null>
+  /** Formats this build can import — Apple Notes only exists on macOS — and,
+   *  for each, which source-picking dialogs to offer on this platform. */
+  importFormats(): Promise<ImportFormatInfo[]>
+  /** Opens a native picker scoped to the format and mode. `mode` must be one
+   *  the format reported in `importFormats`; anything else falls back to its
+   *  first. Null if cancelled. */
+  importPickSource(format: ImportFormat, mode: ImportPickMode): Promise<string[] | null>
   /** Unpacks what was picked (a .zip) into a folder the importer can read.
    *  Separate from the picker because it can take minutes on a big export. */
   importPrepare(format: ImportFormat, paths: string[]): Promise<string[]>
