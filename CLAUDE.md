@@ -436,6 +436,24 @@ app — `release.yml` triggers on tags alone. `main` + `CHANGELOG.md`'s `[Unrele
 Vercel on every push to `main`, deliberately. Full model, and how this blurred once (v1.0.0
 shipped an unreviewed feature via a mislabelled commit): `docs/workflow.md`.
 
+**A `CHANGELOG.md` line must land in the SAME commit as the code it describes — committing it
+ahead makes `main` advertise fixes it does not contain, and nothing anywhere warns you.** The
+existing warning about this file was that it accumulates several sessions' bullets, so whoever
+commits it sweeps up work named after one small change. True, but the worse half went unstated
+until 2026-09-06: `CHANGELOG.md` was swept into an unrelated 34-file commit, and because the
+security pass and the Windows import picker were both **deliberately held uncommitted** at the
+time, `main` spent the morning publishing release notes for five fixes whose code was not in the
+repository — the picker, the single-instance lock, the UNC leak, the zip pre-flight and the
+reopen-from-Dock error. `inspectZip.ts`, the pre-flight itself, was not in git at all. Every gate
+stayed green throughout: typecheck, lint and the suite all read the **working tree**, where the
+code is present, so not one of them can see this. A tag cut in that window would have shipped
+release notes describing work that does not exist.
+**So: never `git add CHANGELOG.md` on its own or as a passenger.** Before committing it, take each
+`[Unreleased]` bullet you are about to publish and check the code behind it is in the same commit
+or already at `HEAD` — `git show HEAD:<file> | grep <the marker>` answers it in one line per claim.
+This bites hardest exactly when something is being held back for Reuben to check, which is when
+the changelog line has usually already been written.
+
 **Shipping a release is a separate, much longer ritual — read `docs/release-checklist.md` in
 full before running it.** Short version: when Reuben says "push the latest update," run
 `tools/release-review.sh` and get Reuben's per-item *ship it / hold* on everything in the range
@@ -801,12 +819,17 @@ every session — see the table in **Folder structure** above for the full list.
   `release/` and re-run (`Remove-Item release -Recurse -Force`) — removing just `win-unpacked.tmp`
   is enough and spares any installer already sitting in `release/`. Proper fix: exclude `release/`
   and `node_modules/` from OneDrive sync, or move the project off OneDrive.
-  **And when it fails this way it still EXITS 0** (confirmed 2026-09-05): the `⨯ EPERM` goes to the
-  log, `npm` reports success, and the only thing that says otherwise is that
-  `release/win-unpacked/` does not exist. So `package:dir` returning 0 is not evidence it packaged —
-  the second run in a session is the one that bites, because the first left `win-unpacked/` behind
-  and a stale directory looks exactly like a fresh one. **Always assert the artefact, not the exit
-  code:** `ls release/win-unpacked/Notealise.exe` and check its mtime is from *this* run.
+  **And the exit code is no guide either way — it has been seen BOTH ways on this same failure.**
+  On 2026-09-05 it exited **0**: the `⨯ EPERM` went to the log, `npm` reported success, and the only
+  thing that said otherwise was that `release/win-unpacked/` did not exist. On 2026-09-06, same
+  EPERM on the same rename, it exited **1**. So do not learn "package:dir lies about failing" and
+  start trusting a 1 — learn that the exit code is not the instrument. **Always assert the artefact:**
+  `ls release/win-unpacked/Notealise.exe` and check its mtime is from *this* run.
+  **And delete `release/win-unpacked/` BEFORE the run, not after a failure.** A stale directory
+  looks exactly like a fresh one, so the second run in a session is the one that bites; deleting
+  first is also what makes the mtime check mean anything, because an unchanged mtime on a
+  still-present directory is otherwise indistinguishable from a successful rebuild. Keep
+  `Notealise-Setup.exe` — remove `win-unpacked/` and `win-unpacked.tmp` only, not all of `release/`.
 - Browser-era gotchas (File System Access API, `localhost` vs `file://`, Vite dev port) now
   apply only to `legacy/`. The **legacy app is the canonical look** the Electron UI is kept in
   sync with; the user runs it as a local live server. Launch it with `notes-app/run-legacy.bat`
