@@ -10,9 +10,10 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - A note's title now sits above the note, in the same column as the words, instead of away in the
   toolbar. It used to start further and further from your writing the wider you opened the window;
   now the title and the first line share an edge. Click it to rename, exactly as before
-- Nothing bounces, lifts or grows under the pointer any more. Hovering a button changes its colour
-  and nothing moves. The one place things still spring is where you are dragging something — the
-  bin and the archive still open their lids to show the note will land there
+- Hovering a button changes its colour, and that is all it does. Buttons used to bounce and lift
+  as the pointer crossed them, on a springy overshoot that belonged in a livelier app than this
+  one. The place that spring survives is dragging, where it is telling you something — the bin and
+  the archive still open their lids to show the note will land there
 - An empty button on the format bar is now a dashed outline rather than a question mark, so it
   reads as room for a command instead of an icon that failed to load
 - Corners are consistent throughout: one shape for things you click, one for things that hold
