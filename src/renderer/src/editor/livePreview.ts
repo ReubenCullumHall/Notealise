@@ -1,8 +1,8 @@
-import { RangeSetBuilder } from '@codemirror/state'
+import { Prec, RangeSetBuilder } from '@codemirror/state'
 import { isRaw } from './rawView'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
-import { COLOR_NAMES } from './palette'
+import { colorPairs, isEmptyPair } from './colorTags'
 import { mathPass } from './mathPass'
 import { setLinkEnv } from './linkEnv'
 import { wikiPass } from './wikiPass'
@@ -45,6 +45,10 @@ class BulletWidget extends WidgetType {
  *  `**` — one definition, so "hidden" can't come to mean two different things. */
 export const hideDeco = Decoration.replace({})
 const bulletDeco = Decoration.replace({ widget: new BulletWidget() })
+/** What a hidden mark becomes in raw view instead of disappearing. The two looks
+ *  — faded, or highlighted like code — are `[data-raw-marks]` rules in app.css,
+ *  so one class covers both and switching is a stylesheet concern. */
+const rawMarkDeco = Decoration.mark({ class: 'cm-raw-mark' })
 
 /** A collected decoration. `atomic` marks a hidden/replaced range so the cursor
  *  steps over it as one unit (fed to EditorView.atomicRanges); visible styling
@@ -54,8 +58,18 @@ export interface Deco {
   to: number
   deco: Decoration
   atomic: boolean
+  /** provide this mark at HIGHEST precedence, which in CM6 makes it the
+   *  INNERMOST element — so the syntax highlighter's own marks wrap outside it
+   *  and it inherits their font size. See `colorInner` below. */
+  inner?: boolean
 }
-export type Push = (from: number, to: number, deco: Decoration, atomic: boolean) => void
+export type Push = (
+  from: number,
+  to: number,
+  deco: Decoration,
+  atomic: boolean,
+  inner?: boolean
+) => void
 export type Pass = (view: EditorView, active: Set<number>, push: Push) => void
 
 /** Lines touched by any selection range — their syntax is revealed for editing.
@@ -178,93 +192,55 @@ const markdownPass: Pass = (view, active, push) => {
   }
 }
 
-// Pass 2: text colour + highlight, stored as inline HTML tag pairs. We recognise
-// both this app's palette classes (<mark class="hl-NAME">, <span class="tc-NAME">)
-// AND the legacy inline-style form (<span style="color:#hex">, background-color),
-// so notes written by the old app render clean here too. Tags are located as
-// HTMLTag nodes in the syntax tree (never a doc regex), paired open→close; the
-// content between them is styled and the tags hidden off the cursor line.
-const decoCache = new Map<string, Decoration>()
-const classMark = (cls: string): Decoration => {
-  const key = 'c:' + cls
-  let d = decoCache.get(key)
-  if (!d) {
-    d = Decoration.mark({ class: cls })
-    decoCache.set(key, d)
-  }
-  return d
-}
-const styleMark = (style: string): Decoration => {
-  const key = 's:' + style
-  let d = decoCache.get(key)
-  if (!d) {
-    // hex-pinned upstream, so nothing arbitrary reaches the DOM as CSS
-    d = Decoration.mark({ attributes: { style } })
-    decoCache.set(key, d)
-  }
-  return d
-}
-const OPEN_CLASS = /^<(mark|span) class="(hl|tc)-([a-z]+)">$/
-const OPEN_COLOR = /^<span style="color: *(#[0-9a-fA-F]{3,8}) *;?">$/
-const OPEN_BG = /^<span style="background-color: *(#[0-9a-fA-F]{3,8}) *;?">$/
-
-/** Recognise a colour opening tag → the tag name + the decoration for its content. */
-function detectColorOpen(text: string): { tag: 'mark' | 'span'; deco: Decoration } | null {
-  let m = OPEN_CLASS.exec(text)
-  if (m) {
-    const [, tag, variant, colour] = m
-    const ok = ((tag === 'mark' && variant === 'hl') || (tag === 'span' && variant === 'tc')) && COLOR_NAMES.has(colour)
-    return ok ? { tag: tag as 'mark' | 'span', deco: classMark(`${variant}-${colour}`) } : null
-  }
-  m = OPEN_COLOR.exec(text)
-  if (m) return { tag: 'span', deco: styleMark(`color:${m[1]}`) }
-  m = OPEN_BG.exec(text)
-  if (m) return { tag: 'span', deco: styleMark(`background-color:${m[1]}`) }
-  return null
-}
-
+// Pass 2: text colour + highlight, stored as inline HTML tag pairs. Finding
+// and pairing the tags lives in `colorTags.ts`, shared with the Backspace and
+// empty-pair behaviours in `colorCommands.ts` — the editor must never conceal
+// something the keyboard cannot act on.
 const colorPass: Pass = (view, _active, push) => {
-  const doc = view.state.doc
-  const tree = syntaxTree(view.state)
-  interface Open {
-    tag: string
-    deco: Decoration
-    openStart: number
-    contentStart: number
-  }
-  const stack: Open[] = []
   for (const { from, to } of view.visibleRanges) {
-    tree.iterate({
-      from,
-      to,
-      enter: (node) => {
-        if (node.name !== 'HTMLTag') return
-        const text = doc.sliceString(node.from, node.to)
-        const open = detectColorOpen(text)
-        if (open) {
-          stack.push({ tag: open.tag, deco: open.deco, openStart: node.from, contentStart: node.to })
-          return
-        }
-        if (text !== '</mark>' && text !== '</span>') return
-        const tag = text === '</mark>' ? 'mark' : 'span'
-        for (let i = stack.length - 1; i >= 0; i--) {
-          if (stack[i].tag !== tag) continue
-          const o = stack[i]
-          stack.splice(i, 1)
-          if (node.from > o.contentStart) {
-            push(o.contentStart, node.from, o.deco, false) // style the content (not atomic)
-            // one check over the whole tag pair, not per-tag-line: finishing a
-            // coloured span and typing on past it (same line) should re-conceal
-            // both tags, not just whichever one happens to share the cursor's line
-            if (!overlapsSelection(view, o.openStart, node.to)) {
-              push(o.openStart, o.contentStart, hideDeco, true) // hide open tag
-              push(node.from, node.to, hideDeco, true) // hide close tag
-            }
-          }
-          break
-        }
-      }
-    })
+    for (const p of colorPairs(view.state, from, to)) {
+      if (isEmptyPair(p)) continue // nothing to style; colorCommands sweeps these away
+      push(p.openTo, p.closeFrom, p.deco, false, true) // style the content (not atomic)
+      // ALWAYS hidden — no cursor reveal, unlike every other pass here.
+      // Reuben's call, 2026-08-29: `<mark class="hl-amber">` is not markdown you
+      // would ever hand-edit, it is the storage format, and having twenty-odd
+      // characters of HTML appear around a phrase the moment you click into it
+      // made colour "look so janky" to use. A reveal earns its place for `**` or
+      // a link's `(url)`, which you do fix by hand; it earns nothing here.
+      //
+      // Nothing is lost with it gone. "Remove colour" takes a colour off without
+      // touching the tags by hand, Backspace at either edge does the same
+      // (colorCommands.ts), the tags are `atomic` so the cursor steps over a
+      // whole one rather than landing inside it, and **Markdown pro** still
+      // shows the real source — `build()` skips every pass in raw view, so that
+      // switch remains the one way to see the file as it is on disk.
+      //
+      // `inner: true` is load-bearing, not a tidy-up. Two mark decorations over
+      // the same text nest by the ORDER their providers sit in the
+      // `EditorView.decorations` facet — and it is the LAST input that ends up
+      // outermost (see `outerDecorations` in @codemirror/view, documented as
+      // sitting "at the very bottom of the precedence stack" and wrapping around
+      // everything else). At default precedence this span wrapped the heading
+      // span rather than sitting inside it:
+      //
+      //   <span class="hl-rose">          16px, box 21.4px tall  <- background
+      //     <span class="hi">TEXT</span>  27.2px, 33px tall      <- the glyphs
+      //
+      // A background paints on its own element's inline box, and that box takes
+      // its height from THAT element's font metrics — so on a heading the
+      // highlight was drawn at body size around text half again as large, and
+      // the caps and descenders sat outside it. Measured 2026-08-29 across every
+      // heading level; reported by Reuben on an H1. Provided at `Prec.highest`
+      // the nesting reverses — highest precedence means FIRST in the facet,
+      // which means innermost — so the highlight inherits the heading's own
+      // font-size and the box fits the text at every size for free, with no
+      // magic padding number to maintain. Only the COLOUR marks move; everything
+      // else this file pushes keeps its existing precedence, because link pills,
+      // fenced code and wiki links all depend on nesting outside the highlighter
+      // (see app.css's wiki-link note).
+      push(p.openFrom, p.openTo, hideDeco, true) // hide open tag
+      push(p.closeFrom, p.closeTo, hideDeco, true) // hide close tag
+    }
   }
 }
 
@@ -321,38 +297,65 @@ export const PASSES: Pass[] = [
   wikiPass
 ]
 
-function build(view: EditorView): { decorations: DecorationSet; hidden: DecorationSet } {
+function build(view: EditorView): {
+  decorations: DecorationSet
+  hidden: DecorationSet
+  inner: DecorationSet
+} {
   const active = activeLineSet(view)
   const items: Deco[] = []
-  const push: Push = (from, to, deco, atomic) => {
-    if (to > from) items.push({ from, to, deco, atomic })
+  const push: Push = (from, to, deco, atomic, inner) => {
+    if (to > from) items.push({ from, to, deco, atomic, inner })
   }
-  // Markdown pro. Skipping the passes wholesale is the entire implementation of
-  // raw view: every mark this file hides simply stays visible. `highlight.ts` is
-  // untouched, so bold is still bold and a heading is still large — the user's
-  // call over a flat monospace view, and it means there is no second set of
-  // styles to keep in step with the first.
-  if (!isRaw(view.state)) for (const pass of PASSES) pass(view, active, push)
+  // Markdown pro. `highlight.ts` is untouched either way, so bold is still bold
+  // and a heading is still large — the user's call over a flat monospace view,
+  // and it means there is no second set of styles to keep in step with the first.
+  const raw = isRaw(view.state)
+  for (const pass of PASSES) pass(view, active, push)
 
   // RangeSetBuilder requires ascending order; ranges from the passes are disjoint.
   items.sort((a, b) => a.from - b.from || a.to - b.to)
   const all = new RangeSetBuilder<Decoration>()
   const atomic = new RangeSetBuilder<Decoration>()
+  const inner = new RangeSetBuilder<Decoration>()
   for (const it of items) {
-    all.add(it.from, it.to, it.deco)
+    // RAW VIEW. The passes still run, but nothing they produce may hide or
+    // replace anything — the whole point of the mode is that the source is what
+    // you see. What survives is exactly the ranges that would have been HIDDEN,
+    // re-cast as a plain style mark: those ranges ARE the syntax marks, already
+    // located by the syntax tree, so `rawMarkStyle` gets to fade or highlight
+    // them without a second parser to keep in step (Reuben, 2026-08-29).
+    //
+    // `deco === hideDeco` is the whole test, and it is exact rather than a
+    // guess: `hideDeco` is one shared instance (exported for wikiPass precisely
+    // so "hidden" cannot come to mean two things). Everything else a pass
+    // pushes is either a widget replacement — a bullet, a KaTeX box, a picture,
+    // a checkbox — or a styling mark, and in raw view both are dropped, which
+    // keeps this mode looking exactly as it did before apart from the marks.
+    if (raw) {
+      if (it.deco === hideDeco) all.add(it.from, it.to, rawMarkDeco)
+      continue // never atomic here: these are characters you are editing
+    }
+    // An `inner` mark goes to its OWN set and not to `all` — adding it to both
+    // would render the span twice, nested inside itself, doubling the
+    // highlight's padding and its rounded ends.
+    if (it.inner) inner.add(it.from, it.to, it.deco)
+    else all.add(it.from, it.to, it.deco)
     if (it.atomic) atomic.add(it.from, it.to, it.deco)
   }
-  return { decorations: all.finish(), hidden: atomic.finish() }
+  return { decorations: all.finish(), hidden: atomic.finish(), inner: inner.finish() }
 }
 
 const livePreviewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet
     hidden: DecorationSet
+    inner: DecorationSet
     constructor(view: EditorView) {
       const r = build(view)
       this.decorations = r.decorations
       this.hidden = r.hidden
+      this.inner = r.inner
     }
     update(u: ViewUpdate): void {
       // The last clause is `wikiPass`'s: whether a `[[link]]` resolves depends on
@@ -372,6 +375,7 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         const r = build(u.view)
         this.decorations = r.decorations
         this.hidden = r.hidden
+        this.inner = r.inner
       }
     }
   },
@@ -384,4 +388,16 @@ const atomicHidden = EditorView.atomicRanges.of(
   (view) => view.plugin(livePreviewPlugin)?.hidden ?? Decoration.none
 )
 
-export const livePreview = [livePreviewPlugin, atomicHidden]
+// The colour/highlight content marks, provided separately at the HIGHEST
+// precedence so the syntax highlighter's marks wrap OUTSIDE them — which is what
+// makes a highlight on a heading size itself to the heading rather than to the
+// body text. `Prec.highest` rather than a position in extensions.ts's array, so
+// reordering that array can't silently put the box back to body size.
+//
+// Verified by measurement, not by reading the facet docs — the first attempt
+// used `Prec.lowest` on exactly this reasoning and changed nothing at all.
+const colorInner = Prec.highest(
+  EditorView.decorations.of((view) => view.plugin(livePreviewPlugin)?.inner ?? Decoration.none)
+)
+
+export const livePreview = [livePreviewPlugin, atomicHidden, colorInner]
