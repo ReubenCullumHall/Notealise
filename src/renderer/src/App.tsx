@@ -36,6 +36,9 @@ import {
   splitBlank,
   splitWith,
   swapPanes,
+  takeOutOfSplit,
+  ungroupPanes,
+  moveGroup,
   type TabLayout
 } from './tabs/model'
 import { applySettings, resolveTheme } from './settings/model'
@@ -329,11 +332,14 @@ export default function App(): React.JSX.Element {
   // the app, so a vault switch neither moves it nor has anything to ask.
   const [presets, setPresets] = useState<SpacePreset[]>([])
   // Search (spotlight pill). `deep` also matches note contents, not just titles;
-  // `withArchived` lets shelved notes back into the results; `allSpaces` widens
-  // the index from the active space to the whole vault.
+  // `allSpaces` widens the index from the active space to the whole vault.
+  //
+  // There was a third, `withArchived`, letting shelved notes back into the
+  // results. Removed 2026-09-06 (Reuben) while the archive area is reworked:
+  // archived notes are now always out of a search, and getting at them will be
+  // whatever that rework decides rather than a toggle in the sidebar pill.
   const [query, setQuery] = useState('')
   const [deep, setDeep] = useState(false)
-  const [withArchived, setWithArchived] = useState(false)
   const [allSpaces, setAllSpaces] = useState(false)
   const [cacheVersion, setCacheVersion] = useState(0)
   const contentCache = useRef<Map<string, string>>(new Map())
@@ -2455,7 +2461,7 @@ export default function App(): React.JSX.Element {
     void cacheVersion // recompute when the content cache fills
     const hits: SearchHit[] = []
     for (const n of allNotes) {
-      if (n.archived && !withArchived) continue
+      if (n.archived) continue
       if (n.title.toLowerCase().includes(q)) {
         hits.push(n)
         continue
@@ -2494,7 +2500,7 @@ export default function App(): React.JSX.Element {
       const tag = h.spaceFolder ? (sp?.emoji ? `${sp.emoji} ${h.spaceFolder}` : h.spaceFolder) : 'Loose notes'
       return { ...h, spaceTag: tag }
     })
-  }, [query, deep, withArchived, allNotes, cacheVersion, openPath, allSpaces, space.folder, settings.spaces])
+  }, [query, deep, allNotes, cacheVersion, openPath, allSpaces, space.folder, settings.spaces])
 
   // Shown in the results header so the reordering isn't invisible — only when
   // it actually did something (an open note outside the space root).
@@ -2630,8 +2636,6 @@ export default function App(): React.JSX.Element {
         onQuery={setQuery}
         deep={deep}
         onToggleDeep={() => setDeep((d) => !d)}
-        withArchived={withArchived}
-        onToggleWithArchived={() => setWithArchived((a) => !a)}
         allSpaces={allSpaces}
         onToggleAllSpaces={() => setAllSpaces((a) => !a)}
         searchHits={searchHits}
@@ -2679,6 +2683,11 @@ export default function App(): React.JSX.Element {
           // the gesture where the model can honour it, so this is never a
           // silent no-op — see TabStrip's `canSplitOnto`.
           onSplitWith={(target, dragged) => applyLayout(splitWith(layoutRef.current, target, dragged))}
+          // Notes sharing the screen share one tab (tabs/model.ts's
+          // `stripGroups`). These three are what you can do to that tab.
+          onMoveGroup={(before) => applyLayout(moveGroup(layoutRef.current, before))}
+          onTakeOutOfSplit={(p) => applyLayout(takeOutOfSplit(layoutRef.current, p))}
+          onUngroup={() => applyLayout(ungroupPanes(layoutRef.current))}
           onDragTab={(path) => setDrag(path === null ? null : { kind: 'tab', path })}
           onNewTab={() => applyLayout(openTab(layoutRef.current, BLANK))}
           dragging={drag}

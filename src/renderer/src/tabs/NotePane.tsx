@@ -366,7 +366,7 @@ export function NotePane({
             In a split there is no spacer, no centring and no count: the bar
             takes the whole row and scrolls, exactly as it did before. */}
         {!split && (
-          <span className="flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap pr-4 text-xs text-ink-300">
+          <span className="note-info flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap pr-4 text-xs">
             {!blank && (
               <>
                 {/* The count first, then the date — the date is optional
@@ -577,7 +577,7 @@ export function NotePane({
               className={
                 'btn-edge absolute right-3 z-20 flex h-8 w-8 items-center justify-center rounded-lg border border-ink-300/30 p-0 shadow-card outline-none backdrop-blur transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
                 (markdownPro ? 'bottom-[52px] ' : 'bottom-3 ') +
-                (mediaSource ? 'bg-brand-500/12 text-brand-600' : 'bg-surface/90 text-ink-500 hover:text-ink-900')
+                (mediaSource ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500 hover:text-ink-900')
               }
             >
               <Icon name="eye" className="h-4 w-4" />
@@ -599,7 +599,7 @@ export function NotePane({
                 aria-label={raw ? 'Show the formatted view' : 'Show the raw Markdown'}
                 className={
                   'btn-edge absolute bottom-3 right-3 z-20 flex h-8 w-8 items-center justify-center rounded-lg border border-ink-300/30 p-0 shadow-card outline-none backdrop-blur transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-                  (raw ? 'bg-brand-500/12 text-brand-600' : 'bg-surface/90 text-ink-500 hover:text-ink-900')
+                  (raw ? 'bg-brand-500/15 text-brand-600' : 'bg-surface/90 text-ink-500 hover:text-ink-900')
                 }
               >
                 <Icon name="code" className="h-4 w-4" />

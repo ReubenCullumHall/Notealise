@@ -596,6 +596,20 @@ That made three follow-ons necessary, all in `colorCommands.ts` and all off in r
   exactly the asymmetry that gives it away. Only pairs whole in `startState` are touched, so a
   stray tag the file already had stays visible — Reuben's call: that is broken markup, and showing
   it is the only way anyone learns to fix it.
+- **`mendColorPairs`'s position mapping is the whole correctness of it (fixed 2026-09-06).** The
+  filter asks "is this tag still here?" by mapping each tag's two offsets through the transaction
+  and comparing the slice to the tag's original text. It was mapping them so each tag **widened**
+  over anything inserted at its edge — `from` with assoc `-1`, `to` with `1`, the usual default.
+  So typing a single space at the right-hand edge of a coloured phrase made the slice `" </span"`
+  rather than `"</span>"`, the tag read as deleted, and the mend inserted a DUPLICATE close tag
+  that then showed as raw text. The left-hand edge duplicated the open tag the same way.
+  The pair must **close in** on itself instead: a start with `1`, an end with `-1`, so an insertion
+  at either boundary lands outside the tag and the slice still equals the tag. That also fixes a
+  second case for free — typing OVER a whole coloured phrase now keeps the colour, where the old
+  mapping made `contentSurvives` false and swept both tags away.
+  Reuben reported the close-tag half; the open-tag half and the type-over case came out of writing
+  the tests. **Every test in `colorCommands.test.ts` deleted; none inserted.** Three tests now
+  cover the boundary, which is the seam the suite had never touched.
 - Backspace/Delete at a tag edge removes BOTH tags rather than eating one atomically.
 - A surviving fragment keeps its colour (the pair is re-closed around it) rather than going plain.
 

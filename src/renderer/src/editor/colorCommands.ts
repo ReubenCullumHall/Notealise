@@ -143,10 +143,22 @@ const mendColorPairs = EditorState.transactionFilter.of((tr) => {
       done.add(p.openFrom)
       const openText = old.doc.sliceString(p.openFrom, p.openTo)
       const closeText = old.doc.sliceString(p.closeFrom, p.closeTo)
-      const openFrom = tr.changes.mapPos(p.openFrom, -1)
-      const openTo = tr.changes.mapPos(p.openTo, 1)
-      const closeFrom = tr.changes.mapPos(p.closeFrom, -1)
-      const closeTo = tr.changes.mapPos(p.closeTo, 1)
+      // ASSOCIATIVITY IS THE WHOLE CORRECTNESS OF THIS BLOCK. Each tag is mapped
+      // so the pair CLOSES IN on itself: a start with `1` (an insertion at the
+      // start lands outside, before the tag) and an end with `-1` (an insertion
+      // at the end lands outside, after it). The opposite convention — widening,
+      // which is the usual default — makes the slice below include whatever was
+      // just typed at the boundary, the tag reads as dead, and the mend inserts
+      // a DUPLICATE of a tag that never went anywhere.
+      //
+      // Reuben, 2026-09-06: colour a word, leave the cursor at its right-hand
+      // edge, press space, and a raw `</span>` appeared after it. Typing at the
+      // LEFT edge duplicated the open tag the same way (found by the tests
+      // below, not reported — nobody had typed there yet).
+      const openFrom = tr.changes.mapPos(p.openFrom, 1)
+      const openTo = tr.changes.mapPos(p.openTo, -1)
+      const closeFrom = tr.changes.mapPos(p.closeFrom, 1)
+      const closeTo = tr.changes.mapPos(p.closeTo, -1)
       // A tag "survived" only if its exact text is still there — mapping a
       // position through a deletion lands you at the deletion point, where the
       // slice is empty or something else entirely.

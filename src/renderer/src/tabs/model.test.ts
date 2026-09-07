@@ -19,7 +19,11 @@ import {
   splitAt,
   splitBlank,
   splitWith,
+  stripGroups,
   swapPanes,
+  takeOutOfSplit,
+  ungroupPanes,
+  moveGroup,
   equalisePanes,
   MIN_PANE_PX,
   paneSizes,
@@ -599,5 +603,78 @@ describe('splitting two tabs against each other', () => {
     expect(l.panes).toEqual(['b.md', 'a.md'])
     expect(paneSizes(l)).toEqual([0.5, 0.5])
     invariants(l)
+  })
+})
+
+describe('the strip when notes are sharing the screen', () => {
+  it('collapses the panes into one item, at the leftmost member position', () => {
+    // a.md | b.md on screen, c.md open behind them. `opened` leaves the strip
+    // as a,b,c and splitAt puts a.md back on screen beside b.md.
+    const l = splitAt(opened('a.md', 'b.md', 'c.md'), 'a.md', 0)
+    expect(l.panes).toEqual(['a.md', 'c.md'])
+    expect(stripGroups(l)).toEqual([['a.md', 'c.md'], ['b.md']])
+  })
+
+  it('reads the group in PANE order, not strip order', () => {
+    // The point of the group is to show the arrangement on screen, so a split
+    // whose columns were swapped reads swapped in the strip too.
+    const l = swapPanes(splitAt(opened('a.md', 'b.md', 'c.md'), 'a.md', 0), 0, 1)
+    expect(l.panes).toEqual(['c.md', 'a.md'])
+    expect(stripGroups(l)[0]).toEqual(['c.md', 'a.md'])
+  })
+
+  it('groups nothing when one note is on screen', () => {
+    const l = opened('a.md', 'b.md')
+    expect(stripGroups(l)).toEqual([['a.md'], ['b.md']])
+  })
+
+  it('includes the blank tab as a segment — it is a column like any other', () => {
+    const l = splitBlank(opened('a.md'))
+    expect(stripGroups(l)).toEqual([['a.md', BLANK]])
+  })
+
+  it('takes one note out of the split without closing it', () => {
+    const l = takeOutOfSplit(threeCols(), 'b.md')
+    expect(l.panes).toEqual(['a.md', 'c.md'])
+    expect(l.tabs).toContain('b.md') // still open, just not on screen
+    invariants(l)
+  })
+
+  it('refuses to take the last note out — there would be nothing on screen', () => {
+    const l = opened('a.md', 'b.md')
+    expect(takeOutOfSplit(l, 'b.md')).toBe(l)
+    expect(takeOutOfSplit(threeCols(), 'nope.md')).toEqual(threeCols())
+  })
+
+  it('splits them all apart down to the FOCUSED column', () => {
+    const three = { ...threeCols(), focus: 1 }
+    const l = ungroupPanes(three)
+    expect(l.panes).toEqual(['b.md'])
+    expect(l.tabs).toHaveLength(3) // nothing closed
+    expect(l.sizes).toBeUndefined()
+    invariants(l)
+  })
+
+  it('retires the blank when splitting apart leaves it with no column', () => {
+    const l = ungroupPanes(splitBlank(opened('a.md')))
+    expect(l.panes).toEqual(['a.md'])
+    expect(l.tabs).not.toContain(BLANK)
+    invariants(l)
+  })
+
+  it('drags the whole group along the strip as one block, in pane order', () => {
+    // strip a,b,c with a.md | c.md on screen; drop the group before b.md.
+    const l = splitAt(opened('a.md', 'b.md', 'c.md'), 'a.md', 0)
+    const moved = moveGroup(l, 'b.md')
+    expect(moved.tabs).toEqual(['a.md', 'c.md', 'b.md'])
+    expect(moveGroup(l, null).tabs).toEqual(['b.md', 'a.md', 'c.md'])
+    invariants(moved)
+  })
+
+  it('is a no-op dropped inside itself, or with one column', () => {
+    const l = splitAt(opened('a.md', 'b.md', 'c.md'), 'a.md', 0)
+    expect(moveGroup(l, 'c.md')).toBe(l) // c.md is in the group
+    const one = opened('a.md', 'b.md')
+    expect(moveGroup(one, 'a.md')).toBe(one)
   })
 })

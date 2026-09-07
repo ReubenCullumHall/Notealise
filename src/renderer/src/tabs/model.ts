@@ -431,6 +431,81 @@ export function swapPanes(l: TabLayout, a: number, b: number): TabLayout {
   return { ...l, panes, focus: b }
 }
 
+/** How the strip reads when notes are sharing the screen: the panes collapse
+ *  into ONE item, so a split looks like a split before you have opened it.
+ *  Everything else is a lone tab, in strip order.
+ *
+ *  Two decisions live here rather than in the component:
+ *
+ *  1. **Where the group sits** — at the position of its LEFTMOST member in the
+ *     strip. Any rule works as long as it is stable; this one is the only one
+ *     that never moves a group when the note beside it closes.
+ *  2. **What order the group reads in** — PANE order, not strip order, because
+ *     the whole point of grouping is to show the left-to-right arrangement on
+ *     screen. `moveGroup` writes that order back into `tabs` when the group is
+ *     dragged, so the two agree again afterwards.
+ *
+ *  A single pane groups nothing: one note on screen is not a split, and a
+ *  one-segment group would just be a tab wearing a costume. */
+export function stripGroups(l: TabLayout): string[][] {
+  if (l.panes.length <= 1) return l.tabs.map((t) => [t])
+  const inGroup = new Set(l.panes)
+  const items: string[][] = []
+  let placed = false
+  for (const t of l.tabs) {
+    if (!inGroup.has(t)) {
+      items.push([t])
+      continue
+    }
+    if (!placed) {
+      items.push([...l.panes])
+      placed = true
+    }
+  }
+  return items
+}
+
+/** Take one note out of the split — right-click a segment, or drag it out of
+ *  the group. Its column closes; the note stays OPEN as an ordinary tab, which
+ *  is exactly what closing a pane has always meant. */
+export function takeOutOfSplit(l: TabLayout, path: string): TabLayout {
+  const at = l.panes.indexOf(path)
+  return at === -1 ? l : closePane(l, at)
+}
+
+/** Split them all apart: back to one column, every other note still open as its
+ *  own tab. The column that survives is the FOCUSED one — the note you were
+ *  actually in, rather than whichever happened to be leftmost.
+ *
+ *  Unless the focus is on the BLANK, which is a standing request for a note and
+ *  not a note. Ending the split there would leave "Select a note" filling the
+ *  window with every real note hidden behind it — an answer to a question
+ *  nobody asked. It collapses onto a real column instead, and the blank retires
+ *  by the ordinary rules (`tidy`, invariant 3). */
+export function ungroupPanes(l: TabLayout): TabLayout {
+  if (l.panes.length <= 1) return l
+  const focused = l.panes[l.focus]
+  const keep = focused === BLANK ? (l.panes.find((p) => p !== BLANK) ?? focused) : focused
+  return tidy({ tabs: l.tabs, panes: [keep], focus: 0, sizes: undefined })
+}
+
+/** Drag the whole group along the strip. Every note on screen travels together
+ *  and lands as one contiguous block, in pane order — so after the drag the
+ *  stored strip order and the order you can see finally agree.
+ *
+ *  Dropping the group inside itself is a no-op rather than an error: there is
+ *  no arrangement it could mean, and the strip offers no indicator there. */
+export function moveGroup(l: TabLayout, before: string | null): TabLayout {
+  if (l.panes.length <= 1) return l
+  if (before !== null && l.panes.includes(before)) return l
+  const group = l.panes.filter((p) => l.tabs.includes(p))
+  if (!group.length) return l
+  const rest = l.tabs.filter((t) => !group.includes(t))
+  const at = before === null ? rest.length : rest.indexOf(before)
+  if (at === -1) return l
+  return { ...l, tabs: [...rest.slice(0, at), ...group, ...rest.slice(at)] }
+}
+
 /** Reorder the strip: put `path` immediately before `before` (or last, if null). */
 export function moveTab(l: TabLayout, path: string, before: string | null): TabLayout {
   if (path === before || !l.tabs.includes(path)) return l

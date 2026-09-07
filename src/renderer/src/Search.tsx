@@ -22,8 +22,6 @@ interface Props {
   onQuery: (q: string) => void
   deep: boolean
   onToggleDeep: () => void
-  withArchived: boolean
-  onToggleWithArchived: () => void
   allSpaces: boolean
   onToggleAllSpaces: () => void
 }
@@ -49,8 +47,8 @@ function SearchToggle({
       className={
         'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-none p-0 outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
         (on
-          ? 'bg-brand-500/12 text-brand-600 hover:bg-brand-500/12'
-          : 'bg-transparent text-ink-400 hover:bg-ink-300/15 hover:text-ink-900')
+          ? 'bg-accent-500/15 text-accent-600 hover:bg-accent-500/15'
+          : 'bg-transparent text-accent-500 hover:bg-ink-300/15 hover:text-accent-600')
       }
     >
       {children}
@@ -58,29 +56,47 @@ function SearchToggle({
   )
 }
 
-/** The Spotlight-style search pill: one rounded pill with the query input, a
- *  clear button, and the filters on the right so they're always in reach without
- *  opening anything (legacy/src/App.jsx:767-789). */
+/** The Spotlight-style search pill: one rounded pill with the query input and
+ *  the filters on the right, so they're always in reach without opening
+ *  anything (legacy/src/App.jsx:767-789).
+ *
+ *  Two filters, not three. The archive toggle was removed 2026-09-06 while
+ *  Reuben reworks the archive area — searching archived notes belongs to
+ *  whatever that becomes, and in the meantime the width is worth more to the
+ *  query than to a filter nobody had asked for. Archived notes are simply out
+ *  of the results (App.tsx's `n.archived` guard). */
 export function SearchBar({
   query,
   onQuery,
   deep,
   onToggleDeep,
-  withArchived,
-  onToggleWithArchived,
   allSpaces,
   onToggleAllSpaces
 }: Props): React.JSX.Element {
   return (
     <div className="px-3 pb-2">
-      <div className="btn-edge flex items-center gap-1.5 rounded-full border border-ink-300/30 bg-surface/70 py-1.5 pl-3 pr-1.5 focus-within:border-brand-300 focus-within:ring-4 focus-within:ring-brand-100">
+      <div className="btn-edge flex items-center gap-1.5 rounded-full border border-ink-300/30 bg-surface/70 py-1.5 pl-3 pr-1.5 focus-within:border-accent-300 focus-within:ring-4 focus-within:ring-accent-100">
         {/* Quieter than the ink ramp's own floor: at full --ink-300 the glyph
             and the divider read as controls you were meant to do something
             with. They are furniture, so they sit back into the pill and let
             the placeholder and the filters carry the row. The focus ring on
             the pill itself is untouched — that is the one signal here that
-            IS meant to be seen (tester feedback, 2026-09-05). */}
-        <span className="shrink-0 text-ink-300/55">
+            IS meant to be seen (tester feedback, 2026-09-05).
+
+            AND IT GETS OUT OF THE WAY ONCE YOU TYPE (Reuben, 2026-09-06): the
+            glyph says "this is the search box", which is a thing you only need
+            told while the box is empty — the moment there are words in it, the
+            words say it better. So it collapses to nothing and slides left,
+            handing the row back to the query. `w-0` with `overflow-hidden`
+            rather than unmounting it, so the width animates instead of the
+            input jumping; `opacity` alone would leave the gap behind. */}
+        <span
+          aria-hidden={query ? true : undefined}
+          className={
+            'shrink-0 overflow-hidden text-ink-300/55 transition-[width,opacity,margin] duration-200 ' +
+            (query ? 'pointer-events-none -ml-1.5 w-0 opacity-0' : 'w-4 opacity-100')
+          }
+        >
           <Icon name="search" className="h-4 w-4" />
         </span>
         <input
@@ -90,16 +106,10 @@ export function SearchBar({
           onChange={(e) => onQuery(e.target.value)}
           spellCheck={false}
         />
-        {query && (
-          <button
-            className="shrink-0 rounded-full border-none bg-transparent p-1 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
-            data-tip="Clear"
-            aria-label="Clear search"
-            onClick={() => onQuery('')}
-          >
-            <Icon name="x" className="h-4 w-4" />
-          </button>
-        )}
+        {/* No clear button. It only ever existed while there was a query — i.e.
+            exactly when the row is at its tightest and every pixel is the thing
+            you are typing into. Escape and a held Backspace both already clear
+            it, and neither costs the row any width (Reuben, 2026-09-06). */}
         <span className="h-4 w-px shrink-0 bg-ink-300/15" />
         {/* The three filters are one group, so they sit tighter to each other
             than to the divider and the input: the row's own `gap-1.5` still
@@ -113,13 +123,6 @@ export function SearchBar({
             title={deep ? 'Searching titles and note contents' : 'Searching titles only'}
           >
             <Icon name="text" className="h-4 w-4" />
-          </SearchToggle>
-          <SearchToggle
-            on={withArchived}
-            onClick={onToggleWithArchived}
-            title={withArchived ? 'Including archived notes' : 'Archived notes hidden'}
-          >
-            <Icon name="archive" className="h-4 w-4" />
           </SearchToggle>
           <SearchToggle
             on={allSpaces}
@@ -184,7 +187,7 @@ export function SearchResults({
           className={
             'tree-row group flex cursor-pointer items-center pr-1.5 text-left ' +
             (activePath === h.path
-              ? 'bg-brand-500/12 ring-1 ring-brand-300/50'
+              ? 'bg-brand-500/15 ring-1 ring-brand-300/50'
               : 'hover:bg-surface/70')
           }
           style={{ paddingLeft: 'var(--row-pad0)' }}

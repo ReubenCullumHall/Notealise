@@ -73,8 +73,6 @@ interface Props {
   onQuery: (q: string) => void
   deep: boolean
   onToggleDeep: () => void
-  withArchived: boolean
-  onToggleWithArchived: () => void
   allSpaces: boolean
   onToggleAllSpaces: () => void
   searchHits: SearchHit[] | null
@@ -134,8 +132,8 @@ function TB({
       className={
         'press flex items-center gap-1.5 rounded-lg border-none px-2 py-1 text-[12px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
         (active
-          ? 'bg-brand-500/12 text-brand-600 hover:bg-brand-500/12'
-          : 'bg-transparent text-ink-500 hover:bg-ink-300/15 hover:text-ink-900')
+          ? 'bg-accent-500/15 text-accent-600 hover:bg-accent-500/15'
+          : 'bg-transparent text-accent-500 hover:bg-ink-300/15 hover:text-accent-600')
       }
     >
       {children}
@@ -177,7 +175,7 @@ function SortMenu({
                 className={
                   'flex w-full items-center gap-2 rounded-lg border-none px-2 py-1.5 text-left text-[12px] outline-none ' +
                   (o.id === value
-                    ? 'bg-brand-500/12 text-brand-600 hover:bg-brand-500/12'
+                    ? 'bg-brand-500/15 text-brand-600 hover:bg-brand-500/15'
                     : 'bg-transparent text-ink-600 hover:bg-brand-500/[0.08] hover:text-ink-900')
                 }
               >
@@ -243,8 +241,6 @@ export function Sidebar({
   onQuery,
   deep,
   onToggleDeep,
-  withArchived,
-  onToggleWithArchived,
   allSpaces,
   onToggleAllSpaces,
   searchHits,
@@ -543,8 +539,6 @@ export function Sidebar({
         onQuery={onQuery}
         deep={deep}
         onToggleDeep={onToggleDeep}
-        withArchived={withArchived}
-        onToggleWithArchived={onToggleWithArchived}
         allSpaces={allSpaces}
         onToggleAllSpaces={onToggleAllSpaces}
       />
@@ -923,10 +917,10 @@ export function Sidebar({
                     // keeps its accent border, which is how you can see which
                     // space you're in
                     (on
-                      ? 'border-brand-400/60 bg-brand-500/12 text-brand-600'
+                      ? 'border-accent-400/60 bg-accent-500/15 text-accent-600'
                       : arming
-                        ? 'scale-105 border-brand-400/70 bg-brand-500/20 text-brand-600 ring-2 ring-brand-400/50'
-                        : 'btn-edge border-ink-300/25 bg-transparent text-ink-500 hover:bg-ink-300/15 hover:text-ink-900')
+                        ? 'scale-105 border-accent-400/70 bg-accent-500/20 text-accent-600 ring-2 ring-accent-400/50'
+                        : 'btn-edge border-ink-300/25 bg-transparent text-accent-500 hover:bg-ink-300/15 hover:text-accent-600')
                   }
                 >
                   {/* pointer-events-none as well as the stillInside() guard: the
@@ -1075,8 +1069,8 @@ export function Sidebar({
             // over, not on the pair.
             'flex h-full flex-1 items-center justify-center gap-1.5 border-none px-2 text-[12px] font-medium tabular-nums outline-none transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ' +
             (inBin || dropZone === 'trash'
-              ? 'bg-brand-500/12 text-brand-600'
-              : 'bg-transparent text-ink-500 hover:bg-ink-300/15')
+              ? 'bg-accent-500/15 text-accent-600'
+              : 'bg-transparent text-accent-500 hover:bg-ink-300/15')
           }
         >
           <span className={lidOpen ? 'lid-open' : ''}>
@@ -1127,8 +1121,8 @@ export function Sidebar({
             // border-style, which would leave a 1px-wide invisible border.
             'flex h-full flex-1 items-center justify-center gap-1.5 border-y-0 border-r-0 border-l border-solid border-ink-300/30 px-2 text-[12px] font-medium tabular-nums outline-none transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ' +
             (inArchive || dropZone === 'archive'
-              ? 'bg-brand-500/12 text-brand-600'
-              : 'bg-transparent text-ink-500 hover:bg-ink-300/15')
+              ? 'bg-accent-500/15 text-accent-600'
+              : 'bg-transparent text-accent-500 hover:bg-ink-300/15')
           }
         >
           <span className={archiveLidOpen ? 'lid-open' : ''}>

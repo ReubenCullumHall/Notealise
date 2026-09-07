@@ -79,6 +79,26 @@ than loaded every session — see "Where the rest of it lives" near the end of t
    `bg-surface/45` and `rgb(var(--surface) / 0.45)` are the same thing. Spacing, radius and
    typography come from Tailwind utilities on the components. See rule 8.
 
+   **An opacity modifier must be a MULTIPLE OF FIVE.** `bg-brand-500/12` is not a class Tailwind
+   generates — it emits nothing at all, the element gets no background, and the JSX still reads as
+   though it has one. Nothing warns you: on 2026-09-06 the app was carrying **52** of these, 24 of
+   them for weeks, and `typecheck`, `oxlint` and 669 unit tests were all green the whole time. They
+   were found by running `npm run build` and grepping `out/renderer/assets/index-*.css` for the
+   class. `src/main/tailwindOpacity.test.ts` is that grep, kept, and it names the file and the
+   class; if you genuinely need an off-scale alpha, the arbitrary form `bg-brand-500/[0.12]` works
+   and the test deliberately allows it. **The same trap applies to any generated utility** — when a
+   class does nothing, check the built CSS before you check your component.
+
+   **The accent has THREE token families and they are not interchangeable** (`settings/model.ts`'s
+   `applyAccent`). `--brand-*` is the accent only in `accentMode: 'tint'` — in `text` mode, the
+   default, it stays the theme's neutral grey, which is why chrome painted from it looks unaccented
+   for most people. `--accent-*` carries the real accent in BOTH modes, and is what a control that
+   should always show the colour must read. `--ink-acc-*` is the accented version of each ink stop,
+   for the handful of things allowed to colour TEXT with it: Settings' section headings and nav,
+   a note's `#` headings, a note's word count and dates. A note's own body is never one of them —
+   `--ink-plain-*` exists to hand it back the theme's ink when "Colour all UI text" repaints the
+   ramp. Adding a fourth reader of `--ink-acc-*` is a product decision, not a styling one.
+
 8. **The legacy app is the visual source of truth — and READ-ONLY.** `legacy/` (localhost:5173) is
    the canonical *look*; the Electron UI is kept in step with it. Legacy is styled with Tailwind v3
    utility classes, so this app is too — **copy the `className` string from `legacy/src/App.jsx`
@@ -1118,6 +1138,39 @@ feedback. Two rules follow, both learned the hard way on that feature:
 
 Also note Tailwind's ring utilities are box-shadow, not border: firm up a `ring-1` control by setting
 **`--tw-ring-color`**, which is why the button-definition rule sets both properties.
+
+### Two rules in app.css can collide, and the loser is invisible (2026-09-06)
+
+`.mini.danger` (0,2,0) sets a red `color` on the button's own ground. `button.danger` (0,1,1) was
+added later for a confirm dialog's filled red button and sets `background` AND `color: #fff`. Being
+less specific it lost the colour and **won the background** — so every armed `.mini danger` in the
+app was red text on a red fill, legible only on hover, where `.mini.danger:hover` finally set white.
+Reuben found it on Settings → Spaces → **Delete space**; the bin's **Delete all now** had it too.
+Fix is `button.danger:not(.mini)` on both the base rule and its `:hover`.
+
+The general shape: **a new rule for one variant, named after the shared class, silently repaints
+every other variant** — and a partial override (background taken, colour not) reads as a rendering
+bug rather than a cascade one. Two habits follow:
+
+1. When adding a rule for a *specific* kind of a thing, scope it away from the kinds it is not
+   (`:not(.mini)`), rather than trusting that the other rule is more specific. It may only be more
+   specific for *some* of the properties.
+2. **Measure both rules' output, don't read them.** A one-page harness that renders both variants
+   and prints `getComputedStyle` took two minutes and gave `background` and `color` as the same
+   `rgb(229, 72, 77)` — proof, where reading the file twice had not been.
+
+### A wrapping flex container is still measured as one line (2026-09-06)
+
+`.sel-toolbar` used `flex-wrap: wrap` with a `flex-basis: 100%` child to drop the colour picker
+onto a second row. The wrap worked. But a **shrink-to-fit** flex container computes its max-content
+width as if nothing wrapped, so the bar sized itself to the swatch row *plus* the picker side by
+side — 492px of bar around a 236px picker, and 249px of dead space where Reuben expected the panel
+to end. `flex-basis: 100%` is also not a width: on a flex item it beats the `width` sitting beside
+it, which is why an earlier `width: 208px` on the same rule had never applied at all.
+
+**Rows that stack are a column of row elements, not a wrapping row.** The container then measures
+as the widest row, which is what you meant. Reach for `flex-wrap` only when the number of items per
+line is genuinely fluid.
 
 ### Where the last few bugs actually lived (pattern, not history)
 

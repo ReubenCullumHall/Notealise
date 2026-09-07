@@ -26,17 +26,10 @@ so `<mark style="background-color: #hex">` is recognised. Proved by reading comp
 a running build of that exact tree: custom highlight `rgb(255, 59, 48)`, custom text colour
 `rgb(52, 199, 89)`, a named `hl-amber` control unchanged. **`main` is releasable again.**
 
-### The colour bar's mid-drag suppression was never observed
-
-The *release* path is verified — measured in the packaged app: 40 ms after a double-click the bar
-is absent while the selection already exists, and at 340 ms it is there. The *drag* path is not.
-`dragSelecting` is set on `pointerdown` inside `view.dom` and cleared on `pointerup`, and the code
-reads correctly, but every attempt to drive a real drag-select through `sendInputEvent` produced no
-selection at all — so nothing ever exercised it.
-
-**To close it:** drag slowly across a sentence with the button held. Nothing should appear until
-you let go. (This is the same class of problem CLAUDE.md already records about synthetic input and
-CodeMirror — the instrument, not the code, was the thing that failed.)
+**Closed 2026-09-06:** the colour bar's mid-drag suppression. Reuben dragged across a sentence with
+the button held and confirmed the bar stays away until release. It had never been observed because
+every attempt to drive a real drag-select through `sendInputEvent` produced no selection at all —
+the instrument failed, not the code. **All three items from the tester-feedback pass are now closed.**
 
 ### Windows is entirely untested
 
@@ -48,6 +41,11 @@ which is platform-independent, so this is a confirmation rather than a suspicion
 
 Also worth a glance on Windows: the search bar's two new opacities (`ink-300/55`, `ink-300/15`)
 against ClearType, and the sidebar hover mask, which uses `-webkit-mask-image`.
+
+Added 2026-09-06, from the second round of fixes: the search pill's magnifier now animates its own
+`width` to zero as you type, and the selection colour bar is sized by `width: max-content` on a
+flex column. Both are layout that a different font metric can shift — the pill by a pixel or two of
+reflow mid-animation, the bar by however much wider Segoe sets the "Apply to text" button.
 
 ### Reading view would strip a custom colour — pre-existing, not caused here
 
