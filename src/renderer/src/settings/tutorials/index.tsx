@@ -38,7 +38,7 @@ export function Tutorials(): React.JSX.Element {
         <button
           type="button"
           onClick={() => setOpenId(null)}
-          className="flex w-fit items-center gap-1.5 rounded-lg border-none bg-transparent px-2 py-1 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"
+          className="flex w-fit items-center gap-1.5 rounded-lg border-none bg-transparent px-2 py-1 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
         >
           <span aria-hidden="true" className="inline-flex rotate-180">
             <Icon name="chevron" className="h-3.5 w-3.5" />
@@ -52,7 +52,7 @@ export function Tutorials(): React.JSX.Element {
 
   return (
     <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Tutorials</h3>
+      <h3 className="accent-heading font-display text-[15px] font-semibold">Tutorials</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         How the parts of the app that aren&rsquo;t obvious from looking at them actually work.
       </p>
@@ -63,9 +63,9 @@ export function Tutorials(): React.JSX.Element {
             key={g.id}
             type="button"
             onClick={() => setOpenId(g.id)}
-            className="btn-edge flex items-start gap-3 rounded-xl border-none px-3 py-3 text-left outline-none ring-1 ring-ink-300/20 transition duration-200 hover:bg-brand-500/8 focus-visible:ring-2 focus-visible:ring-brand-300"
+            className="btn-edge flex items-start gap-3 rounded-xl border-none px-3 py-3 text-left outline-none ring-1 ring-ink-300/20 transition duration-200 hover:bg-ink-300/15 focus-visible:ring-2 focus-visible:ring-brand-300"
           >
-            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500/12 text-brand-600">
+            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500/15 text-brand-600">
               <Icon name={g.icon} className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">

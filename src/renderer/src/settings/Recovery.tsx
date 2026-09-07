@@ -30,7 +30,7 @@ function daysLeft(purgedAt: number): number {
 export function Recovery({ items, onRestore, onPurge, onRevealHeld }: Props): React.JSX.Element {
   return (
     <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Recovery</h3>
+      <h3 className="accent-heading font-display text-[15px] font-semibold">Recovery</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         A second safety net beneath the bin. Deleting something forever from the bin — one item, or
         the whole &ldquo;Empty recycle bin&rdquo; — lands it here instead, where it waits 7 days
@@ -108,14 +108,14 @@ function RecoveryRow({
           onRevealHeld(heldPath(RECOVERY_DIR, item.id, item.name), item.media?.note ?? null)
         }
         data-tip="Show me this file on my computer"
-        className="shrink-0 rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600"
+        className="shrink-0 rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-ink-900"
       >
         <Icon name="folder" className="h-4 w-4" />
       </button>
       <button
         onClick={onRestore}
         data-tip="Put back"
-        className="shrink-0 rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-brand-500/10 hover:text-brand-600"
+        className="shrink-0 rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-ink-900"
       >
         <Icon name="restore" className="h-4 w-4" />
       </button>
@@ -160,7 +160,7 @@ function TwoStepButton({
           'shrink-0 rounded-lg border-none bg-transparent p-1.5 outline-none transition duration-200 ' +
           (armed
             ? 'text-[#e5484d] hover:bg-[#e5484d]/10' // same literal .mini.danger / .menu-item.danger use
-            : 'text-ink-400 hover:bg-brand-500/10 hover:text-brand-600')
+            : 'text-ink-400 hover:bg-ink-300/15 hover:text-ink-900')
         }
       >
         <Icon name="trash" className="h-4 w-4" />

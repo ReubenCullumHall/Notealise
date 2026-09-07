@@ -89,7 +89,7 @@ export function VaultStep({
       <div className="flex min-h-[130px] w-full max-w-[440px] flex-col items-center justify-center gap-3 rounded-2xl bg-surface/70 px-6 py-6 shadow-card">
         {vault ? (
           <>
-            <span className="max-w-full truncate rounded-lg bg-brand-500/8 px-3 py-1.5 font-mono text-[12.5px] text-ink-800">
+            <span className="max-w-full truncate rounded-lg bg-ink-300/10 px-3 py-1.5 font-mono text-[12.5px] text-ink-800">
               {vault}
             </span>
             {established ? (

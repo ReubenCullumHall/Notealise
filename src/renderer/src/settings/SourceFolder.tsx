@@ -18,7 +18,7 @@ interface Props {
 export function SourceFolder({ vault, onPickVault }: Props): React.JSX.Element {
   return (
     <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Source folder</h3>
+      <h3 className="accent-heading font-display text-[15px] font-semibold">Source folder</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         Every note is an ordinary <code className="font-mono text-ink-700">.md</code> file in this
         folder. The app edits those files in place — nothing is copied into a database, and nothing
@@ -42,14 +42,14 @@ export function SourceFolder({ vault, onPickVault }: Props): React.JSX.Element {
         its own setup with it if you move or sync it.
       </p>
 
-      <h3 className="mt-7 font-display text-[15px] font-semibold text-ink-900">Use another folder</h3>
+      <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">Use another folder</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         Switching points the app at a different folder. Nothing is moved, copied or deleted — the
         folder you leave stays exactly as it is, and switching back finds it unchanged, tabs and all.
       </p>
       <button
         onClick={onPickVault}
-        className="btn-edge mt-3 flex items-center justify-center gap-2 rounded-lg border border-ink-300/35 bg-surface/70 px-3 py-2 text-[13px] font-medium text-ink-700 outline-none transition duration-200 hover:border-brand-300 hover:text-brand-600 focus-visible:ring-4 focus-visible:ring-brand-100"
+        className="btn-edge mt-3 flex items-center justify-center gap-2 rounded-lg border border-ink-300/35 bg-surface/70 px-3 py-2 text-[13px] font-medium text-ink-700 outline-none transition duration-200 hover:border-ink-300/60 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         <Icon name="folder" className="h-4 w-4" />
         Choose a different folder…

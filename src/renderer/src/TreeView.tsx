@@ -328,7 +328,7 @@ export function TreeView({
     const tone = isPicked
       ? `row-picked${open ? ' is-open' : ''}`
       : open && !painted
-        ? 'bg-brand-500/12 ring-1 ring-brand-300/50'
+        ? 'bg-brand-500/15 ring-1 ring-brand-300/50'
         : ''
     // Tailwind's hover background is emitted only when nothing else owns the
     // row's background. A utility and an app.css rule at the same specificity
@@ -423,7 +423,7 @@ export function TreeView({
           <Icon name="doc" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="tree-title truncate font-medium text-ink-900">{labelOf(node)}</span>
+          <span className="tree-title truncate font-medium">{labelOf(node)}</span>
           {/* hidden entirely at ultra density — see --row-sub-display */}
           <span className="tree-sub truncate text-ink-500">
             {stamp ? `Archived ${stamp}` : node.preview || 'Empty note'}

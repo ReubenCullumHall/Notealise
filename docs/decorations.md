@@ -66,6 +66,49 @@ The wrapping/unwrapping is separate: `colorModel.ts` holds the pure `recolor` (s
 toggle, merge — unit tested), `colorCommands.ts` is the CodeMirror wrapper, and
 `SelectionToolbar.tsx` is the floating popover.
 
+### Two marks over one range: which one ends up INSIDE (2026-08-29)
+
+`colorPass` pushes its content mark through `push(..., inner: true)`, which routes it to a second
+decoration set provided at **`Prec.highest`**. That is not tidiness — it decides the DOM nesting,
+and the nesting decides the size of the highlight.
+
+Mark decorations from different providers nest by the order their sets sit in the
+`EditorView.decorations` facet, and **the LAST input is the outermost** (see `outerDecorations` in
+`@codemirror/view`, documented as sitting "at the very bottom of the precedence stack" and wrapping
+around everything else). At default precedence the colour mark wrapped the highlighter's heading
+span:
+
+```
+<span class="hl-rose">            16px, painted box 21.4px tall   <- the background
+  <span class="ͼo">TEXT</span>    27.2px, glyphs 33px tall        <- the text
+</span>
+```
+
+A background paints on its own element's inline box, and that box takes its height from THAT
+element's font metrics — so a highlight on an H1 was drawn at body-text height around text half
+again as large, with the caps and descenders outside it. At `Prec.highest` the colour mark is
+first, therefore innermost, therefore inherits the heading's own `font-size`, and the box fits at
+every size with no padding constant to maintain.
+
+**Do not reason this out from the facet docs — measure it.** The first attempt used `Prec.lowest`
+on exactly the reasoning above and changed nothing at all; only swapping to `highest` and
+re-reading `getComputedStyle(mark).fontSize` (27.2px, `children.length === 0`) settled it.
+
+### Raw view styles the marks rather than skipping the passes (2026-08-29)
+
+`build()` used to skip `PASSES` wholesale in raw view. It now RUNS them and keeps only the items
+whose decoration is the shared `hideDeco` instance, re-cast as `Decoration.mark({class:
+'cm-raw-mark'})` and never atomic. Those ranges *are* the syntax marks, already located by the
+tree, so `rawMarkStyle` can fade or colour them with no second parser. Everything else a pass
+pushes — widget replacements (bullets, KaTeX, pictures, checkboxes) and styling marks — is dropped,
+so the mode still looks as it did apart from the marks. `deco === hideDeco` is an exact identity
+test, which is why `hideDeco` is one shared exported instance.
+
+**Anything that edits concealed markup must switch itself off in raw view.** `colorCommands.ts`'s
+pair-mender and edge-Backspace both check `isRaw` first: raw view is where the tags are visible and
+yours to hand-edit, and an editor that silently puts back a `</mark>` you just deleted, while you
+are looking straight at it, is worse than the bug it was fixing.
+
 ### The math pass (`mathPass`, implemented)
 
 `mathPass` renders LaTeX with KaTeX: `$$…$$` (block) and `$…$` (inline). It scans the visible

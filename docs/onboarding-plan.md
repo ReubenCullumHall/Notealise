@@ -488,3 +488,22 @@ completion event, can have its own terminal-state UI raced out from under it by 
 context's reaction to that same event — worth checking for whenever a component built for one
 embedding (a modal that only closes on explicit user action) gets reused inside another that
 auto-advances on its own.
+
+## The welcome-notes opt-in (built 2026-09-06)
+
+A toggle on the **Write** step — "Start me off with a few welcome notes", on by default. Reuben
+asked for a page of its own; it went on an existing step instead, at his choice, once the
+seven-vs-eight-steps trade was put to him. The brand principle it protects is the one already in
+this file: onboarding stays thin, customisation is a discovery.
+
+Lifted to `Onboarding.tsx` beside `notePath` for the same reason that is: the step that ASKS is not
+the step that ACTS. Finishing does, and it survives stepping Back and forward again.
+
+**Off does not mean an empty app.** `finishOnboarding` opens the note the flow just wrote instead
+of the welcome note it would have seeded — handing back a blank pane at the end of a setup flow is
+a worse ending than either. The toggle's own hint says so out loud, because "no welcome notes" and
+"empty app" are the same screen and only one of them is what you chose.
+
+Both paths were driven end to end against the real flow before it was called done: on, the vault
+holds the note you wrote plus the five seeded ones and opens on **Start here**; off, it holds only
+the note you wrote and opens on that.

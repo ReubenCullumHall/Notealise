@@ -56,7 +56,7 @@ export function Customisation({
 
   return (
     <>
-      <div className="rounded-xl bg-brand-500/8 px-3 py-2.5 ring-1 ring-brand-300/40">
+      <div className="rounded-xl bg-ink-300/10 px-3 py-2.5 ring-1 ring-ink-300/25">
         <p className="flex items-center gap-2 text-[13px] font-medium text-brand-600">
           <Icon name="spaces" className="h-3.5 w-3.5" />
           Everything here applies to all {spaces.length} {spaces.length === 1 ? 'space' : 'spaces'}
@@ -77,7 +77,7 @@ export function Customisation({
       </div>
 
       <div>
-        <h3 className="font-display text-[15px] font-semibold text-ink-900">Every space</h3>
+        <h3 className="accent-heading font-display text-[15px] font-semibold">Every space</h3>
         {spaces.length > 1 && (
           <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
             Where your spaces disagree about something, it&rsquo;s marked — change it here to settle

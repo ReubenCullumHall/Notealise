@@ -169,7 +169,7 @@ export function ColorField({
               setTyped(null)
             }
           }}
-          className="w-full rounded-lg bg-ink-300/8 px-2.5 py-1.5 font-mono text-[12px] lowercase text-ink-900 outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
+          className="w-full rounded-lg bg-ink-300/10 px-2.5 py-1.5 font-mono text-[12px] lowercase text-ink-900 outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
         />
       </label>
     </div>

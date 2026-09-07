@@ -112,7 +112,7 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
 
   return (
     <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Transfer data</h3>
+      <h3 className="accent-heading font-display text-[15px] font-semibold">Transfer data</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         Your notes are ordinary files in your vault folder — no uninstaller, app-cleaner or new
         computer can touch them, and moving that folder is all it takes to bring them with you.
@@ -138,7 +138,7 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
         </p>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-ink-300/8 px-3.5 py-2.5 text-[11.5px] text-ink-500 ring-1 ring-ink-300/25">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-ink-300/10 px-3.5 py-2.5 text-[11.5px] text-ink-500 ring-1 ring-ink-300/25">
         <span className="font-medium text-ink-600">On this computer now</span>
         <span>{inv.presets} {inv.presets === 1 ? 'preset' : 'presets'}</span>
         <span>{inv.customFonts} custom {inv.customFonts === 1 ? 'font' : 'fonts'}</span>
@@ -146,7 +146,7 @@ export function TransferData({ onImported }: Props): React.JSX.Element {
         <span>Updates: {inv.autoUpdate ? 'automatic' : 'manual'}</span>
       </div>
 
-      <h3 className="mt-7 font-display text-[15px] font-semibold text-ink-900">
+      <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">
         Move to another computer
       </h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">

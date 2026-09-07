@@ -7,6 +7,30 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Notes sharing the screen now share a tab. A split reads as one wide tab with a small divider at
+  each seam, in the order the columns sit on screen, so you can see what is open without looking
+  at the window. Drag its grip to move them all together, drag a name out to take that note out of
+  the split, or right-click a name for the same in words
+- **Drag a tab onto the middle of another tab** to put the two side by side. The one you drop onto
+  keeps the left, the one you dragged arrives on its right. Dropping on a tab's left or right edge
+  still moves it along the strip, as before
+- Every column except the leftmost has a button to swap it with the one on its left — the same
+  thing dragging a column's top row has always done, now with something on screen that says so
+- **Cmd/Ctrl+S** shows and hides the sidebar. It and **Cmd/Ctrl+\** (open another column) are in
+  the **View** menu, so the shortcuts are somewhere you can find them rather than only in the app's
+  head
+- Buttons, tabs and sidebar rows give slightly under the click. Hover still never moves anything —
+  only your own press does. Off entirely with **Interface animations**
+- Your accent colour now marks what it is for. Headings, note and folder titles, the settings list,
+  the sidebar's own buttons, the search bar's glow and a note's word count take it; hints, labels,
+  and the words you write in a note do not. **Colour all UI text** puts it back on every label if
+  you want that, and even then your writing stays yours to colour. Picking a colour used to repaint
+  every word in the app, which was a lot of colour for a writing app
+- The first-run intro asks whether to add the welcome notes. Leave it on and they arrive as before;
+  switch it off and you land on the note you wrote yourself, in an otherwise empty vault
+- Selected things actually show their highlight again. The soft background behind the open tab, the
+  selected sidebar row, the current settings section and the active toolbar buttons had quietly
+  been rendering as nothing at all
 - One set of colours, everywhere. The colours you can put on text, on a highlight, on a note or
   folder, on the accent, and under a page are now the same ten, in the same order, in a picker
   that looks the same in every one of those places — the first-run intro included. There were
@@ -34,8 +58,12 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - The word count moved to the left-hand end of the toolbar, away from the split-screen button, and
   stays put however long the note's name is
 - The search bar's magnifier and the divider before the filters sit back into the panel instead of
-  reading as controls, and the three filters group together rather than spreading along the pill.
-  The border still lights up when you click in to type
+  reading as controls, and the filters group together rather than spreading along the pill. The
+  border still lights up when you click in to type
+- The search bar gets out of your way as you type. The magnifier shrinks away and slides left the
+  moment there are words in the box, and the clear cross is gone — Escape still empties it. The
+  filter for searching archived notes has gone too, while the archive is reworked; archived notes
+  stay out of your results in the meantime. All of it is width handed back to what you are typing
 - An open folder with nothing in it says "This folder is currently empty". It only offers "Drop
   items here" while you are actually holding something
 - **Start empty** is now **Start with nothing open**, and says outright that your notes are all
@@ -61,6 +89,16 @@ enough for a solo project). History before this file existed lives in the `v*` g
   note onto the bin or the archive still works exactly as before
 - A note with no links says just "No links yet", with no rule under it, instead of a full-width
   line of instructions above every unlinked note. The hint about typing `[[` is on the tooltip
+- Fixed: typing at either end of coloured text put a stray `</span>` or `<mark>` into the note.
+  Colouring a word and then pressing space with the cursor at its right-hand edge was the way to
+  see it, but the left-hand edge did the same. The tag is markup you are never meant to look at,
+  so a duplicate appearing mid-sentence had no explanation and nothing obvious to do about it
+- The **Any colour** panel on the colour bar is the width of the bar rather than running past it,
+  and a line now separates the highlight/text switch from the ten colours, so the switch reads as
+  the thing that decides what they do
+- Fixed: **Delete space** turned into a blank red button once you had clicked it. Its "Click again
+  to delete" was red on red and only appeared when you hovered. The bin's own **Delete all now**
+  had the same fault once armed
 - Fixed on Windows: importing from Notion, Markdown or HTML offered a folder picker only, so a
   `.zip` could not be chosen at all — typing its path in answered "The folder name is not valid",
   under a dialog headed "Choose your Notion export (.zip or an already-unzipped folder)". Windows

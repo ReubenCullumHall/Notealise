@@ -4,6 +4,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { search, searchKeymap } from '@codemirror/search'
 import { drawSelection, EditorView, keymap } from '@codemirror/view'
 import { editorStyling } from './highlight'
+import { colorEditing } from './colorCommands'
 import { livePreview } from './livePreview'
 import { imageClick } from './imagePass'
 import { attachInput } from './attachInput'
@@ -97,6 +98,10 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     embedSelectionAttr,
     scrollbarReveal,
     livePreview,
+    // Backspace at a colour tag's edge + the empty-pair sweep. Beside
+    // livePreview because the two are halves of one thing: that hides the tags,
+    // this keeps them editable while hidden.
+    colorEditing,
     imageClick,
     attachInput,
     webLinkGestures,

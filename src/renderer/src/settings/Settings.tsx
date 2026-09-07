@@ -148,6 +148,7 @@ const SEARCH_INDEX: SearchEntry[] = [
   { section: 'customisation', disclosure: 'Appearance', label: 'Theme', hint: 'Light, dark or extra dark, applied to the whole app.', keywords: 'dark mode light mode night mode black extra dark appearance colour scheme white black background bright darker lighter' },
   { section: 'customisation', disclosure: 'Appearance', label: 'Text colour', hint: 'How bright the writing sits on a dark background.', keywords: 'white grey text brightness dark theme readability contrast' },
   { section: 'customisation', disclosure: 'Appearance', label: 'Accent colour', hint: 'Pick a colour, then choose how far it reaches.', keywords: 'accent color highlight brand colour tint hue' },
+  { section: 'customisation', disclosure: 'Appearance', label: 'Colour all UI text', hint: 'Let every label in the app take the accent, not just headings and titles.', keywords: 'accent ui text label everywhere hints sidebar tabs colour red heading title word count' },
   { section: 'customisation', disclosure: 'Appearance', label: 'Stronger button edges', hint: 'How hard the edges of buttons and controls read against the page.', keywords: 'button outline border contrast ui buttons edges' },
   { section: 'customisation', disclosure: 'Appearance', label: 'Density', hint: 'How tightly notes and folders pack in the sidebar.', keywords: 'compact spacing sidebar rows tight loose comfortable size cramped roomy bigger smaller' },
   { section: 'customisation', disclosure: 'Appearance', label: 'Editor width', hint: 'How wide the writing area grows.', keywords: 'line length text width column wide narrow reading margins' },
@@ -465,7 +466,7 @@ export function SettingsButton({
         // `btn-edge` returns with the border it colours.
         className={
           'btn-edge pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-ink-300/30 outline-none backdrop-blur transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-          (open ? 'bg-brand-500/12 text-brand-600' : 'bg-surface/90 text-ink-500 hover:bg-ink-300/15')
+          (open ? 'bg-accent-500/15 text-accent-600' : 'bg-surface/90 text-accent-500 hover:bg-ink-300/15')
         }
         data-tip="Settings"
         aria-label="Settings"
@@ -687,7 +688,7 @@ function SettingsWindow({
                 <button
                   key={m.section + m.label + i}
                   onClick={() => jumpTo(m)}
-                  className="flex w-full flex-col items-start gap-0.5 rounded-xl border-none px-2.5 py-2 text-left outline-none transition duration-200 hover:bg-ink-300/12 focus-visible:ring-2 focus-visible:ring-brand-300"
+                  className="flex w-full flex-col items-start gap-0.5 rounded-xl border-none px-2.5 py-2 text-left outline-none transition duration-200 hover:bg-ink-300/15 focus-visible:ring-2 focus-visible:ring-brand-300"
                 >
                   <span className="text-[12.5px] font-medium text-ink-700">{m.label}</span>
                   <span className="text-[11px] text-ink-400">{SECTION_LABEL[m.section]}</span>
@@ -708,9 +709,13 @@ function SettingsWindow({
                   aria-current={section === s.id}
                   className={
                     'flex w-full items-center gap-2 rounded-xl border-none px-2.5 py-2 text-left text-[13px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+                    // The settings window's own sidebar takes the accent
+                    // alongside the section headings — the two are what give
+                    // this window its shape (Reuben, 2026-09-06). Everything
+                    // else in here stays ink unless "Colour all UI text" is on.
                     (section === s.id
-                      ? 'bg-brand-500/12 text-brand-600'
-                      : 'bg-transparent text-ink-500 hover:bg-ink-300/12 hover:text-ink-900')
+                      ? 'bg-accent-500/15 text-accent-600'
+                      : 'bg-transparent text-accent-500 hover:bg-ink-300/15 hover:text-accent-600')
                   }
                 >
                   <Icon name={s.icon} className="h-4 w-4" />
@@ -742,7 +747,7 @@ function SettingsWindow({
                 <div>
                   <Formatting settings={settings} onChange={onChange} />
                 </div>
-                <p className="rounded-xl bg-ink-300/8 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-500 ring-1 ring-ink-300/25">
+                <p className="rounded-xl bg-ink-300/10 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-500 ring-1 ring-ink-300/25">
                   <span className="font-medium text-brand-600">Looking for the theme, colours or
                   the sidebar?</span>{' '}
                   Those belong to a space, not to the app — see{' '}
@@ -789,7 +794,7 @@ function SettingsWindow({
               <button
                 type="button"
                 onClick={() => goTo('transferData')}
-                className="btn-edge flex w-full items-center gap-2.5 rounded-xl border border-ink-300/30 bg-ink-300/8 px-3.5 py-2.5 text-left outline-none transition duration-200 hover:border-ink-300/60 focus-visible:ring-2 focus-visible:ring-brand-300"
+                className="btn-edge flex w-full items-center gap-2.5 rounded-xl border border-ink-300/30 bg-ink-300/10 px-3.5 py-2.5 text-left outline-none transition duration-200 hover:border-ink-300/60 focus-visible:ring-2 focus-visible:ring-brand-300"
               >
                 <Icon name="export" className="h-4 w-4 shrink-0 text-brand-500" />
                 <span className="min-w-0 flex-1">
@@ -849,7 +854,7 @@ function SettingsWindow({
 function General({ settings, onChange }: Props): React.JSX.Element {
   return (
     <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Startup</h3>
+      <h3 className="accent-heading font-display text-[15px] font-semibold">Startup</h3>
       <p className="mt-0.5 text-[12px] text-ink-500">What you see when the app opens.</p>
       {/* Was two full-height option cards — the same "pick one of these" shape
           as Date format and Time zone below, just given special-case treatment.
@@ -875,7 +880,7 @@ function General({ settings, onChange }: Props): React.JSX.Element {
         />
       </div>
 
-      <h3 className="mt-6 font-display text-[15px] font-semibold text-ink-900">Animations</h3>
+      <h3 className="mt-6 accent-heading font-display text-[15px] font-semibold">Animations</h3>
       <p className="mt-0.5 text-[12px] text-ink-500">Motion used throughout the interface.</p>
       <div className="mt-3">
         <ToggleRow
@@ -886,7 +891,7 @@ function General({ settings, onChange }: Props): React.JSX.Element {
         />
       </div>
 
-      <h3 className="mt-6 font-display text-[15px] font-semibold text-ink-900">Photos and video</h3>
+      <h3 className="mt-6 accent-heading font-display text-[15px] font-semibold">Photos and video</h3>
       <p className="mt-0.5 text-[12px] text-ink-500">Deleting one from a note.</p>
       <div className="mt-3">
         <ToggleRow
@@ -928,7 +933,7 @@ function VaultReset(): React.JSX.Element {
 
   return (
     <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Vault reset</h3>
+      <h3 className="accent-heading font-display text-[15px] font-semibold">Vault reset</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         Start over without reinstalling. Neither of these touches the notes in your real vault.
       </p>
@@ -993,7 +998,7 @@ function Legal({ onOpenLicences }: { onOpenLicences: () => void }): React.JSX.El
   const point = 'text-[12px] leading-relaxed text-ink-500'
   return (
     <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Legal</h3>
+      <h3 className="accent-heading font-display text-[15px] font-semibold">Legal</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         The essentials are below. The full terms of use and privacy policy are on the
         website.

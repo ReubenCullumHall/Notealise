@@ -50,7 +50,7 @@ export function RequestForm({
 
   return (
     <>
-      {title && <h3 className="font-display text-[15px] font-semibold text-ink-900">{title}</h3>}
+      {title && <h3 className="accent-heading font-display text-[15px] font-semibold">{title}</h3>}
       <p className={(title ? 'mt-0.5 ' : '') + 'text-[12px] text-ink-500'}>{hint}</p>
 
       <div className="mt-4 flex flex-col gap-1">
@@ -63,7 +63,7 @@ export function RequestForm({
           value={fromEmail}
           onChange={(e) => setFromEmail(e.target.value)}
           placeholder="you@example.com"
-          className="w-full rounded-lg bg-brand-500/8 px-2.5 py-1.5 text-[12px] text-ink-900 outline-none placeholder:text-ink-400"
+          className="w-full rounded-lg bg-ink-300/10 px-2.5 py-1.5 text-[12px] text-ink-900 outline-none placeholder:text-ink-400"
         />
       </div>
 
@@ -77,7 +77,7 @@ export function RequestForm({
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder={placeholder}
-          className="w-full resize-y rounded-lg bg-brand-500/8 px-2.5 py-2 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400"
+          className="w-full resize-y rounded-lg bg-ink-300/10 px-2.5 py-2 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400"
         />
       </div>
 

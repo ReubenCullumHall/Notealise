@@ -102,11 +102,22 @@
      renders exactly as it did before these existed; applyAccent overwrites
      them inline the moment a real accent is picked, in BOTH accent modes.
      Only a control whose on-state IS the accent should read these: the pill
-     switch and the tick box. Everything else stays on the brand ramp, which is
-     what 'Text only' vs 'Tinted' is still about. */
+     switch and the tick box, the sidebar's own furniture (the cog, the bin,
+     the archive, the search pill's focus glow) and the space switcher — the
+     things Reuben called out on 2026-09-06 as having lost the colour entirely
+     when the ink ramp stopped carrying it. What must NOT read these is a
+     surface or a body of text: that is what 'Text only' vs 'Tinted' decides.
+     Full ramp rather than three stops since 2026-09-06 — the search pill's
+     glow is `border-300` over `ring-100`, and those had no accent to reach
+     for. */
+  --accent-50: 20 20 20;
+  --accent-100: 31 31 31;
+  --accent-200: 43 43 43;
+  --accent-300: 74 74 74;
   --accent-400: 92 92 92;
   --accent-500: 143 143 143;
   --accent-600: 216 216 216;
+  --accent-700: 228 228 228;
   --ink-900: 214 214 214;
   --ink-800: 202 202 202;
   --ink-700: 184 184 184;
@@ -164,6 +175,10 @@
   --brand-200: 28 28 28;
   --brand-300: 58 58 58;
   --brand-400: 78 78 78;
+  --accent-50: 12 12 12;
+  --accent-100: 19 19 19;
+  --accent-200: 28 28 28;
+  --accent-300: 58 58 58;
   --accent-400: 78 78 78;
   /* ink-300 carries every divider and border; a touch brighter than dark's,
      because there is no surface contrast left to help them read. */
@@ -184,9 +199,14 @@
   --brand-400: 138 138 135;
   --brand-500: 106 106 104;
   --brand-600: 29 29 28;
+  --accent-50: 237 237 235;
+  --accent-100: 226 226 224;
+  --accent-200: 210 210 208;
+  --accent-300: 176 176 173;
   --accent-400: 138 138 135;
   --accent-500: 106 106 104;
   --accent-600: 29 29 28;
+  --accent-700: 15 15 15;
   --brand-700: 15 15 15;
   --ink-900: 26 26 25;
   --ink-800: 44 44 43;

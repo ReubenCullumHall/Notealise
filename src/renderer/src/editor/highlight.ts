@@ -9,11 +9,20 @@ const c = (name: string, alpha?: number): string =>
 // Visual styling for the markdown syntax tree — headings look like headings,
 // bold is bold, etc. Colours and fonts reference theme tokens (--ed-*, --font-*
 // in theme.css) so light and dark both track the active [data-theme].
+// A heading's colour, and one of the things `text` accent mode paints
+// (settings/model.ts's `applyAccent`). The note's BODY around it never is —
+// the words you write are yours to colour per selection, and Space.accentUiText
+// says why that is a rule.
+// Headings carried NO colour before this and inherited `--ink-900` from the
+// editor, so the fallback here is not a guess — it is measured, and with no
+// accent picked the heading renders at exactly the value it always did.
+const HEADING = 'rgb(var(--ink-acc-900, var(--ink-900)))'
+
 const mdHighlight = HighlightStyle.define([
-  { tag: t.heading1, fontSize: '1.7em', fontWeight: '700', lineHeight: '1.3' },
-  { tag: t.heading2, fontSize: '1.4em', fontWeight: '700', lineHeight: '1.3' },
-  { tag: t.heading3, fontSize: '1.2em', fontWeight: '600' },
-  { tag: [t.heading4, t.heading5, t.heading6], fontWeight: '600' },
+  { tag: t.heading1, fontSize: '1.7em', fontWeight: '700', lineHeight: '1.3', color: HEADING },
+  { tag: t.heading2, fontSize: '1.4em', fontWeight: '700', lineHeight: '1.3', color: HEADING },
+  { tag: t.heading3, fontSize: '1.2em', fontWeight: '600', color: HEADING },
+  { tag: [t.heading4, t.heading5, t.heading6], fontWeight: '600', color: HEADING },
   { tag: t.strong, fontWeight: '700' },
   { tag: t.emphasis, fontStyle: 'italic' },
   { tag: t.strikethrough, textDecoration: 'line-through', color: 'var(--ed-muted)' },

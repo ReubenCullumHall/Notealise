@@ -166,3 +166,23 @@ caught 2026-08-17 while building onboarding, which reuses both:
 **Lesson for next time this file is read for planning**: a "contradicts current code" or "unchanged"
 claim here can go stale the moment the code it describes changes, and nothing forces a revisit.
 Spot-check against the actual source before relying on this doc for what's built vs. not.
+
+
+## Colour and Markdown pro (2026-08-29, from Reuben in session)
+
+- **Colour/highlight tags are NEVER shown in the formatted view**, not even with the cursor inside
+  the phrase. They are a storage format, not markdown anyone edits by hand. Markdown pro is the
+  one way to see them.
+- **A partly-deleted highlight keeps its colour on whatever survives** — you deleted part of it,
+  not the colour. The pair is repaired around the remainder.
+- **A stray unmatched tag the file already contained is left visible.** It is broken markup, and
+  showing it is the only way it ever gets fixed. Only breaks this app causes are mended.
+- **Raw view is hands-off.** Nothing that edits concealed markup — the mender, the edge-Backspace
+  — may run while Markdown pro is showing the source. That is where you are meant to hand-edit.
+- **The highlight-vs-text-colour choice is remembered for the session only**, not written to disk:
+  it is a scratch preference about the last thing you did, not part of how a space looks.
+- **The word count counts what a reader would count.** No markdown syntax, no link addresses, no
+  image alt text, no maths; a token needs a letter or digit, so a bare operator in a code block
+  (`const a = 1` → 3) and stranded punctuation do not score.
+- **Every setting added here still obeys the settings rule**: `rawMarkStyle` and `rawMarkTint` are
+  per-space and reachable from Customisation's apply-to-all, like every other look.

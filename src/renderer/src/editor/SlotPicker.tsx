@@ -32,7 +32,7 @@ export function ActionGrid({
                 onClick={() => onPick(a.id)}
                 className={
                   'flex items-center gap-2 rounded-lg border-none px-2 py-1.5 text-left outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-                  (on ? 'bg-brand-500/15 text-brand-600' : 'bg-transparent text-ink-700 hover:bg-brand-500/10 hover:text-brand-600')
+                  (on ? 'bg-brand-500/15 text-brand-600' : 'bg-transparent text-ink-700 hover:bg-ink-300/15 hover:text-ink-900')
                 }
               >
                 <span className="flex h-5 w-5 shrink-0 items-center justify-center">{a.glyph}</span>
@@ -45,7 +45,7 @@ export function ActionGrid({
       <button
         onClick={() => onPick('')}
         className={
-          'col-span-full mt-1.5 flex items-center justify-center gap-1.5 rounded-lg border-none bg-transparent py-1.5 text-[12px] outline-none transition duration-150 hover:bg-brand-500/10 hover:text-brand-600 ' +
+          'col-span-full mt-1.5 flex items-center justify-center gap-1.5 rounded-lg border-none bg-transparent py-1.5 text-[12px] outline-none transition duration-150 hover:bg-ink-300/15 hover:text-ink-900 ' +
           (value ? 'text-ink-500' : 'text-ink-400')
         }
       >

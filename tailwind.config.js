@@ -59,7 +59,9 @@ module.exports = {
            app ever set, so `bg-accent` had silently been `bg-brand-500` since
            it was written. */
         accent: {
-          400: rgb('--accent-400'), 500: rgb('--accent-500'), 600: rgb('--accent-600')
+          50: rgb('--accent-50'), 100: rgb('--accent-100'), 200: rgb('--accent-200'),
+          300: rgb('--accent-300'), 400: rgb('--accent-400'), 500: rgb('--accent-500'),
+          600: rgb('--accent-600'), 700: rgb('--accent-700')
         }
       },
       boxShadow: {

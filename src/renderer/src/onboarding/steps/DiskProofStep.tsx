@@ -43,7 +43,7 @@ export function DiskProofStep({ notePath, noteText, onReady }: Props): React.JSX
         type="button"
         onClick={reveal}
         disabled={!notePath}
-        className="rounded-full px-5 py-2 text-[13px] font-medium text-brand-700 ring-1 ring-brand-300 transition duration-150 hover:bg-brand-500/8 disabled:opacity-50"
+        className="rounded-full px-5 py-2 text-[13px] font-medium text-brand-700 ring-1 ring-brand-300 transition duration-150 hover:bg-ink-300/15 disabled:opacity-50"
       >
         Show me the file
       </button>

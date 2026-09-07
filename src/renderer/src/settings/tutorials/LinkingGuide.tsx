@@ -49,7 +49,7 @@ function Chip({ children, dir = false }: { children: React.ReactNode; dir?: bool
 export function LinkingGuide(): React.JSX.Element {
   return (
     <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Linking notes</h3>
+      <h3 className="accent-heading font-display text-[15px] font-semibold">Linking notes</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         Type <code className="font-mono text-ink-700">[[</code> anywhere in a note to connect it to
         another one, and pick from the list. The <span className="font-medium">Link to a note</span>{' '}
@@ -61,7 +61,7 @@ export function LinkingGuide(): React.JSX.Element {
         it still reads sensibly — nothing about this app is needed to make sense of it later.
       </p>
 
-      <h3 className="mt-7 font-display text-[15px] font-semibold text-ink-900">The five forms</h3>
+      <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">The five forms</h3>
       <div className="mt-3 flex flex-col gap-2">
         <Form type="[[Waves]]" title="By name" reads={<Chip>Waves</Chip>}>
           The everyday one. If two notes share a name, the nearest wins — the one in the same folder,
@@ -106,7 +106,7 @@ export function LinkingGuide(): React.JSX.Element {
         </Form>
       </div>
 
-      <h3 className="mt-7 font-display text-[15px] font-semibold text-ink-900">
+      <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">
         Links and your spaces
       </h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
@@ -131,7 +131,7 @@ export function LinkingGuide(): React.JSX.Element {
         the space it lands in.
       </p>
 
-      <h3 className="mt-7 font-display text-[15px] font-semibold text-ink-900">Opening a link</h3>
+      <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">Opening a link</h3>
       <div className="mt-2 flex flex-col gap-1 text-[12px] text-ink-600">
         {[
           ['Click', 'Opens in a new tab — the note you were reading stays open'],
@@ -147,7 +147,7 @@ export function LinkingGuide(): React.JSX.Element {
         ))}
       </div>
 
-      <h3 className="mt-7 font-display text-[15px] font-semibold text-ink-900">The links strip</h3>
+      <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">The links strip</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         Every note carries a strip of its connections at the top: what it links to, then what links
         back to it. Hover one to see which of the two it is, which space it&rsquo;s in, and the line

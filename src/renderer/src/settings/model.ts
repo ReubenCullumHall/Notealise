@@ -251,15 +251,36 @@ const WHITE_LIFT: Record<string, number> = {
  *  are in, and theme.css seeds the same three at each theme's own brand values
  *  so the 'Default' accent is byte-identical to what shipped before this. */
 const ACCENT_KEYS = {
+  '--accent-50': '--brand-50',
+  '--accent-100': '--brand-100',
+  '--accent-200': '--brand-200',
+  '--accent-300': '--brand-300',
   '--accent-400': '--brand-400',
   '--accent-500': '--brand-500',
-  '--accent-600': '--brand-600'
+  '--accent-600': '--brand-600',
+  '--accent-700': '--brand-700'
 } as const
+
+/** The accented ink ramp lives under its own names as well as (sometimes)
+ *  replacing `--ink-*`. `--ink-acc-700` is "the accent's version of the colour
+ *  `--ink-700` already is", so anything that wants the accent can swap one
+ *  token for the other and keep its place in the hierarchy:
+ *
+ *      color: rgb(var(--ink-acc-900, var(--ink-900)))
+ *
+ *  The fallback is what makes it safe everywhere — no accent picked means the
+ *  variable is not set at all, and the element renders exactly as it did.
+ *  Three things read these today (Settings' section headings, a note's `#`
+ *  headings, a note's word count and dates); nothing else should, or the
+ *  "headings only" setting stops meaning what it says. */
+const accName = (k: string): string => k.replace('--ink-', '--ink-acc-')
 
 const ALL_KEYS = [
   ...new Set([
     ...Object.keys(DARK_RAMP),
     ...Object.keys(DARK_TEXT_RAMP),
+    ...Object.keys(DARK_TEXT_RAMP).map(accName),
+    ...Object.keys(DARK_TEXT_RAMP).map((k) => k.replace('--ink-', '--ink-plain-')),
     ...Object.keys(ACCENT_KEYS)
   ])
 ]
@@ -283,18 +304,58 @@ function applyAccent(
     mode: Space['accentMode']
     theme: ResolvedThemeId
     tone: Space['textTone']
+    /** `text` mode only: paint the WHOLE ink ramp, so every label in the
+     *  interface takes the accent (Space.accentUiText). Off by default. A
+     *  note's own body is pinned back to the theme's ink either way — see
+     *  `--ink-plain-*` below. */
+    uiText: boolean
     active: boolean
   }
 ): void {
   ALL_KEYS.forEach((k) => el.style.removeProperty(k))
   const hue = accentHue(opts.accent)
   if (!opts.active || hue == null) return
-  const ramp = opts.mode === 'text' ? TEXT_RAMP[opts.theme] : RAMP[opts.theme]
+
+  // The theme's OWN ink, captured after the clear above and before anything is
+  // written over it. `uiText` mode repaints `--ink-*` wholesale — that is what
+  // "every label" means — and a note's body reads `--ink-900` like everything
+  // else, so without this there is no way left to put the note back. Read from
+  // the computed style rather than kept in a table here because these values
+  // live in theme.css and belong to whichever theme is active.
+  const plain = Object.keys(TEXT_RAMP[opts.theme]).map(
+    (k) => [k, getComputedStyle(el).getPropertyValue(k).trim()] as const
+  )
   // the light theme has no white to give — see the tone block in theme.css
   const lift = opts.tone === 'white' && opts.theme !== 'light'
-  Object.entries(ramp).forEach(([k, [s, l]]) =>
-    el.style.setProperty(k, channels(hue, s, Math.min(100, l + (lift ? (WHITE_LIFT[k] ?? 0) : 0))))
+  const at = ([s, l]: [number, number], k: string): string =>
+    channels(hue, s, Math.min(100, l + (lift ? (WHITE_LIFT[k] ?? 0) : 0)))
+
+  // Written in BOTH modes and in both states of the toggle, so the three
+  // elements that read `--ink-acc-*` are accented however the rest is set —
+  // and so "headings only" is the ramp NOT being applied to `--ink-*`, rather
+  // than a second, separately-tuned colour that could drift from it.
+  Object.entries(TEXT_RAMP[opts.theme]).forEach(([k, stop]) =>
+    el.style.setProperty(accName(k), at(stop, k))
   )
+
+  // `text` mode paints `--ink-*` ONLY when the user asks for every label
+  // (`uiText`). Left alone — the default — the accent reaches the interface
+  // through the named list that reads `--ink-acc-*` and `--accent-*` instead:
+  // headings, sidebar titles, a note's properties, the sidebar's furniture.
+  // Painting the ramp unconditionally is what made picking a colour turn every
+  // word in the app that colour, which is the thing this replaced.
+  // `tint` is unchanged: its ramp tints the ink LIGHTLY by design and moves the
+  // surfaces too, which is the whole difference between the two modes.
+  if (opts.mode !== 'text') {
+    Object.entries(RAMP[opts.theme]).forEach(([k, stop]) => el.style.setProperty(k, at(stop, k)))
+  } else if (opts.uiText) {
+    Object.entries(TEXT_RAMP[opts.theme]).forEach(([k, stop]) =>
+      el.style.setProperty(k, at(stop, k))
+    )
+    // …and hand the note its own ink back. app.css's `[data-ui-accent]` block
+    // is the only reader.
+    plain.forEach(([k, v]) => v && el.style.setProperty(k.replace('--ink-', '--ink-plain-'), v))
+  }
   // Outside the mode branch on purpose — see ACCENT_KEYS. Read from the TINTED
   // ramp in both modes, so a switch is the same colour either way.
   const tinted = RAMP[opts.theme]
@@ -388,11 +449,15 @@ export function applySettings(s: AppSettings): void {
   root.style.setProperty('--page-tint-rgb', pageTint ? rgbChannels(pageTint.hex) : '0 0 0')
   root.style.setProperty('--page-tint-alpha', pageTint ? String(pageTint.opacity / 100) : '0')
   root.dataset.motion = s.animationsEnabled ? 'on' : 'off'
+  // Read by app.css to pin a note's body back to the theme's own ink while
+  // every other label wears the accent.
+  root.dataset.uiAccent = a.accentMode === 'text' && a.accentUiText ? 'on' : 'off'
   applyAccent(root, {
     accent: a.accent,
     mode: a.accentMode,
     theme,
     tone: a.textTone,
+    uiText: a.accentUiText,
     active: a.accent !== 'default'
   })
   applyFont(root, a.uiFont, a.font, a.dyslexiaFont)

@@ -17,7 +17,7 @@ export function OssLicenses({ onBack }: Props): React.JSX.Element {
       <button
         type="button"
         onClick={onBack}
-        className="flex w-fit items-center gap-1.5 rounded-lg border-none bg-transparent px-2 py-1 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-brand-500/10 hover:text-brand-600 focus-visible:ring-2 focus-visible:ring-brand-300"
+        className="flex w-fit items-center gap-1.5 rounded-lg border-none bg-transparent px-2 py-1 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         <span aria-hidden="true" className="inline-flex rotate-180">
           <Icon name="chevron" className="h-3.5 w-3.5" />
@@ -25,7 +25,7 @@ export function OssLicenses({ onBack }: Props): React.JSX.Element {
         General
       </button>
 
-      <h3 className="mt-3 font-display text-[15px] font-semibold text-ink-900">Open source licences</h3>
+      <h3 className="mt-3 accent-heading font-display text-[15px] font-semibold">Open source licences</h3>
       <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
         Notealise is built with the following open-source software, each under its own licence.
       </p>

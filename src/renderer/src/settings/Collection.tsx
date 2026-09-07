@@ -39,7 +39,7 @@ function ExploreButton({ label, onClick }: { label: string; onClick: () => void 
   return (
     <button
       onClick={onClick}
-      className="btn-edge mt-3 flex w-full items-center gap-2.5 rounded-xl border border-ink-300/30 bg-brand-500/6 px-3.5 py-2.5 text-left outline-none transition duration-200 hover:border-brand-300 focus-visible:ring-4 focus-visible:ring-brand-100"
+      className="btn-edge mt-3 flex w-full items-center gap-2.5 rounded-xl border border-ink-300/30 bg-ink-300/10 px-3.5 py-2.5 text-left outline-none transition duration-200 hover:border-ink-300/60 focus-visible:ring-2 focus-visible:ring-brand-300"
     >
       <Icon name="plus" className="h-4 w-4 shrink-0 text-brand-500" />
       <span className="min-w-0 flex-1">

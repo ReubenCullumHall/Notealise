@@ -566,7 +566,7 @@ function NameField({
           ;(e.target as HTMLInputElement).blur()
         }
       }}
-      className="w-44 rounded-lg bg-ink-300/8 px-2.5 py-1.5 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400 focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-40"
+      className="w-44 rounded-lg bg-ink-300/10 px-2.5 py-1.5 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400 focus-visible:ring-2 focus-visible:ring-brand-300 disabled:opacity-40"
     />
   )
 }
@@ -632,7 +632,7 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
         aria-expanded={open}
         className={
           'flex items-center gap-1.5 rounded-lg border border-ink-300/30 px-2.5 py-1.5 text-[12.5px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-          (open ? 'bg-brand-500/12 text-brand-600' : 'btn-edge bg-surface/70 text-ink-700 hover:text-ink-900')
+          (open ? 'bg-brand-500/15 text-brand-600' : 'btn-edge bg-surface/70 text-ink-700 hover:text-ink-900')
         }
       >
         <span className="text-[15px] leading-none">{value || '🙂'}</span>
@@ -672,7 +672,7 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
                     }}
                     className={
                       'flex h-7 w-7 items-center justify-center rounded-md border-none text-[15px] leading-none outline-none transition duration-150 ' +
-                      (e === value ? 'bg-brand-500/12 ring-1 ring-brand-400' : 'bg-transparent hover:bg-ink-300/15')
+                      (e === value ? 'bg-brand-500/15 ring-1 ring-brand-400' : 'bg-transparent hover:bg-ink-300/15')
                     }
                   >
                     {e}
@@ -734,7 +734,7 @@ function DeleteSpace({
               'flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-[11.5px] outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
               (keepPreset
                 ? 'text-brand-600'
-                : 'text-ink-500 hover:bg-ink-300/12 hover:text-ink-700')
+                : 'text-ink-500 hover:bg-ink-300/15 hover:text-ink-700')
             }
           >
             {keepPreset ? (
@@ -915,7 +915,7 @@ export function Disclosure({
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-3 px-3 py-2 text-left outline-none transition duration-200 hover:bg-ink-300/12 focus-visible:ring-2 focus-visible:ring-brand-300"
+        className="flex w-full items-center gap-3 px-3 py-2 text-left outline-none transition duration-200 hover:bg-ink-300/15 focus-visible:ring-2 focus-visible:ring-brand-300"
       >
         <span className="min-w-0 flex-1">
           <span className={'block text-[13px] font-medium ' + (open ? 'text-brand-600' : 'text-ink-700')}>
@@ -1078,6 +1078,24 @@ export function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Elem
             )
           })}
         </div>
+        {/* Nested under Text, and only shown there: `tint` tints the ink ramp
+            lightly by design, so there is nothing here for it to add.
+            OFF by default. Note that neither state touches a note's own body —
+            see Space.accentUiText for why that is a rule and not an oversight. */}
+        {space.accentMode === 'text' && (
+          <div className="mt-3">
+            <ToggleRow
+              on={space.accentUiText}
+              onClick={() => onChange({ accentUiText: !space.accentUiText })}
+              label="Colour all UI text"
+              hint={
+                space.accentUiText
+                  ? 'On \u2014 every label in the app takes the colour: settings hints, sidebar previews, tabs, the path bar. What you write in a note is still yours to colour.'
+                  : 'Headings, note and folder titles, the settings list, the sidebar\u2019s buttons and a note\u2019s word count take the colour. Every other label stays your theme\u2019s own ink.'
+              }
+            />
+          </div>
+        )}
       </section>
 
       <section className="settings-group">
@@ -1201,7 +1219,7 @@ export function SpaceShortcuts({ space, onChange }: SpaceProps): React.JSX.Eleme
         className={
           'flex h-7 w-7 items-center justify-center rounded-md border-none p-0 outline-none transition duration-150 ' +
           (on
-            ? 'bg-brand-500/12 text-brand-600 ring-2 ring-brand-400'
+            ? 'bg-brand-500/15 text-brand-600 ring-2 ring-brand-400'
             : slots[i]
               ? 'bg-transparent text-ink-500 hover:bg-ink-300/15'
               : 'bg-transparent text-ink-300 hover:bg-ink-300/15')

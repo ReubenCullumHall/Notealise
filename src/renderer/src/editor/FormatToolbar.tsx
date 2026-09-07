@@ -25,12 +25,12 @@ interface Props {
 // without it flex would squeeze the buttons themselves instead, so B/I/U/S run
 // into each other at a third of the window's width.
 const BTN_BASE =
-  'flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-none bg-transparent p-0 text-[14px] leading-none outline-none transition duration-150 '
-const BTN_IDLE = 'text-ink-500 hover:bg-brand-500/10 hover:text-brand-600 '
+  'press flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-none bg-transparent p-0 text-[14px] leading-none outline-none transition duration-150 '
+const BTN_IDLE = 'text-ink-500 hover:bg-ink-300/15 hover:text-ink-900 '
 const BTN_ACTIVE = 'bg-brand-500/15 text-brand-600 '
 // An empty slot is quieter than a real button — it's an invitation, not a
 // command, and shouldn't compete with B / I / U / S for attention.
-const BTN_EMPTY = 'text-ink-300 hover:bg-brand-500/10 hover:text-brand-600 '
+const BTN_EMPTY = 'text-ink-300 hover:bg-ink-300/15 hover:text-ink-900 '
 const FMT_BTN = BTN_BASE + BTN_IDLE
 
 // The top format bar. The controls sit centred over the text column, with two

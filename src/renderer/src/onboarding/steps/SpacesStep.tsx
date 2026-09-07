@@ -113,8 +113,8 @@ export function SpacesStep({ onOpenSpace, onReady }: Props): React.JSX.Element {
               className={
                 'rounded-full px-3 py-2 text-[12.5px] font-medium transition duration-150 ' +
                 (on
-                  ? 'bg-brand-500/12 text-brand-700 ring-2 ring-brand-400'
-                  : 'bg-surface/70 text-ink-600 ring-1 ring-ink-300/25 hover:bg-brand-500/8')
+                  ? 'bg-brand-500/15 text-brand-700 ring-2 ring-brand-400'
+                  : 'bg-surface/70 text-ink-600 ring-1 ring-ink-300/25 hover:bg-ink-300/15')
               }
             >
               {name}
@@ -128,7 +128,7 @@ export function SpacesStep({ onOpenSpace, onReady }: Props): React.JSX.Element {
               key={name}
               type="button"
               onClick={() => toggle(name)}
-              className="col-span-2 rounded-full bg-brand-500/12 px-3 py-2 text-[12.5px] font-medium text-brand-700 ring-2 ring-brand-400 sm:col-span-4"
+              className="col-span-2 rounded-full bg-brand-500/15 px-3 py-2 text-[12.5px] font-medium text-brand-700 ring-2 ring-brand-400 sm:col-span-4"
             >
               {name}
             </button>

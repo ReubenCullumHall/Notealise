@@ -232,16 +232,16 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
       if (afterNotice) {
         return (
           <>
-            <h3 className="font-display text-[15px] font-semibold text-ink-900">Import complete</h3>
+            <h3 className="accent-heading font-display text-[15px] font-semibold">Import complete</h3>
             <p className="mt-2 text-[13px] leading-relaxed text-[#e5484d]">{afterNotice}</p>
           </>
         )
       }
       return (
         <>
-          <h3 className="font-display text-[15px] font-semibold text-ink-900">Importing…</h3>
+          <h3 className="accent-heading font-display text-[15px] font-semibold">Importing…</h3>
           <p className="mt-2 text-[13px] text-ink-600">Finishing up…</p>
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-brand-500/12">
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-brand-500/15">
             <div className="h-full w-full bg-brand-500" />
           </div>
         </>
@@ -249,7 +249,7 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
     }
     return (
       <>
-        <h3 className="font-display text-[15px] font-semibold text-ink-900">
+        <h3 className="accent-heading font-display text-[15px] font-semibold">
           {result.cancelled ? 'Import stopped' : 'Import complete'}
         </h3>
         <p className="mt-2 text-[13px] text-ink-600">
@@ -280,10 +280,10 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
     const pct = progress && progress.total > 0 ? Math.min(100, (progress.current / progress.total) * 100) : 0
     return (
       <>
-        <h3 className="font-display text-[15px] font-semibold text-ink-900">Importing…</h3>
+        <h3 className="accent-heading font-display text-[15px] font-semibold">Importing…</h3>
         <p className="mt-2 truncate text-[13px] text-ink-600">{progress?.label ?? 'Working…'}</p>
         {progress && progress.total > 0 && (
-          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-brand-500/12">
+          <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-brand-500/15">
             <div className="h-full bg-brand-500 transition-all duration-300" style={{ width: `${pct}%` }} />
           </div>
         )}
@@ -307,7 +307,7 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
 
   return (
     <>
-      <h3 className="font-display text-[15px] font-semibold text-ink-900">Import data</h3>
+      <h3 className="accent-heading font-display text-[15px] font-semibold">Import data</h3>
       <p className="mt-0.5 text-[12px] text-ink-500">Bring notes in from another app as plain Markdown.</p>
 
       <SettingRow title="File format" desc={current.hint}>
@@ -375,7 +375,7 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
       </div>
 
       {preview && (
-        <div className="rounded-xl bg-ink-300/8 px-3 py-2.5 text-[12px] leading-relaxed text-ink-600 ring-1 ring-ink-300/25">
+        <div className="rounded-xl bg-ink-300/10 px-3 py-2.5 text-[12px] leading-relaxed text-ink-600 ring-1 ring-ink-300/25">
           <p>
             {preview.noteCount} note{preview.noteCount === 1 ? '' : 's'}
             {preview.folderCount > 0

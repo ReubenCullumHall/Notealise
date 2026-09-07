@@ -307,7 +307,7 @@ export function SpaceForm({
                         onClick={() => onChange({ rawMarkTint: token })}
                         className={
                           'h-6 w-6 rounded-md border-none outline-none transition duration-150 ' +
-                          (on ? 'ring-2 ring-brand-400' : 'ring-1 ring-ink-300/25 hover:ring-brand-300')
+                          (on ? 'ring-2 ring-brand-400' : 'ring-1 ring-ink-300/25 hover:ring-ink-300/60')
                         }
                         // The swatch shows the real token, so it previews the
                         // value this theme will actually paint.

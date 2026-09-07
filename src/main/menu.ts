@@ -87,6 +87,29 @@ export function installMenu(): void {
               { role: 'toggleDevTools' },
               { type: 'separator' }
             ] as MenuItemConstructorOptions[])),
+        // The two layout shortcuts live in the menu rather than in App.tsx's
+        // keydown listener, and that is the whole point of putting them here:
+        // a keystroke nothing on screen ever mentions is a keystroke nobody
+        // finds. A menu accelerator is consumed by main BEFORE the renderer
+        // sees the key (the same mechanism that made Cmd+W need moving above),
+        // so these two are menu-owned outright — do not also bind them in the
+        // renderer or the split would run twice.
+        //
+        // Cmd/Ctrl+S is the sidebar, not Save. Every note is written 400ms
+        // after you stop typing, so there is no save command to collide with,
+        // and the reflex press that would otherwise do nothing at all now
+        // does something useful.
+        {
+          label: 'Toggle Sidebar',
+          accelerator: 'CommandOrControl+S',
+          click: () => sendMenuCommand('toggle-sidebar')
+        },
+        {
+          label: 'Split the Screen',
+          accelerator: 'CommandOrControl+\\',
+          click: () => sendMenuCommand('split-pane')
+        },
+        { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
         { role: 'zoomOut' },

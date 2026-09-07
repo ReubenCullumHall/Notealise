@@ -161,7 +161,7 @@ export function SpaceColour({ space, onChange, onColorExisting }: ColourProps): 
                 onClick={() => remove(hex)}
                 data-tip={`Remove ${hex} from the palette`}
                 aria-label={`Remove ${hex}`}
-                className="absolute -right-1 -top-1 hidden h-3.5 w-3.5 items-center justify-center rounded-full border-none bg-surface p-0 text-ink-500 shadow-card outline-none group-hover:flex hover:text-brand-600"
+                className="absolute -right-1 -top-1 hidden h-3.5 w-3.5 items-center justify-center rounded-full border-none bg-surface p-0 text-ink-500 shadow-card outline-none group-hover:flex hover:text-ink-900"
               >
                 <Icon name="x" className="h-2.5 w-2.5" />
               </button>
@@ -238,7 +238,7 @@ export function SpaceColour({ space, onChange, onColorExisting }: ColourProps): 
         ) : null}
       </section>
 
-      <p className="rounded-xl bg-brand-500/8 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-500 ring-1 ring-brand-300/40">
+      <p className="rounded-xl bg-ink-300/10 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-500 ring-1 ring-ink-300/25">
         <span className="font-medium text-brand-600">To colour one note or folder:</span> hover its
         row in the sidebar and click the circle in the buttons that appear, or right-click the row
         and choose <span className="font-medium text-ink-600">Colour…</span>. Select several rows

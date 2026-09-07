@@ -403,7 +403,7 @@ export function Explore({ tab, onTab, onBack, settings, onChange, fontLibrary }:
           <Icon name="chevron" className="h-3.5 w-3.5 rotate-180" />
           Your collection
         </button>
-        <h3 className="font-display text-[15px] font-semibold text-ink-900">Explore and install more</h3>
+        <h3 className="accent-heading font-display text-[15px] font-semibold">Explore and install more</h3>
         <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
           Everything you don&apos;t have yet, in one place. Whatever you take from here lands in
           Your collection, and from there you put it on a space.

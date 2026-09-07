@@ -4,6 +4,50 @@ How the tab strip / split panes and the Spaces hierarchy are built, and the deci
 gestures. Read this before changing either — both have been rebuilt once already after a gesture
 or a hierarchy choice turned out wrong in practice.
 
+## Grouped tabs, and splitting from the strip (built 2026-09-06)
+
+Verified live by Reuben the day it was built. Three changes to the strip, all in `TabStrip.tsx`
+with the arithmetic in `model.ts`.
+
+**A split is ONE tab.** `stripGroups` collapses every path in `panes` into a single item, drawn as
+one pill with a divider at each seam. Two decisions live in that function rather than the
+component, because either could otherwise be re-derived differently by the next person:
+
+- **Where the group sits** — at the position of its LEFTMOST member in `tabs`. Any rule works if it
+  is stable; this is the only one that never moves the group when a neighbouring tab closes.
+- **What order it reads in** — PANE order, not strip order. The whole point is to show the
+  left-to-right arrangement on screen. `moveGroup` writes that order back into `tabs` when the
+  group is dragged, so afterwards the stored order and the visible order agree.
+
+The blank tab is a segment like any other — it is a column, and hiding it would make
+`Cmd/Ctrl+\` look broken.
+
+**`TAB_SHOWN` went with this** (rule 9). Tabs on screen but unfocused carried a second, quieter
+accent border meaning "this is visible"; the group says that outright, and two things saying the
+same thing is exactly the redundancy rule 9 is about.
+
+**Gestures.** The pill's grip drags the whole group (`moveGroup`); a name inside it drags out of
+the split (`takeOutOfSplit`, which is `closePane` — the note stays OPEN, only its column goes);
+right-click a name for both in words plus close. The grip has to be a distinct target because the
+names inside are draggable too, and two gestures starting in the same pixels is a coin toss.
+
+**Dropping a tab on the MIDDLE of another tab splits them** (`splitWith`): the target takes the
+left column, the dragged note arrives on its right — the same left-to-right rule `splitBlank` and
+`Cmd/Ctrl+\` already followed. The outer thirds keep the reorder the strip has always done. The
+middle third is only offered when the split can actually be made, because an indicator for a drop
+the model refuses promises a column that never comes. `splitWith` is built from `openTab` +
+`splitAt` so the cap, the widths and invariant 2 stay decided in one place, and it refuses **as a
+whole** rather than leaving the target moved with nothing beside it.
+
+**Each column except the leftmost has a `⇆` button** that swaps it leftward — the same `swapPanes`
+the header-row drag has always run. Deliberately redundant, and flagged as such before it was
+built: the drag was there first and stays, but nothing on screen had ever said it existed.
+
+**One decision a test made.** `ungroupPanes` ("split them all apart") keeps the FOCUSED column —
+except when that is the blank, where it collapses onto a real column instead. Ending a split on
+"Select a note" would fill the window with a question nobody asked while hiding every real note
+behind it. Ten new tests; that is the one they caught.
+
 ## Tabs and split panes (built 2026-07-31)
 
 Several notes are open at once: a strip of tabs across the top of the editor area, and **1–3 panes

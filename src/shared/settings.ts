@@ -107,6 +107,24 @@ export interface Space {
   accent: string
   /** whether the accent recolours just the text or surfaces too */
   accentMode: AccentMode
+  /** In `text` mode only: colour EVERY piece of interface text with the accent
+   *  — settings hints and labels, sidebar previews, the tab strip, the path
+   *  bar — not just the named list `text` mode paints on its own. OFF by
+   *  default.
+   *
+   *  **A note's own body is never included, in either state.** That was tried
+   *  for one afternoon (2026-09-06, as `accentNoteText`) and withdrawn the same
+   *  day: the colour of the words in a note is already the user's to set, per
+   *  selection, through highlight and text colour (rule 4). One space-wide
+   *  switch quietly overriding all of it is two features fighting over the same
+   *  pixels, and the note always loses. Off, `text` mode paints headings,
+   *  sidebar titles, a note's properties and the sidebar's own furniture; on,
+   *  it paints those and every other label in the interface. Neither touches
+   *  what you wrote.
+   *
+   *  Meaningless in `tint` mode, whose ramp tints the ink lightly by design.
+   *  Stored regardless so switching modes and back doesn't forget it. */
+  accentUiText: boolean
   // --- entry colour ---
   // The accent above is ONE colour for the whole app. These are about telling
   // individual rows apart from each other, which is a different job: the colour
@@ -379,6 +397,7 @@ export const DEFAULT_SPACE: Space = {
   editorWidth: 'normal',
   accent: 'default',
   accentMode: 'text',
+  accentUiText: false,
   colorStyle: 'tag',
   // Off by default: a fresh vault filling itself with colour nobody asked for
   // is the app making a decision that is the user's. The palette IS pre-filled,
@@ -547,6 +566,11 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     accentMode: MODES.includes(s.accentMode as AccentMode)
       ? (s.accentMode as AccentMode)
       : DEFAULT_SPACE.accentMode,
+    // FALSE for a settings.json written before this existed — an upgrade
+    // quiets the app rather than preserving the every-word-is-accent behaviour
+    // for everyone who had already picked one. Deliberate, and the only field
+    // here whose default changes what an existing vault looks like.
+    accentUiText: typeof s.accentUiText === 'boolean' ? s.accentUiText : DEFAULT_SPACE.accentUiText,
     colorStyle: COLOR_STYLES.includes(s.colorStyle as ColorStyle)
       ? (s.colorStyle as ColorStyle)
       : DEFAULT_SPACE.colorStyle,
