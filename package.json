@@ -22,6 +22,12 @@
     "sync:mac": "sh tools/sync-mac.sh"
   },
   "dependencies": {
+    "chokidar": "^4.0.3",
+    "electron-updater": "^6.8.9",
+    "mammoth": "^1.12.0",
+    "turndown": "^7.2.4"
+  },
+  "devDependencies": {
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-markdown": "^6.5.1",
@@ -31,17 +37,11 @@
     "@codemirror/view": "^6.43.6",
     "@lezer/highlight": "^1.2.3",
     "@lezer/markdown": "^1.7.2",
-    "chokidar": "^4.0.3",
     "dompurify": "^3.4.12",
-    "electron-updater": "^6.8.9",
     "katex": "^0.18.1",
-    "mammoth": "^1.12.0",
     "marked": "^18.0.7",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "turndown": "^7.2.4"
-  },
-  "devDependencies": {
     "@types/katex": "^0.16.8",
     "@types/node": "^26.1.1",
     "@types/react": "^19.2.17",

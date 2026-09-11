@@ -205,6 +205,20 @@ comparison.
 **Ask before adding any dependency beyond the names above.** Added since: `turndown`
 (HTML->Markdown, every importer), `mammoth` (.docx -> HTML).
 
+**Which list a dependency goes in is decided by which PROCESS loads it, not by whether it ships.**
+Main-process libraries (`chokidar`, `electron-updater`, `turndown`, `mammoth`) go in
+`dependencies` — `externalizeDepsPlugin` leaves them out of the bundle and electron-builder copies
+them into the package. **Renderer-only libraries (React, CodeMirror, KaTeX, marked, DOMPurify) go
+in `devDependencies`**: Vite bundles them into `out/renderer` whatever list they are in, so under
+`dependencies` they shipped twice — once bundled, once as a raw copy nothing loads (~18 MB, until
+2026-09-11). They still ship, so `tools/licenses/generate-licenses.mjs` reads the renderer's
+imports to keep their licences listed; check its output is unchanged after moving anything.
+
+**The packaged app carries English language packs only** (`electronLanguages` in
+`electron-builder.yml`), so on a non-English machine the app locale falls back to `en-US` and
+`Intl.*(undefined, …)` formats accordingly. Anything that should follow the user's own region
+must ask the OS for it, not the app locale — see `docs/open-items.md`.
+
 ## Importing notes
 
 Six formats, one pipeline (Notion, Markdown, HTML, Word, Google Keep, Apple Notes), all converted

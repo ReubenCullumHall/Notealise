@@ -46,6 +46,9 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - Every switch and tick box takes your accent colour when it is on, and the theme's own grey when
   it is off. They stayed grey before unless you had also set the accent to reach surfaces — which
   is not the default, so for most people the accent never reached them at all
+- Smaller downloads. The Mac download is now built for your Mac's own chip — Apple silicon or
+  Intel — at about half the size, and the download page picks the right one for you. Both
+  installers also leave out files the app never used
 - The colour bar over selected text waits for you to finish choosing. It no longer chases the
   pointer across the words you are selecting: it appears when you let go, or when the selection
   has stopped moving

@@ -13,6 +13,17 @@ has been answered; move its line into `[Unreleased]` if it earns one.
 
 ---
 
+### Non-English machines get US-style default dates — Reuben to rule: fix, or accept and say so
+
+A side effect of the smaller-downloads change (logged 2026-09-11; its release-day checks are in
+`docs/release-checklist.md`). Trimming Chromium's language packs to English (`electronLanguages`
+in `electron-builder.yml`) makes the app's locale fall back to `en-US` on a machine set to any
+other language, and `intl.ts` formats "Default" dates and numbers with that locale. Measured in a
+packaged build on a Mac set to French: *September 11, 2026* and *1,234,567.5*, where v1.0.2 gave
+*11 septembre 2026* and *1 234 567,5*. A UK Mac is unchanged (`en-GB`, *11 September 2026*).
+Fix if wanted: format with the OS's own region (`app.getPreferredSystemLanguages()`, passed to the
+renderer) instead of the app locale, or keep more language packs.
+
 ## From the tester-feedback pass (2026-09-05)
 
 The other twelve items from that pass are logged. These two are not.

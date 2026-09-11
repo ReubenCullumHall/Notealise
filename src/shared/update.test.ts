@@ -5,8 +5,10 @@ import {
   pickRelease,
   normalizeUpdatePrefs,
   parseFeed,
+  parseRelease,
   isAllowedReleaseUrl,
-  type FeedRelease
+  type FeedRelease,
+  type MacArch
 } from './update'
 // A REAL payload, captured from the live releases API on 2026-08-25. Kept because
 // the shape of GitHub's response is the thing most likely to change under us
@@ -117,7 +119,9 @@ describe('normalizeUpdatePrefs', () => {
 })
 
 describe('parseFeed, against a real GitHub payload', () => {
-  const feed = parseFeed(realFeed)
+  // Captured before the per-chip split, so it carries only the universal .dmg —
+  // which is exactly what either chip must fall back to.
+  const feed = parseFeed(realFeed, 'arm64')
 
   it('reads every release, and strips the leading v from the tag', () => {
     expect(feed.length).toBe(realFeed.length)
@@ -149,12 +153,55 @@ describe('parseFeed, against a real GitHub payload', () => {
 
   it('drops a draft release, which only the repo owner can see', () => {
     const withDraft = [{ ...realFeed[0], tag_name: 'v9.9.9', draft: true }, ...realFeed]
-    expect(pickRelease(parseFeed(withDraft), '0.8.0')).toBeNull()
+    expect(pickRelease(parseFeed(withDraft, 'arm64'), '0.8.0')).toBeNull()
   })
 
   it('survives junk in the feed without throwing', () => {
-    expect(parseFeed(null)).toEqual([])
-    expect(parseFeed({ message: 'Not Found' })).toEqual([])
-    expect(parseFeed([null, 42, {}, { tag_name: 'v1.0.0' }])).toHaveLength(1)
+    expect(parseFeed(null, 'arm64')).toEqual([])
+    expect(parseFeed({ message: 'Not Found' }, 'arm64')).toEqual([])
+    expect(parseFeed([null, 42, {}, { tag_name: 'v1.0.0' }], 'arm64')).toHaveLength(1)
   })
+
+  it('offers the universal build to an Intel Mac too', () => {
+    expect(parseFeed(realFeed, 'x64')[0].dmgUrl).toBe(feed[0].dmgUrl)
+  })
+})
+
+describe('choosing the Mac download for this chip', () => {
+  const release = (...names: string[]) => ({
+    tag_name: 'v2.0.0',
+    assets: names.map((name) => ({
+      name,
+      browser_download_url: `https://github.com/x/y/releases/download/v2.0.0/${name}`
+    }))
+  })
+  const file = (arch: MacArch, r: unknown) => parseRelease(r, arch)?.dmgUrl?.split('/').pop()
+
+  // Every release from the split on: GitHub's own (alphabetical) order.
+  const split = release(
+    'latest.yml',
+    'Notealise-Setup.exe',
+    'Notealise-Setup.exe.blockmap',
+    'Notealise.dmg',
+    'Notealise.mac-arm64.dmg',
+    'Notealise.mac-x64.dmg'
+  )
+
+  it("gives each chip its own build when the release has one", () => {
+    expect(file('arm64', split)).toBe('Notealise.mac-arm64.dmg')
+    expect(file('x64', split)).toBe('Notealise.mac-x64.dmg')
+  })
+
+  it('falls back to the universal build when there is none for this chip', () => {
+    expect(file('x64', release('latest.yml', 'Notealise.dmg'))).toBe('Notealise.dmg')
+    expect(file('x64', release('Notealise.dmg', 'Notealise.mac-arm64.dmg'))).toBe('Notealise.dmg')
+  })
+
+  it("never offers the other chip's build — an Apple silicon build does not open on an Intel Mac", () => {
+    const armOnly = release('Notealise.mac-arm64.dmg')
+    expect(parseRelease(armOnly, 'x64')?.dmgUrl).toBeNull()
+    expect(pickRelease(parseFeed([armOnly], 'x64'), '1.0.0')).toBeNull()
+  })
+  // The names electron-builder.yml really produces are checked against this in
+  // src/main/macDmgNames.test.ts — reading a file is only legal on that side.
 })

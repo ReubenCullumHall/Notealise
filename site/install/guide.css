@@ -61,6 +61,8 @@ a { color: var(--ink); text-underline-offset: 2px; }
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px;
 }
 .status b { font-weight: 600; }
+/* macOS: which chip's build this is, and a way to the other one. */
+.status-chip { flex-basis: 100%; color: var(--soft); }
 
 /* Numbered steps with a hairline spine. */
 ol.steps {

@@ -1,5 +1,6 @@
 # electron-builder — packages the electron-vite build (out/) into installers.
-# Windows -> NSIS .exe, macOS -> universal .dmg. Unsigned for the MVP (testers
+# Windows -> NSIS .exe, macOS -> one .dmg per chip (release.yml also publishes a
+# universal one — see its comment). Unsigned for the MVP (testers
 # click through the OS "unverified developer" warning). Artifact names are fixed
 # (no version) so the download page can link to a stable /releases/latest/download/ URL.
 appId: com.notealise.desktop
@@ -51,20 +52,37 @@ electronFuses:
   enableNodeOptionsEnvironmentVariable: false
   enableNodeCliInspectArguments: false
   onlyLoadAppFromAsar: true
+# English only, on both platforms. Chromium ships ~55 language packs (~47 MB
+# unpacked) for its OWN built-in text; this app's interface is English, so they
+# were dead weight (Reuben, 2026-09-11: "keep it English for now"). Knock-on
+# worth knowing: the app's locale now resolves to English everywhere, so the
+# "Default" date and number formats follow English conventions on a
+# non-English machine — Settings → General still offers each format explicitly.
+# Revisit this list if the app is ever translated. The names differ per OS
+# because the files do: Windows has en-US.pak, macOS has en.lproj / en_GB.lproj.
 win:
   target: nsis
   artifactName: ${productName}-Setup.${ext}
+  electronLanguages: [en-US, en-GB]
 nsis:
   oneClick: true
   perMachine: false
   createDesktopShortcut: always
   shortcutName: ${productName}
 mac:
+  # One .dmg per chip rather than one universal .dmg carrying both: a universal
+  # build is two whole apps glued together, so each per-chip file is about half
+  # the download (measured 2026-09-11). release.yml still publishes the universal
+  # build as Notealise.dmg — read its comment before changing either name.
   target:
     - target: dmg
-      arch: universal
+      arch: [arm64, x64]
   category: public.app-category.productivity
-  artifactName: ${productName}.${ext}
+  # `.mac-` and not `-`: the name decides where the file sorts on GitHub, which
+  # decides what every copy installed before the split downloads. CHIP_DMG in
+  # src/shared/update.ts explains; update.test.ts reads this line to check it.
+  artifactName: ${productName}.mac-${arch}.${ext}
+  electronLanguages: [en, en_GB]
   # Unsigned MVP build — do not attempt to sign or notarize.
   identity: null
 dmg:

@@ -8,7 +8,8 @@ import {
   isAllowedReleaseUrl,
   parseFeed,
   pickRelease,
-  type FeedRelease
+  type FeedRelease,
+  type MacArch
 } from '../shared/update'
 
 // The macOS half of updating, and the reason it exists is worth stating plainly:
@@ -77,6 +78,14 @@ function getText(url: string, timeoutMs = 15_000): Promise<string> {
   })
 }
 
+/** Which chip's build this Mac should download. `process.arch` alone is not
+ *  enough: an Intel build running on Apple silicon under Rosetta reports x64,
+ *  and would go on choosing the Intel build forever. Asking about the
+ *  translation as well moves such an install onto the native build at its next
+ *  update. */
+const macArch = (): MacArch =>
+  process.arch === 'arm64' || app.runningUnderARM64Translation ? 'arm64' : 'x64'
+
 /**
  * Ask GitHub whether there is a newer version for this Mac.
  *
@@ -89,7 +98,7 @@ function getText(url: string, timeoutMs = 15_000): Promise<string> {
 export async function checkMacUpdate(): Promise<FeedRelease | null> {
   try {
     const body = await getText(`${RELEASES_API}?per_page=20`)
-    const feed = parseFeed(JSON.parse(body))
+    const feed = parseFeed(JSON.parse(body), macArch())
     return pickRelease(feed, app.getVersion())
   } catch {
     return null

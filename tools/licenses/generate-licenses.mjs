@@ -2,9 +2,10 @@
 // GENERATOR for src/renderer/src/settings/ossLicenses.generated.ts — the data
 // behind Settings → General → "Open source licenses".
 //
-// Walks the production dependency graph from package-lock.json (never
-// devDependencies — those never ship), starting at the root package's
-// "dependencies". The graph comes from the LOCKFILE, not a scan of the
+// Walks the shipped dependency graph from package-lock.json, starting at the
+// root package's "dependencies" plus the devDependencies the renderer bundles
+// (see rendererImports below) — never build tools, which never ship. The graph
+// comes from the LOCKFILE, not a scan of the
 // installed node_modules on disk: this project's OneDrive node_modules is a
 // Windows-targeted install (see CLAUDE.md's "two trees" gotcha) and isn't
 // always fully in sync with the lockfile, so a name+version+license lookup
@@ -23,7 +24,7 @@
 //   node tools/licenses/generate-licenses.mjs
 // Never hand-edit the generated file — same rule as tools/wordmark's output.
 
-import { readFileSync, existsSync, writeFileSync } from 'node:fs'
+import { readFileSync, existsSync, writeFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -78,9 +79,37 @@ function findLicenseTextOnDisk(lockKey) {
   return null
 }
 
+// The renderer's libraries (React, CodeMirror, KaTeX…) are devDependencies ON
+// PURPOSE. Vite bundles them into out/renderer, so leaving them under
+// "dependencies" made electron-builder copy a second, never-loaded set into the
+// package as well (~18 MB, removed 2026-09-11). They still SHIP — inside that
+// bundle — so their licences still belong here. Which devDependencies those are
+// is read off the renderer's own imports rather than kept as a list, so a new
+// renderer library cannot be left out.
+function rendererImports() {
+  const found = new Set()
+  const walk = (dir) => {
+    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, ent.name)
+      if (ent.isDirectory()) walk(p)
+      else if (/\.(tsx?|jsx?|css)$/.test(ent.name) && !/\.test\./.test(ent.name)) {
+        const src = readFileSync(p, 'utf8')
+        for (const m of src.matchAll(/(?:from\s+|import\s*\(\s*|import\s+|@import\s+)['"]([^'"./][^'"]*)['"]/g)) {
+          const parts = m[1].split('/')
+          found.add(m[1].startsWith('@') ? parts.slice(0, 2).join('/') : parts[0])
+        }
+      }
+    }
+  }
+  walk(path.join(ROOT, 'src/renderer'))
+  return found
+}
+
 const seen = new Map()
 const rootDeps = packages[''].dependencies ?? {}
-const queue = Object.keys(rootDeps).map((name) => ({ name, fromKey: '' }))
+const devDeps = packages[''].devDependencies ?? {}
+const bundled = [...rendererImports()].filter((name) => name in devDeps && !name.startsWith('@types/'))
+const queue = [...Object.keys(rootDeps), ...bundled].map((name) => ({ name, fromKey: '' }))
 
 while (queue.length > 0) {
   const { name, fromKey } = queue.shift()

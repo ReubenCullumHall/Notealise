@@ -151,8 +151,17 @@ $l = Invoke-RestMethod "https://api.github.com/repos/ReubenCullumHall/Notealise/
 $l.assets | ForEach-Object { "{0} {1:N1} MB {2}" -f $_.name, ($_.size/1MB), $_.state }
 ```
 
-All four assets (`Notealise-Setup.exe`, `Notealise-Setup.exe.blockmap`, `latest.yml`, `Notealise.dmg`) must read
-`uploaded` **and** `latest` must be the new tag. Only then tell anyone to download.
+All six assets (`Notealise-Setup.exe`, `Notealise-Setup.exe.blockmap`, `latest.yml`, `Notealise.dmg`,
+`Notealise.mac-arm64.dmg`, `Notealise.mac-x64.dmg`) must read `uploaded` **and** `latest` must be the
+new tag. Only then tell anyone to download. (Before 2026-09-11 there were four — the two per-chip
+`.dmg`s arrived with the Mac download split; see the macOS note under known gaps.)
+
+**First release after 2026-09-11 only — the checks the split could not get before a real tag:**
+on notealise.com in **real Safari** on an Apple silicon Mac, *Download for macOS* must fetch
+`Notealise.mac-arm64.dmg` and the status strip must name Apple silicon; the `.mac-arm64.dmg`
+must install and open; an older installed copy (v1.0.2) must be offered the update and fetch
+`Notealise.dmg`, not a per-chip file; and note the real Windows installer size (estimated
+~85–90 MB, never built). An Intel Mac is on the tester checklist. Delete this paragraph once done.
 
 **CI now checks this for you** (`verify-release` job in `release.yml`, added 2026-08-27) — it fails
 the workflow loudly if any expected asset isn't `uploaded`. The manual check above is still worth
@@ -262,6 +271,18 @@ resumes normally on the release after that, once `appId` is stable again.
   offered and broken); and the **asset host allow-list** in `shared/update.ts` is closed — if
   GitHub ever serves assets from a new hostname, downloads fail closed and that list is where to
   look.
+
+  **Since 2026-09-11 each release carries three `.dmg`s**: one per chip
+  (`Notealise.mac-arm64.dmg`, `Notealise.mac-x64.dmg`, about half the size each) and the universal
+  `Notealise.dmg`. The updater takes this Mac's own chip, falls back to the universal one, and never
+  offers the other chip's build. **The universal one is not optional**: every copy installed up to
+  v1.0.2 takes the *first* `.dmg` in the release, GitHub sorts assets alphabetically, and
+  `Notealise.dmg` sorting first is the only reason an old install on an Intel Mac does not fetch an
+  Apple silicon build it cannot open. So never drop it, and never rename the per-chip files to
+  anything that sorts before it (`Notealise-arm64.dmg` would — "-" sorts before ".").
+  `src/main/macDmgNames.test.ts` reads `electron-builder.yml` and fails if that happens; the
+  download page (`site/install/guide.js`) also falls back to it when it cannot tell a visitor's
+  chip.
 - **Windows is unsigned**, so SmartScreen warns on first install ("More info" → "Run anyway").
 - **No automated UI tests.** Everything in gate 1's smoke list is manual.
 
