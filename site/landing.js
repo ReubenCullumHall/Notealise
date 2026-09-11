@@ -105,6 +105,28 @@
   var strand = walk && walk.querySelector(".walk-strand");
   if (!walk || !strand) return;
 
+  /* The two buttons below install a desktop app — on a phone or tablet
+     neither can do anything, and a reader arriving from an Instagram/TikTok
+     link is exactly who hits this. Walking them into a download that can't
+     work is worse than no line at all, so the whole ending swaps to a plain
+     "not available" notice and the draw never runs. This is a DEVICE check,
+     not a width one — narrowing a desktop browser window must still show the
+     real line (the buttons still work fine stacked), so it can't key off
+     the same breakpoint the "Try it" panel's controls do. */
+  var ua = navigator.userAgent || "";
+  // ?device=phone forces the phone version, for previewing it in a desktop browser.
+  var MOBILE = /[?&]device=phone(?:&|$)/.test(location.search) ||
+    !!(navigator.userAgentData && navigator.userAgentData.mobile) ||
+    /android|iphone|ipad|ipod|windows phone|mobile/i.test(ua) ||
+    // iPads on iPadOS 13+ send a Mac user agent by default; no real Mac has a touchscreen.
+    (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  if (MOBILE) {
+    var walkLineEl = walk.querySelector(".walk-line");
+    if (walkLineEl) walkLineEl.textContent = "Not available on your device.";
+    walk.classList.add("unavailable");
+    return;
+  }
+
   var hSpan = walk.querySelector(".walk-h");
   var hTip = walk.querySelector(".walk-anchor");
   var walkLine = walk.querySelector(".walk-line");
@@ -141,6 +163,18 @@
     var lx = lb.left + lb.width / 2 - box.left, ly = lb.top - box.top + 1;
     var rx = rb.left + rb.width / 2 - box.left, ry = rb.top - box.top + 1;
 
+    /* On a narrow screen the two buttons stack (.btns goes one column at 480px),
+       so there is nothing to fork out to — a fork just draws a second vertical
+       line straight through the top button. Stacked, it is ONE line instead:
+       the wave up top, then straight down and finishing at the lower (macOS)
+       button. The download buttons centre their icon+label, so their left
+       third is empty — the descent runs down THAT band, clear of every glyph,
+       rather than through the middle of the Windows label. */
+    var stacked = rb.top - lb.top > lb.height * 0.6;
+    var colX = stacked
+      ? lb.left - box.left + Math.min(lb.width * 0.12, 46)
+      : (lx + rx) / 2;
+
     /* ── The shape ────────────────────────────────────────────────────────────
        ONE rule governs the whole thing: every join is vertical. The "h" ends
        with its right leg pointing straight down, so the ink leaves straight
@@ -153,13 +187,15 @@
        the split is tangent to the trunk (a separation, not a V), and each end
        meets the button edge square-on instead of grazing it. It also makes a
        crossing impossible — nothing ever doubles back past the fork. */
-    var fx = (lx + rx) / 2;                          // dead centre of the buttons
+    var fx = colX;                                   // trunk foot: fork centre, or the stacked descent band
     var top = Math.min(ly, ry);
     var fy = sy + (top - sy) * 0.70;                 // fork, 70% of the way down
     var drop = fy - sy;
     var gap = rx - lx;
 
-    var bx = fx - gap * 0.42;                        // belly, left of the fork
+    // belly, thrown left of the fork. Normally a fraction of the button gap;
+    // stacked, that gap is ~0, so use a fixed offset to keep the wave visible.
+    var bx = fx - (stacked ? Math.min(box.width * 0.14, 64) : gap * 0.42);
     var by = sy + drop * 0.55;
     var t1 = drop * 0.30;                            // h → belly tangent
     var t2 = drop * 0.24;                            // belly → fork tangent
@@ -187,8 +223,20 @@
         ex, ey
       );
     }
-    forkL.setAttribute("d", branch(lx, ly));
-    forkR.setAttribute("d", branch(rx, ry));
+    if (stacked) {
+      // One line: straight down the empty left band, past the Windows button,
+      // landing on the top edge of the macOS button in that same band.
+      forkL.setAttribute("d", "");
+      forkR.setAttribute("d",
+        "M " + r(colX) + " " + r(fy) +
+        " C " + r(colX) + " " + r(fy + (ry - fy) * 0.5) +
+        " "   + r(colX) + " " + r(ry - (ry - fy) * 0.2) +
+        " "   + r(colX) + " " + r(ry)
+      );
+    } else {
+      forkL.setAttribute("d", branch(lx, ly));
+      forkR.setAttribute("d", branch(rx, ry));
+    }
   }
 
   /* The line's start is measured off the rendered text, so it has to be
@@ -581,6 +629,58 @@
     var v = sw[s].getAttribute("data-val");
     sw[s].style.setProperty("--sw", tintColour(v));
   }
+
+  /* Phone held upright: the sidebar stacks above the note, and five rows of
+     controls there pushed the note off the screen. So the controls move into
+     a strip at the foot of the note (.nl-strip in landing.css) — tool names
+     along the bottom, the picked tool's choices above them. The click handler
+     above is bound to ctlEl itself, so moving the element keeps every control
+     working. Sideways and desktop put it back in the sidebar. */
+  var side = app.querySelector(".nl-side");
+  var main = app.querySelector(".nl-main");
+  var upright = window.matchMedia("(max-width: 62rem) and (orientation: portrait)");
+  var rows = ctlEl.querySelectorAll(".nl-row-ctl");
+  var strip = document.createElement("div");
+  strip.className = "nl-strip";
+  var tools = document.createElement("div");
+  tools.className = "nl-tools";
+  tools.setAttribute("role", "tablist");
+  tools.setAttribute("aria-label", "Customise this space");
+  for (var r = 0; r < rows.length; r++) {
+    var tb = document.createElement("button");
+    tb.type = "button";
+    tb.setAttribute("role", "tab");
+    tb.setAttribute("data-tool", String(r));
+    tb.textContent = rows[r].firstElementChild.textContent.trim();
+    tools.appendChild(tb);
+  }
+  strip.appendChild(tools);
+
+  function pickTool(i) {
+    for (var j = 0; j < rows.length; j++) {
+      rows[j].classList.toggle("is-tool", j === i);
+      tools.children[j].classList.toggle("on", j === i);
+      tools.children[j].setAttribute("aria-selected", j === i ? "true" : "false");
+    }
+  }
+  tools.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-tool]");
+    if (b) pickTool(+b.getAttribute("data-tool"));
+  });
+  pickTool(0);
+
+  function placeControls() {
+    if (upright.matches) {
+      strip.insertBefore(ctlEl, tools);
+      if (strip.parentNode !== main) main.appendChild(strip);
+    } else if (ctlEl.parentNode !== side) {
+      side.appendChild(ctlEl);
+      if (strip.parentNode) strip.parentNode.removeChild(strip);
+    }
+  }
+  placeControls();
+  if (upright.addEventListener) upright.addEventListener("change", placeControls);
+  else if (upright.addListener) upright.addListener(placeControls);
 
   paint();
 })();

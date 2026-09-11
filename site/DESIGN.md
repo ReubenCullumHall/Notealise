@@ -1497,3 +1497,32 @@ a `<b>` and an `<i>`; the script only replaces it with per-letter spans when `ht
 set. Verified by loading the real page with JavaScript disabled — plain finished sentence, no
 motion, no flash, identical position. The per-letter spans carry `aria-label` on the `<p>` so a
 screen reader still gets one clean string.
+
+## Phones, 2026-09-11 — the "Try it" strip and the download ending
+
+Reuben: *"most people will find out about the app on instagram/tiktok and then view the webpage on
+that, so this needs to be dialed in just as much as the normal webpage."* Desktop was not to change
+at all — verified with byte-identical screenshots of the Try it panel at 1440 and 1100 wide, before
+and after.
+
+**Try it, held upright: an edit strip.** The five controls had been switched off below 62rem,
+because stacked above the note they were a wall that pushed it off the screen. Three layouts were
+built for real and rendered at iPhone size (artifact `f53d7d78-3025-4691-9085-fca8ed5b7411`): an
+edit strip, a slide-up "Customise" sheet, and all five always open. Reuben picked the strip — tool
+names along the bottom, the picked tool's choices above them, sticky to the bottom of the screen,
+the edit screen Instagram and TikTok users already know. It never covers the note (316 of 316px
+visible while tapping, against 208 for always-open) and needs no tap to find (the sheet hid behind
+a button). `.nl` is `overflow: clip` below 62rem: `hidden` makes it its own scroller and the strip
+could never stick. The search box and breadcrumb are hidden there — ~95px that did nothing.
+
+**Try it, sideways:** the desktop's two columns fitted to the screen height; buttons shrink to 32px
+(dots 24px) so everything fits.
+
+**The download ending decides by DEVICE, not width.** A phone or tablet can run neither download,
+so a path walking you to the buttons promises something it can't give: phones and tablets get "Not
+available on your device." above both buttons, and no line. Computers keep the line at every width.
+A computer window under 480px stacks the buttons and the line then crosses the Windows button —
+Reuben saw it and chose to leave it. `?device=phone` forces the phone ending, because a Mac browser
+(and any phone-frame preview running inside one) is always a computer to this check.
+
+**Still open:** the Try it intro says "switch spaces down the side", which is wrong on a phone.

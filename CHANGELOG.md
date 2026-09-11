@@ -127,7 +127,7 @@ enough for a solo project). History before this file existed lives in the `v*` g
   window-switching can no longer let an older version of a note overwrite a newer one
 - A font that fails to download properly is now refused rather than installed as a broken file
 - The download page reads as a page now, not just a button. Under the wordmark sits a strip of
-  four facts — $0 forever, plain `.md` files, any typeface or colour, spaces you name yourself
+  four facts — $0, plain `.md` files, any typeface or colour, spaces you name yourself
   — then three short sections on what Notealise is, what it isn't and who it's for, then the
   real app running inline to try before downloading, then a path that draws itself down to the
   Windows and macOS buttons. The look you pick in the inline app carries through to the end
@@ -232,6 +232,20 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - Settings → Legal now says the same thing in the app itself: what stays on your computer, what
   the app sends, that there's no warranty, and the law it's governed by — with a link out to the
   full pages for whoever wants them
+- The favourite star on a sidebar row stays where it is when you hover the row, so you can click
+  it again to unfavourite. Hovering used to swap it for the row's other buttons, which left
+  nothing to click
+- The **Lined** page look is an even ruled page now. Every line takes exactly one rule — a heading
+  as much as a paragraph — and the words sit just above it, like writing on paper. Before, a
+  heading knocked every line after it out of step with the rules. The rules are spaced to fit a
+  large heading, so ordinary text gets more room between lines
+- On a phone, **Try it** on the download page has all its controls again. A strip of tools runs
+  along the bottom of the note — Typeface, Spacing, Theme, Colour, Accent — the way a photo editor
+  lays them out, and the note stays in full view above it while you change things. Turned
+  sideways, it lays out like the desktop: controls on the left, the note on the right
+- On a phone or tablet, the end of the download page says **Not available on your device** above
+  the two download buttons, rather than drawing a path to downloads that can't run there.
+  Computers still get the path
 
 ## [1.0.1] - 2026-08-29
 - New, in Settings → Transfer data: move the parts of your setup that live on one computer and

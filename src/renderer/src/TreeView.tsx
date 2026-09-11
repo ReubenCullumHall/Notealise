@@ -133,18 +133,23 @@ const ROW_ACTIONS_CLASS =
   'transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto ' +
   'focus-within:opacity-100 focus-within:pointer-events-auto'
 
-/** A quiet hover action on a row. `always` keeps it visible (a set pin). */
+/** A quiet hover action on a row. `always` keeps it visible (a set pin).
+ *  `hoverHide` is for an `always` button that has a twin inside the hover
+ *  actions group: it shows the marker at rest and steps aside on hover so the
+ *  group's buttons never land on top of it. */
 function RowBtn({
   onClick,
   title,
   tone = 'ink',
   always = false,
+  hoverHide = false,
   children
 }: {
   onClick: (e: React.MouseEvent) => void
   title: string
   tone?: 'ink' | 'brand'
   always?: boolean
+  hoverHide?: boolean
   children: React.ReactNode
 }): React.JSX.Element {
   return (
@@ -154,7 +159,9 @@ function RowBtn({
       aria-label={title}
       className={
         'inline-flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0.5 outline-none transition-colors hover:bg-transparent ' +
-        (always ? 'opacity-100 ' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 ') +
+        (always
+          ? 'opacity-100 ' + (hoverHide ? 'group-hover:opacity-0 group-hover:pointer-events-none ' : '')
+          : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 ') +
         (tone === 'brand' ? 'text-brand-500 hover:text-ink-900' : 'text-ink-300 hover:text-ink-900')
       }
     >
@@ -448,6 +455,7 @@ export function TreeView({
                 title="Unpin"
                 tone="brand"
                 always
+                hoverHide
                 onClick={(e) => {
                   e.stopPropagation()
                   onTogglePin([node.path], !isPinned)
@@ -457,17 +465,6 @@ export function TreeView({
               </RowBtn>
             )}
             <div className={ROW_ACTIONS_CLASS}>
-              {!isPinned && (
-                <RowBtn
-                  title="Pin to favourites"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onTogglePin([node.path], !isPinned)
-                  }}
-                >
-                  <Icon name="star" />
-                </RowBtn>
-              )}
               <RowBtn
                 title="Move to bin"
                 onClick={(e) => {
@@ -476,6 +473,20 @@ export function TreeView({
                 }}
               >
                 <Icon name="trash" />
+              </RowBtn>
+              {/* star LAST so it sits at the row's right edge — the same spot
+                  the always-on marker holds at rest, so pinning/unpinning a
+                  hovered row doesn't make it hop sideways. Matches folder rows,
+                  where the star is already last. */}
+              <RowBtn
+                title={isPinned ? 'Unpin' : 'Pin to favourites'}
+                tone={isPinned ? 'brand' : 'ink'}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onTogglePin([node.path], !isPinned)
+                }}
+              >
+                <Icon name={isPinned ? 'starFilled' : 'star'} />
               </RowBtn>
             </div>
           </>
@@ -582,6 +593,7 @@ export function TreeView({
                   title="Unpin folder"
                   tone="brand"
                   always
+                  hoverHide
                   onClick={(e) => {
                     e.stopPropagation()
                     onTogglePin([node.path], !isPinned)
@@ -609,17 +621,16 @@ export function TreeView({
                 >
                   <Icon name="folderPlus" />
                 </RowBtn>
-                {!isPinned && (
-                  <RowBtn
-                    title="Pin folder"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onTogglePin([node.path], !isPinned)
-                    }}
-                  >
-                    <Icon name="star" />
-                  </RowBtn>
-                )}
+                <RowBtn
+                  title={isPinned ? 'Unpin folder' : 'Pin folder'}
+                  tone={isPinned ? 'brand' : 'ink'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onTogglePin([node.path], !isPinned)
+                  }}
+                >
+                  <Icon name={isPinned ? 'starFilled' : 'star'} />
+                </RowBtn>
               </div>
             </>
           )}

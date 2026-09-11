@@ -1110,6 +1110,49 @@ button.icon:hover {
     var(--page-line) var(--page-rule)
   );
 }
+/* The `lined` look runs on a BASELINE GRID, unlike every other look and unlike
+   the app's default spacing (:root, above, which is deliberately left alone —
+   the ruling there just tracks the body line height and a heading is allowed
+   to break the rhythm, "like real ruled paper under a big title").
+   Here every line — heading or body, whatever its font size — occupies exactly
+   ONE rule, so pressing Enter always drops the cursor one rule down and the
+   page never reads as unformatted. The rule is sized to a Heading 1's line box
+   (font unchanged, so ~1.7em → a ~38px line); `.cm-line` and its spans are
+   pinned to that height so a smaller line can't be shorter. Reversal of the
+   ruling in docs/feature-tabs-spaces.md — that doc carries the before/after.
+   `lined-tight` is unchanged and still breaks rhythm under a heading; making
+   it a tight EVEN grid needs the heading font shrunk, which is a separate call. */
+[data-page-look='lined'] {
+  --page-rule: 38px;
+}
+[data-page-look='lined'] .cm-editor .cm-line {
+  line-height: var(--page-rule);
+}
+/* the spans inside a line drop their own leading (a heading's 1.3, the base
+   1.7) so only the line's strut sets the row height — otherwise a heading's
+   taller intrinsic line box adds ~3px and walks the text off the rules after
+   every heading. The strut is --page-rule and no glyph at these sizes exceeds
+   it, so every line lands on exactly one rule. */
+[data-page-look='lined'] .cm-editor .cm-line * {
+  line-height: 1;
+}
+/* The rule mark is drawn at the BOTTOM of each --page-rule band (see the
+   gradient above), but a line's text baseline sits well above its own line
+   box's bottom edge — the font's half-leading, at this line-height. Left
+   alone, every rule sits well below where the writing actually is — the
+   "floating above the line" Reuben flagged first. Shifting the whole
+   repeating pattern down brings the mark up to where the baseline falls;
+   because the grid is uniform now (see above), one offset lines up EVERY
+   line, heading or body alike.
+   Exactly AT the baseline (measured 25px) then turned out wrong the other
+   way — a descender (the tail on g/y/p/j/q) hangs below the baseline, so a
+   rule drawn right through it reads as the word cutting the line rather than
+   sitting on it (Reuben, second look). 22px leaves the descenders just
+   enough room to clear the rule while still sitting close to it. Re-measure
+   both numbers if the base font, its size, or --page-rule change. */
+[data-page-look='lined'] .edit-layer .cm-scroller {
+  background-position-y: 22px;
+}
 [data-page-look='lined-tight'] {
   --page-rule: 20.4px;
 }
