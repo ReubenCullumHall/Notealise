@@ -49,6 +49,11 @@ export interface VaultChange {
 /** The typed API exposed on `window.api` by the preload bridge. Every path
  *  argument is vault-relative and validated against the vault root in main. */
 export interface VaultApi {
+  /** The user's own language and region ("fr-FR", "en-GB"), for formatting dates
+   *  and numbers — not the interface language, which is English. Read by main
+   *  from `app.getPreferredSystemLanguages()`; absent in the browser preview. Use
+   *  `userLocale` from renderer/src/intl.ts rather than reading this directly. */
+  readonly systemLocale?: string
   /** Current vault path, or null if none is set / the saved one is gone. */
   getVault(): Promise<string | null>
   /** Open the OS folder picker; persists and returns the chosen path, or null

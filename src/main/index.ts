@@ -38,7 +38,19 @@ function createWindow(): BrowserWindow {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false // preload needs require() for the contextBridge setup
+      sandbox: false, // preload needs require() for the contextBridge setup
+      // The user's own language and region ("fr-FR"), for formatting dates and
+      // numbers. The app's locale cannot be used for that: the packaged build
+      // carries English language packs only, so on a French machine it falls
+      // back to en-US. Nor can app.getSystemLocale(): on macOS it answers with
+      // the language the APP is localised into plus the region — "en-FR" on a
+      // French Mac, measured 2026-09-11 — so months came out in English. The
+      // preferred-languages list is what the app's locale used to be built from
+      // before the trim, so this keeps v1.0.2's formatting. See `userLocale` in
+      // renderer/src/intl.ts.
+      additionalArguments: [
+        `--system-locale=${app.getPreferredSystemLanguages()[0] ?? app.getSystemLocale()}`
+      ]
     }
   })
 

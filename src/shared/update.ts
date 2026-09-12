@@ -40,13 +40,9 @@ export interface UpdateStatus {
 export interface FeedRelease {
   version: string
   prerelease: boolean
-  /** absolute https URL of the .dmg for THIS Mac's chip — or of the universal
-   *  build, which runs on either — when the release has one */
+  /** absolute https URL of the macOS .dmg asset, when the release has one */
   dmgUrl: string | null
 }
-
-/** The two chips a Mac build can target, named the way `process.arch` names them. */
-export type MacArch = 'arm64' | 'x64'
 
 /** Machine-level update preferences. Deliberately NOT part of AppSettings: those
  *  live per-vault in <vault>/.mdnotes/settings.json, and "auto-update" is a
@@ -212,62 +208,32 @@ export function isAllowedReleaseUrl(raw: string): boolean {
   }
 }
 
-/** A per-chip Mac download — `Notealise.mac-arm64.dmg` / `Notealise.mac-x64.dmg`,
- *  from electron-builder.yml's mac `artifactName`. Any other .dmg is the
- *  universal build, `Notealise.dmg`, which runs on either chip (release.yml
- *  publishes it alongside).
- *
- *  The shape of these names is decided by code that can no longer be changed:
- *  every copy installed before the split (v1.0.2 and earlier) takes the FIRST
- *  .dmg in a release, and GitHub lists assets alphabetically (checked against
- *  the live API, 2026-09-11). `Notealise.dmg` sorts ahead of `Notealise.mac-…`
- *  because they first differ at "d" against "m" — a letter against a letter, so
- *  the order holds whatever collation GitHub uses. Call a per-chip file
- *  `Notealise-arm64.dmg` instead and "-" sorts before ".", so an old install on
- *  an Intel Mac would fetch a build that does not open. update.test.ts checks
- *  the names electron-builder.yml really produces against this. */
-const CHIP_DMG = /\.mac-(arm64|x64)\.dmg$/i
-
 /** One entry of GitHub's releases response, reduced to what the app uses.
  *  Returns null for anything unusable, including a DRAFT: a draft is visible
  *  to the repo owner and to nobody else, so offering it would show Reuben
- *  updates none of his users can actually download.
- *
- *  `arch` picks the download: this chip's own build first, the universal one
- *  when the release has no build for this chip (every release made before the
- *  split). The OTHER chip's build is never offered — an Apple silicon build does
- *  not open on an Intel Mac at all. */
-export function parseRelease(raw: unknown, arch: MacArch): FeedRelease | null {
+ *  updates none of his users can actually download. */
+export function parseRelease(raw: unknown): FeedRelease | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
   if (r.draft === true) return null
   if (typeof r.tag_name !== 'string') return null
   const assets = Array.isArray(r.assets) ? r.assets : []
-  let own: string | null = null
-  let universal: string | null = null
+  let dmgUrl: string | null = null
   for (const a of assets) {
     if (!a || typeof a !== 'object') continue
     const { name, browser_download_url: url } = a as Record<string, unknown>
     if (typeof name !== 'string' || typeof url !== 'string') continue
     if (!name.toLowerCase().endsWith('.dmg')) continue
     if (!isAllowedReleaseUrl(url)) continue
-    const chip = CHIP_DMG.exec(name)
-    if (!chip) {
-      if (!universal) universal = url
-    } else if (chip[1].toLowerCase() === arch) {
-      if (!own) own = url
-    }
+    dmgUrl = url
+    break
   }
-  return {
-    version: r.tag_name.replace(/^v/, ''),
-    prerelease: r.prerelease === true,
-    dmgUrl: own ?? universal
-  }
+  return { version: r.tag_name.replace(/^v/, ''), prerelease: r.prerelease === true, dmgUrl }
 }
 
 /** The whole response. Never throws: a feed that is not an array, or is full of
  *  junk, reads as "nothing to offer" rather than taking the check down. */
-export function parseFeed(raw: unknown, arch: MacArch): FeedRelease[] {
+export function parseFeed(raw: unknown): FeedRelease[] {
   if (!Array.isArray(raw)) return []
-  return raw.map((r) => parseRelease(r, arch)).filter((r): r is FeedRelease => r !== null)
+  return raw.map(parseRelease).filter((r): r is FeedRelease => r !== null)
 }

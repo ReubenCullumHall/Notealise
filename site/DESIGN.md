@@ -133,6 +133,15 @@ repo). Two things *do* exist and are relevant:
   "alise" animates in "like you'd write it, with smooth lines." Two different techniques, one per
   word, both pure CSS (no runtime JS, no animation library — matches this project's plain
   HTML/CSS/JS stack):
+
+  **Superseded 2026-09-12: the whole mechanism below is retired.** Measured against the live
+  site, the per-slice reveal let ink on "l" and "e" switch on up to ~8x the pen dot's own width
+  away from it — a real, if brief, glitch, and not fixable with a parameter tweak (two cheap
+  tries changed nothing; see `tools/wordmark/README.md`'s top for the full diagnosis). The whole
+  "Note" + "alise" build-up below is now `site/wordmark.mp4` — a real hand-drawn ink recording
+  (the same one already used for the app's own load-in), baked onto white and compressed
+  62MB→42KB. Everything from here through the animation's history is kept for the record, not
+  because any of it is still live.
   - **"Note" — a typewriter reveal.** `.wm-note` is clipped with `clip-path: inset(0 X% 0 0)`
     stepped through 4 keyframe stops, one per keystroke, each a near-instant reveal (~5% of the
     animation's time) followed by a hold (~35%) — a "staircase" keyframe (two adjacent stops at the
@@ -1300,18 +1309,17 @@ have both tightened iframe-initiated downloads, and that needs a real deployment
 browser. If any of them refuse, soften "Your download has started" to "should start" and lean on
 the visible link, which is always wired.
 
-**The macOS page picks a chip (2026-09-11).** Each release carries one `.dmg` per chip, about half
-the size of the universal `Notealise.dmg` that runs on either. `guide.js` asks the browser which
-chip this is (Chrome's `userAgentData`, else the graphics chip's name, else — in Safari, which
-hides the name — whether the GPU offers ASTC texture compression, an Apple-GPU-only feature), asks
-GitHub whether the latest release has that chip's build, and offers it. **Any doubt gets the
-universal file**: no answer from the browser, a release made before the split, GitHub unreachable,
-or more than 4s. Because detection can be wrong, the status strip gains one line naming the chip
-with a link to the other build. Tested in Chromium and WebKit with the API faked (11 cases).
-**Not verified**: real Safari on a real Intel Mac — the ASTC signal has only been seen on Apple
-silicon. A widely copied S3TC-sRGB test was tried first and reads an Apple silicon Mac as Intel;
-do not reach for it. **Unlike the rest of this section, this part is not temporary** — the
-per-chip builds stay after signing.
+**Intel Macs are not supported (Reuben, 2026-09-11).** The Mac build is Apple silicon only, about
+half the size of the universal build it replaced. When the browser says plainly that this is an
+Intel Mac — Chrome's `userAgentData`, or a graphics chip named Intel/AMD/NVIDIA in Firefox —
+`guide.js` swaps "download has started" for one line saying Notealise needs a Mac with Apple
+silicon, and starts nothing; the link stays, as "Download it anyway". **Safari always downloads**:
+it hides the chip on every Mac, and telling someone "you can't use this" on a Mac that can is worse
+than a download that fails. Tested in Chromium and WebKit (9 cases). A per-chip version of this
+page (detect, then offer an Apple silicon / Intel / universal build) was built and tested the same
+day and removed when Intel was dropped — `eea8277` has it if Intel ever comes back, including why
+a widely copied S3TC-sRGB check misreads Apple silicon as Intel. **Not temporary**, unlike the rest
+of this section.
 
 **The `<details>` on the macOS page is a deliberate exception to this file's own rule, not
 drift.** The 2026-08-09 note above says the unverified-developer help must not come back as a

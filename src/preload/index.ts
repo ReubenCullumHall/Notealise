@@ -4,10 +4,16 @@ import type { VaultApi, VaultChange } from '../shared/types'
 import type { UpdateStatus } from '../shared/update'
 import type { ImportProgress } from '../shared/notesImport'
 
+// The user's language + region main read from the OS and passed as a launch
+// argument (main/index.ts). A plain string; intl.ts validates it before use.
+const LOCALE_ARG = '--system-locale='
+const systemLocale = process.argv.find((a) => a.startsWith(LOCALE_ARG))?.slice(LOCALE_ARG.length)
+
 // The single, typed bridge between renderer and main. With contextIsolation the
 // renderer can only reach the filesystem through these calls — every path is
 // validated against the vault root in the main process.
 const api: VaultApi = {
+  systemLocale,
   getVault: () => ipcRenderer.invoke(CH.getVault),
   pickVault: () => ipcRenderer.invoke(CH.pickVault),
   listTree: () => ipcRenderer.invoke(CH.listTree),

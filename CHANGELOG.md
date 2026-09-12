@@ -7,6 +7,25 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+- Smaller downloads. The Mac download is now built for Apple silicon only and packed tighter —
+  about a third of its old size — and both installers leave out files the app never used. Macs
+  with an Intel processor are no longer supported
+- The favourite star on a sidebar row stays where it is when you hover the row, so you can click
+  it again to unfavourite. Hovering used to swap it for the row's other buttons, which left
+  nothing to click
+- The **Lined** page look is an even ruled page now. Every line takes exactly one rule — a heading
+  as much as a paragraph — and the words sit just above it, like writing on paper. Before, a
+  heading knocked every line after it out of step with the rules. The rules are spaced to fit a
+  large heading, so ordinary text gets more room between lines
+- On a phone, **Try it** on the download page has all its controls again. A strip of tools runs
+  along the bottom of the note — Typeface, Spacing, Theme, Colour, Accent — the way a photo editor
+  lays them out, and the note stays in full view above it while you change things. Turned
+  sideways, it lays out like the desktop: controls on the left, the note on the right
+- On a phone or tablet, the end of the download page says **Not available on your device** above
+  the two download buttons, rather than drawing a path to downloads that can't run there.
+  Computers still get the path
+
+## [1.0.2] - 2026-09-07
 - Notes sharing the screen now share a tab. A split reads as one wide tab with a small divider at
   each seam, in the order the columns sit on screen, so you can see what is open without looking
   at the window. Drag its grip to move them all together, drag a name out to take that note out of
@@ -46,9 +65,6 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - Every switch and tick box takes your accent colour when it is on, and the theme's own grey when
   it is off. They stayed grey before unless you had also set the accent to reach surfaces — which
   is not the default, so for most people the accent never reached them at all
-- Smaller downloads. The Mac download is now built for your Mac's own chip — Apple silicon or
-  Intel — at about half the size, and the download page picks the right one for you. Both
-  installers also leave out files the app never used
 - The colour bar over selected text waits for you to finish choosing. It no longer chases the
   pointer across the words you are selecting: it appears when you let go, or when the selection
   has stopped moving
@@ -235,20 +251,6 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - Settings → Legal now says the same thing in the app itself: what stays on your computer, what
   the app sends, that there's no warranty, and the law it's governed by — with a link out to the
   full pages for whoever wants them
-- The favourite star on a sidebar row stays where it is when you hover the row, so you can click
-  it again to unfavourite. Hovering used to swap it for the row's other buttons, which left
-  nothing to click
-- The **Lined** page look is an even ruled page now. Every line takes exactly one rule — a heading
-  as much as a paragraph — and the words sit just above it, like writing on paper. Before, a
-  heading knocked every line after it out of step with the rules. The rules are spaced to fit a
-  large heading, so ordinary text gets more room between lines
-- On a phone, **Try it** on the download page has all its controls again. A strip of tools runs
-  along the bottom of the note — Typeface, Spacing, Theme, Colour, Accent — the way a photo editor
-  lays them out, and the note stays in full view above it while you change things. Turned
-  sideways, it lays out like the desktop: controls on the left, the note on the right
-- On a phone or tablet, the end of the download page says **Not available on your device** above
-  the two download buttons, rather than drawing a path to downloads that can't run there.
-  Computers still get the path
 
 ## [1.0.1] - 2026-08-29
 - New, in Settings → Transfer data: move the parts of your setup that live on one computer and

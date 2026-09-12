@@ -170,31 +170,6 @@ jobs:
           # shellcheck disable=SC2086
           npx --no-install electron-builder --publish always $KIND_ARGS
 
-      # macOS ALSO publishes the universal build, under the name every earlier
-      # release used. The step above builds one .dmg per chip (electron-builder.yml
-      # → mac.target), about half the download each. This one keeps
-      # `Notealise.dmg` — both chips in one file — for three readers that need it:
-      #   1. every copy installed before the split (v1.0.2 and earlier). Its
-      #      updater takes the first .dmg in the release and GitHub lists assets
-      #      alphabetically, so it takes this one — CHIP_DMG in shared/update.ts
-      #      says why the per-chip names are shaped to keep it that way;
-      #   2. the download page, when it cannot tell which chip a visitor has;
-      #   3. any old link to /releases/latest/download/Notealise.dmg.
-      - name: Package the universal macOS build & publish it too
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          # Same reasoning as the step above — values, never pasted into the script.
-          KIND_ARGS: ${{ steps.kind.outputs.args }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: |
-          # Unquoted on purpose, as above. The single quotes keep ${productName}
-          # and ${ext} for electron-builder to expand, not bash.
-          # shellcheck disable=SC2086
-          npx --no-install electron-builder --mac dmg --universal --publish always $KIND_ARGS \
-            -c.mac.artifactName='${productName}.${ext}'
-
   # electron-builder's GitHub publisher silently SKIPS uploading (exit 0, no
   # error) if the release it's publishing to was created more than 2 hours
   # ago — a guard against a stale/delayed CI run clobbering a release that's
@@ -223,7 +198,7 @@ jobs:
           else
             yml="latest.yml"
           fi
-          expected=("Notealise-Setup.exe" "Notealise-Setup.exe.blockmap" "Notealise.dmg" "Notealise.mac-arm64.dmg" "Notealise.mac-x64.dmg" "$yml")
+          expected=("Notealise-Setup.exe" "Notealise-Setup.exe.blockmap" "Notealise.dmg" "$yml")
 
           release_json=$(curl -sf -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "User-Agent: notes-app-release-verify" \

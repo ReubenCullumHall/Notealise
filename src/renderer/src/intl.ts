@@ -22,6 +22,27 @@ export const NUMBER_FORMATS: { id: NumberFormatId; label: string }[] = [
   { id: 'dot', label: '1.000.000,00' }
 ]
 
+/** The computer's own region for formatting — "fr-FR", "en-GB" — as main read
+ *  it from the OS. NOT the app's locale: the packaged app carries English
+ *  language packs only (electron-builder.yml), so on a French machine the app's
+ *  own locale falls back to en-US and `Intl.*(undefined, …)` prints US dates
+ *  there. Only the region is wanted; the interface stays English. Anything the
+ *  OS hands over that is not a valid locale tag is dropped rather than thrown
+ *  on — Intl would throw on it at every single date. */
+export function pickLocale(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || !raw.trim()) return undefined
+  try {
+    return Intl.getCanonicalLocales(raw.trim().replace(/_/g, '-'))[0]
+  } catch {
+    return undefined
+  }
+}
+
+/** Use this, never `undefined`, as the locale for anything the user reads. */
+export const userLocale: string | undefined = pickLocale(
+  typeof window !== 'undefined' ? window.api?.systemLocale : undefined
+)
+
 const zoneOpt = (tz?: string): Intl.DateTimeFormatOptions =>
   tz && tz !== 'system' ? { timeZone: tz } : {}
 
@@ -103,11 +124,11 @@ export function formatDate(ms: number | null | undefined, fmt: DateFormatId = 'r
   if (fmt === 'ymd') return numeric(ms, ['year', 'month', 'day'], tz)
   const opts: Intl.DateTimeFormatOptions =
     fmt === 'short' ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'long', year: 'numeric' }
-  return new Intl.DateTimeFormat(undefined, { ...zoneOpt(tz), ...opts }).format(new Date(ms))
+  return new Intl.DateTimeFormat(userLocale, { ...zoneOpt(tz), ...opts }).format(new Date(ms))
 }
 
 export const formatTime = (ms: number, tz = 'system'): string =>
-  new Intl.DateTimeFormat(undefined, { ...zoneOpt(tz), hour: '2-digit', minute: '2-digit' }).format(new Date(ms))
+  new Intl.DateTimeFormat(userLocale, { ...zoneOpt(tz), hour: '2-digit', minute: '2-digit' }).format(new Date(ms))
 
 /**
  * The shortest honest answer to "when?", for the strip beside a note's word
@@ -136,6 +157,6 @@ export const formatDateTime = (ms: number | null | undefined, fmt: DateFormatId 
 
 export function formatNumber(n: number, fmt: NumberFormatId = 'default'): string {
   if (typeof n !== 'number' || !isFinite(n)) return String(n)
-  const locale = fmt === 'comma' ? 'en-US' : fmt === 'dot' ? 'de-DE' : undefined
+  const locale = fmt === 'comma' ? 'en-US' : fmt === 'dot' ? 'de-DE' : userLocale
   return new Intl.NumberFormat(locale).format(n)
 }

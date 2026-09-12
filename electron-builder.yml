@@ -1,6 +1,6 @@
 # electron-builder — packages the electron-vite build (out/) into installers.
-# Windows -> NSIS .exe, macOS -> one .dmg per chip (release.yml also publishes a
-# universal one — see its comment). Unsigned for the MVP (testers
+# Windows -> NSIS .exe, macOS -> Apple silicon .dmg (Intel Macs are not
+# supported). Unsigned for the MVP (testers
 # click through the OS "unverified developer" warning). Artifact names are fixed
 # (no version) so the download page can link to a stable /releases/latest/download/ URL.
 appId: com.notealise.desktop
@@ -54,11 +54,12 @@ electronFuses:
   onlyLoadAppFromAsar: true
 # English only, on both platforms. Chromium ships ~55 language packs (~47 MB
 # unpacked) for its OWN built-in text; this app's interface is English, so they
-# were dead weight (Reuben, 2026-09-11: "keep it English for now"). Knock-on
-# worth knowing: the app's locale now resolves to English everywhere, so the
-# "Default" date and number formats follow English conventions on a
-# non-English machine — Settings → General still offers each format explicitly.
-# Revisit this list if the app is ever translated. The names differ per OS
+# were dead weight (Reuben, 2026-09-11: "keep it English for now"). Knock-on:
+# the app's own locale is now English everywhere, so on a French machine it
+# falls back to en-US. Dates and numbers still follow the machine's region
+# because renderer/src/intl.ts formats with the OS locale (`userLocale`), never
+# the app's — keep it that way. Revisit this list if the app is ever
+# translated. The names differ per OS
 # because the files do: Windows has en-US.pak, macOS has en.lproj / en_GB.lproj.
 win:
   target: nsis
@@ -70,23 +71,28 @@ nsis:
   createDesktopShortcut: always
   shortcutName: ${productName}
 mac:
-  # One .dmg per chip rather than one universal .dmg carrying both: a universal
-  # build is two whole apps glued together, so each per-chip file is about half
-  # the download (measured 2026-09-11). release.yml still publishes the universal
-  # build as Notealise.dmg — read its comment before changing either name.
+  # Apple silicon only — Reuben, 2026-09-11, on Intel Macs: "don't support
+  # them". A universal build is two whole apps glued together, one per chip, so
+  # this halves the Mac download (measured 2026-09-11). An Intel Mac refuses to
+  # open it ("not supported on this Mac"); the download page says so first when
+  # the browser reveals the chip (site/install/guide.js). A copy of v1.0.2 or
+  # earlier on an Intel Mac will be offered updates it cannot open — accepted
+  # with the ruling (docs/product-rulings.md).
   target:
     - target: dmg
-      arch: [arm64, x64]
+      arch: arm64
   category: public.app-category.productivity
-  # `.mac-` and not `-`: the name decides where the file sorts on GitHub, which
-  # decides what every copy installed before the split downloads. CHIP_DMG in
-  # src/shared/update.ts explains; update.test.ts reads this line to check it.
-  artifactName: ${productName}.mac-${arch}.${ext}
+  artifactName: ${productName}.${ext}
   electronLanguages: [en, en_GB]
   # Unsigned MVP build — do not attempt to sign or notarize.
   identity: null
 dmg:
   writeUpdateInfo: false
+# The finished .dmg is re-compressed with LZMA (ULMO) by this hook before it is
+# uploaded — about a quarter smaller than the default, a few seconds slower to
+# open (Reuben, 2026-09-11). `dmg.format` cannot do it: the schema refuses ULMO.
+# The hook explains the ordering that makes it safe, and the measurements.
+artifactBuildCompleted: tools/dmg-lzma.cjs
 # owner/repo are PINNED rather than inferred from the git remote. Inference is
 # what an installer's update feed is built from, so a build made in a clone whose
 # `origin` points somewhere else produces installers that quietly update from

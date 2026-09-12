@@ -186,3 +186,17 @@ Spot-check against the actual source before relying on this doc for what's built
   (`const a = 1` → 3) and stranded punctuation do not score.
 - **Every setting added here still obeys the settings rule**: `rawMarkStyle` and `rawMarkTint` are
   per-space and reachable from Customisation's apply-to-all, like every other look.
+
+## Download size (2026-09-11, from Reuben in session)
+
+- **Intel Macs are not supported.** *"Reduce the bloatware, and don't support them."* The Mac
+  build is Apple silicon only, which halves the Mac download (a universal build carries a whole
+  app per chip). The download page tells a visitor on an Intel Mac before they download, when the
+  browser reveals the chip. Accepted cost: a copy of v1.0.2 or earlier on an Intel Mac will be
+  offered updates it cannot open. CLAUDE.md rule 7's "macOS" now means Apple silicon.
+- **The interface is English; formats follow the machine.** Chromium's language packs are trimmed
+  to English (*"keep it English for now"* — to be revisited if the app is translated), but dates
+  and numbers keep following the computer's own region, as they did before the trim.
+- **The Mac installer uses the tightest compression** (LZMA, applied by `tools/dmg-lzma.cjs`
+  during the build) — same app, about a quarter smaller (82.6 MB against ~111 MB), at the cost of
+  opening in ~7s instead of ~3s the first time. Reuben's call: smaller file over faster open.

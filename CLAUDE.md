@@ -121,7 +121,8 @@ than loaded every session — see "Where the rest of it lives" near the end of t
    the main process (`src/main/vault.ts` is the only fs-touching code). The vault root is the
    boundary: main resolves every incoming path and rejects anything that escapes it.
 
-7. **Windows and macOS are both first-class.** A vault written on one must open cleanly on the
+7. **Windows and macOS are both first-class** — macOS meaning **Apple silicon only** since
+   2026-09-11; Intel Macs are not supported (`docs/product-rulings.md`). A vault written on one must open cleanly on the
    other. Build paths with `path.join`/`resolve`, never string concatenation with `/`. Compare
    paths with `path.relative`, never `===` / `startsWith` (a `startsWith(vaultRoot)` check
    passes review and fails on Windows). Never assume a dot-prefixed folder is hidden on Windows,
@@ -215,9 +216,13 @@ in `devDependencies`**: Vite bundles them into `out/renderer` whatever list they
 imports to keep their licences listed; check its output is unchanged after moving anything.
 
 **The packaged app carries English language packs only** (`electronLanguages` in
-`electron-builder.yml`), so on a non-English machine the app locale falls back to `en-US` and
-`Intl.*(undefined, …)` formats accordingly. Anything that should follow the user's own region
-must ask the OS for it, not the app locale — see `docs/open-items.md`.
+`electron-builder.yml`), so on a non-English machine the app locale falls back to `en-US`.
+**So never format a date or number with `Intl.*(undefined, …)` or `toLocale*String(undefined)`**
+— on a French machine that prints US dates, and it looks right on every English one, so nobody
+testing in the UK would notice. Use `userLocale` from `renderer/src/intl.ts`: the user's own
+language and region, read by main (`app.getPreferredSystemLanguages()[0]` — **not**
+`app.getSystemLocale()`, which on macOS mixes in the app's own English and answers "en-FR" on a
+French Mac), handed to the preload as a launch argument and exposed as `window.api.systemLocale`.
 
 ## Importing notes
 
@@ -347,9 +352,16 @@ notes-app/
   legacy/                   pre-Electron browser app — reference only, NOT built (legacy/README.md)
   site/                     the Vercel download page. site/DESIGN.md is its design directive and
                             decision log — read it before any visual change here
-  tools/wordmark/           GENERATOR for the wordmark animation in site/index.html, plus its
-                            verification harness and its own gotchas doc. Not shipped, not an
+  tools/wordmark/           GENERATOR for the wordmark animation — NOT currently used by
+                            site/index.html (2026-09-12: swapped for site/wordmark.mp4, a real
+                            ink pass, after this generator's per-slice reveal was measured
+                            popping ink up to 8x the pen dot's width away on "l"/"e" with no
+                            small fix found — see this dir's README's top for the full story).
+                            Kept for its verification harness and gotchas doc, and in case the
+                            video approach is ever reverted. Not shipped, not an
                             app dependency. See tools/wordmark/README.md
+  tools/dmg-lzma.cjs        electron-builder hook: re-compresses the finished .dmg with LZMA
+                            before upload (the config schema refuses that format). Not shipped
   tools/release-review.sh   run BEFORE every git tag — dumps everything on main since the last
                             tag (commits, files by area, diffstat, [Unreleased]) for a per-item
                             ship/hold sign-off. See docs/workflow.md

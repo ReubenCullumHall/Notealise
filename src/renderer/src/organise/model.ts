@@ -7,6 +7,7 @@ import type { TreeNode } from '../../../shared/types'
 import type { EntryMeta, Workspace } from '../../../shared/workspace'
 import { isSelfOrDescendant } from '../../../shared/workspace'
 import { pickAutoColor } from '../../../shared/color'
+import { userLocale } from '../intl'
 
 export const NO_META: EntryMeta = {}
 
@@ -270,7 +271,7 @@ export function onDate(ms: number | undefined): string | null {
   )
   if (days <= 0) return 'today'
   if (days === 1) return 'yesterday'
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  return d.toLocaleDateString(userLocale, { day: 'numeric', month: 'short' })
 }
 
 export function sortArchived(nodes: TreeNode[], ws: Workspace, sort: ArchiveSort): TreeNode[] {

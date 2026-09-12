@@ -9,15 +9,12 @@
    browsers and opens a self-closing tab instead (see site/DESIGN.md), whereas an
    iframe pointed at GitHub's attachment response just downloads.
 
-   macOS has three builds on each release since 2026-09-11: one per chip
-   (Notealise.mac-arm64.dmg for Apple silicon, Notealise.mac-x64.dmg for Intel),
-   each about half the size, and the universal Notealise.dmg that runs on either.
-   The page offers the visitor's own chip when it can tell, and the universal
-   build whenever it cannot — see pickMacFile. */
+   The Mac build is Apple silicon only (Reuben, 2026-09-11). When the browser
+   says plainly that this Mac has an Intel processor, the page says so instead of
+   starting a download that would not open — see isIntelMac. */
 
 (function () {
   var REPO = "ReubenCullumHall/Notealise";
-  var BASE = "https://github.com/" + REPO + "/releases/latest/download/";
   var FILE = { windows: "Notealise-Setup.exe", mac: "Notealise.dmg" };
   var OSNAME = { windows: "Windows", mac: "macOS" };
 
@@ -25,37 +22,45 @@
   var name = FILE[os];
   if (!name) return;
 
-  // The "get it again" / "download it" link always points at a stable URL. On a
-  // Mac it is re-pointed once the page knows which build to offer.
-  function pointLinksAt(url) {
-    var links = document.querySelectorAll("a[data-download]");
-    for (var i = 0; i < links.length; i++) links[i].href = url;
-  }
-  pointLinksAt(BASE + name);
+  var url = "https://github.com/" + REPO + "/releases/latest/download/" + name;
+
+  // The "get it again" / "download it" link always points at the stable URL.
+  var links = document.querySelectorAll("a[data-download]");
+  for (var i = 0; i < links.length; i++) links[i].href = url;
 
   var wantsDownload = new URLSearchParams(location.search).has("dl");
-  var already = false;
-  if (wantsDownload) {
-    // Drop the param so a reload or a shared link doesn't re-trigger.
-    try {
-      history.replaceState(null, "", location.pathname);
-    } catch (e) {}
+  if (!wantsDownload) return;
 
+  // Drop the param so a reload or a shared link doesn't re-trigger.
+  try {
+    history.replaceState(null, "", location.pathname);
+  } catch (e) {}
+
+  var msg = document.querySelector(".status-msg");
+  var link = document.querySelector(".status-link");
+
+  if (os === "mac") {
+    isIntelMac(function (intel) {
+      if (intel) sayIntelUnsupported();
+      else start();
+    });
+  } else {
+    start();
+  }
+
+  function start() {
     // Reflect that the download is running, rather than inviting one.
-    var msg = document.querySelector(".status-msg");
-    var link = document.querySelector(".status-link");
     if (msg) msg.textContent = "Your " + (OSNAME[os] || "") + " download has started.";
     if (link) link.textContent = "Not downloading? Get it again.";
 
     // Fire once per tab, so a back-then-forward doesn't download twice.
+    var already = false;
     try {
       already = sessionStorage.getItem("notealise-dl-" + os) === "1";
       sessionStorage.setItem("notealise-dl-" + os, "1");
     } catch (e) {}
-  }
+    if (already) return;
 
-  function start(url) {
-    if (!wantsDownload || already) return;
     try {
       var frame = document.createElement("iframe");
       frame.setAttribute("aria-hidden", "true");
@@ -67,111 +72,47 @@
     }
   }
 
-  if (os !== "mac") return start(BASE + name);
-
-  pickMacFile(function (file, chip) {
-    pointLinksAt(BASE + file);
-    var shown = document.querySelectorAll("[data-file]");
-    for (var i = 0; i < shown.length; i++) shown[i].textContent = file;
-    if (chip) offerOtherChip(chip);
-    start(BASE + file);
-  });
-
-  /* Two questions at once — which chip is this, and does the latest release have
-     a build for it — and the universal file unless both come back yes. A release
-     published before the split carries only Notealise.dmg, so linking a per-chip
-     name blindly would 404 until the next one ships. Never waits more than 4s:
-     the universal build works on every Mac, so there is no reason to hold the
-     download back for a better answer. */
-  function pickMacFile(done) {
-    var chip = null, names = null, pending = 2, finished = false;
-    function finish(file, c) {
-      if (finished) return;
-      finished = true;
-      done(file, c);
-    }
-    function settle() {
-      if (--pending > 0) return;
-      var own = chip ? "Notealise.mac-" + chip + ".dmg" : null;
-      if (own && names && names.indexOf(own) !== -1) finish(own, chip);
-      else finish(FILE.mac, null);
-    }
-    detectChip(function (c) { chip = c; settle(); });
-    releaseAssets(function (n) { names = n; settle(); });
-    setTimeout(function () { finish(FILE.mac, null); }, 4000);
+  // No download is started; the link stays, in case the guess is wrong.
+  function sayIntelUnsupported() {
+    if (msg) msg.textContent = "Notealise needs a Mac with Apple silicon (M1 or newer). This Mac looks like it has an Intel processor, so it would not open here.";
+    if (link) link.textContent = "Download it anyway";
   }
 
-  function releaseAssets(done) {
-    if (!window.fetch) return done(null);
-    fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) {
-        done(j && j.assets ? j.assets.map(function (a) { return a.name; }) : null);
-      }, function () { done(null); });
-  }
-
-  /* "arm64", "x64", or null when the browser gives nothing to go on.
-
-     1. Chrome, Edge and Opera say outright (userAgentData, secure pages only).
-     2. Otherwise the graphics chip's name, where the browser shares it: Firefox
-        and Chrome give "Apple M2", "Intel Iris…", "AMD Radeon…".
-     3. Safari hides the name behind "Apple GPU" on every Mac. What it cannot
-        hide is what the GPU can do: ASTC texture compression is a feature of
-        Apple's own GPUs, which Intel Macs' graphics chips lack. Seen offered on
-        Apple silicon (2026-09-11); NOT yet checked on a real Intel Mac, which is
-        why the other chip's build stays one click away on the page. A widely
-        copied test that looks for S3TC sRGB instead was tried first and is
-        WRONG — on an Apple silicon Mac it reads as Intel (measured 2026-09-11)
-        — so do not swap it back in.
-     A software renderer (SwiftShader, llvmpipe) emulates everything and says
-     nothing about the chip, so it counts as no answer. */
-  function detectChip(done) {
+  /* True only when the browser SAYS this is an Intel Mac: Chrome, Edge and Opera
+     report the architecture outright (userAgentData, secure pages only), and
+     Firefox names the graphics chip ("Intel Iris…", "AMD Radeon…"). Safari hides
+     the chip behind "Apple GPU" on every Mac, so Safari always gets the download
+     — telling someone "you can't use this" on a Mac that can is worse than a
+     download that fails. Never waits more than 2s. */
+  function isIntelMac(done) {
+    var answered = false;
+    function answer(v) {
+      if (answered) return;
+      answered = true;
+      done(v);
+    }
+    setTimeout(function () { answer(false); }, 2000);
     var ua = navigator.userAgentData;
     if (ua && ua.getHighEntropyValues) {
       ua.getHighEntropyValues(["architecture"]).then(function (v) {
-        if (v.architecture === "arm") done("arm64");
-        else if (v.architecture === "x86") done("x64");
-        else done(chipFromGraphics());
-      }, function () { done(chipFromGraphics()); });
+        if (v.architecture === "x86") answer(true);
+        else if (v.architecture === "arm") answer(false);
+        else answer(graphicsSayIntel());
+      }, function () { answer(graphicsSayIntel()); });
     } else {
-      done(chipFromGraphics());
+      answer(graphicsSayIntel());
     }
   }
 
-  function chipFromGraphics() {
+  function graphicsSayIntel() {
     try {
       var gl = document.createElement("canvas").getContext("webgl");
-      if (!gl) return null;
+      if (!gl) return false;
       var dbg = gl.getExtension("WEBGL_debug_renderer_info");
       var r = String(gl.getParameter(dbg ? dbg.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || "");
-      if (/swiftshader|llvmpipe|software/i.test(r)) return null;
-      if (/apple m\d/i.test(r)) return "arm64";
-      if (/intel|amd|radeon|nvidia|geforce/i.test(r)) return "x64";
-      if (/apple gpu/i.test(r)) {
-        var ext = gl.getSupportedExtensions() || [];
-        return ext.indexOf("WEBGL_compressed_texture_astc") !== -1 ? "arm64" : "x64";
-      }
-    } catch (e) {}
-    return null;
-  }
-
-  // Detection can be wrong, so the other chip's build is one click away.
-  function offerOtherChip(chip) {
-    var slot = document.querySelector(".status-chip");
-    if (!slot) return;
-    var other = document.createElement("a");
-    other.href = BASE + "Notealise.mac-" + (chip === "arm64" ? "x64" : "arm64") + ".dmg";
-    other.target = "_blank";
-    other.rel = "noopener";
-    if (chip === "arm64") {
-      slot.textContent = "This is the version for Macs with Apple silicon. On an Intel Mac? ";
-      other.textContent = "Get the Intel version";
-    } else {
-      slot.textContent = "This is the version for Macs with an Intel processor. On a Mac with Apple silicon? ";
-      other.textContent = "Get that version";
+      return /intel|amd|radeon|nvidia|geforce/i.test(r) && !/apple m\d/i.test(r);
+    } catch (e) {
+      return false;
     }
-    slot.appendChild(other);
-    slot.appendChild(document.createTextNode("."));
-    slot.hidden = false;
   }
 })();
