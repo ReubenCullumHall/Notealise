@@ -1,5 +1,28 @@
 # Wordmark animation tooling (`site/index.html`)
 
+**STATUS (2026-09-12): `site/index.html` no longer uses this generator's output.** Measured
+with `verify_ink_vs_pen.py` against the live site, the per-slice reveal below let ink on "l"
+and "e" switch on up to ~8x the pen dot's own width away from it — a real, if brief (~25ms),
+glitch, and not fixable with a parameter tweak (two cheap tries, `KF_PER_STROKE` and `SLICES`,
+both changed nothing; the mismatch is in `gen_pen.py`'s pacing estimate, not the geometry).
+`site/index.html`'s wordmark is now `site/wordmark.mp4` — a real hand-drawn ink pass (the same
+one already used for the app's own load-in), transcoded from the ProRes 4444 source
+(`notealise-ink.mov`) with:
+
+```
+ffmpeg -i notealise-ink.mov -f lavfi -i color=white:s=2206x524:r=30 \
+  -filter_complex "[0:v]fps=30,format=yuva444p12le[fg];[1:v][fg]overlay=shortest=1:format=auto,scale=1600:-2:flags=lanczos[out]" \
+  -map "[out]" -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 20 -preset slow -movflags +faststart -an wordmark.mp4
+```
+
+62MB ProRes → 42KB H.264 (the alpha is flattened onto white — `--bg` is `#ffffff` everywhere on
+this page, so there's no theme to preserve alpha for). It happens to settle at ~3000ms, almost
+exactly where the old animation did, so `landing.js`'s tagline `LEAD` (3050ms) needed no change.
+Everything below is unchanged and still correct **about this generator** — kept in case the ink
+pass ever needs revisiting or the video approach gets reverted, not because it's live now.
+
+---
+
 The "alise" half of the Notealise wordmark is **generated, not hand-written**. The clip paths,
 their switch-on delays, and the pen dot's path and keyframes inside `site/index.html` are all
 emitted by `gen_pen.py`.

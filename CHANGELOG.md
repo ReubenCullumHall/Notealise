@@ -24,6 +24,9 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - On a phone or tablet, the end of the download page says **Not available on your device** above
   the two download buttons, rather than drawing a path to downloads that can't run there.
   Computers still get the path
+- The wordmark's write-on at the top of the download page is a real ink recording now, not a
+  generated one — the generated version could let a stroke on "l" or "e" pop in slightly ahead of
+  the pen instead of drawing smoothly
 
 ## [1.0.2] - 2026-09-07
 - Notes sharing the screen now share a tab. A split reads as one wide tab with a small divider at
