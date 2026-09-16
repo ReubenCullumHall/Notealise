@@ -151,14 +151,28 @@ $l = Invoke-RestMethod "https://api.github.com/repos/ReubenCullumHall/Notealise/
 $l.assets | ForEach-Object { "{0} {1:N1} MB {2}" -f $_.name, ($_.size/1MB), $_.state }
 ```
 
-All four assets (`Notealise-Setup.exe`, `Notealise-Setup.exe.blockmap`, `latest.yml`, `Notealise.dmg`) must read
-`uploaded` **and** `latest` must be the new tag. Only then tell anyone to download.
+All five assets (`Notealise-Setup.exe`, `Notealise-Setup.exe.blockmap`, `latest.yml`, `Notealise.dmg`,
+`Notealise.intel.dmg`) must read `uploaded` **and** `latest` must be the new tag. Only then tell
+anyone to download. (Four until 2026-09-15, when the Intel Mac build came back as its own file.)
+
+**First release after 2026-09-15 only — delete this paragraph once done.** **Before pushing
+`main`:** remove the temporary dev-only "Mac chooser: Always ask" switch Reuben asked for on
+2026-09-15 to preview the popup — `grep -rn DEV_CHOOSER_BUTTON site/` finds every line (it is hidden
+on notealise.com unless `?dev` is in the URL, so it is harmless if missed, but it was never meant to
+ship). The Intel build is
+packaged by its own step in `release.yml`, proven locally (same command, `--publish never`: one
+`Notealise.intel.dmg`, 92.0 MB, ULMO, `x86_64` only, signature verifies) but not yet in CI. Check
+`lipo -archs` on the app inside each `.dmg` — `arm64` in `Notealise.dmg`, `x86_64` in
+`Notealise.intel.dmg`. On notealise.com: in **Safari**, *Download for macOS* must open the "Which
+Mac do you have?" popup, and each card must fetch its own file; in **Chrome** on an Apple silicon
+Mac it must skip the popup and fetch `Notealise.dmg`. An Intel Mac opening the Intel build is on
+the tester checklist — nobody has one to hand.
 
 **First release after 2026-09-11 only — delete this paragraph once done.** `Notealise.dmg` is now
 Apple silicon only and LZMA-compressed (by `tools/dmg-lzma.cjs`, inside the build): check that
 `diskutil image info Notealise.dmg` says ULMO, that `lipo -info` on the app inside it says `arm64` and
-nothing else, that it installs and opens, and that an installed v1.0.2 is offered the update. On
-the site, *Download for macOS* in Safari should just download. Note the real Mac and Windows sizes
+nothing else, that it installs and opens, and that an installed v1.0.2 is offered the update.
+(The site check that stood here is replaced by the 2026-09-15 paragraph above.) Note the real Mac and Windows sizes
 against the old 225 MB / 105 MB (Windows was never built after the trims — estimated ~85–90 MB).
 
 **CI now checks this for you** (`verify-release` job in `release.yml`, added 2026-08-27) — it fails
@@ -270,12 +284,16 @@ resumes normally on the release after that, once `appId` is stable again.
   GitHub ever serves assets from a new hostname, downloads fail closed and that list is where to
   look.
 
-  **Since 2026-09-11 `Notealise.dmg` is Apple silicon only** (Reuben: Intel Macs are not
-  supported). Copies of v1.0.2 or earlier on an Intel Mac still check this feed, will be offered
-  the update, and will download a build that macOS refuses to open there. Accepted with the ruling
-  — see `docs/product-rulings.md`. Do not "fix" it by publishing an Intel build under another name
-  without reading `eea8277` first: pre-split installs take the first `.dmg` GitHub lists, and
-  GitHub sorts assets alphabetically.
+  **Since 2026-09-15 each release carries one `.dmg` per chip**: `Notealise.dmg` (Apple silicon)
+  and `Notealise.intel.dmg` (Intel). The updater takes this Mac's own (Rosetta-aware — an Intel
+  build running on Apple silicon moves to the native one at its next update) and never offers the
+  other chip's, so a release missing the Intel file is simply not offered to Intel Macs. **Never
+  rename either file to anything that sorts before `Notealise.dmg`** (`Notealise-Intel.dmg` would —
+  "-" sorts before "."): copies of v1.0.2 or earlier take the *first* `.dmg` GitHub lists, and
+  GitHub sorts assets alphabetically, ignoring case. The flip side is accepted: such a copy on an
+  Intel Mac is offered the Apple silicon build, which will not open there. `INTEL_DMG` in
+  `shared/update.ts` explains; `src/main/macDmgNames.test.ts` fails if `release.yml`, the updater
+  and `site/mac-chip.js` stop agreeing on the name.
 - **Windows is unsigned**, so SmartScreen warns on first install ("More info" → "Run anyway").
 - **No automated UI tests.** Everything in gate 1's smoke list is manual.
 

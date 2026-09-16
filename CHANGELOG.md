@@ -7,9 +7,9 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
-- Smaller downloads. The Mac download is now built for Apple silicon only and packed tighter —
-  about a third of its old size — and both installers leave out files the app never used. Macs
-  with an Intel processor are no longer supported
+- Smaller downloads. The Mac download is now built for one kind of Mac at a time instead of both
+  at once, and packed tighter — about a third of its old size — and both installers leave out
+  files the app never used
 - The favourite star on a sidebar row stays where it is when you hover the row, so you can click
   it again to unfavourite. Hovering used to swap it for the row's other buttons, which left
   nothing to click
@@ -27,6 +27,12 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - The wordmark's write-on at the top of the download page is a real ink recording now, not a
   generated one — the generated version could let a stroke on "l" or "e" pop in slightly ahead of
   the pen instead of drawing smoothly
+- Macs with an Intel processor have their own download, so neither kind of Mac downloads the
+  other's half. **Download for macOS** gives your Mac the version made for it. When your browser
+  doesn't say which Mac you have — Safari never does — it asks first, in the page's own light or
+  dark look, with where to check in **About This Mac**, then fades through to the install steps as
+  the download starts. Those steps name the version you got, with the other one a click away
+- On a Mac, the app's update check only ever offers the version made for that Mac
 
 ## [1.0.2] - 2026-09-07
 - Notes sharing the screen now share a tab. A split reads as one wide tab with a small divider at

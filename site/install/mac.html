@@ -7,6 +7,8 @@
   <meta name="description" content="How to clear the macOS checks the first time you open Notealise." />
   <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
   <link rel="stylesheet" href="guide.css" />
+  <!-- Arriving from Download for macOS in a browser without cross-page view transitions: fade in (guide.css). -->
+  <script>try{if(!("onpagereveal" in window)&&/[?&]dl=/.test(location.search))document.documentElement.classList.add("guide-arrive")}catch(e){}</script>
 </head>
 <body data-os="mac">
   <a href="../" aria-label="Notealise home"><img class="mark" src="../favicon.svg" alt="Notealise" width="34" height="34" /></a>
@@ -20,12 +22,14 @@
     <p class="status">
       <b class="status-msg">Ready to install Notealise for macOS.</b>
       <a class="status-link" data-download href="https://github.com/ReubenCullumHall/Notealise/releases/latest/download/Notealise.dmg" target="_blank" rel="noopener">Download it</a>
+      <span class="status-chip" hidden></span>
     </p>
+
 
     <ol class="steps">
       <li>
         <h2>Move Notealise into Applications</h2>
-        <p>Open the downloaded <strong>Notealise.dmg</strong>. In the window that opens, drag the Notealise icon onto the <strong>Applications</strong> folder. Then open Applications and double-click Notealise.</p>
+        <p>Open the downloaded <strong data-file>Notealise.dmg</strong>. In the window that opens, drag the Notealise icon onto the <strong>Applications</strong> folder. Then open Applications and double-click Notealise.</p>
         <figure class="drag" aria-label="Drawing: drag the Notealise icon onto the Applications folder">
           <span class="drag-item">
             <img src="../favicon.svg" alt="" width="42" height="42" />
@@ -115,6 +119,7 @@
     <span class="footer-legal">&copy; 2026 Notealise. All rights reserved.</span>
   </footer>
 
+  <script src="../mac-chip.js"></script>
   <script src="guide.js"></script>
 </body>
 </html>

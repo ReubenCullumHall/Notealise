@@ -1,6 +1,6 @@
 # electron-builder — packages the electron-vite build (out/) into installers.
-# Windows -> NSIS .exe, macOS -> Apple silicon .dmg (Intel Macs are not
-# supported). Unsigned for the MVP (testers
+# Windows -> NSIS .exe, macOS -> Apple silicon .dmg (release.yml also publishes
+# an Intel one — see its comment). Unsigned for the MVP (testers
 # click through the OS "unverified developer" warning). Artifact names are fixed
 # (no version) so the download page can link to a stable /releases/latest/download/ URL.
 appId: com.notealise.desktop
@@ -71,13 +71,12 @@ nsis:
   createDesktopShortcut: always
   shortcutName: ${productName}
 mac:
-  # Apple silicon only — Reuben, 2026-09-11, on Intel Macs: "don't support
-  # them". A universal build is two whole apps glued together, one per chip, so
-  # this halves the Mac download (measured 2026-09-11). An Intel Mac refuses to
-  # open it ("not supported on this Mac"); the download page says so first when
-  # the browser reveals the chip (site/install/guide.js). A copy of v1.0.2 or
-  # earlier on an Intel Mac will be offered updates it cannot open — accepted
-  # with the ruling (docs/product-rulings.md).
+  # Apple silicon here; release.yml packages the Intel build separately, as
+  # Notealise.intel.dmg (Reuben, 2026-09-15: Intel Macs are back, as their own
+  # download). One file per chip rather than one universal .dmg: a universal
+  # build is two whole apps glued together, so it is about double the download
+  # (measured 2026-09-11). Read release.yml's comment before renaming either
+  # file — installs up to v1.0.2 depend on which one sorts first.
   target:
     - target: dmg
       arch: arm64

@@ -25,6 +25,24 @@ body {
   min-height: 100dvh;
 }
 
+/* Arriving from the home page (Reuben, 2026-09-15: "a smooth animation between
+   the button clicking and going to the install page"). Browsers with
+   cross-page view transitions crossfade from the home page — nav.css opts in
+   there — and the guide's content rises into place. The rest get the same rise
+   from html.guide-arrive, set in mac.html's <head> only when ?dl is present,
+   so a direct visit just loads. */
+@view-transition { navigation: auto; }
+main { view-transition-name: guide-main; }
+::view-transition-old(root) { animation: 200ms ease-in both guide-fade-out; }
+::view-transition-new(root) { animation: 260ms ease-out both guide-fade-in; }
+::view-transition-new(guide-main) { animation: 460ms cubic-bezier(0.22, 1, 0.36, 1) 60ms both guide-rise; }
+::view-transition-old(guide-main) { animation: 200ms ease-in both guide-fade-out; }
+html.guide-arrive body { animation: guide-fade-in 260ms ease-out both; }
+html.guide-arrive main { animation: guide-rise 460ms cubic-bezier(0.22, 1, 0.36, 1) 60ms both; }
+@keyframes guide-fade-in { from { opacity: 0; } }
+@keyframes guide-fade-out { to { opacity: 0; } }
+@keyframes guide-rise { from { opacity: 0; transform: translateY(14px); } }
+
 /* Top-left mark. No banner, no nav — matches index.html. */
 .mark {
   position: fixed; top: 24px; left: 24px; z-index: 10;
@@ -61,6 +79,12 @@ a { color: var(--ink); text-underline-offset: 2px; }
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px;
 }
 .status b { font-weight: 600; }
+/* macOS: which chip's version this is, and a way to choose again. */
+.status-chip { flex-basis: 100%; color: var(--soft); }
+.linkish {
+  font: inherit; color: var(--ink); background: none; border: 0; padding: 0;
+  cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+}
 
 /* Numbered steps with a hairline spine. */
 ol.steps {
@@ -207,6 +231,8 @@ ol.steps strong { color: var(--ink); font-weight: 600; }
   .footer { justify-content: center; text-align: center; }
 }
 @media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+  html.guide-arrive body, html.guide-arrive main { animation: none; }
   html { scroll-behavior: auto; }
   .tshoot-chev { transition: none; }
 }

@@ -13,7 +13,6 @@ has been answered; move its line into `[Unreleased]` if it earns one.
 
 ---
 
-
 ## From the tester-feedback pass (2026-09-05)
 
 The other twelve items from that pass are logged. These two are not.

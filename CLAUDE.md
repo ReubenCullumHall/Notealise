@@ -121,8 +121,8 @@ than loaded every session — see "Where the rest of it lives" near the end of t
    the main process (`src/main/vault.ts` is the only fs-touching code). The vault root is the
    boundary: main resolves every incoming path and rejects anything that escapes it.
 
-7. **Windows and macOS are both first-class** — macOS meaning **Apple silicon only** since
-   2026-09-11; Intel Macs are not supported (`docs/product-rulings.md`). A vault written on one must open cleanly on the
+7. **Windows and macOS are both first-class** — macOS meaning **both Apple silicon and Intel**, as
+   two separate downloads since 2026-09-15 (`docs/product-rulings.md`). A vault written on one must open cleanly on the
    other. Build paths with `path.join`/`resolve`, never string concatenation with `/`. Compare
    paths with `path.relative`, never `===` / `startsWith` (a `startsWith(vaultRoot)` check
    passes review and fails on Windows). Never assume a dot-prefixed folder is hidden on Windows,

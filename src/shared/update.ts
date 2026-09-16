@@ -40,9 +40,12 @@ export interface UpdateStatus {
 export interface FeedRelease {
   version: string
   prerelease: boolean
-  /** absolute https URL of the macOS .dmg asset, when the release has one */
+  /** absolute https URL of the .dmg for THIS Mac's chip, when the release has one */
   dmgUrl: string | null
 }
+
+/** The two chips a Mac build can target, named the way `process.arch` names them. */
+export type MacArch = 'arm64' | 'x64'
 
 /** Machine-level update preferences. Deliberately NOT part of AppSettings: those
  *  live per-vault in <vault>/.mdnotes/settings.json, and "auto-update" is a
@@ -208,11 +211,34 @@ export function isAllowedReleaseUrl(raw: string): boolean {
   }
 }
 
+/** The Intel Mac download, `Notealise.intel.dmg` — named by release.yml's
+ *  Intel packaging step. Every other .dmg is the Apple silicon build,
+ *  `Notealise.dmg` (or, in releases up to v1.0.2, the universal build that runs
+ *  on either chip).
+ *
+ *  The shape of this name is decided by code that can no longer be changed:
+ *  every copy installed up to v1.0.2 takes the FIRST .dmg in a release, and
+ *  GitHub lists assets by name, ignoring case — not by upload order (checked
+ *  2026-09-15: cli/cli's release lists its assets in name order while their ids
+ *  are out of order, and this repo's own releases list `Notealise.dmg` last
+ *  although it uploaded first).
+ *  `Notealise.dmg` sorts ahead of `Notealise.intel.dmg` because they first
+ *  differ at "d" against "i" — a letter against a letter, so the order holds
+ *  whatever collation GitHub uses. Call it `Notealise-Intel.dmg` instead and
+ *  "-" sorts before ".", so every old install on an Apple silicon Mac would
+ *  fetch the Intel build. src/main/macDmgNames.test.ts checks the name in
+ *  release.yml and site/mac-chip.js against this. */
+export const INTEL_DMG = 'Notealise.intel.dmg'
+
 /** One entry of GitHub's releases response, reduced to what the app uses.
  *  Returns null for anything unusable, including a DRAFT: a draft is visible
  *  to the repo owner and to nobody else, so offering it would show Reuben
- *  updates none of his users can actually download. */
-export function parseRelease(raw: unknown): FeedRelease | null {
+ *  updates none of his users can actually download.
+ *
+ *  `arch` picks the download. The other chip's build is never offered: an
+ *  Apple silicon build does not open on an Intel Mac at all, and a release with
+ *  no build for this chip is skipped by `pickRelease` rather than offered. */
+export function parseRelease(raw: unknown, arch: MacArch): FeedRelease | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
   if (r.draft === true) return null
@@ -225,6 +251,8 @@ export function parseRelease(raw: unknown): FeedRelease | null {
     if (typeof name !== 'string' || typeof url !== 'string') continue
     if (!name.toLowerCase().endsWith('.dmg')) continue
     if (!isAllowedReleaseUrl(url)) continue
+    const intel = name.toLowerCase() === INTEL_DMG.toLowerCase()
+    if (intel !== (arch === 'x64')) continue
     dmgUrl = url
     break
   }
@@ -233,7 +261,7 @@ export function parseRelease(raw: unknown): FeedRelease | null {
 
 /** The whole response. Never throws: a feed that is not an array, or is full of
  *  junk, reads as "nothing to offer" rather than taking the check down. */
-export function parseFeed(raw: unknown): FeedRelease[] {
+export function parseFeed(raw: unknown, arch: MacArch): FeedRelease[] {
   if (!Array.isArray(raw)) return []
-  return raw.map(parseRelease).filter((r): r is FeedRelease => r !== null)
+  return raw.map((r) => parseRelease(r, arch)).filter((r): r is FeedRelease => r !== null)
 }

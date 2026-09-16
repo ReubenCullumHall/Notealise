@@ -1,0 +1,148 @@
+/* "Which Mac do you have?" — the popup behind the home page's Download for
+   macOS button (mac-chooser.js). In the home page's own theme (Reuben,
+   2026-09-15: "make it the same theme you're on"): nav.css's tokens, so it is
+   light or dark with the page, Fraunces for the question, Inter for the rest,
+   JetBrains Mono for the eyebrow and the drawn About This Mac line. It also
+   goes dark when the Try it stop has turned the download section dark
+   (data-carry-theme, landing.js) — that is the ground the button sat on. The
+   fallbacks after each var() only matter if this ever loads without nav.css. */
+
+.mac-chooser {
+  --mc-bg: var(--bg, #ffffff);
+  --mc-ink: var(--ink, oklch(24% 0.02 50));
+  --mc-soft: var(--soft, oklch(44% 0.015 50));
+  --mc-muted: var(--muted, oklch(24% 0.02 50 / 0.5));
+  --mc-line: var(--line, oklch(24% 0.02 50 / 0.16));
+
+  box-sizing: border-box;
+  width: min(580px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: auto;
+  padding: 30px 30px 22px;
+  border: 1px solid var(--mc-line); border-radius: 16px;
+  background: var(--mc-bg); color: var(--mc-ink);
+  font: 16px/1.6 var(--sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif);
+  letter-spacing: normal; text-align: left;
+  -webkit-font-smoothing: antialiased;
+}
+/* The Try it stop's dark look, on an otherwise light page — same values as
+   nav.css's dark theme. */
+:root[data-carry-theme="dark"] .mac-chooser {
+  color-scheme: dark;
+  --mc-bg: oklch(17% 0.01 60);
+  --mc-ink: oklch(93% 0.012 70);
+  --mc-soft: oklch(79% 0.012 70);
+  --mc-muted: oklch(93% 0.012 70 / 0.56);
+  --mc-line: oklch(93% 0.012 70 / 0.15);
+}
+.mac-chooser *, .mac-chooser *::before, .mac-chooser *::after { box-sizing: border-box; }
+.mac-chooser form { margin: 0; }
+
+/* The scrim. Set per theme rather than from the tokens: ::backdrop does not
+   inherit custom properties in every browser still in use. */
+.mac-chooser::backdrop { background: oklch(24% 0.02 50 / 0.3); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mac-chooser::backdrop { background: oklch(8% 0.01 60 / 0.62); }
+}
+:root[data-theme="dark"] .mac-chooser::backdrop,
+:root[data-carry-theme="dark"] .mac-chooser::backdrop { background: oklch(8% 0.01 60 / 0.62); }
+
+/* In: a fade and a short rise, on the site's own curve. Out (is-leaving, set by
+   mac-chooser.js for ~180ms before it closes): the reverse, a little quicker. */
+.mac-chooser[open] { animation: mc-in .26s cubic-bezier(0.22, 1, 0.36, 1); }
+.mac-chooser[open]::backdrop { animation: mc-fade-in .26s ease-out; }
+.mac-chooser.is-leaving { animation: mc-out .18s ease-in forwards; }
+.mac-chooser.is-leaving::backdrop { animation: mc-fade-out .18s ease-in forwards; }
+@keyframes mc-in { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
+@keyframes mc-out { to { opacity: 0; transform: translateY(6px) scale(0.985); } }
+@keyframes mc-fade-in { from { opacity: 0; } }
+@keyframes mc-fade-out { to { opacity: 0; } }
+
+.mc-eyebrow {
+  margin: 0 0 12px;
+  font: var(--eyebrow, 500 12px/1.4 ui-monospace, Menlo, monospace);
+  letter-spacing: var(--eyebrow-tracking, 0.14em);
+  text-transform: uppercase;
+  color: var(--mc-muted);
+}
+/* The popup opens with focus on its title, not on the first card — a ring on
+   "Apple silicon" read as though it had been chosen already. */
+.mc-title:focus { outline: none; }
+.mc-title {
+  margin: 0 0 12px;
+  font-family: var(--serif, Georgia, serif);
+  font-optical-sizing: auto;
+  font-size: clamp(1.7rem, 1.4rem + 1.2vw, 2.1rem); font-weight: 500;
+  line-height: 1.1; letter-spacing: -0.018em;
+  text-wrap: balance;
+  color: var(--mc-ink);
+}
+.mc-lede { margin: 0 0 22px; font-size: 15px; line-height: 1.6; color: var(--mc-soft); }
+.mc-lede strong { color: var(--mc-ink); font-weight: 600; }
+
+.mc-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mc-option {
+  display: block; width: 100%; margin: 0; padding: 0;
+  font: inherit; text-align: left; color: var(--mc-ink);
+  background: transparent; border: 1.5px solid var(--mc-line); border-radius: 12px;
+  cursor: pointer; transition: border-color .15s ease, background-color .15s ease;
+}
+/* Same hover as the download buttons behind it. */
+.mc-option:hover {
+  border-color: var(--mc-ink);
+  background: color-mix(in srgb, var(--mc-ink) 6%, transparent);
+}
+.mc-option:focus-visible, .mc-cancel:focus-visible { outline: 2px solid var(--mc-ink); outline-offset: 2px; }
+.mc-option-name {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--mc-line);
+  font-size: 16px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.5;
+}
+.mc-option-name svg { flex: none; width: 18px; height: 18px; color: var(--mc-muted); transition: color .15s ease, transform .15s ease; }
+.mc-option:hover .mc-option-name svg { color: var(--mc-ink); }
+.mc-option-says { display: block; padding: 11px 16px 14px; }
+.mc-hint { display: block; font-size: 12.5px; line-height: 1.5; color: var(--mc-muted); }
+.mc-kv {
+  display: block; margin-top: 4px;
+  font: 400 12px/1.5 var(--mono, ui-monospace, Menlo, monospace);
+  color: var(--mc-ink);
+}
+.mc-kv span { color: var(--mc-muted); margin-right: 4px; }
+
+.mc-actions { display: flex; justify-content: flex-end; margin-top: 18px; }
+.mc-cancel {
+  margin: 0;
+  font: inherit; font-size: 14px; font-weight: 600; line-height: 1.5; color: var(--mc-soft);
+  padding: 8px 16px; border-radius: 12px;
+  border: 1.5px solid var(--mc-line); background: transparent; cursor: pointer;
+  transition: border-color .15s ease, color .15s ease;
+}
+.mc-cancel:hover { color: var(--mc-ink); border-color: var(--mc-ink); }
+
+/* Leaving for the install guide in a browser without cross-page view
+   transitions: the page fades to its own ground first (mac-chooser.js). */
+html.mc-leaving body { opacity: 0; transition: opacity .2s ease-in; }
+
+@media (max-width: 480px) {
+  .mac-chooser { padding: 24px 18px 16px; }
+  .mc-options { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mac-chooser[open], .mac-chooser[open]::backdrop,
+  .mac-chooser.is-leaving, .mac-chooser.is-leaving::backdrop { animation: none; }
+  .mc-option, .mc-option-name svg, .mc-cancel { transition: none; }
+  html.mc-leaving body { transition: none; }
+}
+
+/* DEV_CHOOSER_BUTTON — temporary, dev-only (see mac-chooser.js). Same pill as
+   nav.css's .dev-theme, stacked just above it. */
+.dev-chooser {
+  position: fixed; right: 12px; bottom: 46px; z-index: 90;
+  font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em;
+  color: #fff; background: oklch(24% 0.02 50);
+  border: 1px solid #fff; border-radius: 999px;
+  padding: 7px 10px; cursor: pointer; opacity: 0.85;
+}
+.dev-chooser:hover { opacity: 1; }
+.dev-chooser b { font-weight: 500; opacity: 0.6; margin-right: 6px; }

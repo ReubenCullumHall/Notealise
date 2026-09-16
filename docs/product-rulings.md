@@ -189,11 +189,20 @@ Spot-check against the actual source before relying on this doc for what's built
 
 ## Download size (2026-09-11, from Reuben in session)
 
-- **Intel Macs are not supported.** *"Reduce the bloatware, and don't support them."* The Mac
-  build is Apple silicon only, which halves the Mac download (a universal build carries a whole
-  app per chip). The download page tells a visitor on an Intel Mac before they download, when the
-  browser reveals the chip. Accepted cost: a copy of v1.0.2 or earlier on an Intel Mac will be
-  offered updates it cannot open. CLAUDE.md rule 7's "macOS" now means Apple silicon.
+- **Intel Macs are supported again, as their own download (2026-09-15)** — reversing the
+  2026-09-11 call below. *"I've seen lots of people actually using the Intel MacBooks around
+  college… I don't want to miss out on this market"*, but not at the cost of the Apple silicon
+  download: *"I don't want it to be nearly three hundred megabytes if we add both into the same
+  download link."* So each release carries `Notealise.dmg` (Apple silicon, 82.6 MB) and
+  `Notealise.intel.dmg` (Intel, 92.0 MB), never a universal build. Download for macOS picks
+  the visitor's chip when the browser says; when it cannot (Safari, always), a popup on the home
+  page asks, styled like the install guide, with how to check (Apple menu → About This Mac), then
+  goes to the install guide, which starts that download. No Intel Mac was
+  available to test on — *"we'll just have to figure it out"*. Still true: a copy of v1.0.2 or
+  earlier on an Intel Mac takes the first `.dmg` GitHub lists, which is the Apple silicon one.
+- ~~**Intel Macs are not supported.**~~ *(superseded 2026-09-15, above)* *"Reduce the bloatware,
+  and don't support them."* The Mac build was Apple silicon only, which halved the Mac download (a
+  universal build carries a whole app per chip).
 - **The interface is English; formats follow the machine.** Chromium's language packs are trimmed
   to English (*"keep it English for now"* — to be revisited if the app is translated), but dates
   and numbers keep following the computer's own region, as they did before the trim.
