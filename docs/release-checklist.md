@@ -155,11 +155,7 @@ All five assets (`Notealise-Setup.exe`, `Notealise-Setup.exe.blockmap`, `latest.
 `Notealise.intel.dmg`) must read `uploaded` **and** `latest` must be the new tag. Only then tell
 anyone to download. (Four until 2026-09-15, when the Intel Mac build came back as its own file.)
 
-**First release after 2026-09-15 only — delete this paragraph once done.** **Before pushing
-`main`:** remove the temporary dev-only "Mac chooser: Always ask" switch Reuben asked for on
-2026-09-15 to preview the popup — `grep -rn DEV_CHOOSER_BUTTON site/` finds every line (it is hidden
-on notealise.com unless `?dev` is in the URL, so it is harmless if missed, but it was never meant to
-ship). The Intel build is
+**First release after 2026-09-15 only — delete this paragraph once done.** The Intel build is
 packaged by its own step in `release.yml`, proven locally (same command, `--publish never`: one
 `Notealise.intel.dmg`, 92.0 MB, ULMO, `x86_64` only, signature verifies) but not yet in CI. Check
 `lipo -archs` on the app inside each `.dmg` — `arm64` in `Notealise.dmg`, `x86_64` in

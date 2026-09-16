@@ -50,7 +50,7 @@
 
   function goToGuide(answer) {
     var dl = answer === "arm64" || answer === "x64" ? answer : "1";
-    var url = GUIDE + "?dl=" + dl + (devAlwaysAsk() ? "&dev" : "");
+    var url = GUIDE + "?dl=" + dl;
     if (reduced || crossPage) return void (location.href = url);
     root.classList.add("mc-leaving");
     setTimeout(function () { location.href = url; }, 200);
@@ -115,49 +115,10 @@
     // Cmd/Ctrl/Shift/middle-click keep their usual meaning: open the guide.
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
-    if (devAlwaysAsk()) return ask();
     withAnswer(function (a) {
       if (a) goToGuide(a);
       else ask();
     });
   });
 
-  /* DEV_CHOOSER_BUTTON — temporary (Reuben, 2026-09-15). A dev-only switch that
-     makes "Download for macOS" always ask, so the popup can be seen before any
-     release carries both Mac builds (until then the real button never asks). It
-     also tells the guide to act as if the release had both, so the page after a
-     pick looks as it will — an Intel pick downloads nothing until that release
-     exists. Shown on local addresses or with ?dev in the URL, never otherwise —
-     the same rule as nav.js's theme switch, and it sits just above that switch.
-     To remove: delete this block, devAlwaysAsk() and its three uses above, the
-     `dev` checks in install/guide.js, and .dev-chooser in mac-chooser.css — grep
-     the tag. */
-  var DEV_KEY = "nl-dev-mac-chooser";
-  function devAlwaysAsk() {
-    try { return !!devSwitch && localStorage.getItem(DEV_KEY) === "ask"; } catch (e) { return false; }
-  }
-  var devSwitch = null;
-  (function () {
-    var host = location.hostname;
-    var local = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/.test(host) ||
-      /\.local$/.test(host) ||
-      /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
-    if (!local && !/[?&]dev(=|&|$)/.test(location.search)) return;
-    devSwitch = document.createElement("button");
-    devSwitch.type = "button";
-    devSwitch.className = "dev-chooser";
-    devSwitch.setAttribute("aria-label", "Mac chooser: always ask (dev only)");
-    function label() {
-      devSwitch.innerHTML = "<b>Mac chooser</b>" + (devAlwaysAsk() ? "Always ask" : "Normal");
-    }
-    devSwitch.addEventListener("click", function () {
-      try {
-        if (devAlwaysAsk()) localStorage.removeItem(DEV_KEY);
-        else localStorage.setItem(DEV_KEY, "ask");
-      } catch (e) {}
-      label();
-    });
-    document.body.appendChild(devSwitch);
-    label();
-  })();
 })();

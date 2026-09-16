@@ -135,14 +135,3 @@ html.mc-leaving body { opacity: 0; transition: opacity .2s ease-in; }
   html.mc-leaving body { transition: none; }
 }
 
-/* DEV_CHOOSER_BUTTON — temporary, dev-only (see mac-chooser.js). Same pill as
-   nav.css's .dev-theme, stacked just above it. */
-.dev-chooser {
-  position: fixed; right: 12px; bottom: 46px; z-index: 90;
-  font: 500 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em;
-  color: #fff; background: oklch(24% 0.02 50);
-  border: 1px solid #fff; border-radius: 999px;
-  padding: 7px 10px; cursor: pointer; opacity: 0.85;
-}
-.dev-chooser:hover { opacity: 1; }
-.dev-chooser b { font-weight: 500; opacity: 0.6; margin-right: 6px; }

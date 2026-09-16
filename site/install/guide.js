@@ -39,9 +39,6 @@
   var params = new URLSearchParams(location.search);
   var wantsDownload = params.has("dl");
   var dlChip = params.get("dl");
-  // DEV_CHOOSER_BUTTON: the home page's dev switch adds &dev — act as if the
-  // latest release already had both Mac builds.
-  var dev = params.has("dev");
   if (wantsDownload) {
     // Drop the param so a reload or a shared link doesn't re-trigger.
     try {
@@ -178,14 +175,10 @@
   }
 
   if (wantsDownload) {
+    // An answer from the home page still checks the release has that build:
+    // before the first release with both, the one universal file is the right
+    // download for either answer.
     var answered = dlChip === "arm64" || dlChip === "x64" ? dlChip : null;
-    if (answered && dev) {
-      download(answered, false);
-    } else {
-      // An answer from the home page still checks the release has that build:
-      // before the first release with both, the one universal file is the right
-      // download for either answer.
-      ask(false, answered || undefined);
-    }
+    ask(false, answered || undefined);
   }
 })();
