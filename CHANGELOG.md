@@ -54,6 +54,10 @@ enough for a solo project). History before this file existed lives in the `v*` g
   notes in Obsidian or VS Code, and why a new computer warns you on first launch
 - Start scrolling during the page's opening animation and the rest of the front page now sweeps up
   into place in order, rather than snapping in all at once
+- The two install guides — the pages explaining the warning Windows and macOS show the first time
+  you open Notealise — look like the rest of the site now. They follow your light or dark setting
+  instead of always being white, and use the site's own headline and label type rather than your
+  computer's default font
 
 ## [1.0.2] - 2026-09-07
 - Notes sharing the screen now share a tab. A split reads as one wide tab with a small divider at

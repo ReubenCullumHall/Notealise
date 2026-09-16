@@ -6,7 +6,13 @@
   <title>Notealise — Opening it on Windows</title>
   <meta name="description" content="How to get past the warning Windows shows the first time you open Notealise." />
   <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-  <link rel="stylesheet" href="guide.css" />
+  <!-- The site's shared tokens, fonts and dark blocks (nav.css) load FIRST so
+       guide.css below can still override anything it needs. These pages carry
+       no .topbar and no .page class, so nav.css contributes only colours,
+       type and ::selection here — nothing structural. -->
+  <script>try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+  <link rel="stylesheet" href="../nav.css?v=20260916b" />
+  <link rel="stylesheet" href="guide.css?v=20260916a" />
 </head>
 <body data-os="windows">
   <a href="../" aria-label="Notealise home"><img class="mark" src="../favicon.svg" alt="Notealise" width="34" height="34" /></a>
@@ -72,6 +78,7 @@
     <span class="footer-legal">&copy; 2026 Notealise. All rights reserved.</span>
   </footer>
 
+  <script src="../nav.js?v=20260916a"></script>
   <script src="guide.js"></script>
 </body>
 </html>

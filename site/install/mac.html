@@ -6,7 +6,13 @@
   <title>Notealise — Opening it on macOS</title>
   <meta name="description" content="How to clear the macOS checks the first time you open Notealise." />
   <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
-  <link rel="stylesheet" href="guide.css" />
+  <!-- The site's shared tokens, fonts and dark blocks (nav.css) load FIRST so
+       guide.css below can still override anything it needs. These pages carry
+       no .topbar and no .page class, so nav.css contributes only colours,
+       type and ::selection here — nothing structural. -->
+  <script>try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+  <link rel="stylesheet" href="../nav.css?v=20260916b" />
+  <link rel="stylesheet" href="guide.css?v=20260916a" />
   <!-- Arriving from Download for macOS in a browser without cross-page view transitions: fade in (guide.css). -->
   <script>try{if(!("onpagereveal" in window)&&/[?&]dl=/.test(location.search))document.documentElement.classList.add("guide-arrive")}catch(e){}</script>
 </head>
@@ -120,6 +126,7 @@
   </footer>
 
   <script src="../mac-chip.js"></script>
+  <script src="../nav.js?v=20260916a"></script>
   <script src="guide.js"></script>
 </body>
 </html>
