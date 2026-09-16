@@ -38,7 +38,10 @@
   font: var(--eyebrow);
   letter-spacing: var(--eyebrow-tracking);
   text-transform: uppercase;
-  color: var(--muted);
+  /* The one visible use of --accent on the main page right now (2026-09-13) —
+     "What it is" / "What it isn't" / "Who it's for" / "Try it" — a small,
+     repeated touch of colour instead of the page reading pure black-and-white. */
+  color: var(--accent);
   margin: 0;
 }
 .beat h2 {
@@ -53,7 +56,12 @@
   margin: 0;
 }
 .beat-eyebrow + h2 { margin-top: 14px; }
-.beat p {
+/* :not(.beat-eyebrow) matters: .beat-eyebrow is also a <p>, and this rule's
+   specificity (element+class) otherwise beats .beat-eyebrow's own (one
+   class), silently overriding its colour back to --soft. Found 2026-09-13
+   fixing the eyebrow's accent colour — it never took over .beat's eyebrows
+   because of exactly this collision. */
+.beat p:not(.beat-eyebrow) {
   margin: 0;
   font-size: 1.0625rem;
   line-height: 1.68;
@@ -266,9 +274,9 @@
   font-family: var(--serif);
   font-optical-sizing: auto;
   font-weight: 500;
-  font-size: clamp(1.6rem, 1.1rem + 2.4vw, 2.5rem);
-  letter-spacing: -0.021em;
-  line-height: 1.15;
+  font-size: var(--display);
+  letter-spacing: -0.028em;
+  line-height: 1;
   color: var(--ink);
   text-align: center;
   text-wrap: balance;
@@ -302,6 +310,13 @@
    the spacer doesn't need to hold room for one to travel through. */
 .walk.unavailable .walk-strand { display: none; }
 .walk.unavailable .walk-spacer { height: 32px; }
+/* No CTA on phone (see landing.js) — two buttons that can't do anything on
+   this device is the dead end, not just the missing ink line. */
+.walk.unavailable .btns { display: none; }
+/* Without this the section still reserves its full min-height (~one screen)
+   for vertical centering, so one short line ends up alone in a wall of
+   blank space — the same "empty screen" problem this is meant to fix. */
+.walk.unavailable { min-height: 0; }
 /* A zero-size inline box sitting on the text baseline, right after "path".
    Its rect gives the exact x at the end of the h and the exact baseline y —
    the h's right leg ends there, so that is where the ink line leaves it.
@@ -357,7 +372,7 @@
   transition: background-color .45s ease, color .45s ease;
 }
 :root[data-carry-theme="dark"] .walk {
-  background-color: oklch(0.20 0.014 60);
+  background-color: var(--carry-bg);
   color: oklch(0.93 0.012 70);
 }
 :root[data-carry-theme="dark"] .walk-line { color: oklch(0.93 0.012 70); }
@@ -396,26 +411,28 @@
    imported, because the site must not depend on the app's build.
 
    If the app's tokens change, these are what falls out of step. ──────────── */
+/* Same outer edges as every other section — 1320px wide, inside the page
+   gutter (Reuben, 2026-09-14: "fit within the border of the website at all
+   widths"). The heading and lede keep their own narrower measures. */
 .try {
-  max-width: var(--col);
+  max-width: 1320px;
   margin: 0 auto;
-  padding: clamp(56px, 10vh, 110px) clamp(20px, 5vw, 32px);
+  padding: clamp(56px, 10vh, 110px) var(--gutter);
   text-align: center;
 }
 .try h2 {
   font-family: var(--serif); font-optical-sizing: auto; font-weight: 500;
-  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 2.6rem);
-  letter-spacing: -0.021em; line-height: 1.1; text-wrap: balance;
-  color: var(--ink); margin: 14px 0 18px;
+  font-size: var(--display);
+  letter-spacing: -0.028em; line-height: 1; text-wrap: balance;
+  color: var(--ink); margin: clamp(16px, 2.2vw, 28px) auto clamp(20px, 3vw, 36px);
+  max-width: 14ch;
 }
 .try-lede { max-width: var(--col); margin: 0 auto 30px; font-size: 1.0625rem; line-height: 1.68; color: var(--soft); }
 
-/* full-bleed: the app window ignores the page's margins entirely */
-.nl-wrap {
-  width: 100vw;
-  margin-left: calc(50% - 50vw);
-  padding: 0 clamp(0px, 2vw, 28px);
-}
+/* Inside the page's edges, not full-bleed. It was 100vw wide, and 100vw
+   counts the scrollbar in any browser that shows one — so the window hung off
+   both sides and the page scrolled sideways (Reuben's screenshot, 2026-09-14). */
+.nl-wrap { width: auto; margin: 0; padding: 0; }
 
 /* ---- the app window ------------------------------------------------------ */
 .nl {
@@ -499,12 +516,14 @@
 }
 .nl-space i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .5; flex: none; }
 .nl-space:hover { background: rgb(var(--brand-500) / 0.08); color: rgb(var(--brand-600)); }
+/* On-states read --accent-* (the app's ACCENT_KEYS), falling back to the
+   theme's brand ramp when no colour is picked. */
 .nl-space.on {
-  background: rgb(var(--brand-500) / 0.12);
-  border-color: rgb(var(--brand-400) / 0.6);
-  color: rgb(var(--brand-600));
+  background: rgb(var(--accent-500, var(--brand-500)) / 0.12);
+  border-color: rgb(var(--accent-400, var(--brand-400)) / 0.6);
+  color: rgb(var(--accent-600, var(--brand-600)));
 }
-.nl-space.on i { opacity: 1; background: var(--hl, currentColor); }
+.nl-space.on i { opacity: 1; background: rgb(var(--accent-500, var(--ink-900))); }
 
 /* note rows — cozy density from theme.css */
 .nl-tree { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
@@ -532,7 +551,7 @@
 .nl-row:focus-visible { outline: 2px solid rgb(var(--brand-500)); outline-offset: -2px; }
 .nl-row svg { width: 16px; height: 16px; flex: none; margin-top: 1px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: .6; }
 .nl-row span { min-width: 0; }
-.nl-row b { display: block; font-size: 14px; line-height: 1.35; font-weight: 500; color: rgb(var(--ink-900)); }
+.nl-row b { display: block; font-size: 14px; line-height: 1.35; font-weight: 500; color: rgb(var(--ink-acc-900, var(--ink-900))); }
 .nl-row em {
   display: block; font-size: 12px; line-height: 1.35; font-style: normal;
   color: rgb(var(--ink-400));
@@ -546,6 +565,18 @@
   display: flex; flex-direction: column; gap: 9px;
 }
 .nl-row-ctl { display: flex; flex-direction: column; gap: 6px; }
+/* Desktop: Theme and Accent (two buttons each) share a row, so adding Paper
+   (2026-09-15) still fits a 768px-tall laptop screen without cutting the
+   bottom row off. Children: 1 label, 2 Typeface, 3 Spacing, 4 Theme,
+   5 Colour, 6 Accent, 7 Paper. */
+@media (min-width: 62.01rem) {
+  .nl-ctl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding-top: 10px; }
+  .nl-ctl > * { grid-column: 1 / -1; }
+  .nl-ctl > .nl-row-ctl:nth-child(4) { grid-column: 1; order: 1; }
+  .nl-ctl > .nl-row-ctl:nth-child(6) { grid-column: 2; order: 1; }
+  .nl-ctl > .nl-row-ctl:nth-child(5) { order: 2; }
+  .nl-ctl > .nl-row-ctl:nth-child(7) { order: 2; }
+}
 .nl-row-ctl > span:first-child {
   font: 500 10px/1.4 var(--mono); letter-spacing: 0.13em;
   text-transform: uppercase; color: rgb(var(--ink-400)); padding-left: 4px;
@@ -560,16 +591,16 @@
 }
 .nl-seg button:hover { color: rgb(var(--brand-600)); }
 .nl-seg button.on {
-  background: rgb(var(--brand-500) / 0.12);
-  border-color: rgb(var(--brand-400) / 0.6);
-  color: rgb(var(--brand-600));
+  background: rgb(var(--accent-500, var(--brand-500)) / 0.12);
+  border-color: rgb(var(--accent-400, var(--brand-400)) / 0.6);
+  color: rgb(var(--accent-600, var(--brand-600)));
 }
 .nl-tints { display: flex; gap: 6px; padding-left: 2px; }
 .nl-tints button {
   width: 20px; height: 20px; border-radius: 50%; padding: 0; cursor: pointer;
   border: 1px solid rgb(var(--brand-200)); background: var(--sw, transparent);
 }
-.nl-tints button.on { outline: 2px solid rgb(var(--brand-400)); outline-offset: 2px; }
+.nl-tints button.on { outline: 2px solid rgb(var(--accent-500, var(--brand-400))); outline-offset: 2px; }
 
 /* ---- main pane ----------------------------------------------------------- */
 .nl-main { display: flex; flex-direction: column; min-width: 0; background: rgb(var(--paper)); }
@@ -594,15 +625,60 @@
 .nl-bar b { font-weight: 700; }
 .nl-bar i { font-style: italic; }
 .nl-bar-sep { width: 1px; height: 14px; background: rgb(var(--brand-200)); }
-.nl-bar-a { border-bottom: 2px solid var(--hl, currentColor); line-height: 1.1; }
+.nl-bar-a { border-bottom: 2px solid rgb(var(--accent-500, var(--ink-400))); line-height: 1.1; }
 
 .nl-scroll { flex: 1; overflow: hidden; position: relative; }
+
+/* Page looks (Reuben, 2026-09-15: "add page looks into that sequence too").
+   Drawn the way app.css draws [data-page-look]: lines in the theme's --wash at
+   0.13 (dots 0.26), on the writing surface, starting where the text starts,
+   moving with it when it scrolls. Lined runs on a baseline grid like the app's:
+   every line — heading, body, the gap between paragraphs — is exactly one rule
+   tall, so the rules stay under the words after a heading. The rule is the
+   space's own line height, and landing.js measures the font to set
+   --rule-shift so each rule sits just under the letters. */
+.nl {
+  --nl-pt: clamp(22px, 3.4vw, 46px);
+  --nl-line: rgb(var(--wash) / 0.13);
+  --nl-line-strong: rgb(var(--wash) / 0.26);
+  --nl-cell: 27.2px;
+}
+.nl-scroll { background-attachment: local; background-position: 0 var(--nl-pt); }
+/* the off-screen copy landing.js measures notes in (fitHeight) */
+.nl.nl-measure { position: absolute; left: 0; top: 0; display: block; height: auto; min-height: 0; border: 0; visibility: hidden; pointer-events: none; }
+.nl-measure, .nl-measure * { transition: none !important; }
+/* The first layer is plain paper over the top margin, so the ruling starts
+   under the first line of writing instead of doubling up with the toolbar's
+   bottom edge (2026-09-15). */
+.nl[data-paper="lined"] .nl-scroll {
+  --rule: calc(17px * var(--nl-lh));
+  background-image: linear-gradient(rgb(var(--paper)), rgb(var(--paper))),
+    repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--rule) - 1px),
+    var(--nl-line) calc(var(--rule) - 1px), var(--nl-line) var(--rule));
+  background-repeat: no-repeat, repeat;
+  background-size: 100% calc(var(--nl-pt) + var(--rule-shift, 0px)), auto;
+  background-position: 0 0, 0 calc(var(--nl-pt) + var(--rule-shift, 0px));
+}
+.nl[data-paper="lined"] .nl-note { line-height: var(--rule); }
+.nl[data-paper="lined"] .nl-note h4 { line-height: var(--rule); font-size: min(1.55em, calc(var(--rule) * 0.9)); margin: 0 0 var(--rule); }
+.nl[data-paper="lined"] .nl-note :is(p, ul) { margin: 0 0 var(--rule); }
+.nl[data-paper="lined"] .nl-note li { margin: 0; }
+.nl[data-paper="lined"] .nl-note :is(p, li) * { line-height: 1; }
+.nl[data-paper="grid"] .nl-scroll {
+  background-image:
+    repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--nl-cell) - 1px), var(--nl-line) calc(var(--nl-cell) - 1px), var(--nl-line) var(--nl-cell)),
+    repeating-linear-gradient(to right, transparent 0, transparent calc(var(--nl-cell) - 1px), var(--nl-line) calc(var(--nl-cell) - 1px), var(--nl-line) var(--nl-cell));
+}
+.nl[data-paper="dots"] .nl-scroll {
+  background-image: radial-gradient(circle at center, var(--nl-line-strong) 0 1.1px, transparent 1.2px);
+  background-size: var(--nl-cell) var(--nl-cell);
+}
 /* the tint: a wash over the whole writing surface, the way a space's tint sits
    on .cm-scroller in the app. Strong enough to read as a choice, light enough
    that the text keeps its contrast. */
 .nl-note {
   position: relative;
-  padding: clamp(22px, 3.4vw, 46px) clamp(20px, 4vw, 56px);
+  padding: var(--nl-pt) clamp(20px, 4vw, 56px);
   max-width: 46rem;
   font-family: var(--nl-font);
   font-size: 17px;
@@ -612,7 +688,7 @@
 }
 .nl-note h4 {
   margin: 0 0 .6em; font-family: inherit; font-weight: 600;
-  font-size: 1.55em; line-height: 1.2; color: rgb(var(--ink-900));
+  font-size: 1.55em; line-height: 1.2; color: rgb(var(--ink-acc-900, var(--ink-900)));
 }
 .nl-note p { margin: 0 0 .9em; color: rgb(var(--ink-700)); }
 .nl-note ul { margin: 0 0 .9em; padding-left: 1.3em; color: rgb(var(--ink-700)); }
@@ -642,45 +718,130 @@
   .nl-search, .nl-path { display: none; }
   /* the note is its own height: no scroll box inside a scrolling page */
   .nl-scroll { max-height: none; overflow: visible; }
-  /* thumb-sized targets */
-  .nl-space { padding: 11px 15px; font-size: 14px; }
-  .nl-seg button { height: 42px; padding: 0 6px; font-size: 13.5px; border-radius: 10px; }
-  .nl-tints button { width: 32px; height: 32px; }
+  /* Smaller than a thumb's full 44px on purpose (Reuben, 2026-09-13: "the
+     buttons are too big") — kept at 30px+ so they are still easy to hit. */
+  .nl-space { padding: 8px 12px; font-size: 13px; }
+  .nl-seg button { height: 32px; padding: 0 6px; font-size: 12.5px; border-radius: 9px; }
+  .nl-tints button { width: 26px; height: 26px; }
 }
 
-/* Upright: the edit strip. landing.js moves #nlControls out of the stacked
-   sidebar into .nl-strip at the foot of the note — tool names along the
-   bottom, the picked tool's choices above them, one tool at a time, the way a
-   photo or video edit screen works. Sticky, so it sits under the thumb for as
-   long as the note is on screen, and never covers the note itself. */
+/* Upright: ONE control panel. Reuben, 2026-09-13: "make it into one intuitive
+   dashboard kind of control room", smaller buttons, the demo's width kept, and
+   buttons that float — "liquid glass" — rather than sit flat.
+
+   So every setting is on show at once (no tabs to discover), laid out as a
+   small grid: Typeface | Theme, Spacing | Accent, then the colours across the
+   bottom. landing.js moves #nlControls into .nl-strip at the top of the note,
+   where it stays — attached to the note area, not following the scroll
+   (Reuben, 2026-09-13: "it should be attached to the note area").
+
+   A deliberate departure from DESIGN.md's flat / no-shadow rule, at Reuben's
+   explicit request; it is scoped to this panel and the space buttons above it,
+   on upright phones only. Desktop and sideways keep the flat sidebar. */
 @media (max-width: 62rem) and (orientation: portrait) {
+  .nl {
+    --glass: 255 255 255;
+    --glass-shade: 40 30 20;
+  }
+  /* Reuben, 2026-09-15, from a screenshot: the buttons were bigger and more
+     spaced out than they need to be, and the panel out-shouted the note. So:
+     the brand and the spaces share one row, the buttons are their own width
+     instead of stretching, and the six settings flow into as few rows as the
+     width allows. */
+  .nl-side { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; padding: 10px 12px; }
+  .nl-side > .nl-label { display: none; }
+  .nl-top { padding: 0 2px; }
+  .nl-spaces { gap: 5px; }
+  .nl-space { padding: 6px 11px; font-size: 12px; }
   .nl-strip {
-    position: sticky; bottom: 0; z-index: 2;
-    background: rgb(var(--surface));
-    border-top: 1px solid rgb(var(--brand-200));
-    padding: 12px 14px 0;
-    display: flex; flex-direction: column; gap: 10px;
+    margin: 8px 8px 0; padding: 9px 10px 10px;
+    border-radius: 16px;
+    background: rgb(var(--wash) / 0.045);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
+            backdrop-filter: blur(20px) saturate(1.6);
+    border: 1px solid rgb(var(--glass) / 0.7);
+    box-shadow:
+      inset 0 1px 0 rgb(var(--glass) / 0.8),
+      0 0 0 1px rgb(var(--glass-shade) / 0.05),
+      0 10px 30px rgb(var(--glass-shade) / 0.1);
   }
-  .nl-strip .nl-ctl { margin: 0; padding: 0; border: 0; display: block; }
+  .nl[data-theme="dark"] .nl-strip {
+    border-color: rgb(var(--glass) / 0.12);
+    box-shadow: inset 0 1px 0 rgb(var(--glass) / 0.1), 0 10px 30px rgb(0 0 0 / 0.5);
+  }
+
+  .nl-strip .nl-ctl {
+    margin: 0; padding: 0; border: 0;
+    display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 7px 12px;
+  }
   .nl-strip .nl-label { display: none; }
-  .nl-strip .nl-row-ctl { display: none; }
-  .nl-strip .nl-row-ctl.is-tool { display: flex; min-height: 44px; justify-content: center; }
-  .nl-strip .nl-row-ctl > span:first-child { display: none; }   /* the tool tab names it */
-  .nl-strip .nl-seg button { height: 44px; }
-  .nl-strip .nl-tints { justify-content: space-between; padding: 5px 6px; }
-  .nl-strip .nl-tints button { width: 34px; height: 34px; }
-  .nl-tools { display: flex; margin: 0 -14px; border-top: 1px solid rgb(var(--brand-200)); }
-  .nl-tools button {
-    flex: 1; min-height: 46px; padding: 0 2px; position: relative;
-    background: none; border: 0; cursor: pointer;
-    font: 500 12.5px/1 "Inter", system-ui, sans-serif; color: rgb(var(--ink-400));
+  .nl-strip .nl-row-ctl { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; min-width: 0; }
+  .nl-strip .nl-row-ctl > span:first-child {
+    font: 500 8.5px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase;
+    color: rgb(var(--ink-400)); padding-left: 3px;
   }
-  .nl-tools button.on { color: rgb(var(--ink-900)); font-weight: 600; }
-  .nl-tools button.on::before {
-    content: ""; position: absolute; top: -1px; left: 22%; right: 22%; height: 2px;
-    background: rgb(var(--ink-900));
+  /* children of #nlControls: 1 = the hidden label, 2 Typeface, 3 Spacing,
+     4 Theme, 5 Colour, 6 Accent, 7 Paper — shown in this order */
+  .nl-strip .nl-row-ctl:nth-child(2) { order: 1; }
+  .nl-strip .nl-row-ctl:nth-child(4) { order: 2; }
+  .nl-strip .nl-row-ctl:nth-child(3) { order: 3; }
+  .nl-strip .nl-row-ctl:nth-child(6) { order: 4; }
+  .nl-strip .nl-row-ctl:nth-child(7) { order: 5; }
+  .nl-strip .nl-row-ctl:nth-child(5) { order: 6; }
+
+  /* the floating glass buttons */
+  .nl-strip .nl-seg { gap: 3px; }
+  .nl-strip .nl-seg button,
+  .nl-space {
+    border-radius: 999px;
+    color: rgb(var(--ink-700));
+    background: rgb(var(--glass) / 0.5);
+    border: 1px solid rgb(var(--glass) / 0.9);
+    box-shadow:
+      inset 0 1px 0 rgb(var(--glass) / 0.95),
+      0 1px 2px rgb(var(--glass-shade) / 0.1),
+      0 3px 10px rgb(var(--glass-shade) / 0.07);
+    transition: background-color .2s ease, box-shadow .2s ease, color .2s ease;
   }
-  .nl-tools button:focus-visible { outline: 2px solid rgb(var(--brand-500)); outline-offset: -2px; }
+  .nl-strip .nl-seg button { flex: 0 0 auto; height: 24px; padding: 0 8px; font: 500 11px/1 "Inter", system-ui, sans-serif; }
+  .nl-strip .nl-seg button.on,
+  .nl-space.on {
+    background: rgb(var(--glass) / 0.96);
+    color: rgb(var(--accent-600, var(--ink-900)));
+    font-weight: 600;
+    border-color: rgb(var(--glass));
+    box-shadow:
+      inset 0 1px 0 rgb(var(--glass)),
+      0 0 0 1px rgb(var(--accent-500, var(--ink-900)) / 0.3),
+      0 2px 4px rgb(var(--glass-shade) / 0.12),
+      0 8px 18px rgb(var(--glass-shade) / 0.12);
+  }
+  .nl[data-theme="dark"] .nl-strip .nl-seg button,
+  .nl[data-theme="dark"] .nl-space {
+    background: rgb(var(--glass) / 0.07);
+    border-color: rgb(var(--glass) / 0.14);
+    box-shadow: inset 0 1px 0 rgb(var(--glass) / 0.12), 0 2px 10px rgb(0 0 0 / 0.45);
+  }
+  .nl[data-theme="dark"] .nl-strip .nl-seg button.on,
+  .nl[data-theme="dark"] .nl-space.on {
+    background: rgb(var(--glass) / 0.2);
+    border-color: rgb(var(--glass) / 0.28);
+    box-shadow:
+      inset 0 1px 0 rgb(var(--glass) / 0.25),
+      0 0 0 1px rgb(var(--accent-500, 255 255 255) / 0.4),
+      0 4px 14px rgb(0 0 0 / 0.5);
+  }
+
+  .nl-strip .nl-tints { justify-content: flex-start; gap: 4px; padding: 4px 1px; }
+  .nl-strip .nl-tints button {
+    width: 16px; height: 16px;
+    border: 1.5px solid rgb(var(--glass) / 0.9);
+    box-shadow: 0 1px 2px rgb(var(--glass-shade) / 0.18), 0 3px 8px rgb(var(--glass-shade) / 0.1);
+  }
+  .nl-strip .nl-tints button[data-val="none"] { background: rgb(var(--glass) / 0.6); }
+  .nl-strip .nl-tints button.on { outline: 2px solid rgb(var(--accent-500, var(--ink-900))); outline-offset: 2px; }
+  .nl[data-theme="dark"] .nl-strip .nl-tints button { border-color: rgb(var(--glass) / 0.3); }
+  .nl[data-theme="dark"] .nl-strip .nl-tints button[data-val="none"] { background: rgb(var(--glass) / 0.12); }
 }
 
 /* Sideways: there is room for the desktop's two columns, so it is that
@@ -710,7 +871,23 @@
   .nl-tints button { width: 24px; height: 24px; }
   .nl-main { min-height: 0; overflow: hidden; }
   .nl-scroll { overflow-y: auto; }
+  .nl { --nl-pt: 16px; }
   .nl-note { padding: 16px 24px; }
+}
+/* Phones: the brand and the three spaces have to share one row ("Research"
+   is the long one), so both step down a size. Smallest phones (360px) go a
+   notch further, which also gets the controls to four rows rather than five. */
+@media (max-width: 440px) and (orientation: portrait) {
+  .nl-side { padding: 9px 10px; gap: 8px; }
+  .nl-brand { font-size: 15px; }
+  .nl-spaces { gap: 4px; }
+  .nl-space { padding: 5px 9px; font-size: 11.5px; gap: 5px; }
+}
+@media (max-width: 380px) and (orientation: portrait) {
+  .nl-space { padding: 4px 8px; font-size: 11px; }
+  .nl-space i { width: 6px; height: 6px; }
+  .nl-strip .nl-ctl { gap: 7px 10px; }
+  .nl-strip .nl-seg button { padding: 0 7px; font-size: 10.5px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .nl, .nl-note, .nl-seg button, .nl-space { transition: none; }
@@ -859,4 +1036,434 @@
   .wm-motion .hero-plain { opacity: 1; animation: none; }
   .wm-motion .hero-stats li { opacity: 1; animation: none; }
   .walk-line.sweep { -webkit-mask: none; mask: none; animation: none; }
+}
+
+
+/* ── The narrative, 2026-09-13 — built from site/prototype.html ─────────────
+   Reuben's brief: the "walking the path" feel, sections alternating left and
+   right, stats and examples to look at, and much bigger type with more impact
+   (reference: axiomapply.com, in this site's own fonts). The page-long path line
+   from the prototype was dropped at his call; the sizes are the prototype's
+   "Big" step. Colour deliberately untouched — his call is colour last.
+
+   Still monochrome, still hairlines, no shadow, no gradient (DESIGN.md). ── */
+:root {
+  --display: clamp(2.3rem, 0.9rem + 4.4vw, 5.25rem);
+  --stat: clamp(4.5rem, 1.5rem + 10vw, 10.5rem);
+  --statline: clamp(1.1rem, 0.8rem + 1vw, 1.75rem);
+  --gutter: clamp(20px, 6vw, 110px);
+  /* --raised and --line-2 live in nav.css now, with their dark values */
+}
+
+.story { max-width: 1320px; margin: 0 auto; }
+
+.stop-eyebrow {
+  font: var(--eyebrow); letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase; color: var(--muted); margin: 0;
+}
+.stop-eyebrow b { color: var(--ink); font-weight: 500; margin-right: 12px; }
+
+/* A stop: headline on its side, then the words and the thing to look at */
+.stop { padding: clamp(72px, 12vh, 150px) var(--gutter); }
+.stop-head .stop-eyebrow { margin-bottom: clamp(16px, 2.2vw, 28px); }
+.stop-title {
+  font-family: var(--serif); font-optical-sizing: auto; font-weight: 500;
+  font-size: var(--display); line-height: 1; letter-spacing: -0.028em;
+  margin: 0; max-width: 14ch; text-wrap: balance; color: var(--ink);
+}
+/* The highlighter (.hl, nav.css) sweeps in left to right as its headline
+   reveals. No JS or reduced motion: .reveal is never added, so the band is
+   simply there. */
+.reveal .hl { background-size: 0% 100%; }
+.reveal.is-in .hl { background-size: 100% 100%; transition: background-size 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.75s; }
+[data-side="right"] .stop-head { width: fit-content; max-width: 100%; margin-left: auto; }
+/* 04 (Reuben, 2026-09-15): its headline centred over the row below, not
+   pushed to the right-hand side. Beats the phone rule that zeroes the margin. */
+[data-side] .stop-head.stop-head-center { margin-inline: auto; text-align: center; }
+[data-side] .stop-head.stop-head-center .stop-title { margin-inline: auto; }
+.stop-row {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(32px, 6vw, 110px); align-items: start;
+  margin-top: clamp(36px, 5.5vw, 84px);
+}
+[data-side="right"] .stop-row { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+[data-side="right"] .stop-body { order: 2; }
+.stop-body p {
+  margin: 0; max-width: 34ch; color: var(--soft);
+  font-size: clamp(1.05rem, 0.95rem + 0.4vw, 1.3rem); line-height: 1.6;
+}
+.stop-body p + p { margin-top: 1em; }
+/* A stop with only words — no visual beside them */
+.stop > .stop-body { margin-top: clamp(28px, 4vw, 56px); }
+/* Centred stop (02) */
+.stop-center { text-align: center; }
+.stop-center .stop-title,
+.stop-center .stop-body p { margin-inline: auto; }
+.stop-body a, .faq a {
+  color: var(--ink); text-decoration: underline;
+  text-decoration-color: var(--line); text-underline-offset: 3px;
+}
+.stop-body a:hover, .faq a:hover { text-decoration-color: currentColor; }
+
+/* Stat moments: centred at every width */
+.stat { padding: clamp(40px, 8vh, 110px) var(--gutter); text-align: center; }
+.stat-num {
+  font-family: var(--serif); font-optical-sizing: auto; font-weight: 400;
+  font-size: var(--stat); line-height: 0.86; letter-spacing: -0.05em;
+  margin: 0.1em 0 0.12em; font-variant-numeric: lining-nums; color: var(--ink);
+}
+.stat-line {
+  margin: 0 auto; max-width: 24ch; font-size: var(--statline);
+  line-height: 1.28; letter-spacing: -0.014em; text-wrap: balance; color: var(--ink);
+}
+
+/* Placeholders: dashed and labelled, so nothing reads as a real figure */
+.ph-tag {
+  display: inline-block; font: 500 10.5px/1 var(--mono); letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--soft);
+  border: 1px dashed var(--line-2); border-radius: 3px; padding: 6px 8px;
+}
+.stat.is-placeholder .stat-num { color: var(--ink-faint); }
+.stat.is-placeholder .stat-line { color: var(--soft); }
+.minis {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 1100px; margin: clamp(40px, 6vw, 80px) auto 0;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+}
+.mini { padding: 26px 20px; }
+.mini + .mini { border-left: 1px solid var(--line); }
+.mini b {
+  display: block; font-family: var(--serif); font-weight: 400;
+  font-size: clamp(2.4rem, 1.6rem + 2.4vw, 4rem); line-height: 1; letter-spacing: -0.04em;
+  color: var(--ink);
+}
+.is-placeholder .mini b { color: var(--ink-faint); }
+.stat-sources { margin: 22px auto 0; font-size: 12.5px; color: var(--muted); }
+.stat-sources a { color: inherit; text-underline-offset: 3px; text-decoration-color: var(--line); }
+.stat-sources a:hover { color: var(--ink); text-decoration-color: currentColor; }
+.mini > span:not(.ph-tag) { display: block; margin-top: 10px; font-size: 14px; line-height: 1.45; color: var(--soft); }
+.mini .ph-tag { margin-top: 14px; }
+
+/* Screenshot slot: drop the file at the path it names and it fills itself */
+.shot {
+  position: relative; margin: 0; aspect-ratio: 16 / 10; max-width: 100%;
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--raised); overflow: hidden;
+}
+.shot::after {
+  content: ""; position: absolute; inset: 12px; z-index: 0; pointer-events: none;
+  border: 1px dashed var(--line-2); border-radius: 7px;
+}
+.shot img { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; object-fit: cover; }
+.shot figcaption {
+  position: absolute; inset: 0; z-index: 1; padding: 28px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; text-align: center;
+}
+.shot strong {
+  font-family: var(--serif); font-weight: 500; letter-spacing: -0.01em;
+  font-size: clamp(1.1rem, 0.9rem + 0.8vw, 1.6rem); line-height: 1.2;
+}
+.shot-desc { font-size: 14px; color: var(--soft); max-width: 38ch; line-height: 1.5; }
+.shot code { font: 12px/1.4 var(--mono); color: var(--muted); }
+
+/* 01: Research vs Journal slider. The Research image sits on top, clipped
+   to the left of --pos; drag anywhere on it (landing.js part 5) or use the
+   arrow keys on the hidden range input, which is what keyboard focus lands on. */
+.compare { margin: 0; }
+.compare-stage {
+  --pos: 30%;
+  position: relative; aspect-ratio: 16 / 10; container-type: inline-size; max-width: 100%;
+  border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  background: var(--raised);
+  cursor: ew-resize; touch-action: pan-y;
+  -webkit-user-select: none; user-select: none;
+}
+.compare-layer { position: absolute; inset: 0; }
+.compare-layer img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: left top; pointer-events: none; -webkit-user-drag: none; }
+.compare-top { clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
+.compare-tag {
+  position: absolute; bottom: 12px;
+  font: var(--eyebrow); letter-spacing: var(--eyebrow-tracking); text-transform: uppercase;
+  padding: 5px 9px 4px; border-radius: 3px; pointer-events: none; white-space: nowrap;
+}
+.compare-tag-l { left: 12px; color: #f1ece6; background: rgb(12 12 12 / 0.72); }
+.compare-tag-r { right: 12px; color: var(--on-accent); background: rgb(255 255 255 / 0.85); border: 1px solid rgb(0 0 0 / 0.08); }
+.compare-line {
+  position: absolute; top: 0; bottom: 0; left: var(--pos); width: 2px; margin-left: -1px;
+  background: var(--accent); pointer-events: none;
+}
+.compare-knob {
+  position: absolute; top: 50%; left: var(--pos); width: 40px; height: 40px; margin: -20px 0 0 -20px;
+  display: grid; place-items: center; border-radius: 50%;
+  background: var(--accent); color: var(--on-accent); border: 1.5px solid var(--on-accent);
+  pointer-events: none;
+}
+.compare-knob svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.compare-range {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+  opacity: 0; pointer-events: none;
+}
+.compare-range:focus-visible ~ .compare-knob { outline: 2px solid var(--ink); outline-offset: 3px; }
+@media (max-width: 480px) {
+  .compare-knob { width: 34px; height: 34px; margin: -17px 0 0 -17px; }
+}
+/* The slider starts on the sidebar edge, 30% across, and the Research label
+   lives inside that strip. Sized by the PICTURE's width, not
+   the screen's: a two-column tablet layout has a picture as narrow as a phone's. */
+@container (max-width: 520px) {
+  .compare-tag { bottom: 6px; padding: 3px 4px 2px; font-size: 9px; letter-spacing: 0.04em; }
+  .compare-tag-l { left: 5px; } .compare-tag-r { right: 5px; }
+}
+@container (max-width: 300px) {
+  .compare-tag { font-size: 8px; letter-spacing: 0.02em; padding: 2px 3px 1px; }
+  .compare-tag-l { left: 4px; } .compare-tag-r { right: 4px; }
+}
+
+/* 03: Pick your paper — the app's page looks, ported from app.css. The ruling
+   is drawn by the same gradients the app uses; --rule is the lined look's
+   38px baseline grid and every line of the sample sits on exactly one rule. */
+.paper { display: flex; flex-direction: column; gap: 14px; }
+.paper-page {
+  --rule: 38px; --cell: 27.2px;
+  /* measured: body baselines land 6px into each 38px band; 10px puts every
+     rule 3px under the words, clear of the descenders (the app uses 22px for
+     its own editor padding — same idea, different starting point) */
+  --rule-y: 10px;
+  --line-c: var(--paper-line); --line-strong-c: var(--paper-line-strong);
+  --wash: transparent;
+  --look: none; --look-size: auto;
+  border: 1px solid var(--line); border-radius: 12px;
+  background-color: var(--wash);
+  background-image: var(--look); background-size: var(--look-size);
+  padding: 19px 26px 30px;
+  font-family: var(--serif); font-size: 17px; line-height: var(--rule);
+  color: var(--paper-text);
+  transition: background-color .35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.paper-page p { margin: 0; }
+.paper-page .paper-h { font-weight: 600; font-size: 1.45em; color: var(--ink); }
+.paper-page[data-look="lined"] {
+  --look: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--rule) - 1px),
+    var(--line-c) calc(var(--rule) - 1px), var(--line-c) var(--rule));
+  background-position: 0 var(--rule-y, 0px);
+}
+.paper-page[data-look="grid"] {
+  --look:
+    repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--cell) - 1px), var(--line-c) calc(var(--cell) - 1px), var(--line-c) var(--cell)),
+    repeating-linear-gradient(to right, transparent 0, transparent calc(var(--cell) - 1px), var(--line-c) calc(var(--cell) - 1px), var(--line-c) var(--cell));
+}
+.paper-page[data-look="dots"] {
+  --look: radial-gradient(circle at center, var(--line-strong-c) 0 1.1px, transparent 1.2px);
+  --look-size: var(--cell) var(--cell);
+}
+.paper-page[data-look="graph"] {
+  --cell: 13.6px;
+  --look:
+    repeating-linear-gradient(to bottom, var(--line-strong-c) 0 1px, transparent 1px calc(var(--cell) * 5)),
+    repeating-linear-gradient(to right, var(--line-strong-c) 0 1px, transparent 1px calc(var(--cell) * 5)),
+    repeating-linear-gradient(to bottom, var(--line-c) 0 1px, transparent 1px var(--cell)),
+    repeating-linear-gradient(to right, var(--line-c) 0 1px, transparent 1px var(--cell));
+}
+.paper-page[data-look="grain"] {
+  --grain: var(--paper-grain); --grain-coarse: var(--paper-grain-coarse);
+  --look:
+    radial-gradient(circle at 17% 29%, var(--grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 63% 11%, var(--grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 41% 73%, var(--grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 89% 57%, var(--grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 28% 91%, var(--grain-coarse) 0 1px, transparent 1.2px),
+    radial-gradient(circle at 77% 37%, var(--grain-coarse) 0 1px, transparent 1.2px);
+  --look-size: 13px 11px, 17px 19px, 11px 23px, 19px 13px, 53px 61px, 67px 47px;
+}
+.paper-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.paper-looks { display: flex; flex-wrap: wrap; gap: 6px; }
+.paper-looks button {
+  font: 500 13px/1 var(--sans); color: var(--soft); cursor: pointer;
+  background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px;
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease;
+}
+.paper-looks button:hover { color: var(--ink); border-color: var(--line-2); }
+.paper-looks button.on { color: var(--ink); border-color: var(--ink); }
+.paper-washes { display: flex; gap: 8px; }
+.paper-washes button {
+  width: 22px; height: 22px; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 1px solid var(--line-2); background: var(--sw, var(--bg));
+}
+.paper-washes button.on { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* 04: Moving in */
+.move { display: flex; flex-direction: column; gap: 16px; }
+.move-report {
+  border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px 20px;
+  font: 14px/1.7 var(--mono); color: var(--soft); background: var(--raised);
+}
+.move-report p { margin: 0; }
+.move-report b { color: var(--ink); font-weight: 500; }
+.move-cap {
+  font: var(--eyebrow); letter-spacing: 0.06em; color: var(--muted);
+  margin-bottom: 12px !important; padding-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.move-cap span { text-transform: uppercase; letter-spacing: var(--eyebrow-tracking); }
+.move-h { color: var(--ink); font-weight: 500; }
+.move-h2 { color: var(--ink); margin-top: 10px !important; }
+
+/* 06: questions — sits under the download buttons. Words on the left, the
+   list on the right, the list's top rule level with the "06 Questions" label
+   (Reuben, 2026-09-14). */
+.faq-grid {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(32px, 6vw, 110px); align-items: start;
+}
+.faq-intro .stop-body { margin-top: clamp(28px, 4vw, 56px); }
+.faq { border-top: 1px solid var(--line); }
+.faq details { border-bottom: 1px solid var(--line); }
+.faq summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center;
+  justify-content: space-between; gap: 24px; padding: 22px 0;
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.35rem); font-weight: 500; letter-spacing: -0.01em;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: "+"; flex: none; font: 300 26px/1 var(--sans); color: var(--soft);
+  transition: transform .3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.faq details[open] summary::after { transform: rotate(45deg); }
+.faq details p { margin: 0 0 24px; max-width: 52ch; color: var(--soft); line-height: 1.6; }
+
+.try .stop-eyebrow { text-align: center; }
+
+@media (max-width: 899px) {
+  [data-side="right"] .stop-head { margin-left: 0; }
+  .stop-row, [data-side="right"] .stop-row, .faq-grid { grid-template-columns: 1fr; }
+  [data-side="right"] .stop-body { order: 0; }
+  .minis { grid-template-columns: 1fr; max-width: 22rem; }
+  .mini + .mini { border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .faq summary::after, .paper-page { transition: none; }
+}
+
+
+/* ── Arrive and settle (Reuben, 2026-09-14, reference/05-brand-feel.md) ─────
+   Three movements from the research table, each used for one kind of thing,
+   each played once as it arrives and then left still:
+     placed down — pictures and cards settle like paper set on a table: a
+                   small drop from just above, then a soft stop
+     pulled out  — the numbered section labels slide out from the page edge,
+                   like a divider tab being pulled
+     written in  — headlines appear left to right, then the highlighter sweeps
+   Everything else keeps the plain fade-and-rise above. All of it hangs off
+   .reveal, which landing.js never adds under reduced motion or without JS. */
+/* The slight 1.03 scale on a full-width card pushes it a few px past a
+   phone's edge until it lands, which let the page wiggle sideways. Clip the
+   page's width instead of dropping the movement. */
+body { overflow-x: clip; }
+.shot.reveal, .compare.reveal, .paper.reveal, .move.reveal, .insides.reveal,
+.minis.reveal, .faq.reveal, .nl-wrap.reveal {
+  opacity: 0;
+  transform: translateY(-16px) scale(1.03);
+  transition: opacity 0.45s ease, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.shot.reveal.is-in, .compare.reveal.is-in, .paper.reveal.is-in, .move.reveal.is-in, .insides.reveal.is-in,
+.minis.reveal.is-in, .faq.reveal.is-in, .nl-wrap.reveal.is-in {
+  opacity: 1; transform: none;
+}
+.stop-head .stop-eyebrow.reveal {
+  transform: translateX(-32px);
+  transition: opacity 0.5s ease, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+[data-side="right"] .stop-head .stop-eyebrow.reveal { transform: translateX(32px); }
+.stop-head .stop-eyebrow.reveal.is-in { transform: none; }
+/* Hidden by opacity, NOT by clip-path, until it arrives: an element clipped
+   to nothing never counts as on screen to the observer that reveals it, so a
+   headline clipped from the start was only ever shown by the 3s safety net
+   (measured 2026-09-14). The wipe runs as an animation once .is-in lands. */
+.stop-title.reveal, .try h2.reveal { opacity: 0; transform: none; transition: none; width: fit-content; }
+.stop-title.reveal.is-in, .try h2.reveal.is-in {
+  opacity: 1;
+  animation: writeIn 1s cubic-bezier(0.5, 0, 0.2, 1) both;
+}
+@keyframes writeIn {
+  from { clip-path: inset(-0.3em 100% -0.3em -0.3em); }
+  to   { clip-path: inset(-0.3em -0.3em -0.3em -0.3em); }
+}
+
+/* ── 02's proof: the note, and the plain file it really is (Reuben,
+   2026-09-14, "show the insides"). The file side is exactly what the app
+   writes — a palette highlight is a <mark class="hl-NAME">, per CLAUDE.md
+   rule 4 — so change it only if the app's output changes. ─────────────── */
+.insides {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center; gap: clamp(12px, 2vw, 28px);
+  max-width: 1000px; margin: clamp(40px, 6vw, 72px) auto 0; text-align: left;
+}
+.inside-card { margin: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); }
+.inside-card figcaption {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 11px 16px; border-bottom: 1px solid var(--line);
+  font: var(--eyebrow); letter-spacing: var(--eyebrow-tracking); text-transform: uppercase; color: var(--muted);
+}
+.inside-card figcaption code { font: 12px/1.4 var(--mono); letter-spacing: 0; text-transform: none; color: var(--soft); }
+.inside-note { padding: 20px 22px 24px; font-family: var(--serif); font-size: 17px; line-height: 1.6; color: var(--ink); }
+.inside-note p { margin: 0; }
+.inside-note p + p { margin-top: 0.7em; }
+.inside-note .inside-h { font-weight: 600; font-size: 1.5em; line-height: 1.2; margin-bottom: 0.35em; }
+.inside-note mark { color: inherit; background: color-mix(in oklch, #d7a542 42%, var(--bg)); padding: 0 0.12em; border-radius: 2px; }
+.inside-file pre {
+  margin: 0; padding: 20px 22px 24px; background: var(--raised);
+  font: 14px/1.75 var(--mono); color: var(--soft); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.inside-file pre b { color: var(--ink); font-weight: 500; }
+.inside-eq { font: 400 clamp(1.6rem, 1rem + 1.6vw, 2.4rem)/1 var(--serif); color: var(--muted); }
+
+/* ── Try it takes over the screen when you reach it (Reuben, 2026-09-14:
+   stays at 05, goes full-screen). landing.js adds .is-full once, as the
+   window comes properly into view; it grows edge to edge and to the height
+   under the top bar, then stays. ─────────────────────────────────────────── */
+.nl-wrap { transition: padding 0.8s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.45s ease, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
+.nl { transition: background-color .3s ease, color .3s ease, border-color .3s ease,
+                  height 0.8s cubic-bezier(0.16, 1, 0.3, 1), min-height 0.8s cubic-bezier(0.16, 1, 0.3, 1),
+                  border-radius 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+/* Grows to the screen's height (under the top bar, with room for its own
+   border); the width stays inside the page's edges. */
+.nl-wrap.is-full .nl { height: calc(100svh - var(--topbar-h, 56px) - 24px); max-height: none; }
+@media (max-width: 62rem) and (orientation: portrait) {
+  /* Upright, the window is as tall as its contents (Reuben, 2026-09-15: no
+     empty scrolling area). landing.js sizes the note area to the roomiest
+     note, so the height holds steady as the looks change. */
+  .nl-wrap.is-full .nl { height: auto; }
+}
+
+/* The phone demo plays itself until touched (Reuben, 2026-09-14). The pill
+   says so; the button about to be pressed gets a brief ring so a watcher can
+   follow what changed. */
+.nl-auto {
+  display: block; width: fit-content; margin: 0 auto 12px; padding: 7px 12px;
+  border: 1px solid var(--line); border-radius: 999px;
+  font: 500 12px/1 var(--mono); letter-spacing: 0.04em; color: var(--soft);
+  transition: opacity .4s ease;
+}
+.nl-auto[hidden] { display: none; }
+.nl-auto.is-done { opacity: 0; }
+.nl-auto i { display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--accent); vertical-align: 0; animation: nlAutoPulse 1.6s ease-in-out infinite; }
+@keyframes nlAutoPulse { 50% { opacity: 0.35; } }
+.nl .nl-press { box-shadow: 0 0 0 2px var(--accent) !important; }
+
+@media (max-width: 899px) {
+  /* On a phone these cards are the full width of the page, so any scale at
+     all pushes them past the screen edge and the browser widens the page to
+     fit (measured: 408px wide on a 402px screen). Drop only, no scale. */
+  .shot.reveal, .compare.reveal, .paper.reveal, .move.reveal, .insides.reveal,
+  .minis.reveal, .faq.reveal, .nl-wrap.reveal { transform: translateY(-16px); }
+  /* Stacked, every label sits on the left, so it pulls out from the left too —
+     from the right it started past a small phone's edge (370px on 360). */
+  [data-side="right"] .stop-head .stop-eyebrow.reveal { transform: translateX(-32px); }
+  [data-side="right"] .stop-head .stop-eyebrow.reveal.is-in { transform: none; }
+  .insides { grid-template-columns: 1fr; }
+  .inside-eq { justify-self: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nl-wrap, .nl { transition: none; }
+  .nl-auto i { animation: none; }
 }

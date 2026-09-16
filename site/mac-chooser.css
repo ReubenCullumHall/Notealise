@@ -29,7 +29,7 @@
    nav.css's dark theme. */
 :root[data-carry-theme="dark"] .mac-chooser {
   color-scheme: dark;
-  --mc-bg: oklch(17% 0.01 60);
+  --mc-bg: #000000;
   --mc-ink: oklch(93% 0.012 70);
   --mc-soft: oklch(79% 0.012 70);
   --mc-muted: oklch(93% 0.012 70 / 0.56);
@@ -42,10 +42,10 @@
    inherit custom properties in every browser still in use. */
 .mac-chooser::backdrop { background: oklch(24% 0.02 50 / 0.3); }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .mac-chooser::backdrop { background: oklch(8% 0.01 60 / 0.62); }
+  :root:not([data-theme="light"]) .mac-chooser::backdrop { background: rgb(0 0 0 / 0.62); }
 }
 :root[data-theme="dark"] .mac-chooser::backdrop,
-:root[data-carry-theme="dark"] .mac-chooser::backdrop { background: oklch(8% 0.01 60 / 0.62); }
+:root[data-carry-theme="dark"] .mac-chooser::backdrop { background: rgb(0 0 0 / 0.62); }
 
 /* In: a fade and a short rise, on the site's own curve. Out (is-leaving, set by
    mac-chooser.js for ~180ms before it closes): the reverse, a little quicker. */

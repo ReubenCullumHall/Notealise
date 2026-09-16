@@ -33,6 +33,27 @@ enough for a solo project). History before this file existed lives in the `v*` g
   dark look, with where to check in **About This Mac**, then fades through to the install steps as
   the download starts. Those steps name the version you got, with the other one a click away
 - On a Mac, the app's update check only ever offers the version made for that Mac
+- The download page is rebuilt around a numbered walk-through — what it is, what it isn't, picking
+  your paper, moving in, a working demo, then the questions — instead of one long pitch. It follows
+  whether your computer is set to light or dark, and each page of the site carries its own quiet
+  highlighter colour
+- **01 What it is** shows the same two notes side by side behind a slider you drag: a Journal space
+  in roomy cream serif, and a Research space that is dark, tight and packed with one-line rows, a
+  chart, a table and a checklist. Same app, two completely different rooms
+- **Try it** on the download page can now change the paper too — Plain, Lined, Grid or Dots — and
+  each space keeps its own, the way the real app does. On a phone it plays through those choices
+  by itself until you touch it. The note is sized to the roomiest setting it can be put into, so it
+  no longer grows and shrinks as you change things
+- In dark, the site is properly black rather than very-dark-brown — the same black the app itself
+  uses — and the highlighter behind the headlines sits behind the words as a deepened marker
+  instead of a bright yellow bar under them. Every page colour keeps its own hue in dark
+- The download page repeats itself less: the "every note is a .md file", "0 accounts" and
+  competitor-comparison blocks are gone (each was already said once), the import list no longer
+  names Notion, Word and the rest twice, and four questions that re-answered earlier sections are
+  replaced with ones nobody had answered — working offline, using it on two computers, opening your
+  notes in Obsidian or VS Code, and why a new computer warns you on first launch
+- Start scrolling during the page's opening animation and the rest of the front page now sweeps up
+  into place in order, rather than snapping in all at once
 
 ## [1.0.2] - 2026-09-07
 - Notes sharing the screen now share a tab. A split reads as one wide tab with a small divider at

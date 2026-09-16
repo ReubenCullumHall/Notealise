@@ -20,6 +20,15 @@
    most people. So the first sign of intent — a scroll, a click, a key, a
    touch — jumps the whole thing to its finished state at once.
 
+   But not as a cut (Reuben, 2026-09-15: "don't harshly cut all the front page
+   in, do a slow sweep up slide in like the rest of the website"). Each piece
+   still to come — the tagline, the plain line, each of the four stats — is
+   finished and then swept up into place, top to bottom, the way the sections
+   further down arrive. A piece caught partway (the tagline mid-typing) rises
+   the last few pixels from half-faded rather than vanishing and coming back.
+   Pieces already on screen are left alone, and the wordmark video keeps
+   playing.
+
    Two things are deliberately left running. Anything set to repeat forever
    cannot be finished, and the tagline's slow ambient flourishes (drift, spin,
    breathe — they run to 22s) are atmosphere rather than an entrance, so
@@ -33,10 +42,22 @@
   var EVENTS = ["wheel", "touchstart", "pointerdown", "keydown", "scroll"];
   var spent = false;
 
+  // top to bottom, the order they sweep in
+  var blocks = [document.getElementById("tagline"), hero.querySelector(".hero-plain")]
+    .concat([].slice.call(hero.querySelectorAll(".hero-stats li")))
+    .filter(Boolean);
+  var SWEEP_MS = 900, SWEEP_GAP = 90, SWEEP_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
+
+  function blockOf(el) {
+    for (var b = 0; b < blocks.length; b++) if (blocks[b].contains(el)) return b;
+    return -1;
+  }
+
   function heroSettle() {
     if (spent) return;
     spent = true;
     release();
+    var waiting = [], shown = [];   // per block: any entrance still to come / any already visible
     var running = document.getAnimations();
     for (var i = 0; i < running.length; i++) {
       var a = running[i];
@@ -46,7 +67,26 @@
       if (!t) continue;
       if (t.iterations === Infinity) continue;      // loops forever, can't finish
       if (!(t.endTime <= 9000)) continue;           // ambient, not an entrance
+      var b = blockOf(target);
+      if (b >= 0) {
+        var delay = (a.effect.getTiming && a.effect.getTiming().delay) || 0;
+        if (a.playState === "finished") shown[b] = true;
+        else if ((a.currentTime || 0) < delay) waiting[b] = true;
+        else { waiting[b] = true; shown[b] = true; }
+      }
       try { a.finish(); } catch (e) {}              // already done, or unresolved
+    }
+    if (!blocks[0].animate) return;
+    var order = 0;
+    for (var k = 0; k < blocks.length; k++) {
+      if (!waiting[k]) continue;
+      var from = shown[k]
+        ? { opacity: 0.45, transform: "translateY(8px)" }
+        : { opacity: 0, transform: "translateY(18px)" };
+      blocks[k].animate([from, { opacity: 1, transform: "none" }], {
+        duration: SWEEP_MS, delay: order * SWEEP_GAP, easing: SWEEP_EASE, fill: "backwards"
+      });
+      order++;
     }
   }
   function release() {
@@ -121,8 +161,12 @@
     // iPads on iPadOS 13+ send a Mac user agent by default; no real Mac has a touchscreen.
     (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
   if (MOBILE) {
+    // No CTA here on purpose (Reuben, 2026-09-13): the app isn't coming to
+    // phone any time soon, so two download buttons that can't do anything is
+    // worse than just ending plainly. Copy CONFIRMED by Reuben 2026-09-16 —
+    // this line is the wording, not a placeholder.
     var walkLineEl = walk.querySelector(".walk-line");
-    if (walkLineEl) walkLineEl.textContent = "Not available on your device.";
+    if (walkLineEl) walkLineEl.textContent = "Built for Mac and Windows.";
     walk.classList.add("unavailable");
     return;
   }
@@ -359,45 +403,68 @@
   };
   var DENSITY = { roomy: "1.9", normal: "1.65", tight: "1.42" };
 
-  /* The accent, modelled the way the app does it (settings/model.ts's
-     applyAccent). An accent is a HUE; the mode picks which ramp that hue is
-     written through:
-       text  — TEXT_RAMP: only the ink tokens take it, so just the writing
-               is coloured ("Just the writing takes the colour.")
-       tint  — the full RAMP: brand and surface tokens take it too, so the
-               sidebar, chrome and page shift with it ("Surfaces and controls
-               take it too.")
-     Hues are the app's own eight named colours (theme.css). Each entry is
-     [saturation, lightness] for that token, exactly the shape model.ts uses. */
+  /* The accent, modelled the way the app does it TODAY (settings/model.ts's
+     applyAccent, re-copied 2026-09-13). An accent is a HUE; the mode decides
+     how far it reaches:
+       text  — "Just the writing takes the colour." The accent becomes a
+               TEXT colour for headings and note titles (--ink-acc-*) and the
+               on-state of the controls (--accent-*). The note's own body stays
+               the theme's ink.
+       tint  — "Surfaces and controls take it too." The whole ramp: page,
+               sidebar, controls, plus a light tint through the ink.
+     The demo used to paint the ENTIRE ink ramp in text mode, body included, at
+     low saturation — every word went a muddy olive/khaki. That was an old copy
+     of the app; the app stopped doing it (model.ts: "Painting the ramp
+     unconditionally is what made picking a colour turn every word in the app
+     that colour, which is the thing this replaced"). Reuben, 2026-09-13: "the
+     accent of the actual simulation doesn't look good". */
   var HUE = { none: null, amber: 40, sage: 140, sky: 205, violet: 273, rose: 342 };
 
-  /* The one place a tint's on-screen colour is defined. The swatch in the
-     controls and the ink line in the ending both read from this, so the line
-     is exactly the colour the reader pointed at — no second, approximate
-     value that drifts from the swatch. */
-  function tintColour(tint) {
-    var h = HUE[tint];
-    return h == null ? "transparent" : "hsl(" + h + " 62% 52%)";
-  }
+  /* The one place a tint's on-screen colour is defined — the swatch and the
+     ink line in the ending both read it. The app palette's own hand-tuned hexes
+     (src/shared/palette.ts): one hsl() formula for every hue was what made the
+     green and violet swatches read neon next to amber, and the app tunes each
+     by eye for exactly that reason. */
+  var HEX = { amber: "#d7a542", sage: "#4ab56e", sky: "#4ba0dd", violet: "#b283d8", rose: "#d7708f" };
+  function tintColour(tint) { return HEX[tint] || "transparent"; }
 
-  var TEXT_RAMP = {
-    light: { "--ink-900": [26, 16], "--ink-700": [22, 30], "--ink-500": [18, 46], "--ink-400": [15, 57] },
-    dark:  { "--ink-900": [30, 84], "--ink-700": [26, 74], "--ink-500": [20, 58], "--ink-400": [18, 49] }
+  // model.ts TEXT_RAMP, written to --ink-acc-* in both modes
+  var ACC_INK = {
+    light: { "--ink-acc-900": [62, 26], "--ink-acc-700": [52, 38], "--ink-acc-400": [34, 60] },
+    dark:  { "--ink-acc-900": [56, 82], "--ink-acc-700": [48, 70], "--ink-acc-400": [36, 46] }
   };
-  var FULL_RAMP = {
+  // model.ts LIGHT_RAMP / DARK_RAMP — Tinted mode
+  var TINT_RAMP = {
     light: {
-      "--paper": [40, 96.5], "--surface": [46, 99],
-      "--brand-200": [26, 85], "--brand-400": [22, 60], "--brand-500": [26, 44], "--brand-600": [32, 22],
-      "--ink-900": [26, 16], "--ink-700": [22, 30], "--ink-500": [18, 46], "--ink-400": [15, 57]
+      "--paper": [34, 97.5], "--surface": [30, 99.6],
+      "--brand-200": [36, 85], "--brand-300": [30, 70], "--brand-400": [38, 54],
+      "--brand-500": [46, 42], "--brand-600": [60, 25],
+      "--ink-900": [16, 12], "--ink-800": [15, 18], "--ink-700": [13, 28],
+      "--ink-500": [11, 47], "--ink-400": [10, 57], "--ink-300": [10, 66]
     },
     dark: {
-      "--paper": [48, 6], "--surface": [38, 11],
-      "--brand-200": [28, 21], "--brand-400": [24, 39], "--brand-500": [28, 58], "--brand-600": [32, 84],
-      "--ink-900": [30, 84], "--ink-700": [26, 74], "--ink-500": [20, 58], "--ink-400": [18, 49]
+      "--paper": [26, 3.5], "--surface": [20, 9],
+      "--brand-200": [26, 17], "--brand-300": [24, 30], "--brand-400": [30, 39],
+      "--brand-500": [46, 56], "--brand-600": [72, 73],
+      "--ink-900": [13, 86], "--ink-800": [12, 80], "--ink-700": [11, 73],
+      "--ink-500": [9, 56], "--ink-400": [9, 47], "--ink-300": [8, 39]
     }
   };
-  var RAMP_KEYS = ["--paper", "--surface", "--brand-200", "--brand-400", "--brand-500",
-                   "--brand-600", "--ink-900", "--ink-700", "--ink-500", "--ink-400"];
+  // model.ts ACCENT_KEYS: the on-state colour, read from the tinted ramp in both modes
+  var ACCENT_FROM = { "--accent-400": "--brand-400", "--accent-500": "--brand-500", "--accent-600": "--brand-600" };
+  // the marks in the writing — the app's --hl-NAME / --tc-NAME (theme.css)
+  var HL = {
+    light: { amber: "hsl(40 90% 85%)", sage: "hsl(140 55% 83%)", sky: "hsl(205 88% 86%)", violet: "hsl(273 72% 90%)", rose: "hsl(342 88% 90%)" },
+    dark:  { amber: "hsl(40 48% 30%)", sage: "hsl(140 38% 27%)", sky: "hsl(205 52% 32%)", violet: "hsl(273 40% 38%)", rose: "hsl(342 44% 34%)" }
+  };
+  var TC = {
+    light: { amber: "hsl(40 62% 38%)", sage: "hsl(140 46% 36%)", sky: "hsl(205 72% 42%)", violet: "hsl(273 52% 54%)", rose: "hsl(342 62% 48%)" },
+    dark:  { amber: "hsl(40 78% 66%)", sage: "hsl(140 52% 64%)", sky: "hsl(205 82% 70%)", violet: "hsl(273 72% 78%)", rose: "hsl(342 78% 74%)" }
+  };
+  var CLEAR = ["--paper", "--surface", "--brand-200", "--brand-300", "--brand-400", "--brand-500",
+               "--brand-600", "--ink-900", "--ink-800", "--ink-700", "--ink-500", "--ink-400",
+               "--ink-300", "--ink-acc-900", "--ink-acc-700", "--ink-acc-400",
+               "--accent-400", "--accent-500", "--accent-600", "--hl", "--tc"];
 
   // hsl -> "R G B" channels, because the app's tokens are bare channel triples
   function channels(h, s, l) {
@@ -411,18 +478,21 @@
   }
 
   function applyAccent(el, tint, mode, theme) {
-    for (var i = 0; i < RAMP_KEYS.length; i++) el.style.removeProperty(RAMP_KEYS[i]);
+    for (var i = 0; i < CLEAR.length; i++) el.style.removeProperty(CLEAR[i]);
     var hue = HUE[tint];
-    if (hue == null) { el.style.removeProperty("--hl"); el.style.removeProperty("--tc"); return; }
-    var ramp = (mode === "text" ? TEXT_RAMP : FULL_RAMP)[theme];
-    for (var k in ramp) {
-      if (ramp.hasOwnProperty(k)) el.style.setProperty(k, channels(hue, ramp[k][0], ramp[k][1]));
+    if (hue == null) return;
+    var k, acc = ACC_INK[theme], ramp = TINT_RAMP[theme];
+    for (k in acc) if (acc.hasOwnProperty(k)) el.style.setProperty(k, channels(hue, acc[k][0], acc[k][1]));
+    for (k in ACCENT_FROM) {
+      if (!ACCENT_FROM.hasOwnProperty(k)) continue;
+      var stop = ramp[ACCENT_FROM[k]];
+      el.style.setProperty(k, channels(hue, stop[0], stop[1]));
     }
-    // the marks in the writing, from the same hue — the app's --hl-*/--tc-* pair
-    el.style.setProperty("--hl", theme === "dark"
-      ? "hsl(" + hue + " 46% 30%)" : "hsl(" + hue + " 82% 86%)");
-    el.style.setProperty("--tc", theme === "dark"
-      ? "hsl(" + hue + " 74% 68%)" : "hsl(" + hue + " 62% 42%)");
+    if (mode === "tint") {
+      for (k in ramp) if (ramp.hasOwnProperty(k)) el.style.setProperty(k, channels(hue, ramp[k][0], ramp[k][1]));
+    }
+    el.style.setProperty("--hl", HL[theme][tint]);
+    el.style.setProperty("--tc", TC[theme][tint]);
   }
 
   /* Each space: its look and its notes. Picking a space picks a whole look —
@@ -430,7 +500,7 @@
   var SPACES = {
     journal: {
       name: "Journal",
-      look: { font: "serif", density: "roomy", theme: "light", tint: "none", accentMode: "text" },
+      look: { font: "serif", density: "roomy", theme: "light", tint: "none", accentMode: "text", paper: "lined" },
       open: 0,
       notes: [
         {
@@ -467,51 +537,50 @@
         }
       ]
     },
-    study: {
-      name: "Study",
-      look: { font: "sans", density: "tight", theme: "dark", tint: "sky", accentMode: "tint" },
+    research: {
+      name: "Research",
+      look: { font: "sans", density: "tight", theme: "dark", tint: "sky", accentMode: "tint", paper: "grid" },
       open: 0,
       notes: [
         {
-          t: "Photosynthesis",
-          s: "Light-dependent reactions · Calvin cycle",
+          t: "Sleep and memory",
+          s: "Six papers, two disagree",
           html:
-            "<h4>Photosynthesis</h4>" +
-            "<p>Two stages. The <mark>light-dependent</mark> reactions happen in the " +
-            "thylakoid membrane; the Calvin cycle happens in the stroma.</p>" +
-            "<ul><li>Light hits chlorophyll → electrons excited</li>" +
-            "<li>ATP and NADPH made</li>" +
-            "<li>Both feed the <span class=\"tc\">Calvin cycle</span></li></ul>" +
-            "<p>Overall: <code>6CO₂ + 6H₂O → C₆H₁₂O₆ + 6O₂</code></p>"
+            "<h4>Sleep and memory</h4>" +
+            "<p>Working question: <mark>does a short nap help recall as much as a full " +
+            "night?</mark></p>" +
+            "<ul><li><span class=\"tc\">Finding</span> — five of six papers say yes</li>" +
+            "<li><span class=\"tc\">Caveat</span> — small samples</li>" +
+            "<li><span class=\"tc\">Gap</span> — nobody over sixty</li></ul>" +
+            "<p>Progress: <code>6 read · 3 to go</code></p>"
         },
         {
-          t: "Cell transport",
-          s: "Diffusion, osmosis, active transport",
+          t: "Interview — P4",
+          s: "Transcript, first pass",
           html:
-            "<h4>Cell transport</h4>" +
-            "<p>Three ways things cross a membrane. The first two are free; the third " +
-            "costs the cell energy.</p>" +
-            "<ul><li><span class=\"tc\">Diffusion</span> — high to low, no ATP</li>" +
-            "<li><span class=\"tc\">Osmosis</span> — water, down a water potential gradient</li>" +
-            "<li><span class=\"tc\">Active transport</span> — low to high, <mark>needs ATP</mark></li></ul>" +
-            "<p>Exam trap: osmosis is diffusion, but they want the word osmosis.</p>"
+            "<h4>Interview — P4</h4>" +
+            "<p>Forty minutes. Naps most days, but <mark>only when the week is going " +
+            "badly</mark> — worth asking the others about.</p>" +
+            "<ul><li>Sleeps less before deadlines, not more</li>" +
+            "<li>Remembers lectures better after a nap, “or thinks they do”</li>" +
+            "<li>Happy to do a follow-up in March</li></ul>" +
+            "<p>Code it against the <span class=\"tc\">themes so far</span> tomorrow.</p>"
         },
         {
-          t: "Past paper — June",
-          s: "Q4 still not clicking",
+          t: "Open questions",
+          s: "Does it change with age?",
           html:
-            "<h4>Past paper — June</h4>" +
-            "<p>Q4 still not clicking. It gives a graph of rate against light intensity " +
-            "and asks what is limiting after the plateau.</p>" +
-            "<p><mark>Answer: something other than light</mark> — CO₂ or temperature. " +
-            "The plateau is the whole clue.</p>" +
-            "<p>Redo Q4 and Q7 before Thursday.</p>"
+            "<h4>Open questions</h4>" +
+            "<ul><li>Does the effect shrink with age, or just the number of studies?</li>" +
+            "<li>Is a 20-minute nap different from a 90-minute one?</li>" +
+            "<li>Why do <span class=\"tc\">Paper 2</span> and <span class=\"tc\">Paper 5</span> disagree?</li></ul>" +
+            "<p>Bring the <mark>first two</mark> to supervision on Thursday.</p>"
         }
       ]
     },
     work: {
       name: "Work",
-      look: { font: "mono", density: "normal", theme: "light", tint: "sage", accentMode: "text" },
+      look: { font: "mono", density: "normal", theme: "light", tint: "sage", accentMode: "text", paper: "none" },
       open: 0,
       notes: [
         {
@@ -554,10 +623,31 @@
 
   var current = "journal";
   var look = clone(SPACES.journal.look);
+  var autoRunning = false;   // the phone demo playing itself (below)
 
   function clone(o) { var t = {}; for (var k in o) if (o.hasOwnProperty(k)) t[k] = o[k]; return t; }
   function icon() {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h7l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M13 3v5h5"/></svg>';
+  }
+
+  /* Lined paper: each rule should sit just under the letters, and where the
+     letters sit inside a line depends on the font. A zero-size marker in the
+     first line finds its baseline; how far that is from the middle of the line
+     is fixed for a font, so it is right even while the spacing animates. The
+     rule then goes 0.3em below the baseline, clear of descenders. */
+  var scrollEl = app.querySelector(".nl-scroll");
+  function ruleShift() {
+    if (!scrollEl || look.paper !== "lined") return;
+    var first = note.querySelector("p, li");
+    if (!first) return;
+    var mark = document.createElement("span");
+    mark.style.cssText = "display:inline-block;width:0;height:0;vertical-align:baseline";
+    first.insertBefore(mark, first.firstChild);
+    var cs = window.getComputedStyle(first);
+    var fromMiddle = (mark.getBoundingClientRect().top - first.getBoundingClientRect().top) - parseFloat(cs.lineHeight) / 2;
+    first.removeChild(mark);
+    var rule = 17 * parseFloat(DENSITY[look.density] || DENSITY.normal);
+    scrollEl.style.setProperty("--rule-shift", (fromMiddle - rule / 2 + parseFloat(cs.fontSize) * 0.3).toFixed(2) + "px");
   }
 
   function paint() {
@@ -565,6 +655,7 @@
     var mode = look.theme === "dark" ? "dark" : "light";
 
     app.setAttribute("data-theme", mode);
+    app.setAttribute("data-paper", look.paper || "none");
     app.style.setProperty("--nl-font", FONT[look.font] || FONT.serif);
     app.style.setProperty("--nl-lh", DENSITY[look.density] || DENSITY.normal);
     applyAccent(app, look.tint, look.accentMode, mode);
@@ -581,6 +672,7 @@
 
     var openNote = sp.notes[sp.open];
     note.innerHTML = openNote.html;
+    ruleShift();
     tab.textContent = openNote.t;
     pathEl.innerHTML = sp.name + " &rsaquo; " + openNote.t;
 
@@ -594,7 +686,9 @@
       cb[k].classList.toggle("on", String(look[cb[k].getAttribute("data-set")]) === cb[k].getAttribute("data-val"));
     }
 
-    // the ending picks up whatever look they leave it in
+    // the ending picks up whatever look they leave it in — a look THEY chose,
+    // so not while the demo is playing itself
+    if (autoRunning) return;
     var root = document.documentElement;
     root.setAttribute("data-carry-theme", mode);
     root.setAttribute("data-carry-accent", look.tint);
@@ -630,49 +724,25 @@
     sw[s].style.setProperty("--sw", tintColour(v));
   }
 
-  /* Phone held upright: the sidebar stacks above the note, and five rows of
-     controls there pushed the note off the screen. So the controls move into
-     a strip at the foot of the note (.nl-strip in landing.css) — tool names
-     along the bottom, the picked tool's choices above them. The click handler
-     above is bound to ctlEl itself, so moving the element keeps every control
-     working. Sideways and desktop put it back in the sidebar. */
+  /* Phone held upright: the sidebar stacks above the note, and the controls
+     move into ONE glass panel (.nl-strip in landing.css) pinned to the top of
+     the note, every setting on show at once (Reuben, 2026-09-13: "one intuitive
+     dashboard kind of control room" — it replaced tabs that showed one tool at
+     a time). The click handler above is bound to ctlEl itself, so moving the
+     element keeps every control working. Sideways and desktop put it back in
+     the sidebar. */
   var side = app.querySelector(".nl-side");
   var main = app.querySelector(".nl-main");
   var upright = window.matchMedia("(max-width: 62rem) and (orientation: portrait)");
-  var rows = ctlEl.querySelectorAll(".nl-row-ctl");
   var strip = document.createElement("div");
   strip.className = "nl-strip";
-  var tools = document.createElement("div");
-  tools.className = "nl-tools";
-  tools.setAttribute("role", "tablist");
-  tools.setAttribute("aria-label", "Customise this space");
-  for (var r = 0; r < rows.length; r++) {
-    var tb = document.createElement("button");
-    tb.type = "button";
-    tb.setAttribute("role", "tab");
-    tb.setAttribute("data-tool", String(r));
-    tb.textContent = rows[r].firstElementChild.textContent.trim();
-    tools.appendChild(tb);
-  }
-  strip.appendChild(tools);
-
-  function pickTool(i) {
-    for (var j = 0; j < rows.length; j++) {
-      rows[j].classList.toggle("is-tool", j === i);
-      tools.children[j].classList.toggle("on", j === i);
-      tools.children[j].setAttribute("aria-selected", j === i ? "true" : "false");
-    }
-  }
-  tools.addEventListener("click", function (e) {
-    var b = e.target.closest && e.target.closest("[data-tool]");
-    if (b) pickTool(+b.getAttribute("data-tool"));
-  });
-  pickTool(0);
+  strip.setAttribute("role", "group");
+  strip.setAttribute("aria-label", "Customise this space");
 
   function placeControls() {
     if (upright.matches) {
-      strip.insertBefore(ctlEl, tools);
-      if (strip.parentNode !== main) main.appendChild(strip);
+      strip.appendChild(ctlEl);
+      if (strip.parentNode !== main) main.insertBefore(strip, main.firstChild);
     } else if (ctlEl.parentNode !== side) {
       side.appendChild(ctlEl);
       if (strip.parentNode) strip.parentNode.removeChild(strip);
@@ -682,5 +752,212 @@
   if (upright.addEventListener) upright.addEventListener("change", placeControls);
   else if (upright.addListener) upright.addListener(placeControls);
 
+  /* Upright, the note area is only a little taller than the roomiest look
+     needs (Reuben, 2026-09-15: "only a bit larger than the roomiest look, we
+     don't need unnecessary scrolling area"). The note each space opens on (the
+     only one reachable upright, where the note list is hidden) is measured
+     off-screen at the note area's width, at Roomy, in each typeface,
+     on lined paper and not — lined adds a blank rule between paragraphs — and
+     the tallest sets the height. So the window stays one height while the demo
+     switches looks, with no empty paper under the note. */
+  var FIT_EXTRA = 20;
+  var measurer = null;
+  function fitHeight() {
+    if (!scrollEl) return;
+    if (!upright.matches) { scrollEl.style.minHeight = ""; return; }
+    var width = scrollEl.clientWidth;
+    if (!width) return;
+    if (!measurer) {
+      measurer = document.createElement("div");
+      measurer.className = "nl nl-measure";
+      measurer.setAttribute("aria-hidden", "true");
+      measurer.innerHTML = '<div class="nl-scroll"><article class="nl-note"></article></div>';
+      document.body.appendChild(measurer);
+    }
+    measurer.firstChild.style.width = width + "px";
+    measurer.style.setProperty("--nl-lh", DENSITY.roomy);
+    var mNote = measurer.querySelector(".nl-note");
+    var tallest = 0;
+    for (var key in SPACES) {
+      if (!SPACES.hasOwnProperty(key)) continue;
+      mNote.innerHTML = SPACES[key].notes[SPACES[key].open].html;
+      for (var f in FONT) {
+        if (!FONT.hasOwnProperty(f)) continue;
+        measurer.style.setProperty("--nl-font", FONT[f]);
+        measurer.setAttribute("data-paper", "none");
+        tallest = Math.max(tallest, mNote.getBoundingClientRect().height);
+        measurer.setAttribute("data-paper", "lined");
+        tallest = Math.max(tallest, mNote.getBoundingClientRect().height);
+      }
+    }
+    scrollEl.style.minHeight = Math.ceil(tallest + FIT_EXTRA) + "px";
+  }
+  var fitQueued = false;
+  function queueFit() {
+    if (fitQueued) return;
+    fitQueued = true;
+    window.requestAnimationFrame(function () { fitQueued = false; fitHeight(); });
+  }
+  window.addEventListener("resize", queueFit);
+  if (upright.addEventListener) upright.addEventListener("change", queueFit);
+  else if (upright.addListener) upright.addListener(queueFit);
+
   paint();
+  fitHeight();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { ruleShift(); fitHeight(); });
+
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var wrap = app.parentNode;
+  if (!wrap || !wrap.classList.contains("nl-wrap")) return;
+
+  /* Full screen when you reach it (Reuben, 2026-09-14: Try it stays at 05 and
+     takes over the screen). One-way, like the reveals: once the window is
+     properly in view it grows edge to edge (landing.css .is-full) and stays. */
+  if (reduceMotion || !("IntersectionObserver" in window)) {
+    wrap.classList.add("is-full");
+  } else {
+    var fullIo = new IntersectionObserver(function (entries) {
+      for (var n = 0; n < entries.length; n++) {
+        if (!entries[n].isIntersecting) continue;
+        wrap.classList.add("is-full");
+        fullIo.disconnect();
+      }
+    }, { threshold: 0.35 });
+    fullIo.observe(wrap);
+  }
+
+  /* Plays itself on phones until touched (Reuben, 2026-09-14). It presses the
+     real buttons, so everything it shows is what a tap would do; each press
+     gets a brief ring first so a watcher can follow it. It only runs while the
+     demo is on screen, and the first real tap anywhere on it hands over for
+     good. Programmatic clicks are not "trusted", which is how a real tap is
+     told apart from the demo's own. */
+  var autoEl = document.getElementById("nlAuto");
+  var handsOff = window.matchMedia && window.matchMedia("(hover: none), (max-width: 62rem)").matches;
+  if (!autoEl || !handsOff || reduceMotion || !("IntersectionObserver" in window)) return;
+
+  var STEPS = [
+    '[data-space="research"]',
+    '[data-set="paper"][data-val="dots"]',
+    '[data-set="font"][data-val="serif"]',
+    '[data-set="theme"][data-val="light"]',
+    '[data-set="tint"][data-val="rose"]',
+    '[data-space="work"]',
+    '[data-set="paper"][data-val="lined"]',
+    '[data-set="accentMode"][data-val="tint"]',
+    '[data-set="theme"][data-val="dark"]',
+    '[data-set="density"][data-val="roomy"]',
+    '[data-space="journal"]',
+    '[data-set="tint"][data-val="sky"]',
+    '[data-set="paper"][data-val="grid"]',
+    '[data-set="font"][data-val="mono"]',
+    '[data-space="journal"]'
+  ];
+  var PRESS_MS = 420, EVERY_MS = 1800;
+  var step = 0, timer = 0, visible = false;
+  autoRunning = true;
+  autoEl.hidden = false;
+
+  function press() {
+    timer = 0;
+    if (!autoRunning || !visible) return;
+    var btn = app.querySelector(STEPS[step % STEPS.length]);
+    step++;
+    if (btn) {
+      btn.classList.add("nl-press");
+      window.setTimeout(function () {
+        btn.classList.remove("nl-press");
+        if (autoRunning) btn.click();
+      }, PRESS_MS);
+    }
+    timer = window.setTimeout(press, EVERY_MS);
+  }
+  var seenIo = new IntersectionObserver(function (entries) {
+    visible = entries[entries.length - 1].isIntersecting;
+    if (visible && !timer) timer = window.setTimeout(press, 900);
+    if (!visible && timer) { window.clearTimeout(timer); timer = 0; }
+  }, { threshold: 0.3 });
+  seenIo.observe(app);
+
+  function takeOver(e) {
+    if (e && e.isTrusted === false) return;
+    autoRunning = false;
+    paint();   // the tap that took over was applied while the demo still ran; carry it to the ending now
+    if (timer) window.clearTimeout(timer);
+    seenIo.disconnect();
+    wrap.removeEventListener("click", takeOver);
+    wrap.removeEventListener("keydown", takeOver);
+    autoEl.classList.add("is-done");
+    window.setTimeout(function () { autoEl.hidden = true; }, 450);
+  }
+  wrap.addEventListener("click", takeOver);
+  wrap.addEventListener("keydown", takeOver);
 })();
+
+
+/* ── 4. Pick your paper ────────────────────────────────────────────────────
+   The 03 sample: paper buttons swap the page's look, the dots wash a colour
+   under it. The washes are the app palette's own hexes at a light strength. */
+(function () {
+  var page = document.getElementById("paperPage");
+  if (!page) return;
+  var root = page.parentNode;
+  var WASH = { amber: "215 165 66", sage: "74 181 110", sky: "75 160 221", rose: "215 112 143" };
+  var looks = root.querySelectorAll("[data-look]:not(.paper-page)");
+  var washes = root.querySelectorAll("[data-wash]");
+  for (var i = 0; i < washes.length; i++) {
+    var w = washes[i].getAttribute("data-wash");
+    if (WASH[w]) washes[i].style.setProperty("--sw", "rgb(" + WASH[w] + ")");
+  }
+  function mark(list, on) { for (var j = 0; j < list.length; j++) list[j].classList.toggle("on", list[j] === on); }
+  root.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("button");
+    if (!b) return;
+    if (b.hasAttribute("data-look")) {
+      page.setAttribute("data-look", b.getAttribute("data-look"));
+      mark(looks, b);
+    } else if (b.hasAttribute("data-wash")) {
+      var v = WASH[b.getAttribute("data-wash")];
+      page.style.setProperty("--wash", v ? "rgb(" + v + " / 0.12)" : "transparent");
+      mark(washes, b);
+    }
+  });
+})();
+
+
+/* ── 5. Research vs Journal ─────────────────────────────────────────────────
+   01's slider. --pos on the stage is how much of the Research look shows,
+   from the left. Pointer drags anywhere on the picture move it; the range
+   input (invisible, keyboard-focusable) carries the arrow keys and tells
+   screen readers what it is. Starts at 25% (Reuben, 2026-09-14). */
+(function () {
+  var stage = document.getElementById("compare");
+  if (!stage) return;
+  var range = stage.querySelector(".compare-range");
+  var dragging = false;
+
+  function set(pct) {
+    pct = Math.max(0, Math.min(100, pct));
+    stage.style.setProperty("--pos", pct + "%");
+    if (range) range.value = String(Math.round(pct));
+  }
+  function fromX(clientX) {
+    var r = stage.getBoundingClientRect();
+    if (r.width) set(((clientX - r.left) / r.width) * 100);
+  }
+
+  stage.addEventListener("pointerdown", function (e) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragging = true;
+    try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+    fromX(e.clientX);
+  });
+  stage.addEventListener("pointermove", function (e) { if (dragging) fromX(e.clientX); });
+  function stop() { dragging = false; }
+  stage.addEventListener("pointerup", stop);
+  stage.addEventListener("pointercancel", stop);
+  stage.addEventListener("lostpointercapture", stop);
+
+  if (range) range.addEventListener("input", function () { set(+range.value); });
+})();
+

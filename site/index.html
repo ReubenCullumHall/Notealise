@@ -15,8 +15,11 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="Notealise" />
   <meta name="twitter:description" content="A Markdown editor you shape until it fits how you think. Your notes stay plain files on your own disk — no account, no lock-in. Free, for Windows and macOS." />
-  <link rel="stylesheet" href="nav.css?v=20260904b" />
-  <link rel="stylesheet" href="landing.css?v=20260911a" />
+  <link rel="stylesheet" href="nav.css?v=20260916b" />
+  <!-- dev theme switch (nav.js): applies a saved Light/Dark choice before paint; only ever set on local addresses -->
+  <script>try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+  <link rel="stylesheet" href="landing.css?v=20260916g" />
+  <link rel="stylesheet" href="mac-chooser.css?v=20260916a" />
   <script>
     // Sets html.wm-motion before any body markup is parsed, so the wordmark's hidden-until-
     // animated CSS (below, and in the generated block) can gate on a plain class instead of
@@ -84,6 +87,8 @@
        undistorted rather than stretching it to a guessed box. */
     .wm-video {
       display: block; height: clamp(3.2rem, 11vw, 8.5rem); width: auto; max-width: 100%;
+      /* dark theme: inverted + screen-blended onto the page (tokens in nav.css) */
+      filter: var(--wm-filter, none); mix-blend-mode: var(--wm-blend, normal);
     }
 
     /* ── The tagline under the wordmark ──────────────────────────────── */
@@ -196,7 +201,7 @@
        Reuben rejected on the grounds that it "looks like Claude just built it
        and it had no innovation" — the objection is to the cliche, not to warm
        colour, so a warm red-brown is fine and a saturated orange is not. */
-    .tl-orn { position: absolute; inset: 0; pointer-events: none; color: #7A3B34 }
+    .tl-orn { position: absolute; inset: 0; pointer-events: none; color: var(--orn, #7A3B34) }
     .tl-o {
       position: absolute; left: var(--ox); top: calc(50% + var(--oy));
       width: calc(0.52em * var(--os)); height: calc(0.52em * var(--os));
@@ -315,6 +320,9 @@
       <a href="https://www.youtube.com/@Notealise" aria-label="Notealise on YouTube" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
       </a>
+      <a href="mailto:reubencullumhall@notealise.com" aria-label="Email Reuben, who makes Notealise">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><defs><mask id="mail-flap"><rect width="24" height="24" fill="#fff"/><path d="M5.6 8.6 12 13.1l6.4-4.5" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></mask></defs><rect x="0.8" y="3.5" width="22.4" height="17" rx="5" mask="url(#mail-flap)"/></svg>
+      </a>
     </div>
   </header>
 
@@ -333,10 +341,23 @@
              muted playsinline preload="auto" aria-hidden="true"></video>
     </h1>
     <script>
+      // Marks the moment the wordmark ACTUALLY starts playing, not just the
+      // moment .play() is called. .play()'s own promise only resolves once
+      // playback has really begun, which can lag behind this script running
+      // (worse on some reloads than a first load, since the decoder can be
+      // competing with more torn-down-page work). The tagline script below
+      // waits for this instead of starting its own clock immediately here —
+      // without it, the tagline could start typing before the wordmark's ink
+      // animation has actually finished on screen.
       if (document.documentElement.classList.contains("wm-motion")) {
         var wmv = document.getElementById("wm-video");
-        var p = wmv.play();
-        if (p && p.catch) p.catch(function () {});
+        var played = wmv.play();
+        var markWmPlaying = function () {
+          window.__wmPlaying = true;
+          document.dispatchEvent(new Event("wm-playing"));
+        };
+        if (played && played.then) { played.then(markWmPlaying, markWmPlaying); }
+        else { markWmPlaying(); }
       }
     </script>
     <p class="tagline" id="tagline">the bridge between <b>complexity</b> and <i>constraint</i></p>
@@ -365,108 +386,167 @@
          inches later reads as padding. -->
     <ul class="hero-stats" aria-label="At a glance">
       <li><b>$0</b><span>free, no trial, no subscription</span></li>
-      <li><b>.md</b><span>future-proof, AI&#8209;compatible, stored where you want</span></li>
+      <li><b>.md</b><span>plain text any app can open, AI&#8209;compatible, stored where you want</span></li>
       <li><b>Any</b><span>typeface, colour, layout or page theme</span></li>
       <li><b>Spaces</b><span>yours to name and style, to keep different ideas separate</span></li>
     </ul>
   </section>
 
-  <!-- The narrative. Replaced the placeholder .explore list on 2026-09-01 — the
-       four page links now live in the top bar and the footer instead.
+  <!-- The narrative, rebuilt 2026-09-13 from site/prototype.html (Reuben: "i love
+       it all" — minus the page-long path line, type at the prototype's "Big").
+       Numbered stops alternate left/right on desktop and stack on phones; stat
+       moments sit centred between them. The hero above and the Try-it below are
+       unchanged.
 
-       Spine (Reuben's call): what it isn't, then what it is, then moving in,
-       then the rest in one line, then walk the path out to the buttons.
-       Voice is stated-fact — no first person on this page; the founder story
-       belongs on About. Feature specifics (maths, canvas) belong on the
-       Students page, not here. See site/DESIGN.md. -->
-  <main class="landing">
+       NO PLACEHOLDERS LEFT as of 2026-09-16 — the app-shot slot and every stat
+       block they warned about have all been cut or filled (verified: no
+       .is-placeholder and no .stat in this file). site/ still deploys on every
+       push to main, so keep it that way. -->
+  <main class="story">
 
-    <section class="beat" id="start">
-      <p class="beat-eyebrow" data-reveal>What it is</p>
-      <h2 data-reveal>An editor you can shape until it fits how you think.</h2>
-      <p data-reveal>
-        Sort your notes into spaces &mdash; a project, the journal, study &mdash; each
-        with its own look: study tight and dark, the journal soft and wide.
-      </p>
-      <p data-reveal>
-        None of it is asked of you at the start. You find it when you go looking.
-      </p>
-
-      <!-- Redrawn, not screenshotted: the pieces stay isolatable so they can be
-           animated later. Plain bars stand in for note text on purpose. -->
-      <figure class="app" data-reveal>
-        <div class="app-side">
-          <div class="app-search">Search</div>
-          <div class="app-space is-on">Study</div>
-          <div class="app-space">Journal</div>
-          <div class="app-space">Work</div>
-          <div class="app-tree">
-            <span style="width:84%"></span>
-            <span style="width:66%"></span>
-            <span style="width:78%"></span>
-          </div>
-        </div>
-        <div class="app-notes">
-          <div class="app-note look-a">
-            <span class="bar title"></span>
-            <span class="bar" style="width:97%"></span>
-            <span class="bar" style="width:88%"></span>
-            <span class="li"><span class="bar" style="width:78%"></span></span>
-            <span class="li"><span class="bar" style="width:64%"></span></span>
-            <span class="bar" style="width:93%"></span>
-            <span class="app-cap">Journal</span>
-          </div>
-          <div class="app-note look-b">
-            <span class="bar title"></span>
-            <span class="bar" style="width:97%"></span>
-            <span class="bar" style="width:88%"></span>
-            <span class="li"><span class="bar" style="width:78%"></span></span>
-            <span class="li"><span class="bar" style="width:64%"></span></span>
-            <span class="bar" style="width:93%"></span>
-            <span class="app-cap">Study</span>
-          </div>
-        </div>
-      </figure>
-    </section>
-
-    <section class="beat">
-      <p class="beat-eyebrow" data-reveal>What it isn&rsquo;t</p>
-      <h2 data-reveal>Your notes don&rsquo;t live inside Notealise.</h2>
-      <!-- The margin note must NOT be nested inside the <p>: the parser closes a
-           paragraph the moment flow content like <aside> opens, which puts the note
-           outside .anchor and leaves it positioning against the viewport. -->
-      <div class="anchor" data-reveal>
-        <p>
-          Every note is a plain Markdown file in a folder you picked. No account, no
-          server, no format only Notealise can read. Delete the app and your notes sit
-          exactly where they were, ready to open in anything else.
-        </p>
-        <aside class="m-note lead">
-          There is no export step, because the notes were never anywhere else to be
-          exported from.
-        </aside>
+    <section class="stop" id="start" data-side="left">
+      <div class="stop-head">
+        <p class="stop-eyebrow" data-reveal><b>01</b>What it is</p>
+        <h2 class="stop-title" data-reveal>Shape it until it fits <span class="hl">how you think</span>.</h2>
       </div>
-      <figure class="disk" data-reveal>
-        <span class="disk-dir">my-notes/</span>
-        <span class="disk-file">literature-review.md</span>
-        <span class="disk-file">tuesday.md</span>
-        <span class="disk-file">reading-list.md</span>
-      </figure>
+      <div class="stop-row">
+        <div class="stop-body" data-reveal>
+          <p>Spaces keep things separate. Not only your notes, but how they look.</p>
+          <p>You can customise a space to fit its role in your ecosystem. Research tight and dark; journal soft and wide.</p>
+        </div>
+<!-- Research vs Journal, one slider (Reuben, 2026-09-14): drag across to
+             reveal one space's look over the other. Starts on the sidebar edge
+             (2026-09-15): both sidebars are 288px, 30% of the 960px capture, so
+             the line sits on the line — change --pos and value together. The two images are the
+             site's own Try-it miniature set to each look (Claude's picks: Research
+             = sans, tight, dark, sky tint; Journal = serif, roomy, light, amber
+             tint). Replace either file with a real app capture at the same size
+             (16:10) and it just works. -->
+        <figure class="compare" data-reveal>
+          <div class="compare-stage" id="compare" style="--pos: 30%">
+            <div class="compare-layer compare-base">
+              <img src="screenshots/01-journal.jpg?v=20260915" alt="The Journal space: light cream paper, serif type and roomy lines, open on a Sunday diary entry." width="1600" height="1000" />
+              <span class="compare-tag compare-tag-r">Journal</span>
+            </div>
+            <div class="compare-layer compare-top">
+              <img src="screenshots/01-research.jpg?v=20260915b" alt="The Research space: dark and blue-tinted, with a compact one-line sidebar full of papers and interviews, open on reading notes about sleep and memory with a chart, a table of papers and a checklist." width="1600" height="1000" />
+              <span class="compare-tag compare-tag-l">Research</span>
+            </div>
+            <input class="compare-range" type="range" min="0" max="100" value="30" step="1" aria-label="Slide between the Research look and the Journal look" />
+            <span class="compare-line" aria-hidden="true"></span>
+            <span class="compare-knob" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 7 4 12l5 5M15 7l5 5-5 5"/></svg></span>
+          </div>
+        </figure>
+      </div>
     </section>
 
-    <section class="beat">
-      <p class="beat-eyebrow" data-reveal>Who it&rsquo;s for</p>
-      <h2 data-reveal>For notes that outlast the app you wrote them in.</h2>
-      <p data-reveal>
-        People who write things down and expect to come back to them &mdash; a reading
-        habit, a research project, a diary, a degree. Anyone who&rsquo;s watched a notes
-        app change hands or shut down, and would rather that not matter next time.
-      </p>
-      <p data-reveal>
-        It runs on Windows and macOS, works offline, and
-        <a href="tutorials.html">imports what you already keep elsewhere</a>.
-        <a href="students.html">Studying pushes it hardest.</a>
-      </p>
+    <section class="stop stop-center">
+      <div class="stop-head">
+        <p class="stop-eyebrow" data-reveal><b>02</b>What it isn&rsquo;t</p>
+        <h2 class="stop-title" data-reveal>Your notes <span class="hl">don&rsquo;t live inside</span> the app.</h2>
+      </div>
+      <div class="stop-body" data-reveal>
+        <p>No account. No server. No format only Notealise can read.</p>
+        <p>Delete the app and your notes stay exactly where they were.</p>
+      </div>
+      <!-- "Show the insides" (Reuben, 2026-09-14): the note, and the plain file
+           it is. The file side is exactly what the app writes — a palette
+           highlight is <mark class="hl-NAME"> (CLAUDE.md rule 4). -->
+      <div class="insides" data-reveal>
+        <figure class="inside-card inside-app">
+          <figcaption><span>In Notealise</span></figcaption>
+          <div class="inside-note">
+            <p class="inside-h">Tuesday</p>
+            <p>The market had the <strong>good bread</strong> again.</p>
+            <p>Tomorrow: <mark>ring the dentist</mark>, actually.</p>
+          </div>
+        </figure>
+        <span class="inside-eq" aria-hidden="true">=</span>
+        <figure class="inside-card inside-file">
+          <figcaption><span>On your disk</span><code>Journal/Tuesday.md</code></figcaption>
+<pre><b># Tuesday</b>
+
+The market had the <b>**good bread**</b> again.
+
+Tomorrow: &lt;mark class="hl-amber"&gt;ring the dentist&lt;/mark&gt;, actually.</pre>
+        </figure>
+      </div>
+    </section>
+
+
+    <!-- 03, Pick your paper (Reuben, 2026-09-13: the page never showed what
+         makes the app a pleasure to open). The paper styles are the app's own —
+         the rules are ported from app.css's [data-page-look] blocks and the names
+         from shared/looks.ts. If those change, these fall out of step. -->
+    <section class="stop" data-side="left">
+      <div class="stop-head">
+        <p class="stop-eyebrow" data-reveal><b>03</b>Pick your paper</p>
+        <h2 class="stop-title" data-reveal>Write on the <span class="hl">paper you like</span>.</h2>
+      </div>
+      <div class="stop-row">
+        <div class="stop-body" data-reveal>
+          <p>Lined, grid, dot grid, graph paper or a soft grain, with a wash of colour underneath if you want one.</p>
+          <p>Each space keeps its own. The journal on lined paper, the maths on graph.</p>
+        </div>
+        <div class="paper" data-reveal>
+          <div class="paper-page" id="paperPage" data-look="lined">
+            <p class="paper-h">Tuesday</p>
+            <p>The market had the good bread again.</p>
+            <p>Walked back the long way, past the allotments.</p>
+            <p>Tomorrow: ring the dentist, actually.</p>
+          </div>
+          <div class="paper-controls">
+            <div class="paper-looks" role="group" aria-label="Paper">
+              <button type="button" data-look="none">Plain</button>
+              <button type="button" data-look="lined" class="on">Lined</button>
+              <button type="button" data-look="grid">Grid</button>
+              <button type="button" data-look="dots">Dot grid</button>
+              <button type="button" data-look="graph">Graph</button>
+              <button type="button" data-look="grain">Grain</button>
+            </div>
+            <div class="paper-washes" role="group" aria-label="Colour underneath">
+              <button type="button" data-wash="none" class="on" aria-label="No colour"></button>
+              <button type="button" data-wash="amber" aria-label="Amber"></button>
+              <button type="button" data-wash="sage" aria-label="Sage"></button>
+              <button type="button" data-wash="sky" aria-label="Sky"></button>
+              <button type="button" data-wash="rose" aria-label="Rose"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04, Moving in. (The "Meanwhile, elsewhere" stats on other apps that sat
+         above this were cut 2026-09-15 — Reuben: wrong for the vibe.) What an import does is from src/main/importers: six
+         formats, one new space per import, and an "Import Report" note (report.ts)
+         listing anything skipped or brought in with some loss. The numbers in the
+         report card are an EXAMPLE and are labelled as one. -->
+    <section class="stop" data-side="right">
+      <div class="stop-head stop-head-center">
+        <p class="stop-eyebrow" data-reveal><b>04</b>Moving in</p>
+        <h2 class="stop-title" data-reveal>Bring your notes <span class="hl">with you</span>.</h2>
+      </div>
+      <div class="stop-row">
+        <div class="stop-body" data-reveal>
+          <p>Notion, Google Keep, Apple Notes, Word, HTML or plain Markdown. Point Notealise at what you exported and your notes come across.</p>
+          <p>They arrive in a space of their own, with a report of anything that didn&rsquo;t come over cleanly. Nothing goes missing quietly.</p>
+        </div>
+        <div class="move" data-reveal>
+          <!-- The row of name chips (Notion / Google Keep / …) was removed
+               2026-09-16: the lede beside it already lists exactly the same
+               six names in a sentence, so the chips said it twice. -->
+          <div class="move-report">
+            <p class="move-cap">Import Report.md &middot; <span>example</span></p>
+            <p class="move-h"># Import Report</p>
+            <!-- Keep this at 10 or fewer (Reuben, 2026-09-16): the app can't
+                 carry that many spaces yet, so the example must not show a
+                 number it couldn't actually produce. -->
+            <p>214 notes and 8 folders created.</p>
+            <p class="move-h2">## Imported with some loss</p>
+            <p>&ndash; <b>Reading list</b> &mdash; an embedded board became a plain list</p>
+          </div>
+        </div>
+      </div>
     </section>
 
   </main>
@@ -481,14 +561,15 @@
        (2026-09-02) that the site should show what is coming. The tint shelf
        ships empty in the app today; the tints here are the note palette. -->
   <section class="try" id="try">
-    <p class="beat-eyebrow" data-reveal>Try it</p>
-    <h2 data-reveal>Have a go before you download it.</h2>
+    <p class="stop-eyebrow" data-reveal><b>05</b>Try it</p>
+    <h2 data-reveal><span class="hl">Have a go</span> before you download it.</h2>
     <p class="try-lede" data-reveal>
-      This is the real app, running on the page. Switch spaces down the side and the
-      whole look follows. Nothing you do here is saved.
+      The real app, running on the page. Switch spaces and the whole look follows.
+      Nothing here is saved.
     </p>
 
     <div class="nl-wrap" data-reveal>
+      <p class="nl-auto" id="nlAuto" hidden><i aria-hidden="true"></i>Playing on its own &middot; tap to take over</p>
       <div class="nl" id="tryApp" data-theme="dark" data-tint="none">
 
         <aside class="nl-side">
@@ -500,7 +581,7 @@
           <p class="nl-label">Spaces</p>
           <div class="nl-spaces" id="nlSpaces" role="group" aria-label="Spaces">
             <button type="button" class="nl-space on" data-space="journal"><i></i>Journal</button>
-            <button type="button" class="nl-space" data-space="study"><i></i>Study</button>
+            <button type="button" class="nl-space" data-space="research"><i></i>Research</button>
             <button type="button" class="nl-space" data-space="work"><i></i>Work</button>
           </div>
 
@@ -555,6 +636,18 @@
                 <button type="button" data-set="accentMode" data-val="tint">Tinted</button>
               </span>
             </div>
+
+            <!-- page looks, four of the app's six (shared/looks.ts; drawn like
+                 app.css [data-page-look]) — Reuben, 2026-09-15 -->
+            <div class="nl-row-ctl">
+              <span>Paper</span>
+              <span class="nl-seg" role="group" aria-label="Paper">
+                <button type="button" data-set="paper" data-val="none">Plain</button>
+                <button type="button" data-set="paper" data-val="lined">Lined</button>
+                <button type="button" data-set="paper" data-val="grid">Grid</button>
+                <button type="button" data-set="paper" data-val="dots">Dots</button>
+              </span>
+            </div>
           </div>
         </aside>
 
@@ -602,6 +695,37 @@
     </div>
   </section>
 
+  <!-- 06, the questions — below the download buttons (Reuben, 2026-09-14), the
+       list on the right with its top level with the "06 Questions" label.
+       Answers are only things the app actually does today, and none repeats a
+       point the page already made (Reuben, 2026-09-15 — the account, where-notes-
+       live, importing and stop-using answers went; 02 and 04 say those). Sources:
+       offline = privacy.html's connection list; two computers = CLAUDE.md's synced-
+       vault and cross-platform rules (no sync; last write wins); other editors =
+       CLAUDE.md rule 4; the warning = install/*.html. Check each one again before
+       adding a new question. -->
+  <section class="stop stop-faq" data-side="left">
+    <div class="faq-grid">
+      <div class="faq-intro">
+        <div class="stop-head">
+          <p class="stop-eyebrow" data-reveal><b>06</b>Questions</p>
+          <h2 class="stop-title" data-reveal>Short answers, <span class="hl">no small print</span>.</h2>
+        </div>
+        <div class="stop-body" data-reveal>
+          <p>The things worth knowing before you download.</p>
+        </div>
+      </div>
+      <div class="faq" data-reveal>
+        <details><summary>Is it really free?</summary><p>Yes. No trial and no subscription.</p></details>
+        <details><summary>Why does my computer warn me when I open it?</summary><p>Notealise isn&rsquo;t signed with a paid certificate yet, so Windows and macOS ask you to confirm the first time. That&rsquo;s the only reason. Step-by-step guides for <a href="install/windows.html">Windows</a> and <a href="install/mac.html">Mac</a>.</p></details>
+        <details><summary>Does it work offline?</summary><p>Yes. It runs on your computer and only goes online to check for updates, or to fetch an extra font if you pick one. <a href="privacy.html">Everything it connects to</a>.</p></details>
+        <details><summary>Can I use it on two computers?</summary><p>There&rsquo;s no built-in sync. Keep your notes folder in OneDrive, Dropbox or iCloud Drive and open it on each computer, Windows or Mac. Just don&rsquo;t edit the same note on both at once.</p></details>
+        <details><summary>Will my notes open in Obsidian or VS Code?</summary><p>Yes. They&rsquo;re ordinary Markdown files, so other apps can open the same folder. A few extras, like coloured text, can look plainer there.</p></details>
+        <details><summary>Is there a phone app?</summary><p>No. It&rsquo;s built for Windows and for Macs, both Apple silicon and Intel.</p></details>
+      </div>
+    </div>
+  </section>
+
   <footer class="footer">
     <span class="footer-brand">Notealise <span class="footer-est">est. 2026</span></span>
     <nav class="footer-links">
@@ -642,7 +766,7 @@
     // (measured 2026-09-02 with document.getAnimations()). At 44/52 the typing
     // takes 1976ms instead of 3744ms, and the plain line below no longer fades
     // in on the word "bridge" — see .hero-plain in landing.css.
-    (function () {
+    function __startTagline() {
       var p = document.getElementById("tagline");
       if (!p || !document.documentElement.classList.contains("wm-motion")) return;
 
@@ -811,9 +935,19 @@
       p.setAttribute("aria-label", p.textContent.trim());
       p.textContent = "";
       p.appendChild(frag);
-    })();
+    }
+
+    // Wait for the wordmark to actually be playing before starting the
+    // tagline's own clock — see the video-play script's comment above. If
+    // it's already playing by the time we get here, don't wait for an event
+    // that already happened.
+    if (window.__wmPlaying) { __startTagline(); }
+    else { document.addEventListener("wm-playing", __startTagline, { once: true }); }
   </script>
-  <script src="nav.js?v=20260904b"></script>
-  <script src="landing.js?v=20260911a"></script>
+  <script src="nav.js?v=20260914a"></script>
+  <script src="landing.js?v=20260916b"></script>
+  <!-- Download for macOS: picks the Mac build, or asks which Mac in a popup -->
+  <script src="mac-chip.js?v=20260915a"></script>
+  <script src="mac-chooser.js?v=20260915b"></script>
 </body>
 </html>

@@ -1,5 +1,12 @@
 # Site design directive
 
+> **2026-09-14 — read first.** Reuben's brand rulings in `reference/05-brand-feel.md` supersede
+> the older rules below wherever they disagree: the site now follows the visitor's light/dark
+> setting (not light only), has crayon yellow `#f5c518` as its one colour plus a soft
+> highlighter colour per page (not monochrome / no accent), uses divider tabs for the top menu,
+> and has the glass controls on the phone Try-it. Tokens for all of it live in `nav.css`. A full
+> reconcile of this file is still to do.
+
 Reuben asked that all design work on `site/` (the download page, and whatever else lives
 here later) be held to the **impeccable** and **taste** bar. Logging what that means
 concretely, since neither exists as an invocable Claude Skill in this environment (checked
@@ -1309,17 +1316,40 @@ have both tightened iframe-initiated downloads, and that needs a real deployment
 browser. If any of them refuse, soften "Your download has started" to "should start" and lean on
 the visible link, which is always wired.
 
-**Intel Macs are not supported (Reuben, 2026-09-11).** The Mac build is Apple silicon only, about
-half the size of the universal build it replaced. When the browser says plainly that this is an
-Intel Mac — Chrome's `userAgentData`, or a graphics chip named Intel/AMD/NVIDIA in Firefox —
-`guide.js` swaps "download has started" for one line saying Notealise needs a Mac with Apple
-silicon, and starts nothing; the link stays, as "Download it anyway". **Safari always downloads**:
-it hides the chip on every Mac, and telling someone "you can't use this" on a Mac that can is worse
-than a download that fails. Tested in Chromium and WebKit (9 cases). A per-chip version of this
-page (detect, then offer an Apple silicon / Intel / universal build) was built and tested the same
-day and removed when Intel was dropped — `eea8277` has it if Intel ever comes back, including why
-a widely copied S3TC-sRGB check misreads Apple silicon as Intel. **Not temporary**, unlike the rest
-of this section.
+**Download for macOS picks a chip (2026-09-15).** Each release carries `Notealise.dmg` (Apple
+silicon) and `Notealise.intel.dmg` (Intel), never a universal build — Reuben brought Intel back on
+2026-09-15 on the condition that the Apple silicon download stays one app's size. The home page's
+button (`mac-chooser.js`, with the shared detection in `mac-chip.js`) asks the browser which chip
+this is (Chrome's `userAgentData`, else a graphics chip Firefox names — and a graphics chip named
+"Apple M…" beats Chrome saying x86, which is Intel Chrome under Rosetta) and goes straight to the
+guide as `?dl=arm64` / `?dl=x64`. **When the browser gives no answer — Safari, every time, and any
+visitor not on a Mac — a popup asks, on the home page**: "Which Mac do you have?", two cards drawn
+in the install guide's flat language (each shows what About This Mac says: *Chip Apple M1…* /
+*Processor …Intel Core…*), and Cancel. Reuben's calls: asking over guessing (an ASTC-texture test
+for Safari, `eea8277`, was never checked on a real Intel Mac); the popup on the home page, not the
+guide; and in the home page's own theme ("make it the same theme you're on" — first built in the
+guide's light look, changed the same day): `nav.css` tokens, Fraunces for the question, mono for
+the eyebrow and the drawn About This Mac line, dark with the page, and dark too when the Try it
+stop has darkened the download section (`data-carry-theme`). **Getting to the guide is animated**
+(same day): the popup fades out (180ms), then browsers with cross-page view transitions (Chrome,
+Safari 18.2+) crossfade into the guide while its `main` rises 14px on its own
+(`view-transition-name: guide-main` in `guide.css`, which now opts in to `@view-transition` like
+`nav.css` — **both pages of a navigation must opt in, so any page that does not load `nav.css` gets
+no crossfade until it opts in itself**; the install guides were an instant cut for exactly that
+reason); the rest fade the home page out and the guide in (`html.mc-leaving` /
+`html.guide-arrive`, the latter set in `mac.html`'s head only when `?dl` is present). Verified
+frame by frame with the transitions paused and seeked, in both engines; reduced motion skips all of
+it. Known: the guide is still light-only, so from a dark home page the crossfade goes dark to
+white. Picking goes to the guide, which starts that download; the
+guide names the version with the other one a click away. The guide itself has no popup: an old
+`?dl=1` link, or a browser without `<dialog>`, is worked out there and otherwise asked in the status
+strip. Until a release has both files, every answer gets the one universal `Notealise.dmg`. Focus
+opens on the popup's title (a ring on the first card read as already chosen). Tested in Chromium
+and WebKit end to end with GitHub faked and live (27 checks, phone width and dark mode included).
+**Not verified**: real Safari on notealise.com, any Intel Mac. **Not temporary**, unlike the rest
+of this section. A dev-only "always ask" switch for previewing the popup
+existed for one session on 2026-09-15 and was removed the same day (`ba6d0aa`), before anything
+shipped.
 
 **The `<details>` on the macOS page is a deliberate exception to this file's own rule, not
 drift.** The 2026-08-09 note above says the unverified-developer help must not come back as a

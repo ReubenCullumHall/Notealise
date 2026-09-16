@@ -1,8 +1,10 @@
 /* Shared stylesheet for site/ — the top bar, the inner-page shell, and the
-   site-wide type system. Loaded by every page. Light only, flat, monochrome
-   ink on white, hairline rules. No accent, no gradient, no glow, no shadow.
-   Read site/DESIGN.md ("The site nav" and "The type system") before changing
-   anything here.
+   site-wide type system. Loaded by every page. Flat ink on paper, hairline
+   rules, no glow. Light or dark by the visitor's own setting, crayon yellow as
+   the one site colour and a soft highlighter colour per page — Reuben's
+   2026-09-14 brand rulings (reference/05-brand-feel.md), which supersede
+   DESIGN.md's older "light only, no accent" lines. Read site/DESIGN.md ("The
+   site nav" and "The type system") before changing anything here.
 
    Used by:
    - index.html  — the bar is hidden on load and slid in by nav.js on the first
@@ -63,6 +65,149 @@
   /* The one label treatment, used by every eyebrow on the site. */
   --eyebrow: 500 12px/1.4 var(--mono);
   --eyebrow-tracking: 0.14em;
+
+  /* Crayon yellow — Reuben's pick, 2026-09-14, promoted from the students page
+     to the whole site (replaced muted burgundy #6b2e3a). Yellow is unreadable
+     as text on white, so use it as a fill/highlight behind ink, never as text.
+     Every accented thing on the site should read this ONE variable. A themed
+     page (below) swaps it for its own colour. */
+  --accent: #f5c518;
+
+  /* Each page's own highlighter colour, chosen by meaning (Reuben, 2026-09-14,
+     reference/05-brand-feel.md): Tutorials = study (sky), What's new = fresh
+     (sage), About = personal (rose), Students = the crayon yellow. Soft
+     highlighter tones, so the yellow stays the loudest. Also the colour of each
+     page's divider tab in the top menu. */
+  --c-tutorials: #a9d5f3;
+  --c-updates: #b8dfa9;
+  --c-about: #f3b8c9;
+  --c-students: #f5c518;
+  /* Text sitting ON one of those fills. Dark in both themes: they are all
+     light colours, so light text on them would never read. */
+  --on-accent: oklch(22% 0.02 55);
+
+  /* Everything below differs between light and dark — see the dark blocks
+     after this one. Named for what they do, so a rule reads a token instead of
+     carrying its own light-only colour. */
+  color-scheme: light;
+  --raised: oklch(97.6% 0.004 60);
+  --line-2: oklch(24% 0.02 50 / 0.3);
+  --ink-faint: oklch(24% 0.02 50 / 0.2);
+  --code-bg: oklch(24% 0.02 50 / 0.07);
+  --paper-line: oklch(24% 0.02 50 / 0.13);
+  --paper-line-strong: oklch(24% 0.02 50 / 0.26);
+  --paper-text: oklch(24% 0.02 50 / 0.86);
+  --paper-grain: oklch(24% 0.02 50 / 0.05);
+  --paper-grain-coarse: oklch(24% 0.02 50 / 0.035);
+  --orn: #7A3B34;
+  /* The ending band when the Try-it demo was left on a dark space — it is
+     carrying that look onto a light page, so it must be the SAME dark the
+     demo shows: the app's own paper, #000 (theme.css --paper: 0 0 0). It
+     was a warm brown, which read as a third, unrelated dark on the page
+     (Reuben's phone screenshot, 2026-09-16). */
+  --carry-bg: #000000;
+  /* The wordmark video is ink recorded on white. In dark it is inverted (ink
+     turns light, the white turns black) and hue-turned back to warm, then
+     screen-blended so the black drops out onto whatever the page colour is. */
+  --wm-filter: none;
+  --wm-blend: normal;
+  /* The highlighter band, as a share of the line box. Same in both themes —
+     the stroke always sits BEHIND the words, never as a bar under them. What
+     changes in dark is the fill: the page accent is a light colour, so light
+     ink on it at full strength is unreadable. Dark deepens it instead of
+     moving the band (Reuben, 2026-09-16, option B of the rendered set). */
+  --hl-top: 52%;
+  --hl-bottom: 90%;
+  /* How much of the page accent survives in the stroke; the rest is the page
+     colour. 100% = the accent itself. Read in .hl, not here, so a themed
+     page's own --accent (set on body) is the one that gets mixed. */
+  --hl-mix: 100%;
+}
+
+/* ── Dark: follows the visitor's own setting (Reuben, 2026-09-14: "follow the
+   visitor"). Two blocks with the same values: the media query is the visitor's
+   system setting, [data-theme] is the local-only dev switch (nav.js) forcing
+   one or the other. Both outrank index.html's own light :root, whatever order
+   the stylesheets load in. Only tokens change here — never add a rule. ───── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #000000;
+    --ink: oklch(93% 0.012 70);
+    --soft: oklch(79% 0.012 70);
+    --muted: oklch(93% 0.012 70 / 0.56);
+    --line: oklch(93% 0.012 70 / 0.15);
+    --raised: #161616;
+    --line-2: oklch(93% 0.012 70 / 0.3);
+    --ink-faint: oklch(93% 0.012 70 / 0.22);
+    --code-bg: oklch(93% 0.012 70 / 0.09);
+    --paper-line: oklch(93% 0.012 70 / 0.12);
+    --paper-line-strong: oklch(93% 0.012 70 / 0.24);
+    --paper-text: oklch(93% 0.012 70 / 0.86);
+    --paper-grain: oklch(93% 0.012 70 / 0.06);
+    --paper-grain-coarse: oklch(93% 0.012 70 / 0.045);
+    --orn: oklch(72% 0.09 32);
+    --carry-bg: #000000;
+    --wm-filter: invert(1) hue-rotate(180deg) saturate(0.45);
+    --wm-blend: screen;
+    --hl-mix: 50%;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #000000;
+  --ink: oklch(93% 0.012 70);
+  --soft: oklch(79% 0.012 70);
+  --muted: oklch(93% 0.012 70 / 0.56);
+  --line: oklch(93% 0.012 70 / 0.15);
+  --raised: #161616;
+  --line-2: oklch(93% 0.012 70 / 0.3);
+  --ink-faint: oklch(93% 0.012 70 / 0.22);
+  --code-bg: oklch(93% 0.012 70 / 0.09);
+  --paper-line: oklch(93% 0.012 70 / 0.12);
+  --paper-line-strong: oklch(93% 0.012 70 / 0.24);
+  --paper-text: oklch(93% 0.012 70 / 0.86);
+  --paper-grain: oklch(93% 0.012 70 / 0.06);
+  --paper-grain-coarse: oklch(93% 0.012 70 / 0.045);
+  --orn: oklch(72% 0.09 32);
+  --carry-bg: #000000;
+  --wm-filter: invert(1) hue-rotate(180deg) saturate(0.45);
+  --wm-blend: screen;
+  --hl-mix: 50%;
+}
+
+/* Highlighter stroke behind one key phrase in a headline — the page's accent
+   used as a fill behind ink, never as text. Reuben's pick, 2026-09-14. The two
+   hard stops make one flat band across the lower part of the letters, not a
+   visible gradient. Wraps cleanly across lines (clone). On the home page it
+   sweeps in as its headline reveals (landing.css). */
+.hl {
+  /* In light this is the accent itself (--hl-mix: 100%); in dark it is the
+     same colour deepened into the page so light ink still reads over it. */
+  --hl-stroke: color-mix(in oklab, var(--accent) var(--hl-mix), var(--bg));
+  background-image: linear-gradient(transparent var(--hl-top), var(--hl-stroke) var(--hl-top), var(--hl-stroke) var(--hl-bottom), transparent var(--hl-bottom));
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  padding: 0 0.06em; margin: 0 -0.06em;
+}
+
+/* ── Quick fade between pages (Reuben, 2026-09-14). Pure CSS: browsers that
+   support cross-page view transitions crossfade, the rest just load. ─────── */
+@view-transition { navigation: auto; }
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: 200ms; }
+@media (prefers-reduced-motion: reduce) {
+  @view-transition { navigation: none; }
+}
+
+/* Without this, text selection falls back to the browser/OS accent colour —
+   which is why it was showing red: that's the visitor's own OS accent, not
+   anything this site set. Pinning it stops the page's look depending on a
+   stranger's system settings. */
+::selection {
+  background: color-mix(in oklch, var(--accent) 25%, var(--bg));
+  color: var(--ink);
 }
 
 /* Serif display: optical sizing on, tight tracking, balanced wrap. Applied to
@@ -97,7 +242,9 @@
   background: var(--bg);
   border-bottom: 1px solid var(--line);
   transform: translateY(-100%);
-  transition: transform .34s cubic-bezier(.4, 0, .2, 1);
+  /* Same curve as the tagline/reveal motion in landing.css — was a different
+     one (a generic Material-style ease) that nobody had chosen on purpose. */
+  transition: transform .34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .topbar.is-visible { transform: translateY(0); }
 
@@ -109,6 +256,10 @@
 }
 .topbar-brand img { width: 24px; height: 24px; border-radius: 50%; display: block; }
 
+/* Each page link carries its page's colour as an underline (Reuben,
+   2026-09-14 — replaced the divider tabs the same day). Tutorials sky,
+   Students yellow, About rose, What's new sage (tokens above). The page you
+   are on reads in full ink and weight. */
 .topbar-links {
   justify-self: center;
   display: flex; align-items: center;
@@ -116,18 +267,26 @@
   min-width: 0;
 }
 .topbar-links a {
+  --tab-c: var(--line-2);
+  padding: 5px 0 3px;
+  border-bottom: 3px solid var(--tab-c);
   text-decoration: none;
-  color: var(--muted);
+  color: var(--soft);
   font-family: var(--sans); font-size: 14.5px; font-weight: 500; letter-spacing: 0.005em;
   white-space: nowrap;
   transition: color .14s ease;
 }
+.topbar-links a[href$="tutorials.html"] { --tab-c: var(--c-tutorials); }
+.topbar-links a[href$="students.html"] { --tab-c: var(--c-students); }
+.topbar-links a[href$="about.html"] { --tab-c: var(--c-about); }
+.topbar-links a[href$="updates.html"] { --tab-c: var(--c-updates); }
 .topbar-links a:hover { color: var(--ink); }
 /* The Students link reads "Notealise for students" on desktop; at the mobile
    breakpoint that label overflows the crammed nav, so it shortens to
    "Students" (the label the footer keeps in full). */
 .topbar-links .tb-narrow { display: none; }
 .topbar-links a.is-active { color: var(--ink); font-weight: 600; }
+body[class*="page-theme-"] .topbar { border-bottom: 2px solid var(--accent); }
 
 .topbar-social {
   justify-self: end;
@@ -154,6 +313,7 @@ html.topbar-in .mark { opacity: 0; pointer-events: none; }
   .topbar { grid-template-columns: auto 1fr; }
   .topbar-brand span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .topbar-links { justify-self: end; gap: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .topbar-links a { font-size: 13.5px; }
   .topbar-links::-webkit-scrollbar { display: none; }
   .topbar-social { display: none; }
   .topbar-links .tb-wide { display: none; }
@@ -262,9 +422,40 @@ body.page * { box-sizing: border-box; }
 .page-main code {
   font: 500 0.88em/1 var(--mono);
   padding: 0.12em 0.36em;
-  background: oklch(24% 0.02 50 / 0.07);
+  background: var(--code-bg);
   border-radius: 4px;
 }
+
+/* ── Per-page accent themes ────────────────────────────────────────────
+   Reuben's ruling (reference/04B, then 05-brand-feel 2026-09-14): yellow is
+   the site's colour, and each page gets its own highlighter colour by meaning.
+   Overriding --accent on body re-themes everything that already reads it — the
+   headline highlighter, text selection, the bar's rule — so a page only has
+   to carry the class. */
+body.page.page-theme-students  { --accent: var(--c-students); }
+body.page.page-theme-tutorials { --accent: var(--c-tutorials); }
+body.page.page-theme-about     { --accent: var(--c-about); }
+body.page.page-theme-updates   { --accent: var(--c-updates); }
+body.page[class*="page-theme-"] .page-eyebrow {
+  display: inline-block;
+  color: var(--on-accent);
+  background: var(--accent);
+  padding: 2px 9px;
+  border-radius: 2px;
+}
+
+/* ── Dev-only theme switch (nav.js shows it on local addresses only, never on
+   notealise.com). Reuben, 2026-09-14: most visitors will probably be on dark,
+   so every page needs checking in both. ─────────────────────────────────── */
+.dev-theme {
+  position: fixed; right: 12px; bottom: 12px; z-index: 90;
+  font: 500 11px/1 var(--mono); letter-spacing: 0.04em;
+  color: var(--on-accent); background: var(--accent);
+  border: 1px solid var(--on-accent); border-radius: 999px;
+  padding: 7px 10px; cursor: pointer; opacity: 0.85;
+}
+.dev-theme:hover { opacity: 1; }
+.dev-theme b { font-weight: 500; opacity: 0.6; margin-right: 6px; }
 
 /* ── Bottom bar — same as index.html / guide.css ─────────────────────── */
 .footer {
