@@ -7,6 +7,8 @@ version-heading/date convention (no Added/Changed/Fixed subcategories — one li
 enough for a solo project). History before this file existed lives in the `v*` git tags.
 
 ## [Unreleased]
+
+## [1.3.0] - 2026-09-17
 - Smaller downloads. The Mac download is now built for one kind of Mac at a time instead of both
   at once, and packed tighter — about a third of its old size — and both installers leave out
   files the app never used
