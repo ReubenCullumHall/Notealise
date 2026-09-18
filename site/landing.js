@@ -826,15 +826,21 @@
     fullIo.observe(wrap);
   }
 
-  /* Plays itself on phones until touched (Reuben, 2026-09-14). It presses the
-     real buttons, so everything it shows is what a tap would do; each press
-     gets a brief ring first so a watcher can follow it. It only runs while the
-     demo is on screen, and the first real tap anywhere on it hands over for
-     good. Programmatic clicks are not "trusted", which is how a real tap is
-     told apart from the demo's own. */
+  /* Plays itself until touched (Reuben, 2026-09-14). It presses the real
+     buttons, so everything it shows is what a tap would do; each press gets a
+     brief ring first so a watcher can follow it. It only runs while the demo
+     is on screen, and the first real tap anywhere on it hands over for good.
+     Programmatic clicks are not "trusted", which is how a real tap is told
+     apart from the demo's own.
+
+     It was gated on "(hover: none), (max-width: 62rem)" — phones only — so on
+     a Mac or PC the window just sat there (Reuben, 2026-09-17: "the website on
+     the pc's don't have the animation"). It now runs at every width; only the
+     word in the pill changes, since a desktop visitor clicks rather than taps. */
   var autoEl = document.getElementById("nlAuto");
-  var handsOff = window.matchMedia && window.matchMedia("(hover: none), (max-width: 62rem)").matches;
-  if (!autoEl || !handsOff || reduceMotion || !("IntersectionObserver" in window)) return;
+  if (!autoEl || reduceMotion || !("IntersectionObserver" in window)) return;
+  var touch = window.matchMedia && window.matchMedia("(hover: none)").matches;
+  if (!touch) autoEl.innerHTML = '<i aria-hidden="true"></i>Playing on its own &middot; click to take over';
 
   var STEPS = [
     '[data-space="research"]',

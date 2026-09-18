@@ -450,8 +450,18 @@
 
   display: grid;
   grid-template-columns: 288px 1fr;
-  height: min(82vh, 780px);
-  min-height: 520px;
+  /* The window is as tall as its own sidebar and no taller (Reuben,
+     2026-09-17: "make it more compact so the note is only the depth of all
+     the controls on the sidebar"). It used to be min(82vh, 780px) and then
+     grew to the full screen height on scroll, which left ~750px of empty
+     ruled paper under the note on a tall screen — and on a short one the
+     sidebar was taller than the window, so the Colour row was simply cut
+     off with nothing to scroll (measured 2026-09-17: 647px of sidebar in a
+     618px window). Content height fixes both: nothing to clip, nothing to
+     pad. The note pane is kept out of this measurement by .nl-scroll's
+     min-height below, so a long note scrolls instead of stretching it. */
+  height: auto;
+  min-height: 0;
   border: 1px solid rgb(var(--brand-200));
   border-radius: 14px;
   overflow: hidden;
@@ -628,6 +638,19 @@
 .nl-bar-a { border-bottom: 2px solid rgb(var(--accent-500, var(--ink-400))); line-height: 1.1; }
 
 .nl-scroll { flex: 1; overflow: hidden; position: relative; }
+/* Desktop: the sidebar alone sets the window height. min-height:0 is the whole
+   trick — it stops the note's own length counting towards .nl-main's intrinsic
+   height, so the grid row is sized by the sidebar instead. overflow-y: auto is
+   the safety valve: every space × note × typeface × paper at Roomy was measured
+   at 415px against 533px of paper (383px with the web fonts failing to load),
+   so nothing scrolls today — but a longer note added later scrolls instead of
+   being cut off, and the ruling is background-attachment: local so it travels
+   with the words. Checked 2026-09-17 that this does not cost the page its
+   mouse wheel: 400px of page scroll with the pointer over the note, in both
+   Chromium and WebKit. */
+@media (min-width: 62.01rem) {
+  .nl-scroll { min-height: 0; overflow-y: auto; }
+}
 
 /* Page looks (Reuben, 2026-09-15: "add page looks into that sequence too").
    Drawn the way app.css draws [data-page-look]: lines in the theme's --wash at
@@ -1417,23 +1440,18 @@ body { overflow-x: clip; }
 .inside-file pre b { color: var(--ink); font-weight: 500; }
 .inside-eq { font: 400 clamp(1.6rem, 1rem + 1.6vw, 2.4rem)/1 var(--serif); color: var(--muted); }
 
-/* ── Try it takes over the screen when you reach it (Reuben, 2026-09-14:
-   stays at 05, goes full-screen). landing.js adds .is-full once, as the
-   window comes properly into view; it grows edge to edge and to the height
-   under the top bar, then stays. ─────────────────────────────────────────── */
+/* ── Try it (Reuben, 2026-09-14: stays at 05). It USED to grow to the full
+   screen height as you reached it; that is what produced the empty paper
+   under the note, so as of 2026-09-17 the window keeps its own content
+   height at every size. landing.js still adds .is-full, which no longer
+   changes the height — the transitions below are what is left of it. ── */
 .nl-wrap { transition: padding 0.8s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.45s ease, transform 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
 .nl { transition: background-color .3s ease, color .3s ease, border-color .3s ease,
                   height 0.8s cubic-bezier(0.16, 1, 0.3, 1), min-height 0.8s cubic-bezier(0.16, 1, 0.3, 1),
                   border-radius 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
-/* Grows to the screen's height (under the top bar, with room for its own
-   border); the width stays inside the page's edges. */
-.nl-wrap.is-full .nl { height: calc(100svh - var(--topbar-h, 56px) - 24px); max-height: none; }
-@media (max-width: 62rem) and (orientation: portrait) {
-  /* Upright, the window is as tall as its contents (Reuben, 2026-09-15: no
-     empty scrolling area). landing.js sizes the note area to the roomiest
-     note, so the height holds steady as the looks change. */
-  .nl-wrap.is-full .nl { height: auto; }
-}
+/* Upright, landing.js still sizes the note area to the roomiest note, so the
+   height holds steady as the looks change (Reuben, 2026-09-15: no empty
+   scrolling area). Desktop gets the same promise from .nl's height: auto. */
 
 /* The phone demo plays itself until touched (Reuben, 2026-09-14). The pill
    says so; the button about to be pressed gets a brief ring so a watcher can

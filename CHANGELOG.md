@@ -8,6 +8,12 @@ enough for a solo project). History before this file existed lives in the `v*` g
 
 ## [Unreleased]
 
+### Ready to ship
+- On a computer, **Try it** on the download page is only as tall as its own controls now. On a big
+  screen it used to stretch to the full height, leaving a long stretch of empty paper under the
+  note, and on a short laptop screen the **Colour** row was cut off with no way to scroll to it.
+  It plays itself on a computer too, the way it does on a phone, until you click it
+
 ## [1.3.0] - 2026-09-17
 - Smaller downloads. The Mac download is now built for one kind of Mac at a time instead of both
   at once, and packed tighter — about a third of its old size — and both installers leave out

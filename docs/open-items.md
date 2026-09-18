@@ -66,6 +66,30 @@ considered call with the threat model open, not a line changed in passing.
 
 ---
 
+## Try it on the download page — found 2026-09-18
+
+Found while testing the desktop Try-it fix across devices. None of these was caused by it: a
+side-by-side run of the old code gave identical numbers on every phone and tablet profile.
+
+### Phone held sideways is cramped — needs Reuben's call on whether it matters
+iPhone 14 (750×340) and Pixel 7 (863×360): the window is 268–288px tall, the note scrolls inside
+it, and the sidebar needs a 13px scroll to reach Colour. Works, just tight. Set by the
+`(max-width: 62rem) and (orientation: landscape)` block in `site/landing.css`.
+
+### Windows High Contrast hides the selected button — needs a fix + a real Windows check
+With forced colours on, the `.on` state (a tint plus a border colour) is flattened, so you cannot
+tell which Typeface/Theme/Paper is picked. Likely fix: a `@media (forced-colors: active)` rule
+giving `.on` a system-colour outline. Same pattern probably affects other buttons on the site.
+
+### iPad Pro held upright gets the phone layout — Reuben's call
+834px is under the 62rem breakpoint, so a big tablet shows the glass strip on top. Correct by the
+rule; noting that a large tablet counts as “mobile”.
+
+### Firefox never tested — needs a real Firefox on the PC
+Playwright's Firefox will not launch on the Mac (its sandbox and GPU helper are killed, headed as
+well as headless), so Gecko is the one engine the desktop Try-it fix was not run in. Low risk —
+the CSS is `height: auto` on a grid and `min-height: 0` on a flex child — but unverified.
+
 ## Carried in from before this pass
 
 ### `EntryMeta.collapsed` is read by nothing
