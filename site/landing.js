@@ -94,8 +94,17 @@
       window.removeEventListener(EVENTS[i], heroSettle);
     }
   }
-  for (var i = 0; i < EVENTS.length; i++) {
-    window.addEventListener(EVENTS[i], heroSettle, { passive: true });
+  function arm() {
+    for (var i = 0; i < EVENTS.length; i++) {
+      window.addEventListener(EVENTS[i], heroSettle, { passive: true });
+    }
+  }
+  // Not while the loading gate is up. A tap or a scroll on the loading screen
+  // would otherwise spend the entrance before anyone had seen a frame of it.
+  if (document.documentElement.classList.contains("nl-gate-on")) {
+    document.addEventListener("nl-reveal", arm, { once: true });
+  } else {
+    arm();
   }
 })();
 

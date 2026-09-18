@@ -9,6 +9,12 @@ enough for a solo project). History before this file existed lives in the `v*` g
 ## [Unreleased]
 
 ### Ready to ship
+- The download page opens with the **Notealise** wordmark writing itself large in the middle of a
+  plain screen — white, or black if your computer is set to dark — then shrinking into its usual
+  place as the screen fades away, before the rest of the page comes in. On a slow connection the
+  page no longer shows itself finished, blanks, and starts over; the wordmark video now loads first
+  instead of last, and the pictures further down wait their turn. Once per visit, and links straight
+  to a section skip it
 - On a computer, **Try it** on the download page is only as tall as its own controls now. On a big
   screen it used to stretch to the full height, leaving a long stretch of empty paper under the
   note, and on a short laptop screen the **Colour** row was cut off with no way to scroll to it.

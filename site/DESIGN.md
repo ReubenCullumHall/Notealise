@@ -1577,3 +1577,70 @@ Reuben saw it and chose to leave it. `?device=phone` forces the phone ending, be
 (and any phone-frame preview running inside one) is always a computer to this check.
 
 **Still open:** the Try it intro says "switch spaces down the side", which is wrong on a phone.
+
+## The loading panel, 2026-09-17/18 — `site/index.html` (+ one listener in `landing.js`)
+
+**What it is.** On a visitor's first home-page load in a browser session, a full-screen panel in
+the page's own background (white, or black when their system is dark) covers the page. The
+wordmark — the page's own `<h1>`, lifted above the panel and scaled up, never a copy — writes
+itself large and centred. When the ink has finished AND the page is ready, the word travels down
+into the place it is normally written while the panel fades from 100% to 0% across exactly the same
+800ms. Only then do the tagline, the plain line and the four stats arrive, in their usual order.
+
+**Why.** Reuben loaded the site on slow wifi and saw it arrive in the wrong order. Measured through
+`tools/slow-site.js` at 400 kbit/s: the poster frame (the FINISHED word), tagline and stats painted
+at 0.75s; the two cover tiles (253 KB, 45% of the page, neither on screen) took the connection next;
+`landing.js` arrived at 6.3s and blanked the finished hero to replay it; `wordmark.mp4`, the first
+thing anyone is meant to see, arrived last at 11.2s. The panel fixes the look of that; three loading
+changes fix the order — the clip is fetched by script at the very top of `<head>` (Chrome ranks a
+`<video>` below every font and image, and ignores `<link rel=preload as=video>`), `nav.js`,
+`landing.js` and Inter 400 are preloaded, and the cover tiles are `loading="lazy"`.
+
+**Reuben's decisions:**
+- The word itself, drawn big then shrinking into place — NOT a circle logo on a loading screen. The
+  circle version was built first on a misread brief and rejected (*"the written 'notealise' should
+  load in, then shrink into where it is usually written"*).
+- The background fades 100% → 0% over the move itself, finishing as the word lands.
+- Once per browser session (`sessionStorage`); home page only.
+- Nobody can scroll for the ~4s of ink, even on fast wifi — offered a tap-to-skip, declined
+  ("yep that's fine"). The hero now settles ~2s later than before, because the ink runs before the
+  tagline instead of overlapping it.
+- Verified by Reuben on his iPhone ("works great"), 2026-09-18.
+
+**Cost, measured** (400 kbit/s / 1.6 Mbit/s / fast): blank panel before the ink 3.2s / 0.9s / 0.1s;
+word starts travelling 7.2s / 4.8s / 4.2s; hero settled 10.5s / 8.1s / 7.4s. The blank at the start
+is the clip's own download with nothing on screen — the weak spot. A smaller clip is the lever.
+
+**Deliberately excluded:** deep links (`#try`, `#download`) skip the panel — the browser has already
+scrolled them away, so the word drew off-screen behind 4s of empty panel. Reduced motion gets the
+panel with no scaling or ink; no JavaScript gets no panel at all.
+
+**Traps, each one found by measuring rather than reading:**
+- The big size/offset are INLINE custom properties, so a class rule can never walk them back — the
+  settle step sets them to 0/1 by hand (read `offsetWidth` first so the transition fires).
+- The lift (`position: relative; z-index: 9995`) must come off the moment the word lands
+  (`.nl-moving`). Left on, the word painted over the top bar (z-index 40) and its baked white box
+  blanked the nav links whenever the hero scrolled under it.
+- The `poster` is the finished word and shows until playback starts. Safari starts later than
+  Chromium, so it showed the finished word, blanked, and redrew — the original bug in miniature. The
+  motion path removes the poster; `__wmFinish` seeks to the last frame (or restores the poster)
+  whenever the ink can't or doesn't finish, and nothing can start the ink after that.
+- Removing the poster removed the video's only source of shape before load: a `<video>` with neither
+  is 300px wide, so the phone scale came out 1.1x instead of ~1.5x. Hence `aspect-ratio: 1600/380`.
+- Safari refuses `play()` (NotAllowedError) until it has buffered enough to see the clip is silent.
+  Retry on a timer, not on `canplay`: the rejection arrives asynchronously and `canplay` can fire
+  before you are listening. iPhone Low Power Mode refuses autoplay outright — then the finished word
+  is shown and the panel settles in ~2.4s instead of waiting for its 9s deadline.
+- An error on the blob is not the end: the plain-file retry must get its chance before the panel
+  gives up.
+- `landing.js`'s "nobody waits" skip listeners are armed on `nl-reveal`, so a tap on the panel can't
+  spend an entrance nobody has seen.
+
+**To see it on a slow connection:** `KBPS=400 LATENCY=300 node tools/slow-site.js site` from
+`notes-app/` (default is 1.6 Mbit/s), then a new private window each time. It gzips text the way
+Vercel does and shares one throttled pipe across all requests. A phone on the same wifi can open it
+at the Mac's LAN address.
+
+**Unverified:** a tab opened in the background and looked at later. By design the ink can't redraw
+once the panel has settled, so the likely worst case is the finished page with no intro — but no
+real browser was tested that way.

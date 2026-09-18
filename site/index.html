@@ -4,22 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Notealise — Download</title>
-  <meta name="description" content="A Markdown editor you shape until it fits how you think. Your notes stay plain files on your own disk — no account, no lock-in. Free, for Windows and macOS." />
-  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="canonical" href="https://notealise.com/" />
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="Notealise" />
-  <meta property="og:url" content="https://notealise.com/" />
-  <meta property="og:title" content="Notealise" />
-  <meta property="og:description" content="A Markdown editor you shape until it fits how you think. Your notes stay plain files on your own disk — no account, no lock-in. Free, for Windows and macOS." />
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Notealise" />
-  <meta name="twitter:description" content="A Markdown editor you shape until it fits how you think. Your notes stay plain files on your own disk — no account, no lock-in. Free, for Windows and macOS." />
-  <link rel="stylesheet" href="nav.css?v=20260916b" />
-  <!-- dev theme switch (nav.js): applies a saved Light/Dark choice before paint; only ever set on local addresses -->
-  <script>try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
-  <link rel="stylesheet" href="landing.css?v=20260916g" />
-  <link rel="stylesheet" href="mac-chooser.css?v=20260916a" />
+  <!-- FIRST, deliberately: this block starts the download of the ink clip, and
+       the loading panel is waiting on that clip and nothing else. Below the
+       preloads it was queued behind four other files and the panel sat blank
+       for 3.6s at 400 kbit/s instead of 2.3s (measured 2026-09-17). -->
   <script>
     // Sets html.wm-motion before any body markup is parsed, so the wordmark's hidden-until-
     // animated CSS (below, and in the generated block) can gate on a plain class instead of
@@ -33,8 +21,190 @@
     // before.
     if (window.matchMedia && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       document.documentElement.classList.add("wm-motion");
+
+      // Pull the ink clip down here, as early as the page can ask for anything.
+      // Chrome ranks <video preload="auto"> below fonts and images, so with a
+      // plain src= the clip arrived LAST on a slow connection (11.2s at
+      // 400 kbit/s, measured 2026-09-17) — after the whole page had already
+      // painted in its finished state. The <video> has no src of its own; the
+      // script under the wordmark sets it from this blob, or falls back to the
+      // plain file path if this fetch fails. Reduced motion never runs this and
+      // never downloads the clip: it gets the poster frame, as it always did.
+      window.__wmClip = (window.fetch
+        ? fetch("wordmark.mp4", { priority: "high" })
+            .then(function (r) { return r.ok ? r.blob() : null; })
+            .then(function (b) { return b ? URL.createObjectURL(b) : null; })
+            ["catch"](function () { return null; })
+        : null);
     }
   </script>
+  <meta name="description" content="A Markdown editor you shape until it fits how you think. Your notes stay plain files on your own disk — no account, no lock-in. Free, for Windows and macOS." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="canonical" href="https://notealise.com/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Notealise" />
+  <meta property="og:url" content="https://notealise.com/" />
+  <meta property="og:title" content="Notealise" />
+  <meta property="og:description" content="A Markdown editor you shape until it fits how you think. Your notes stay plain files on your own disk — no account, no lock-in. Free, for Windows and macOS." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="Notealise" />
+  <meta name="twitter:description" content="A Markdown editor you shape until it fits how you think. Your notes stay plain files on your own disk — no account, no lock-in. Free, for Windows and macOS." />
+  <!-- The tagline's face, which the browser would otherwise not discover until
+       it had parsed nav.css. Measured 2026-09-17 at 400 kbit/s: 6.9s without
+       this hint, 0.7s with it. (The ink clip needs the same treatment, but
+       <link rel="preload" as="video"> is not honoured by Chrome — it is fetched
+       by the script below instead. See the loading-gate comment.) -->
+  <link rel="preload" href="fonts/inter-400.woff2" as="font" type="font/woff2" crossorigin />
+  <!-- The two scripts the opening depends on sit at the end of a 55 KB page, so
+       the browser does not learn they exist until it has parsed all of it — and
+       by then the six font files have the pipe. Preloading them here only
+       changes WHEN they are fetched; the <script> tags at the bottom still run
+       them, in the same order, at the same point. -->
+  <link rel="preload" href="nav.js?v=20260914a" as="script" />
+  <link rel="preload" href="landing.js?v=20260917a" as="script" />
+  <link rel="stylesheet" href="nav.css?v=20260916b" />
+  <!-- dev theme switch (nav.js): applies a saved Light/Dark choice before paint; only ever set on local addresses -->
+  <script>try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+  <link rel="stylesheet" href="landing.css?v=20260916g" />
+  <link rel="stylesheet" href="mac-chooser.css?v=20260916a" />
+  <!-- ── The loading panel ────────────────────────────────────────────────
+       A full-screen panel in the page's own background colour. The wordmark is
+       lifted onto it and draws itself large and centred; when the ink has
+       finished AND the page is ready, the word travels down into the place it
+       is normally written while the panel fades to nothing across exactly the
+       same window. The rest of the hero then arrives behind it, in order.
+
+       It is the page's own <h1> throughout, scaled and translated — never a
+       copy — so there is no handover at the end and nothing that can land a
+       pixel out.
+
+       WHY IT EXISTS, measured 2026-09-17 with site/ served through
+       tools/slow-site.js at 400 kbit/s (run it yourself:
+       KBPS=400 LATENCY=300 node tools/slow-site.js site):
+
+         0.75s  the poster frame — the FINISHED wordmark — paints, along with
+                the tagline and all four stats, in fallback fonts
+         2.7s   the first cover tile takes the pipe
+         6.0s   the second cover tile finishes (the two are 253 KB, 45% of the
+                whole page, and neither is on screen)
+         6.3s   landing.js finally arrives and BLANKS the finished hero to
+                replay it from zero
+         6.9s-10.3s  the six fonts land one at a time; text reflows each time
+        11.2s   wordmark.mp4, the first thing anyone is meant to see
+
+       So a visitor on a weak connection watched the completed page sit there
+       for five and a half seconds and then tear itself down and start over.
+       The panel closes that; the clip fetch at the top of <head>, the preload
+       hints below it and the lazy cover tiles close the ordering half.
+
+       WHAT IT COSTS NOW (400 kbit/s / 1.6 Mbit/s / fast, measured 2026-09-17):
+         panel blank, waiting for the clip     3.2s / 0.9s / 0.1s
+         the word starts travelling at         7.2s / 4.8s / 4.2s
+         the hero is fully settled at         10.5s / 8.1s / 7.4s
+       Two things to know before changing any of it. The blank at the start is
+       the clip's own download with nothing on screen for it — the weak spot,
+       and the reason the clip is fetched first of everything. And the ink is a
+       fixed ~4s that now runs BEFORE the tagline instead of overlapping it, so
+       even on a fast connection the hero settles ~2s later than it used to:
+       that is the price of the sequence, not a fault in it.
+
+       ONCE PER BROWSER SESSION (Reuben, 2026-09-17). Nearly all traffic is
+       first-time from Instagram/TikTok, so almost everyone gets it once; a
+       second page view in the same session skips it and the word inks itself
+       where it stands, exactly as this page did before any of this.
+
+       NO JS, or an old browser, means the class is never set, the panel never
+       displays and the page behaves as it did before — the same fallback
+       contract the wordmark and the tagline already use. Reduced motion gets
+       the panel with no scaling and no ink. -->
+  <script>
+    // Not on a deep link (notealise.com/#download, index.html#try): the visitor
+    // asked for one particular section, and the browser has already scrolled
+    // them to it — so the word would draw itself off-screen, far above them,
+    // behind four seconds of empty panel (measured 2026-09-18 landing on #try).
+    if (!location.hash) {
+      try {
+        if (!sessionStorage.getItem("nl-seen-gate")) document.documentElement.classList.add("nl-gate-on");
+      } catch (e) {
+        // Private browsing can throw on sessionStorage. Fail towards showing it.
+        document.documentElement.classList.add("nl-gate-on");
+      }
+    }
+  </script>
+  <style>
+    /* The gate paints before any external stylesheet has arrived, so it carries
+       its own background rather than using --bg from nav.css. The two dark
+       rules mirror nav.css's own pair (system dark, and the local-only
+       [data-theme] dev switch) — keep them in step. */
+    /* The panel. It holds no content of its own: the thing on it is the page's
+       own wordmark, lifted above it (below). Its background is the page's, so
+       the two dark rules here mirror nav.css's own pair (system dark, and the
+       local-only [data-theme] dev switch) — keep them in step. It has to carry
+       them itself because it paints before nav.css has arrived. */
+    #nl-gate {
+      position: fixed; inset: 0; z-index: 9990;
+      display: none;
+      background: #ffffff;
+      opacity: 1;
+    }
+    html.nl-gate-on #nl-gate, html.nl-settling #nl-gate { display: block; }
+    html.nl-gate-on:not(.nl-settling), html.nl-gate-on:not(.nl-settling) body { overflow: hidden; }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) #nl-gate { background: #000000; }
+    }
+    :root[data-theme="dark"] #nl-gate { background: #000000; }
+
+    /* The word draws itself large and centred ON the panel, then travels down
+       into the place it is normally written. Same element throughout — it is
+       the page's own <h1>, lifted over the panel and scaled, never a copy — so
+       there is nothing to hand over at the end and nothing that can land a
+       pixel out. --nl-wm-dy and --nl-wm-scale are measured in the script below;
+       the fallbacks here are what a browser that cannot measure would use. */
+    /* .nl-moving, not .nl-settling: the lift has to come OFF once the word has
+       landed. Left on, the word kept z-index 9995 for the life of the page and
+       painted over the top bar (z-index 40) — its baked white box blanked out
+       the bar's links whenever the hero scrolled under it (found 2026-09-18).
+       .nl-settling stays on for good because the entrance delays below need
+       it; .nl-moving is removed by the script the moment the move ends. */
+    html.nl-gate-on .wordmark, html.nl-moving .wordmark {
+      position: relative; z-index: 9995;
+      transform: translateY(var(--nl-wm-dy, 12vh)) scale(var(--nl-wm-scale, 1.45));
+    }
+    /* The move itself, and the panel fading out across exactly the same window
+       so the colour is gone the instant the word lands (Reuben, 2026-09-17). */
+    html.nl-moving .wordmark {
+      --nl-wm-dy: 0px;
+      --nl-wm-scale: 1;
+      transition: transform var(--nl-settle, 800ms) cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    html.nl-settling #nl-gate {
+      opacity: 0; pointer-events: none;
+      transition: opacity var(--nl-settle, 800ms) linear;
+    }
+
+    /* The hero's own entrances are on CSS delays counted from the moment the
+       stylesheet applied, which behind the panel would run out unseen. Frozen
+       at their first frame until the word starts moving. */
+    html.nl-gate-on .hero-plain,
+    html.nl-gate-on .hero-stats li { animation-play-state: paused; }
+    /* Once it is moving, the ink has already played, so every entrance loses
+       the 2.3s head start it used to spend waiting for that ink. Same spacing
+       between them as landing.css sets, 2.3s earlier — change these together. */
+    html.nl-settling .hero-plain { animation-delay: 2.8s; }
+    html.nl-settling .hero-stats li:nth-child(1) { animation-delay: 3.32s; }
+    html.nl-settling .hero-stats li:nth-child(2) { animation-delay: 3.39s; }
+    html.nl-settling .hero-stats li:nth-child(3) { animation-delay: 3.46s; }
+    html.nl-settling .hero-stats li:nth-child(4) { animation-delay: 3.53s; }
+
+    /* Reduced motion never plays the ink, so there is no sequence to shrink out
+       of: the panel simply goes, and the word is where it always was. */
+    @media (prefers-reduced-motion: reduce) {
+      html.nl-gate-on .wordmark, html.nl-moving .wordmark {
+        position: static; transform: none; transition: none;
+      }
+      html.nl-settling #nl-gate { transition-duration: 160ms; }
+    }
+  </style>
   <style>
     :root {
       --bg: #ffffff;
@@ -87,6 +257,13 @@
        undistorted rather than stretching it to a guessed box. */
     .wm-video {
       display: block; height: clamp(3.2rem, 11vw, 8.5rem); width: auto; max-width: 100%;
+      /* The clip is 1600x380. Stated here because nothing else says so before
+         the clip has loaded: the poster used to (it is the same size), but the
+         loading sequence removes it, and a <video> with neither falls back to
+         a 300px-wide box. The panel measures this box to decide how big to
+         draw the word, so on a phone it drew at 1.1x instead of ~1.5x
+         (measured 2026-09-18, 390px wide). */
+      aspect-ratio: 1600 / 380;
       /* dark theme: inverted + screen-blended onto the page (tokens in nav.css) */
       filter: var(--wm-filter, none); mix-blend-mode: var(--wm-blend, normal);
     }
@@ -295,6 +472,193 @@
   </style>
 </head>
 <body>
+  <!-- Loading gate — see the long comment in <head> for what it fixes. Removed
+       from the DOM once it has lifted. aria-hidden because the page behind it
+       is already in the DOM and readable; this is a visual hold, not content. -->
+  <div id="nl-gate" aria-hidden="true"></div>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      if (!root.classList.contains("nl-gate-on")) return;
+
+      // Measured from navigation, not from when this script happened to parse —
+      // on a slow connection that is already a second in.
+      var SETTLE_MS = 800;   // how long the word takes to travel into place
+      var MIN_MS = 700;      // a fast connection gets a beat, not a flicker
+      var MAX_MS = 9000;     // ...and nobody is held longer than this, whatever
+                             //    failed to arrive or failed to play.
+      var now = function () {
+        return (window.performance && performance.now) ? performance.now() : 0;
+      };
+      var settled = false;
+      var motion = root.classList.contains("wm-motion");
+
+      // ── Where the word starts: big, and centred on the screen ─────────────
+      // Measured off the real <h1>, so it needs no knowledge of the clamp()
+      // that sizes it or of how tall the hero happens to be. Re-run on resize
+      // and again the moment before it moves, because the hero box shifts once
+      // the fonts land.
+      function place() {
+        var h = document.querySelector(".hero .wordmark");
+        if (!h || settled) return;
+        var r = h.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        // getBoundingClientRect reports the box AS TRANSFORMED, so back out
+        // whatever this function set last time before measuring again — on a
+        // resize, otherwise, it would centre the already-centred word again.
+        var cs = getComputedStyle(h);
+        var scaleNow = parseFloat(cs.getPropertyValue("--nl-wm-scale")) || 1;
+        var dyNow = parseFloat(cs.getPropertyValue("--nl-wm-dy")) || 0;
+        var restW = r.width / scaleNow;
+        var restMidY = r.top + r.height / 2 - dyNow;
+        // 86% of the width, 1.7x at most: past that the word starts to feel
+        // like a mistake rather than a title, and on a phone it would clip.
+        var scale = Math.min(1.7, (window.innerWidth * 0.86) / restW);
+        if (!(scale > 1)) scale = 1;
+        var dy = window.innerHeight / 2 - restMidY;
+        h.style.setProperty("--nl-wm-scale", String(Math.round(scale * 1000) / 1000));
+        h.style.setProperty("--nl-wm-dy", Math.round(dy) + "px");
+        h.style.setProperty("--nl-settle", SETTLE_MS + "ms");
+      }
+
+      // ── The end of the sequence ───────────────────────────────────────────
+      function settle() {
+        if (settled) return;
+        place();          // one last measurement before it moves
+        settled = true;
+        try { sessionStorage.setItem("nl-seen-gate", "1"); } catch (e) {}
+
+        // .nl-settling does three things at once, which is the point: the word
+        // travels down to scale 1, the panel fades to nothing over exactly the
+        // same window, and the hero's own entrances come off pause on their
+        // shortened delays.
+        // If the ink has not run to its end — the 9s deadline, a refusal, a
+        // clip that never loaded, a tab opened in the background — show the
+        // finished word now and make sure it can never start drawing later.
+        if (window.__wmFinish) window.__wmFinish();
+
+        root.classList.add("nl-settling", "nl-moving");
+        root.classList.remove("nl-gate-on");
+
+        // The big values are set INLINE by place(), so the .nl-settling rule's
+        // own 0px/1 can never win against them — they have to be walked back
+        // here. Reading offsetWidth first forces the browser to commit the big
+        // state and the newly-added transition before the values change, so it
+        // animates between them instead of jumping.
+        var h = document.querySelector(".hero .wordmark");
+        if (h) {
+          void h.offsetWidth;
+          h.style.setProperty("--nl-wm-dy", "0px");
+          h.style.setProperty("--nl-wm-scale", "1");
+        }
+
+        // The tagline waits on this. With the gate, the ink has already played,
+        // so it uses a short lead (see __startTagline) and follows the word
+        // down rather than typing while it is still up on the panel.
+        window.__nlGated = true;
+        window.__wmPlaying = true;
+        document.dispatchEvent(new Event("wm-playing"));
+        // Anything that was holding off until the page was really on screen.
+        document.dispatchEvent(new Event("nl-reveal"));
+
+        setTimeout(function () {
+          var g = document.getElementById("nl-gate");
+          if (g && g.parentNode) g.parentNode.removeChild(g);
+          // Landed: take the lift off (see .nl-moving in <head> for why this
+          // matters) and clear the measurements, which nothing reads any more.
+          root.classList.remove("nl-moving");
+          if (h) {
+            h.style.removeProperty("--nl-wm-dy");
+            h.style.removeProperty("--nl-wm-scale");
+            h.style.removeProperty("--nl-settle");
+          }
+        }, SETTLE_MS + 100);
+      }
+
+      // Dead man's switch, armed before anything else: nothing below this line
+      // can leave the page stuck behind the panel, however it fails.
+      setTimeout(settle, Math.max(0, MAX_MS - now()));
+
+      // This script sits at the top of <body>, so the <video> and the promise
+      // that gives it a source are both still further down the page, unparsed.
+      // Pick them up the moment they exist rather than waiting for the whole
+      // document — waiting would put the ink 3.5s into a slow load, and the
+      // drawing is the thing that is supposed to fill that time.
+      //
+      // Poll for __wmClipReady, NOT for the <video>: the element is parsed a
+      // moment before the script that hands it a source, and catching it in
+      // that gap meant calling play() on an empty <video>, which rejects. It
+      // happened to win the race in Chromium and lose it in WebKit, where the
+      // ink never drew at all (found 2026-09-17). __wmClipReady existing means
+      // that script has run.
+      function whenClip(cb) {
+        var handed = false;
+        var hand = function () {
+          if (handed) return;
+          handed = true;
+          clearInterval(iv);
+          cb(document.getElementById("wm-video"), window.__wmClipReady || Promise.resolve());
+        };
+        var iv = setInterval(function () { if (window.__wmClipReady) hand(); }, 30);
+        // Whatever happens, stop looking once the document is parsed.
+        document.addEventListener("DOMContentLoaded", hand, { once: true });
+      }
+
+      // ── Start the ink as soon as the clip is here ─────────────────────────
+      // Not when the rest of the page is ready: the drawing IS the wait. The
+      // clip is fetched at the top of <head> for exactly this reason.
+      var inkDone = new Promise(function (res) {
+        if (!motion) return res();
+        whenClip(function (v, clipReady) {
+          if (!v) return res();
+          var done = function () { res(); };
+          v.addEventListener("ended", done, { once: true });
+          // An error on the blob is not the end: the hero script retries the
+          // plain file (see useFile). Only an error on THAT means no ink.
+          v.addEventListener("error", function onErr() {
+            if (/^blob:/.test(v.currentSrc || v.src || "")) return;
+            v.removeEventListener("error", onErr);
+            done();
+          });
+          // ...and if the browser simply will not autoplay it (see doPlay).
+          document.addEventListener("wm-ink-refused", done, { once: true });
+          clipReady["catch"](function () {}).then(function () {
+            place();                                 // size it before it draws
+            if (window.__wmStartInk) window.__wmStartInk();
+            // A clip that stalls mid-draw, or an autoplay refusal we cannot
+            // talk round, must not hold the panel all the way to the cap.
+            setTimeout(done, 9000);
+          });
+        });
+      });
+
+      // ── And the page itself ───────────────────────────────────────────────
+      var pageReady = new Promise(function (res) {
+        // DOMContentLoaded, not "load": it fires only once landing.js has run,
+        // which is the precise thing that used to arrive late and rewind the
+        // hero. Below-the-fold images are deliberately not waited for.
+        var onDom = function () {
+          place();
+          var waits = [];
+          if (document.fonts && document.fonts.load) {
+            // The tagline's base face, and only that. Waiting on Inter 600 too
+            // held the panel 2.2s longer at 400 kbit/s (measured 2026-09-17).
+            waits.push(document.fonts.load('400 1rem "Inter"')["catch"](function () {}));
+          }
+          Promise.all(waits).then(res, res);
+        };
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", onDom);
+        else onDom();
+      });
+
+      Promise.all([inkDone, pageReady]).then(function () {
+        var left = MIN_MS - now();
+        setTimeout(settle, left > 0 ? left : 0);
+      }, function () { settle(); });
+
+      window.addEventListener("resize", place);
+    })();
+  </script>
   <img class="mark" src="favicon.svg" alt="Notealise" width="34" height="34" />
 
   <!-- Hidden on load so it never competes with the wordmark animation. nav.js
@@ -337,8 +701,8 @@
            encode command. The poster frame (the finished word) is what reduced-motion and
            no-JS visitors see; the inline script just below starts playback for everyone
            else, gated on the same html.wm-motion class the tagline uses. -->
-      <video class="wm-video" id="wm-video" src="wordmark.mp4" poster="wordmark-poster.jpg"
-             muted playsinline preload="auto" aria-hidden="true"></video>
+      <video class="wm-video" id="wm-video" poster="wordmark-poster.jpg"
+             muted playsinline preload="none" aria-hidden="true"></video>
     </h1>
     <script>
       // Marks the moment the wordmark ACTUALLY starts playing, not just the
@@ -351,13 +715,109 @@
       // animation has actually finished on screen.
       if (document.documentElement.classList.contains("wm-motion")) {
         var wmv = document.getElementById("wm-video");
-        var played = wmv.play();
+
+        // The poster is the FINISHED word — right for reduced motion and for no
+        // JavaScript (neither runs this block), wrong for everyone who is about
+        // to watch it being written. A browser shows the poster until playback
+        // actually starts, and Safari starts later than Chromium (it waits for
+        // the metadata), so there the finished word appeared first, blanked,
+        // and was then redrawn from nothing: the same finished-then-rewound
+        // fault this whole sequence was built to remove (seen 2026-09-18 in
+        // WebKit at phone size). Dropped here, before the image has even been
+        // requested, which also takes 18 KB off the start of a slow load.
+        wmv.removeAttribute("poster");
+
+        // ...so when the ink cannot or does not run to the end, the finished
+        // word has to be put back by hand: the clip's last frame if it loaded,
+        // the poster if it did not. Called when autoplay is refused (Low Power
+        // Mode on an iPhone refuses it), and by the loading panel if it has to
+        // settle before the ink is done. After this the ink never starts: a
+        // late play() here would be the rewind all over again.
+        var inkStopped = false;
+        var showFinished = function () {
+          inkStopped = true;
+          try { wmv.pause(); } catch (e) {}
+          if (wmv.readyState >= 1 && isFinite(wmv.duration) && wmv.duration > 0) {
+            try { wmv.currentTime = wmv.duration; return; } catch (e) {}
+          }
+          wmv.setAttribute("poster", "wordmark-poster.jpg");
+        };
+        window.__wmFinish = function () { if (!wmv.ended) showFinished(); };
+
+        // The clip was fetched in <head> (see the comment there for why). Hand
+        // it over as a blob; if that fetch failed, or this browser has no
+        // fetch(), load the file the ordinary way.
+        var useFile = function () { wmv.preload = "auto"; wmv.src = "wordmark.mp4"; };
+        var clipReady = (window.__wmClip || Promise.resolve(null)).then(
+          function (url) {
+            if (!url) return useFile();
+            wmv.preload = "auto";
+            wmv.src = url;
+            // Safety net for any engine that will not play a blob: URL in a
+            // <video> (Safari has been fussy about this in the past, and it is
+            // the majority of this site's traffic). One retry on the plain file
+            // path, which is the behaviour this page had before.
+            wmv.addEventListener("error", function onBlobFail() {
+              wmv.removeEventListener("error", onBlobFail);
+              useFile();
+            }, { once: true });
+          },
+          useFile
+        );
+        window.__wmClipReady = clipReady;
+
         var markWmPlaying = function () {
+          // With the loading panel up this event is not ours to fire: there it
+          // marks the word setting off DOWN the screen, which the panel's own
+          // script announces once the ink has finished. Firing it here would
+          // start the tagline typing while the word was still up on the panel.
+          if (document.documentElement.classList.contains("nl-gate-on")) return;
           window.__wmPlaying = true;
           document.dispatchEvent(new Event("wm-playing"));
         };
-        if (played && played.then) { played.then(markWmPlaying, markWmPlaying); }
-        else { markWmPlaying(); }
+
+        // Safari will not start a video until it has enough of it buffered to
+        // see for itself that the clip is silent — ask sooner and it rejects
+        // with NotAllowedError and never plays at all. Chromium is happy either
+        // way, which is why this only ever showed up in WebKit (measured
+        // 2026-09-17: refused at readyState 1, accepted at readyState 4 a tenth
+        // of a second later).
+        //
+        // Retried on a timer rather than on the canplay event, deliberately:
+        // play()'s rejection reaches us asynchronously, so canplay can fire
+        // BEFORE we would get the chance to listen for it, and a listener then
+        // waits for an event that has already gone. That race cost the ink
+        // entirely in WebKit while looking perfect in Chromium.
+        var inkTries = 0;
+        var doPlay = function () {
+          if (inkStopped) return;
+          if (wmv.readyState < 1) {
+            wmv.addEventListener("loadedmetadata", doPlay, { once: true });
+            return;
+          }
+          var played = wmv.play();
+          if (played && played.then) {
+            played.then(markWmPlaying, function () {
+              if (++inkTries <= 20) return setTimeout(doPlay, 120);   // ~2.4s
+              // Giving up. Some browsers and settings refuse to autoplay at
+              // all; say so out loud, because the loading panel is waiting for
+              // an ink animation that is never going to run and would
+              // otherwise sit there until its own 9s deadline.
+              showFinished();
+              document.dispatchEvent(new Event("wm-ink-refused"));
+              markWmPlaying();
+            });
+          } else { markWmPlaying(); }
+        };
+        // The loading panel calls this itself, once it has sized the word —
+        // the drawing is what fills the wait, so it starts before the rest of
+        // the page is ready. Without a panel (a second visit in the same
+        // browser session) the word simply inks itself where it stands, exactly
+        // as this page did before any of this.
+        window.__wmStartInk = function () { clipReady.then(doPlay, doPlay); };
+        if (!document.documentElement.classList.contains("nl-gate-on")) {
+          window.__wmStartInk();
+        }
       }
     </script>
     <p class="tagline" id="tagline">the bridge between <b>complexity</b> and <i>constraint</i></p>
@@ -425,11 +885,11 @@
         <figure class="compare" data-reveal>
           <div class="compare-stage" id="compare" style="--pos: 30%">
             <div class="compare-layer compare-base">
-              <img src="screenshots/01-journal.jpg?v=20260915" alt="The Journal space: light cream paper, serif type and roomy lines, open on a Sunday diary entry." width="1600" height="1000" />
+              <img loading="lazy" decoding="async" src="screenshots/01-journal.jpg?v=20260915" alt="The Journal space: light cream paper, serif type and roomy lines, open on a Sunday diary entry." width="1600" height="1000" />
               <span class="compare-tag compare-tag-r">Journal</span>
             </div>
             <div class="compare-layer compare-top">
-              <img src="screenshots/01-research.jpg?v=20260915b" alt="The Research space: dark and blue-tinted, with a compact one-line sidebar full of papers and interviews, open on reading notes about sleep and memory with a chart, a table of papers and a checklist." width="1600" height="1000" />
+              <img loading="lazy" decoding="async" src="screenshots/01-research.jpg?v=20260915b" alt="The Research space: dark and blue-tinted, with a compact one-line sidebar full of papers and interviews, open on reading notes about sleep and memory with a chart, a table of papers and a checklist." width="1600" height="1000" />
               <span class="compare-tag compare-tag-l">Research</span>
             </div>
             <input class="compare-range" type="range" min="0" max="100" value="30" step="1" aria-label="Slide between the Research look and the Journal look" />
@@ -770,7 +1230,13 @@ Tomorrow: &lt;mark class="hl-amber"&gt;ring the dentist&lt;/mark&gt;, actually.<
       var p = document.getElementById("tagline");
       if (!p || !document.documentElement.classList.contains("wm-motion")) return;
 
-      var LEAD = 3050, STEP = 44, GAP = 52;
+      // 3050ms is the lead that lets the typing overlap the ink's last 50ms
+      // (see the note above). Behind the loading panel the ink has ALREADY
+      // finished before wm-playing fires — that event marks the word setting
+      // off down the screen — so the lead is just the length of that move plus
+      // a breath. Every other hero entrance is shifted by the same 2.3s in the
+      // html.nl-settling rules at the top of this file; change them together.
+      var LEAD = window.__nlGated ? 750 : 3050, STEP = 44, GAP = 52;
       var WORDS = [
         { t: "the",        m: "type" },
         { t: "bridge",     m: "arch" },
@@ -945,7 +1411,7 @@ Tomorrow: &lt;mark class="hl-amber"&gt;ring the dentist&lt;/mark&gt;, actually.<
     else { document.addEventListener("wm-playing", __startTagline, { once: true }); }
   </script>
   <script src="nav.js?v=20260914a"></script>
-  <script src="landing.js?v=20260916b"></script>
+  <script src="landing.js?v=20260917a"></script>
   <!-- Download for macOS: picks the Mac build, or asks which Mac in a popup -->
   <script src="mac-chip.js?v=20260915a"></script>
   <script src="mac-chooser.js?v=20260915b"></script>
