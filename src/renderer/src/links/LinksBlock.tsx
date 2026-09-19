@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Icon } from '../icons'
 import type { OpenHow } from '../editor/linkEnv'
 import type { Inspect } from './LinkInspector'
@@ -138,8 +139,29 @@ function Chip({
 
 export function LinksBlock({ outgoing, incoming, pinned, edge = 'top', ...rest }: Props): React.JSX.Element {
   const all = [...outgoing, ...incoming]
+  const blockRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  // A mouse wheel only goes up/down; turn that into sideways scroll (trackpad swipes already work).
+  useEffect(() => {
+    const block = blockRef.current
+    if (!block) return
+    const onWheel = (e: WheelEvent): void => {
+      const sc = scrollRef.current
+      if (!sc || e.ctrlKey || e.metaKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+      const max = sc.scrollWidth - sc.clientWidth
+      if (max <= 0) return
+      if ((e.deltaY < 0 && sc.scrollLeft <= 0) || (e.deltaY > 0 && sc.scrollLeft >= max - 1)) return
+      sc.scrollLeft += e.deltaY
+      e.preventDefault()
+    }
+    block.addEventListener('wheel', onWheel, { passive: false })
+    return () => block.removeEventListener('wheel', onWheel)
+  }, [])
+
   return (
     <div
+      ref={blockRef}
       // Same box either way — where it SITS is the pane's business, not the
       // block's. Only the backdrop differs: unpinned it floats over the note's
       // own text as that text scrolls up behind it.
@@ -173,7 +195,7 @@ export function LinksBlock({ outgoing, incoming, pinned, edge = 'top', ...rest }
           No links yet
         </span>
       ) : (
-        <div className="links-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">
+        <div ref={scrollRef} className="links-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto py-1">
           {all.map((e) => (
             <Chip key={e.key} entry={e} {...rest} />
           ))}

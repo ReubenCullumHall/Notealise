@@ -578,6 +578,25 @@ every session — see the table in **Folder structure** above for the full list.
   `document.execCommand('insertText', …)` to type into CodeMirror (it handles `beforeinput`).
   React delegates `onMouseEnter`/`onBlur` from **`mouseover`/`focusout`**, so dispatching
   `mouseenter`/`blur` silently does nothing.
+  **`page.mouse.wheel` and `page.mouse.move` DO reach it** (2026-09-18, macOS: a `deltaY` wheel
+  scrolled the sidebar list, and a move raised a link hover card) — so scroll and wheel gestures can
+  be tested with real input. A wheel test needs a control first (scroll something you know moves),
+  or "it did nothing" cannot be told apart from "the input never arrived". Setting `scrollLeft` from
+  script proves an element CAN scroll, not that a mouse wheel scrolls it — those are different
+  questions, and the links strip passed the first for weeks while failing the second.
+- **A real main process on its own profile, with a debug port, without packaging — `electron-vite
+  dev` cannot do this, a plain build can.** Its CLI rejects `--user-data-dir` and forwards nothing to
+  Electron, so instead: `electron-vite build --outDir <scratch>/out`, a `node_modules` symlink to
+  `~/notes-app-mac/node_modules` NEXT to that `out/` (main's externals — `electron-updater` etc. —
+  resolve from there; without it the app dies with "Cannot find module"), then
+  `env -u ELECTRON_RUN_AS_NODE <electron> <scratch>/out/main/index.js --user-data-dir=<scratch>/ud
+  --remote-debugging-port=9333`, with `<scratch>/ud/config.json` set to
+  `{"vaultPath": "<scratch vault>", "hasOnboarded": true}` to skip the picker. It is a real
+  renderer against a real main (a click on a missing-link chip created the file on disk), it never
+  touches the shared `userData` or another session's dev instance, and a window resize works through
+  `osascript … set size of window 1` (CDP's `Browser.setWindowBounds` does not exist in Electron).
+  Relaunch WITHOUT the port when handing it to Reuben. Not a packaged build: fuses, CSP and
+  `app.isPackaged` behaviour still need `package:dir`.
 - **The PACKAGED app can be driven over CDP, and that is the only harness that reaches main.**
   `npm run dev` opens no debugging port and `localhost:5173` stubs `window.api` — so neither can
   test IPC, native dialogs, the fuses or anything else that lives in main. But

@@ -66,7 +66,11 @@ the raw-view toggle.
   the top of each column by default — outgoing first, then backlinks — and **does not put the
   direction on the face of a link**: which way a connection runs is on the hover card, along with the
   line the link sits in, so the strip reads as names rather than badges. It scrolls sideways at a
-  fixed height, because the chrome may not change height with what a note contains. At the top,
+  fixed height, because the chrome may not change height with what a note contains. Its scrollbar is
+  hidden, so a plain up/down mouse wheel is turned into sideways scroll by a wheel listener on the
+  block (2026-09-18; a trackpad swipe needs nothing) — it stands aside with Cmd/Ctrl held, at either
+  end, and when there is nothing to scroll (it leaves the event alone in all three cases). The tab strip
+  and the toolbar hide their scrollbars the same way and have NOT been given it. At the top,
   Settings → Linking content pins it; unpinned (the default) it scrolls away with the text
   (translated against the CodeMirror scroller, whose top padding follows `--links-inset` — CM keeps
   its own scroller, which is not worth restructuring for this).
