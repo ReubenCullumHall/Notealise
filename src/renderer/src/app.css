@@ -1072,33 +1072,10 @@ button.icon:hover {
   --page-tint-boost: 1;
   --page-rule: 27.2px;
   --page-cell: 27.2px;
-  /* The pattern's own colour and strength — two axes on top of the pattern
-     shape itself (which look you picked) and the tint (the colour wash under
-     everything). --page-look-rgb is --wash by default so an untouched space
-     renders byte-identical to before either axis existed; opting into
-     `pageLookAccent` (Settings → Page look / Appearance → Accent, one shared
-     field — see Space.pageLookAccent) repaints it from the accent ramp
-     instead, in BOTH accent modes (--accent-*, not --brand-*, which is
-     text-mode-only — see the CLAUDE.md note on the three accent token
-     families). --page-look-intensity is a MULTIPLIER, not a raw opacity: 50
-     (the default, Space.pageLookIntensity) has to equal 1 so every look keeps
-     the exact strength it was originally tuned at; 100 is a heavier 2x, 10 is
-     a faint 0.2x, 0 removes the pattern entirely. Read by --page-line /
-     --page-line-strong below and by the grain look's own --grain vars. */
-  --page-look-rgb: var(--wash);
-  --page-look-intensity: 1;
-  --page-line: rgb(var(--page-look-rgb) / calc(0.13 * var(--page-look-intensity)));
-  --page-line-strong: rgb(var(--page-look-rgb) / calc(0.26 * var(--page-look-intensity)));
+  --page-line: rgb(var(--wash) / 0.13);
+  --page-line-strong: rgb(var(--wash) / 0.26);
   --page-look-image: none;
   --page-look-size: auto;
-  /* How far a pattern of LINES stops short of a pane divider — and the width
-     of the note's scrollbar, so the two are one number (see the tiling block
-     below). --page-inset-l is overridden per pane, on the scroller itself. */
-  --page-gap: 11px;
-  --page-inset-l: 0px;
-}
-:root[data-page-look-accent='on'] {
-  --page-look-rgb: var(--accent-500);
 }
 :root[data-theme='dark'],
 :root[data-theme='black'] {
@@ -1123,7 +1100,8 @@ button.icon:hover {
 [data-page-look='none'] {
   --page-look-image: none;
 }
-[data-page-look='lined'] {
+[data-page-look='lined'],
+[data-page-look='lined-tight'] {
   --page-look-image: repeating-linear-gradient(
     to bottom,
     transparent 0,
@@ -1141,10 +1119,11 @@ button.icon:hover {
    page never reads as unformatted. The rule is sized to a Heading 1's line box
    (font unchanged, so ~1.7em → a ~38px line); `.cm-line` and its spans are
    pinned to that height so a smaller line can't be shorter. Reversal of the
-   ruling in docs/feature-tabs-spaces.md — that doc carries the before/after. */
+   ruling in docs/feature-tabs-spaces.md — that doc carries the before/after.
+   `lined-tight` is unchanged and still breaks rhythm under a heading; making
+   it a tight EVEN grid needs the heading font shrunk, which is a separate call. */
 [data-page-look='lined'] {
   --page-rule: 38px;
-  --page-tile: var(--page-rule);
 }
 [data-page-look='lined'] .cm-editor .cm-line {
   line-height: var(--page-rule);
@@ -1162,25 +1141,23 @@ button.icon:hover {
    box's bottom edge — the font's half-leading, at this line-height. Left
    alone, every rule sits well below where the writing actually is — the
    "floating above the line" Reuben flagged first. Shifting the whole
-   repeating pattern brings the mark up to where the baseline falls; because
-   the grid is uniform now (see above), one offset lines up EVERY line,
-   heading or body alike.
-   A 1px rule drawn with `background-position-y: P` occupies P-1 .. P (mod the
-   band). The baseline is 25px down the line in Inter, Fraunces and
-   OpenDyslexic (24 in JetBrains Mono — measured 2026-09-19 at 16px on a 38px
-   line), so P = 26 puts the rule's top edge exactly on the baseline: the
-   words SIT on it. The tails of g/y/p/j/q hang below and cross it, as on real
-   ruled paper. History, so it isn't re-tuned blind: 25 put the rule over the
-   bottom pixel of every letter (the second look), and 22 — chosen to "leave
-   descenders room", which moving the rule UP cannot do — put it 3px into the
-   letters (Reuben, third look: "slightly into it"). Re-measure the baseline if
-   the base font size or --page-rule change. */
+   repeating pattern down brings the mark up to where the baseline falls;
+   because the grid is uniform now (see above), one offset lines up EVERY
+   line, heading or body alike.
+   Exactly AT the baseline (measured 25px) then turned out wrong the other
+   way — a descender (the tail on g/y/p/j/q) hangs below the baseline, so a
+   rule drawn right through it reads as the word cutting the line rather than
+   sitting on it (Reuben, second look). 22px leaves the descenders just
+   enough room to clear the rule while still sitting close to it. Re-measure
+   both numbers if the base font, its size, or --page-rule change. */
 [data-page-look='lined'] .edit-layer .cm-scroller {
-  background-position-y: 26px;
+  background-position-y: 22px;
+}
+[data-page-look='lined-tight'] {
+  --page-rule: 20.4px;
 }
 [data-page-look='grid'],
 [data-page-look='grid-fine'] {
-  --page-tile: calc(var(--page-cell) * 5);
   --page-look-image:
     repeating-linear-gradient(
       to bottom,
@@ -1200,57 +1177,6 @@ button.icon:hover {
 [data-page-look='grid-fine'] {
   --page-cell: 13.6px;
 }
-/* HOW THE LINE LOOKS ARE TILED — lined, grid, fine grid, graph.
-   A gradient has no size of its own, so `background-size: auto` makes it as big
-   as the box it sits in — and on a `local` scroller that box is the NOTE'S
-   HEIGHT. So each of these was one tall picture, the height of the note (never
-   less than the window minus the end padding), repeated from its bottom edge.
-   Whenever that height was not a whole number of rules the picture was cut off
-   mid-rule and restarted: a stray line above the first line, one oversize gap
-   further down, and two split panes (two different note heights) each cutting
-   at a different place, which is the "slightly misaligned" pair of columns. It
-   also moved as you typed, because typing changes the note's height.
-   Now the tile is a whole number of periods — one rule for lined, five cells
-   for the grids and graph (5 x 27.2 and 5 x 13.6 are whole pixels, which is why
-   the tile is five cells and not one) — so the pattern is identical however tall
-   the note or the window is. `repeat-y` because the gradients already repeat
-   across the width themselves. Dots and grain keep their own explicit sizes.
-
-   THE DIVIDER GAP. In a split the left pane's lines stopped 11px short of the
-   divider — that was its scrollbar, and only while the note was long enough to
-   scroll — while the right pane's ran right up to it. Both sides now stop the
-   same 11px away. `--page-inset-l` moves the right-hand pane's pattern in;
-   `scrollbar-gutter: stable` keeps the left-hand pane's own 11px there whether
-   or not its note scrolls. Both apply only to a pane that HAS a divider on that
-   side, so a single pane still runs edge to edge. The variable is set on the
-   scroller and read on the scroller: set on <html> it would be resolved there
-   and the per-pane override would never arrive. */
-:is(
-    [data-page-look='lined'],
-    [data-page-look='grid'],
-    [data-page-look='grid-fine'],
-    [data-page-look='graph']
-  )
-  .edit-layer
-  .cm-scroller {
-  background-size: calc(100% - var(--page-inset-l)) var(--page-tile);
-  background-repeat: repeat-y;
-  background-position-x: var(--page-inset-l);
-}
-.pane-divider + .pane-col .edit-layer .cm-scroller {
-  --page-inset-l: var(--page-gap);
-}
-:is(
-    [data-page-look='lined'],
-    [data-page-look='grid'],
-    [data-page-look='grid-fine'],
-    [data-page-look='graph']
-  )
-  .pane-col:has(+ .pane-divider)
-  .edit-layer
-  .cm-scroller {
-  scrollbar-gutter: stable;
-}
 /* Dots need a tile size of their own: a radial gradient has no intrinsic one,
    so without background-size it paints a single blob the size of the pane. */
 [data-page-look='dots'] {
@@ -1261,7 +1187,6 @@ button.icon:hover {
    FIRST so it paints over the fine one where they land on the same pixel. */
 [data-page-look='graph'] {
   --page-cell: 13.6px;
-  --page-tile: calc(var(--page-cell) * 5);
   --page-look-image:
     repeating-linear-gradient(to bottom, var(--page-line-strong) 0 1px, transparent 1px calc(var(--page-cell) * 5)),
     repeating-linear-gradient(to right, var(--page-line-strong) 0 1px, transparent 1px calc(var(--page-cell) * 5)),
@@ -1281,8 +1206,8 @@ button.icon:hover {
    coarser layers stay, well under the others, to keep it from looking like
    uniform noise. */
 [data-page-look='grain'] {
-  --grain: rgb(var(--page-look-rgb) / calc(0.05 * var(--page-look-intensity)));
-  --grain-coarse: rgb(var(--page-look-rgb) / calc(0.035 * var(--page-look-intensity)));
+  --grain: rgb(var(--wash) / 0.05);
+  --grain-coarse: rgb(var(--wash) / 0.035);
   --page-look-image:
     radial-gradient(circle at 17% 29%, var(--grain) 0 0.6px, transparent 0.7px),
     radial-gradient(circle at 63% 11%, var(--grain) 0 0.6px, transparent 0.7px),
@@ -1419,26 +1344,6 @@ button.look-card:hover {
   );
 }
 .tint-alpha:focus-visible {
-  box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.15), 0 0 0 2px rgb(var(--brand-300));
-}
-
-/* The page-look intensity slider (Space.pageLookIntensity, SpacePage.tsx):
-   same track vocabulary as `.tint-alpha` above, but the fill colour is
-   `--page-look-rgb` rather than a picked hex — the caller sets that inline
-   from `pageLookAccent` (ink wash vs. accent), so the track always shows the
-   colour the pattern will actually draw in. */
-.look-intensity {
-  position: relative;
-  height: 12px;
-  border-radius: var(--r-pill);
-  cursor: ew-resize;
-  touch-action: none;
-  outline: none;
-  box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.15);
-  background-color: rgb(var(--paper));
-  background-image: linear-gradient(to right, rgb(var(--page-look-rgb) / 0), rgb(var(--page-look-rgb) / 0.9));
-}
-.look-intensity:focus-visible {
   box-shadow: inset 0 0 0 1px rgb(var(--wash) / 0.15), 0 0 0 2px rgb(var(--brand-300));
 }
 
@@ -3071,8 +2976,8 @@ button.look-card:hover {
       opening, closing, being reordered, or a double-click putting them back to
       even. Same 0.22/1/0.36/1 curve and roughly the same duration as the
       sidebar's own movement, so a rebalancing split reads as part of the app.
-   3. THE SEAM THICKENS on hover and while dragging — from its resting 4px to
-      6px. The seam itself is always drawn (see `.pane-divider-line`).
+   3. THE SEAM WAKES on hover and while dragging — a brand-tinted line growing
+      out of the hairline border that is already there at rest.
 
    All three collapse to nothing under `[data-motion='off']` and
    `prefers-reduced-motion` via the global rule above; none of it needs its own
@@ -3085,73 +2990,54 @@ body.pane-resizing .pane-col {
   transition: none;
 }
 
-/* A REAL 18px box that takes no net width: the negative margins give back
+/* A REAL 11px box that takes no net width: the negative margins give back
    exactly what the width costs, so the panes' fractions still describe the whole
    row while the element keeps a hit area, a focus target and a bounding box that
    assistive tech and automation can find. (It was genuinely 0-wide first, with
    the hit area painted on by a `::before`. Everything worked by hand — pointer
    hit-testing goes through the pseudo-element — but a 0x0 `role="separator"` is
    invisible to anything that measures before it acts.)
-   18px = the 3px bar plus 2.5 x the bar's width (7.5px) each side (Reuben,
-   2026-09-19: the old 11px was "not big enough"). Text starts 28px into a column
-   and the nearest buttons are >12px in, so it still creeps into nothing — but it
-   does sit over the left column's 11px scrollbar, whose thumb can no longer be
-   grabbed (wheel and trackpad scrolling are unaffected). Its centre lands
-   exactly on NotePane's own `border-l`, which stays the resting appearance.
-
-   z-index 15: above the floating links strip (NotePane's `absolute … z-10`),
-   below its corner buttons (z-20) and the tab-drop overlay (z-30). At 5 the
-   strip painted over the half of the line that overlaps its column, so the
-   seam was a full 4px everywhere EXCEPT that 34px band, where it dropped to 2px
-   — and the strip also took the pointer there, so the seam could not be
-   grabbed in that band (Reuben, 2026-09-19, "the thickness not being even"). */
+   11px is the smallest that reliably catches a pointer without the target
+   creeping into the text of the column beside it. Its centre lands exactly on
+   NotePane's own `border-l`, which stays the resting appearance. */
 .pane-divider {
   position: relative;
-  z-index: 15;
+  z-index: 5;
   flex: 0 0 auto;
-  width: 18px;
-  margin: 0 -9px;
+  width: 11px;
+  margin: 0 -5.5px;
   align-self: stretch;
   cursor: col-resize;
   outline: none;
 }
-/* The seam between two columns: ALWAYS drawn, 3px, in the accent colour but
-   softened to half strength (Reuben, 2026-09-19: "a lower opacity than the rest
-   of the accent colours"), 80% while hovered or dragged. 3px after "slightly
-   thinner" than the first 4px.
-   NotePane's own 25%-ink hairline is still under it, but that alone is
-   swallowed whole by a pattern behind the writing ("I should be able to see it
-   when in split view ... make sure it's always there"). The softening is
-   `color-mix` with the page's paper, NOT alpha: a translucent line lets that
-   1px hairline show through as a lighter stripe down its middle. It reads
-   --accent-500, not --brand-*, for the reason in CLAUDE.md: the brand ramp only
-   carries the accent in `tint` mode. --accent-500 is seeded to each theme's own
-   brand grey, so with no accent picked the seam is a plain grey line and with
-   one it wears the colour — no attribute, no branch.
-   Thickness is `width`, not a scaleX: a transformed box is not snapped to whole
-   device pixels and can leave soft edges, where this one measures as whole,
-   solid pixels at 1x and 2x. Hover, focus and drag thicken it to 5px. */
 .pane-divider-line {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 3px;
-  margin-left: -1.5px;
+  width: 2px;
+  margin-left: -1px;
   border-radius: 1px;
-  background: color-mix(in srgb, rgb(var(--accent-500)) 50%, rgb(var(--paper)));
+  background: rgb(var(--brand-400));
+  opacity: 0;
+  /* Grows out of the hairline rather than fading in on top of it: scaling from a
+     half-width line means the border appears to thicken, which is the same
+     gesture the sidebar rows use to acknowledge a hover. */
+  transform: scaleX(0.5);
   pointer-events: none;
-  transition:
-    width 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    margin-left 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 0.18s ease;
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .pane-divider:hover .pane-divider-line,
-.pane-divider:focus-visible .pane-divider-line,
+.pane-divider:focus-visible .pane-divider-line {
+  opacity: 0.7;
+  transform: scaleX(1);
+}
+.pane-divider:focus-visible .pane-divider-line {
+  opacity: 0.85;
+}
 .pane-divider.dragging .pane-divider-line {
-  width: 5px;
-  margin-left: -2.5px;
-  background: color-mix(in srgb, rgb(var(--accent-500)) 80%, rgb(var(--paper)));
+  opacity: 0.95;
+  transform: scaleX(1.5);
 }
 
 /* Pointer capture keeps the events arriving at the divider, but the pointer is
@@ -3256,8 +3142,8 @@ body.pane-resizing * {
    or not anything is in it. `background-clip: content-box` with a transparent
    border is what insets the thumb from the edge without a wrapper. */
 .cm-scroller::-webkit-scrollbar {
-  width: var(--page-gap);
-  height: var(--page-gap);
+  width: 11px;
+  height: 11px;
 }
 .cm-scroller::-webkit-scrollbar-track {
   background: transparent;

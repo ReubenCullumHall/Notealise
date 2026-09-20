@@ -334,8 +334,6 @@ function Tints({ settings, onChange }: LookProps): React.JSX.Element {
             <LookTile
               look={activeSpace(settings).pageLook}
               tint={token}
-              intensity={activeSpace(settings).pageLookIntensity}
-              accent={activeSpace(settings).pageLookAccent}
               lines={4}
               className="h-[150px] w-full"
             />

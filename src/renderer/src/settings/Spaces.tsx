@@ -1096,16 +1096,6 @@ export function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Elem
             />
           </div>
         )}
-        {/* Same field as Page \u2192 Page look's own switch \u2014 one setting, shown in
-            both places since this is where the accent itself lives. */}
-        <div className="mt-3">
-          <ToggleRow
-            on={space.pageLookAccent}
-            onClick={() => onChange({ pageLookAccent: !space.pageLookAccent })}
-            label="Match your page look to it"
-            hint="Draws your page look's pattern \u2014 lines, dots, the grid \u2014 in this colour instead of your theme's ink. Also in Page \u2192 Page look."
-          />
-        </div>
       </section>
 
       <section className="settings-group">

@@ -165,7 +165,7 @@ const PART_KEYS: Record<LookPart, readonly (keyof SpaceLook)[]> = {
   // NOTES are in that island is not here and cannot be — that lives per note in
   // workspace.json (`EntryMeta.island`), so pouring a preset never moves a
   // single note.
-  appearance: ['emoji', 'islandName', 'theme', 'textTone', 'buttonDefinition', 'density', 'editorWidth', 'accent', 'accentMode', 'accentUiText', 'pageLook', 'font', 'uiFont', 'dyslexiaFont', 'tint', 'pageLookIntensity', 'pageLookAccent'],
+  appearance: ['emoji', 'islandName', 'theme', 'textTone', 'buttonDefinition', 'density', 'editorWidth', 'accent', 'accentMode', 'accentUiText', 'pageLook', 'font', 'uiFont', 'dyslexiaFont', 'tint'],
   colour: ['colorStyle', 'colorAuto', 'colorInherit', 'colorFadeNested', 'colorPalette'],
   arranging: ['freeArrange', 'compactNav'],
   links: ['showLinks', 'linksPosition'],

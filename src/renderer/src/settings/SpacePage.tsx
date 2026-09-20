@@ -1,8 +1,12 @@
 import { LookTile } from './LookTile'
-import { BUNDLED_PAGE_LOOKS, findPageLook, parseTint, tintName, type PageLook } from '../../../shared/looks'
+import {
+  BUNDLED_PAGE_LOOKS,
+  findPageLook,
+  parseTint,
+  tintName,
+  type PageLook
+} from '../../../shared/looks'
 import { Icon } from '../icons'
-import { ToggleRow } from './primitives'
-import { IntensitySlider } from './IntensitySlider'
 import type { SpaceProps } from './Spaces'
 
 // Settings → **Page**. Rendered inside SpaceForm, so — like Fonts and Colour
@@ -55,8 +59,6 @@ function Card({
   tip,
   look,
   tint,
-  intensity,
-  accent,
   onClick
 }: {
   on: boolean
@@ -65,21 +67,11 @@ function Card({
   tip?: string
   look: string
   tint: string
-  intensity: number
-  accent: boolean
   onClick: () => void
 }): React.JSX.Element {
   return (
     <button className="look-card" aria-pressed={on} data-tip={tip} onClick={onClick}>
-      <LookTile
-        look={look}
-        tint={tint}
-        intensity={intensity}
-        accent={accent}
-        lines={2}
-        on={on}
-        className="h-[76px] w-full"
-      />
+      <LookTile look={look} tint={tint} lines={2} on={on} className="h-[76px] w-full" />
       <span className={'mt-2 block text-[12.5px] font-medium ' + (on ? 'text-brand-600' : 'text-ink-700')}>
         {on ? '✓ ' : ''}
         {label}
@@ -122,14 +114,7 @@ export function SpacePage({ space, onChange, collection }: Props): React.JSX.Ele
           {tint ? `, tinted ${tint.hex} at ${tint.opacity}%` : ', no tint'} — drawn here exactly as
           the editor draws it, so you can see a change without closing this window.
         </p>
-        <LookTile
-          look={space.pageLook}
-          tint={space.tint}
-          intensity={space.pageLookIntensity}
-          accent={space.pageLookAccent}
-          lines={4}
-          className="h-[168px] w-full"
-        />
+        <LookTile look={space.pageLook} tint={space.tint} lines={4} className="h-[168px] w-full" />
         {(space.pageLook || space.tint) && (
           <button
             className="mini mt-2 inline-flex items-center gap-1.5"
@@ -145,9 +130,9 @@ export function SpacePage({ space, onChange, collection }: Props): React.JSX.Ele
         <h3>Page look</h3>
         <p className="hint">
           A pattern behind your writing, ruled to the editor&apos;s own line spacing. It scrolls
-          with the words rather than sitting still behind them, and by default it&apos;s drawn in
-          your theme&apos;s ink, so one look works on light and dark alike — or switch it to your
-          accent colour below. More in Your collection → Explore.
+          with the words rather than sitting still behind them, and it&apos;s drawn in your
+          theme&apos;s ink, so one look works on light and dark alike. More in Your collection →
+          Explore.
         </p>
         <div className="look-grid">
           <Card
@@ -157,8 +142,6 @@ export function SpacePage({ space, onChange, collection }: Props): React.JSX.Ele
             tip="The app’s own page — nothing drawn behind your writing."
             look=""
             tint={space.tint}
-            intensity={space.pageLookIntensity}
-            accent={space.pageLookAccent}
             onClick={() => onChange({ pageLook: '' })}
           />
           {looks.map((l) => (
@@ -170,8 +153,6 @@ export function SpacePage({ space, onChange, collection }: Props): React.JSX.Ele
               tip={l.blurb}
               look={l.id}
               tint={space.tint}
-              intensity={space.pageLookIntensity}
-              accent={space.pageLookAccent}
               onClick={() => onChange({ pageLook: l.id })}
             />
           ))}
@@ -183,38 +164,9 @@ export function SpacePage({ space, onChange, collection }: Props): React.JSX.Ele
               tip="On this space, but not in your collection — add it under Your collection → Explore to keep it."
               look={uncollectedLook.id}
               tint={space.tint}
-              intensity={space.pageLookIntensity}
-              accent={space.pageLookAccent}
               onClick={() => onChange({ pageLook: uncollectedLook.id })}
             />
           )}
-        </div>
-
-        {/* Two axes on top of the pattern itself: how strongly it draws, and
-            whether it draws in the accent colour. Both greyed out on Plain —
-            neither has anything to act on until a look is picked. */}
-        <div className={'mt-4' + (!space.pageLook ? ' pointer-events-none opacity-40' : '')}>
-          <label className="block text-[11.5px] font-medium text-ink-700" htmlFor="page-look-intensity">
-            Intensity — {space.pageLookIntensity}%
-          </label>
-          <IntensitySlider
-            value={space.pageLookIntensity}
-            accent={space.pageLookAccent}
-            onChange={(n) => onChange({ pageLookIntensity: n })}
-          />
-          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
-            50 is how every look above is tuned by default. Faint down toward 10, bold up toward
-            100 — 0 turns the pattern off without switching back to Plain.
-          </p>
-
-          <div className="mt-3">
-            <ToggleRow
-              on={space.pageLookAccent}
-              onClick={() => onChange({ pageLookAccent: !space.pageLookAccent })}
-              label="Match your accent colour"
-              hint="Draws the pattern in your accent colour instead of your theme’s ink. The same switch as Appearance → Accent."
-            />
-          </div>
         </div>
       </section>
 
@@ -238,8 +190,6 @@ export function SpacePage({ space, onChange, collection }: Props): React.JSX.Ele
             sub="Your theme’s own paper"
             look={space.pageLook}
             tint=""
-            intensity={space.pageLookIntensity}
-            accent={space.pageLookAccent}
             onClick={() => onChange({ tint: '' })}
           />
           {tints.map((t) => (
@@ -250,8 +200,6 @@ export function SpacePage({ space, onChange, collection }: Props): React.JSX.Ele
               sub={`${parseTint(t)?.opacity}% wash`}
               look={space.pageLook}
               tint={t}
-              intensity={space.pageLookIntensity}
-              accent={space.pageLookAccent}
               onClick={() => onChange({ tint: t })}
             />
           ))}
@@ -263,8 +211,6 @@ export function SpacePage({ space, onChange, collection }: Props): React.JSX.Ele
               tip="On this space, but not in your collection — remake it under Your collection → Explore to keep it."
               look={space.pageLook}
               tint={uncollectedTint}
-              intensity={space.pageLookIntensity}
-              accent={space.pageLookAccent}
               onClick={() => onChange({ tint: uncollectedTint })}
             />
           )}

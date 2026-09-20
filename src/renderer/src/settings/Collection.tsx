@@ -4,10 +4,8 @@ import { spacesWearing, spacesWearingFont, withoutFont, withoutPageLook, without
 import { findFont, FONTS, fontCssValue } from './fonts'
 import type { ExploreTab } from './Explore'
 import type { FontLibrary } from './useInstalledFonts'
-import { CATALOGUE_PAGE_LOOKS, findPageLook, parseTint, PAGE_LOOKS, tintName } from '../../../shared/looks'
+import { findPageLook, parseTint, PAGE_LOOKS, tintName } from '../../../shared/looks'
 import { activeSpace, type AppSettings } from '../../../shared/settings'
-import { IntensitySlider } from './IntensitySlider'
-import { ToggleRow } from './primitives'
 
 // Settings → **Your collection**. What you HAVE, and nothing else.
 //
@@ -199,14 +197,6 @@ export function Collection({
     onChange({ spaces: settings.spaces.map((sp) => (sp.folder === here.folder ? { ...sp, pageLook: id } : sp)) })
   const setTint = (token: string): void =>
     onChange({ spaces: settings.spaces.map((sp) => (sp.folder === here.folder ? { ...sp, tint: token } : sp)) })
-  const setIntensity = (n: number): void =>
-    onChange({
-      spaces: settings.spaces.map((sp) => (sp.folder === here.folder ? { ...sp, pageLookIntensity: n } : sp))
-    })
-  const setAccent = (on: boolean): void =>
-    onChange({
-      spaces: settings.spaces.map((sp) => (sp.folder === here.folder ? { ...sp, pageLookAccent: on } : sp))
-    })
 
   return (
     <>
@@ -301,48 +291,15 @@ export function Collection({
                 inUse={inUse}
                 spaceLabel={spaceLabel}
                 tip={look.blurb}
-                tile={
-                  <LookTile
-                    look={look.id}
-                    tint={here.tint}
-                    intensity={here.pageLookIntensity}
-                    accent={here.pageLookAccent}
-                    lines={2}
-                    on={on}
-                    className="h-[76px] w-full"
-                  />
-                }
+                tile={<LookTile look={look.id} tint={here.tint} lines={2} on={on} className="h-[76px] w-full" />}
                 onUse={() => setLook(on ? '' : look.id)}
                 onRemove={bundled ? undefined : () => onChange(withoutPageLook(settings, look.id))}
               />
             )
           })}
         </div>
-
-        {/* Same two axes as Settings → Page look, worked right here on
-            {spaceLabel} — so putting a look on a space and tuning how it
-            draws don't need two different pages. */}
-        <div className={'mt-4' + (!here.pageLook ? ' pointer-events-none opacity-40' : '')}>
-          <label className="block text-[11.5px] font-medium text-ink-700" htmlFor="page-look-intensity">
-            Intensity — {here.pageLookIntensity}%
-          </label>
-          <IntensitySlider value={here.pageLookIntensity} accent={here.pageLookAccent} onChange={setIntensity} />
-          <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
-            50 is how every look above is tuned by default. Faint down toward 10, bold up toward
-            100 — 0 turns the pattern off without switching back to Plain.
-          </p>
-          <div className="mt-3">
-            <ToggleRow
-              on={here.pageLookAccent}
-              onClick={() => setAccent(!here.pageLookAccent)}
-              label="Match your accent colour"
-              hint="Draws the pattern in your accent colour instead of your theme’s ink. The same switch as Appearance → Accent."
-            />
-          </div>
-        </div>
-
         <ExploreButton
-          label={`${CATALOGUE_PAGE_LOOKS.length} more of ours to add — or ask us to make the one you want.`}
+          label="Five more of ours to add — or ask us to make the one you want."
           onClick={() => onExplore('pageLooks')}
         />
       </Shelf>
@@ -371,17 +328,7 @@ export function Collection({
                   sub={`${parseTint(token)?.opacity}% wash`}
                   inUse={inUse}
                   spaceLabel={spaceLabel}
-                  tile={
-                    <LookTile
-                      look={here.pageLook}
-                      tint={token}
-                      intensity={here.pageLookIntensity}
-                      accent={here.pageLookAccent}
-                      lines={2}
-                      on={on}
-                      className="h-[76px] w-full"
-                    />
-                  }
+                  tile={<LookTile look={here.pageLook} tint={token} lines={2} on={on} className="h-[76px] w-full" />}
                   onUse={() => setTint(on ? '' : token)}
                   onRemove={() => onChange(withoutTint(settings, token))}
                 />

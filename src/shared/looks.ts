@@ -61,6 +61,12 @@ export const PAGE_LOOKS: PageLook[] = [
     source: 'bundled'
   },
   {
+    id: 'lined-tight',
+    name: 'Narrow lined',
+    blurb: 'The same rules, closer together — more lines to the page.',
+    source: 'catalogue'
+  },
+  {
     id: 'grid-fine',
     name: 'Fine grid',
     blurb: 'A smaller square. Quieter behind text than the full grid.',
@@ -93,22 +99,6 @@ export function findPageLook(id: string): PageLook | undefined {
 /** In the collection from install. Everything else has to be added. */
 export const BUNDLED_PAGE_LOOKS = PAGE_LOOKS.filter((l) => l.source === 'bundled')
 export const CATALOGUE_PAGE_LOOKS = PAGE_LOOKS.filter((l) => l.source === 'catalogue')
-
-/** How strongly the pattern itself draws — independent of the look you picked
- *  and of the tint. 0 is invisible, 100 is "super bold", 50 is the strength
- *  every look was originally tuned at (app.css's `--page-line` / `--page-line-
- *  strong` opacities), so 50 must render byte-identical to the old, fixed
- *  values. app.css turns this into a multiplier: `intensity / 50`. */
-export const PAGE_LOOK_INTENSITY_MIN = 0
-export const PAGE_LOOK_INTENSITY_MAX = 100
-export const PAGE_LOOK_INTENSITY_DEFAULT = 50
-
-/** Clamp to a whole percent in range; anything unparseable is the default. */
-export function normalizePageLookIntensity(raw: unknown): number {
-  const n = typeof raw === 'number' ? raw : Number(raw)
-  if (!Number.isFinite(n)) return PAGE_LOOK_INTENSITY_DEFAULT
-  return Math.round(Math.min(PAGE_LOOK_INTENSITY_MAX, Math.max(PAGE_LOOK_INTENSITY_MIN, n)))
-}
 
 // --- tints ------------------------------------------------------------------
 
