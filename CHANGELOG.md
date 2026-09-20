@@ -8,7 +8,7 @@ enough for a solo project). History before this file existed lives in the `v*` g
 
 ## [Unreleased]
 
-### Ready to ship
+## [1.3.1] - 2026-09-20
 - The download page opens with the **Notealise** wordmark writing itself large in the middle of a
   plain screen — white, or black if your computer is set to dark — then shrinking into its usual
   place as the screen fades away, before the rest of the page comes in. On a slow connection the
