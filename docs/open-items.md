@@ -100,8 +100,12 @@ and keyboard over Playwright — see CLAUDE.md's gotchas): picking with Enter, w
 `/link` all wrote a clean `[[Second Note]]`, no doubled `]]`, cursor landed right after the closing
 bracket every time — checked against the raw saved file, not just the decorated view. Reuben
 confirmed live in the app after: "works great now."
-**Not tried anywhere:** Backspace with the cursor right after a rendered link — the hidden `]]` is
-one unit, so it may delete both.
+**Backspace right after a rendered link — tried 2026-09-20 (Mac, browser preview, real keyboard
+input, with a control that typed `zz` first):** it deletes BOTH hidden `]]` at once, the chip turns
+back into raw `[[Waves`, and nothing else is lost (a second Backspace then takes letters). Before
+this change the cursor there showed the raw brackets and Backspace took one `]`. Harmless, and reads
+as "unlink", so left as it is — Reuben's call if he would rather it took one bracket. Not tried on
+Windows or in the Electron window.
 
 ### `/link` does not open the picker by itself — still open, unrelated to the fix above
 `wikiLink` inserts `[[]]` with the cursor between, and its own comment calls that "the note picker".
