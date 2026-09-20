@@ -90,6 +90,25 @@ Playwright's Firefox will not launch on the Mac (its sandbox and GPU helper are 
 well as headless), so Gecko is the one engine the desktop Try-it fix was not run in. Low risk —
 the CSS is `height: auto` on a grid and `min-height: 0` on a flex child — but unverified.
 
+## The `[[` picker closes its own link
+
+**Closed 2026-09-20:** Windows pass done, logged. Choosing a note from the `[[` menu writes the
+`]]` and leaves the cursor after it, so the link renders at once (`editor/completions.ts`,
+`editor/wikiPass.ts`, `links/model.ts` + its test; how it works is in `docs/feature-editor.md`).
+Verified on Windows with real CDP-driven input (a scratch build, `--remote-debugging-port`, mouse
+and keyboard over Playwright — see CLAUDE.md's gotchas): picking with Enter, with a click, and via
+`/link` all wrote a clean `[[Second Note]]`, no doubled `]]`, cursor landed right after the closing
+bracket every time — checked against the raw saved file, not just the decorated view. Reuben
+confirmed live in the app after: "works great now."
+**Not tried anywhere:** Backspace with the cursor right after a rendered link — the hidden `]]` is
+one unit, so it may delete both.
+
+### `/link` does not open the picker by itself — still open, unrelated to the fix above
+`wikiLink` inserts `[[]]` with the cursor between, and its own comment calls that "the note picker".
+The menu does not open until a letter is typed — completion only starts on typing. Confirmed again
+on Windows 2026-09-20 via the same CDP pass: after `/link` inserts `[[]]`, no menu until a character
+went in. Not fixed — pre-existing, out of scope of the closing-bracket fix above.
+
 ## Carried in from before this pass
 
 ### `EntryMeta.collapsed` is read by nothing

@@ -22,6 +22,8 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - The row of linked notes at the top of a note now scrolls sideways with an ordinary mouse wheel
   as well as a trackpad swipe. Before, a note with more links than fit had no way to reach the
   rest unless you had a trackpad or a sideways-scrolling mouse
+- Choosing a note after typing `[[` now finishes the link for you — the closing `]]` is added and
+  the link appears straight away
 
 ## [1.3.0] - 2026-09-17
 - Smaller downloads. The Mac download is now built for one kind of Mac at a time instead of both

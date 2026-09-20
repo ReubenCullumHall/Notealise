@@ -126,6 +126,27 @@ export function linkChoices(
   )
 }
 
+/**
+ * What choosing a row in the `[[` picker writes: the title AND the closing `]]`,
+ * with the cursor left after them so the link renders at once instead of waiting
+ * for you to type the brackets and step out.
+ *
+ * `tail` is the rest of the line after the cursor. Brackets that are already there
+ * are used rather than doubled — `/link` inserts `[[]]` up front, so its `]]` is
+ * waiting when you choose. `text` replaces what was typed; `cursor` is measured from
+ * where that replacement starts.
+ *
+ * Returns null when the cursor is in the MIDDLE of a link that is already closed
+ * further along (`[[Wa|ves]]`): there is no right answer for the letters after the
+ * cursor, so the caller leaves the plain insert alone.
+ */
+export function closeWikiLink(insert: string, tail: string): { text: string; cursor: number } | null {
+  const close = tail.indexOf(']]')
+  if (close > 0 && !tail.slice(0, close).includes('[')) return null
+  const have = tail.startsWith(']]') ? 2 : tail.startsWith(']') ? 1 : 0
+  return { text: insert + ']]'.slice(have), cursor: insert.length + 2 }
+}
+
 const stripExt = (p: string): string => (p.toLowerCase().endsWith('.md') ? p.slice(0, -3) : p)
 
 /** The folder part of `path`, with `space/` taken off the front. */

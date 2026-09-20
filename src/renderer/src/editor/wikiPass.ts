@@ -1,7 +1,7 @@
 import { Decoration } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { dirName, resolveLink, scanLinks, type WikiLink } from '../../../shared/links'
-import { hideDeco, overlapsSelection, type Pass } from './livePreview'
+import { hideDeco, type Pass } from './livePreview'
 import { inCode } from './mathPass'
 import { linkEnv, type LinkEnv } from './linkEnv'
 
@@ -153,7 +153,12 @@ export const wikiPass: Pass = (view, _active, push) => {
     for (const link of scanLinks(doc.sliceString(from, to), from)) {
       // The link itself, not its line: finishing "[[Waves]]" and typing on past
       // it should re-render it even though the cursor is still on that line.
-      if (overlapsSelection(view, link.from, link.to)) continue
+      //
+      // A cursor sitting exactly AFTER the closing "]]" is outside it, unlike
+      // `overlapsSelection`'s inclusive edge: that is where the cursor lands the
+      // moment a note is chosen from the picker, and holding the link raw there
+      // would show `[[Waves]]` until something else was typed.
+      if (view.state.selection.ranges.some((r) => r.from < link.to && r.to >= link.from)) continue
       if (inCode(tree.resolveInner(link.from, 1))) continue
 
       const r = env ? resolveInEnv(env, link) : null

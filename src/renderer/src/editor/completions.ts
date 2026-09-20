@@ -1,5 +1,7 @@
 import {
   autocompletion,
+  insertCompletionText,
+  pickedCompletion,
   type Completion,
   type CompletionContext,
   type CompletionResult
@@ -7,7 +9,7 @@ import {
 import type { Extension } from '@codemirror/state'
 import { matchesQuery, SLASH_COMMANDS } from './commands'
 import { linkEnv } from './linkEnv'
-import { linkChoices } from '../links/model'
+import { closeWikiLink, linkChoices } from '../links/model'
 
 // The editor's two completion menus. Both are thin: neither owns a list.
 //
@@ -78,7 +80,17 @@ function wikiSource(context: CompletionContext): CompletionResult | null {
       // CodeMirror's own icon classes: `type` becomes `cm-completionIcon-<type>`,
       // which app.css draws as a folder or a page.
       type: c.ref.kind === 'dir' ? 'folder' : 'note',
-      apply: c.insert
+      // Writes the closing `]]` too and steps out past it, so the link renders
+      // as a link the moment it is chosen — see `closeWikiLink`.
+      apply: (view, completion, cFrom, cTo) => {
+        const line = view.state.doc.lineAt(cTo)
+        const done = closeWikiLink(c.insert, line.text.slice(cTo - line.from))
+        view.dispatch({
+          ...insertCompletionText(view.state, done ? done.text : c.insert, cFrom, cTo),
+          ...(done && { selection: { anchor: cFrom + done.cursor } }),
+          annotations: pickedCompletion.of(completion)
+        })
+      }
     }))
   return options.length ? { from: m.from + 2, options, filter: false } : null
 }

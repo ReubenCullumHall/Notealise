@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TreeNode } from '../../../shared/types'
 import type { LinkRow, NoteRef } from '../../../shared/links'
-import { ancestorsOf, crumbsFor, incomingLinks, indexFingerprint, linkChoices, liveIndex, noteRefs, outgoingLinks, type SpaceMark } from './model'
+import { ancestorsOf, closeWikiLink, crumbsFor, incomingLinks, indexFingerprint, linkChoices, liveIndex, noteRefs, outgoingLinks, type SpaceMark } from './model'
 
 const dir = (path: string, children: TreeNode[]): TreeNode => ({
   name: path.slice(path.lastIndexOf('/') + 1),
@@ -293,5 +293,32 @@ describe('indexFingerprint', () => {
 
   it('keeps a link and an embed of the same name apart', () => {
     expect(indexFingerprint('[[a.png]]')).not.toBe(indexFingerprint('![](a.png)'))
+  })
+})
+
+describe('closeWikiLink', () => {
+  // The point of the picker: choosing a note leaves a FINISHED link, cursor after
+  // the brackets, so it renders without another keystroke.
+  it('adds the closing brackets when the link was typed open', () => {
+    expect(closeWikiLink('Waves', '')).toEqual({ text: 'Waves]]', cursor: 7 })
+    expect(closeWikiLink('Waves', ' and more text')).toEqual({ text: 'Waves]]', cursor: 7 })
+  })
+
+  // `/link` writes `[[]]` first, so the brackets are already there: adding them
+  // again would leave `[[Waves]]]]`.
+  it('uses brackets that are already there instead of doubling them', () => {
+    expect(closeWikiLink('Waves', ']]')).toEqual({ text: 'Waves', cursor: 7 })
+    expect(closeWikiLink('Waves', ']] after')).toEqual({ text: 'Waves', cursor: 7 })
+    expect(closeWikiLink('Waves', ']')).toEqual({ text: 'Waves]', cursor: 7 })
+  })
+
+  it('does not take the brackets of a LATER link for its own', () => {
+    expect(closeWikiLink('Waves', ' and [[Optics]]')).toEqual({ text: 'Waves]]', cursor: 7 })
+  })
+
+  // Cursor inside a link that is already closed further on: no right answer for
+  // the letters after it, so the plain insert is left alone.
+  it('steps aside when the cursor is in the middle of a closed link', () => {
+    expect(closeWikiLink('Waves', 'ves]]')).toBeNull()
   })
 })

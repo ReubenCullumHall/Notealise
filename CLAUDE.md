@@ -597,6 +597,13 @@ every session — see the table in **Folder structure** above for the full list.
   `osascript … set size of window 1` (CDP's `Browser.setWindowBounds` does not exist in Electron).
   Relaunch WITHOUT the port when handing it to Reuben. Not a packaged build: fuses, CSP and
   `app.isPackaged` behaviour still need `package:dir`.
+  **On Windows, `node_modules` needs a junction, not a symlink** — `New-Item -ItemType
+  SymbolicLink` demands admin privilege in an ordinary shell and fails; `cmd /c mklink /J
+  <scratch>\node_modules <repo>\node_modules` (or `New-Item -ItemType Junction`) works with no
+  elevation and resolves main's externals the same way. Verified 2026-09-20 driving this exact
+  recipe with Python + Playwright (`connect_over_cdp`) against the `[[` picker fix: real
+  `page.keyboard.type` / `.press('Enter')` / mouse clicks all reached CodeMirror and picked from
+  the completion menu, matching the macOS CDP finding above.
 - **The PACKAGED app can be driven over CDP, and that is the only harness that reaches main.**
   `npm run dev` opens no debugging port and `localhost:5173` stubs `window.api` — so neither can
   test IPC, native dialogs, the fuses or anything else that lives in main. But
@@ -818,6 +825,33 @@ every session — see the table in **Folder structure** above for the full list.
   it simply meant `ErrorBoundary.tsx` did not exist in that copy, and bin rows missing their `media`
   origin were read as a restore bug when that code was equally absent. Check the artefacts on disk
   first — `.mdnotes/workspace.json`, the mtime of `out/main/index.js` — then theorise.
+- **Getting an edit into the tree Reuben runs is YOUR step, done and checked BEFORE you say "try
+  it" — never a thing you hand him.** 2026-09-20: a `[[` picker change was built, tested in a
+  scratch preview, and reported done with "run `npm run sync:mac`" left for Reuben. He reloaded the
+  window, saw the old behaviour, and read it as "doesn't work"; `diff` of the two trees showed
+  `~/notes-app-mac` still held the original code. Three lines would have prevented it:
+  1. **Renderer-only change and a dev server is already up** (`ps ax | grep electron-vite` names
+     the tree): `cp` just the files you touched into the same path under `~/notes-app-mac`, then
+     `cmp` each. That is what `sync:mac` does minus stopping the server — which may be another
+     session's live window — and Vite hot-reloads it. Anything under `shared/`, `main/` or
+     `preload/` needs the app restarted (see the first gotcha), so say that instead.
+  2. **Prove the running server has it**: `curl -s http://localhost:5173/src/<path> | grep -c
+     <a name you added>` (the renderer's root is `src/renderer`, so the URL drops that prefix;
+     5173 unless "Port … is in use" moved it). A count of 0 means he is not running your change.
+  3. Only then hand it over, and say plainly that the check was the served code, not his window.
+- **The Windows mirror of the gotcha above: OneDrive sync lag looks exactly like a platform bug,
+  and nothing marks it as sync rather than code.** Same feature, same day (2026-09-20), the other
+  direction: asked to debug "works on Mac, doesn't work on Windows," the three files named in the
+  report (`completions.ts`, `wikiPass.ts`, `links/model.ts`) were still on **August** timestamps on
+  this Windows OneDrive copy, and `docs/open-items.md`'s new section describing the fix didn't
+  exist here either — the code had simply not arrived over OneDrive yet. `grep closeWikiLink`
+  across the renderer, and against the dev server's served output, both came back 0. A few minutes
+  later, asked to check again, both were present and current, and a scratch-build CDP pass (see
+  above) showed the fix working cleanly on all three pick paths. **Before hunting for a real
+  per-platform difference, check whether the files/doc sections the report names actually exist
+  and are current on this machine** — `stat` them, or `grep` for a marker the fix is supposed to
+  introduce. A 0 match count or a months-old mtime on a file a same-day fix touched is the whole
+  diagnosis; don't start reasoning about Windows-vs-Mac editor behaviour before ruling that out.
 - **Agent sessions only:** the harness sets `ELECTRON_RUN_AS_NODE=1`, which makes the Electron
   binary run as plain Node (symptom: `electron.app` is undefined, `process.version` is the
   system Node). Clear it before launching: `Remove-Item Env:ELECTRON_RUN_AS_NODE`. A normal user

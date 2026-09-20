@@ -57,6 +57,14 @@ the raw-view toggle.
   reason, and a picker listing every note in every space undoes that the moment you go to link
   something. Scoping applies only to what is OFFERED: a link already written keeps resolving
   wherever it points, which is what the cross-space marking is for.
+  **Choosing a row writes the closing `]]` too and leaves the cursor after it (2026-09-20)** — the
+  link renders the moment it is picked, with nothing left to type. `closeWikiLink` (`links/model.ts`,
+  pure, tested) decides the text; `completions.ts` applies it. Brackets already after the cursor are
+  reused, not doubled (`/link` writes `[[]]` first). A cursor in the MIDDLE of a link that is already
+  closed further along gets the old plain insert — there is no right answer for the letters after it.
+  For that to be visible, `wikiPass` treats a cursor exactly AFTER the `]]` as outside the link —
+  unlike `overlapsSelection`, whose edges are inclusive — so a link you finish typing by hand also
+  renders at once instead of showing raw until you type something after it.
   Renaming a note rewrites the links that pointed at it — only notes the index says actually link
   there, only links that *resolved* to it, after a `flush()`, and through `onDocChange` for notes
   that are open so the autosave owns the write. Moving a note does NOT rewrite anything: links
