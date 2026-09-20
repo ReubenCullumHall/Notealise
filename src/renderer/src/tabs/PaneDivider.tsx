@@ -3,13 +3,13 @@ import { MIN_PANE_PX } from './model'
 
 /** The draggable seam between two columns.
  *
- *  **It takes no net width.** An 11px box with -5.5px margins either side gives
+ *  **It takes no net width.** An 18px box with -9px margins either side gives
  *  back exactly what it costs, so the panes' own fractions still describe the
  *  whole row and adding dividers changes no arithmetic — while the element keeps
- *  a real hit area, focus target and bounding box. What you see at rest is
- *  `NotePane`'s existing `border-l`, which the divider's centre lands on; this
- *  only draws a brighter line *over* that border on hover and while dragging.
- *  The resting appearance of a split does not change.
+ *  a real hit area, focus target and bounding box. `NotePane`'s `border-l`
+ *  hairline sits under the divider's centre, and the divider draws a 3px
+ *  accent-coloured line over it at ALL times (5px on hover and while
+ *  dragging) — the hairline alone disappears behind a page-look pattern.
  *
  *  **The drag is not animated, deliberately.** The seam tracks the pointer 1:1;
  *  a divider that eases toward your finger reads as lag, not as polish. The
@@ -100,6 +100,14 @@ export function PaneDivider({ at, onResize, onReset, label }: Props): React.JSX.
   const move = (e: React.PointerEvent<HTMLDivElement>): void => {
     const d = from.current
     if (!d || d.id !== e.pointerId) return
+    // The button came up somewhere we never heard about (released outside the
+    // window, focus lost mid-drag). Without this the drag never ended: the seam
+    // kept following the cursor, the cursor stayed a resize arrow everywhere,
+    // and the pointer stayed captured, so clicks were swallowed by the divider.
+    if (e.buttons === 0) {
+      end(e)
+      return
+    }
     const pair = neighbours(e.currentTarget)
     if (!pair) return
     const span = d.left + d.right
@@ -166,6 +174,7 @@ export function PaneDivider({ at, onResize, onReset, label }: Props): React.JSX.
       onPointerMove={move}
       onPointerUp={end}
       onPointerCancel={end}
+      onLostPointerCapture={end}
       onDoubleClick={onReset}
       onKeyDown={onKeyDown}
     >

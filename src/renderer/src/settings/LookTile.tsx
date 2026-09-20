@@ -1,5 +1,5 @@
 import { rgbChannels } from '../../../shared/color'
-import { findPageLook, parseTint } from '../../../shared/looks'
+import { findPageLook, parseTint, PAGE_LOOK_INTENSITY_DEFAULT } from '../../../shared/looks'
 
 // The miniature every page-look and tint control is built out of — the cards
 // in Your collection, the cards in Explore, and the pickers on a space.
@@ -28,6 +28,13 @@ interface Props {
   lines?: number
   /** the selected ring */
   on?: boolean
+  /** 0..100, same meaning as Space.pageLookIntensity; defaults to the neutral
+   *  50 so every existing call site keeps rendering exactly as before this
+   *  axis existed. */
+  intensity?: number
+  /** draw the pattern in the accent colour instead of the theme's ink wash —
+   *  same meaning as Space.pageLookAccent */
+  accent?: boolean
   /** height/width utilities from the caller — the tile has no size of its own */
   className?: string
 }
@@ -36,11 +43,25 @@ interface Props {
  *  the same width read as a barcode, not as a paragraph. */
 const WIDTHS = ['100%', '86%', '94%', '62%']
 
-export function LookTile({ look = '', tint = '', lines = 2, on, className = '' }: Props): React.JSX.Element {
+export function LookTile({
+  look = '',
+  tint = '',
+  lines = 2,
+  on,
+  intensity = PAGE_LOOK_INTENSITY_DEFAULT,
+  accent = false,
+  className = ''
+}: Props): React.JSX.Element {
   const parsed = parseTint(tint)
   const vars = {
     '--page-tint-rgb': parsed ? rgbChannels(parsed.hex) : '0 0 0',
-    '--page-tint-alpha': parsed ? parsed.opacity / 100 : 0
+    '--page-tint-alpha': parsed ? parsed.opacity / 100 : 0,
+    '--page-look-intensity': intensity / PAGE_LOOK_INTENSITY_DEFAULT,
+    // Set directly rather than via the `data-page-look-accent` attribute
+    // app.css keys off for the real editor — that rule is scoped to `:root`
+    // on purpose (so it inherits down to the scroller), and this tile is
+    // never :root, so the same attribute here would just match nothing.
+    '--page-look-rgb': accent ? 'var(--accent-500)' : 'var(--wash)'
   } as React.CSSProperties
 
   return (

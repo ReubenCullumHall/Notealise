@@ -29,7 +29,12 @@
 
 import { isColorToken, type ColorToken } from './palette'
 import { DEFAULT_PALETTE, normalizePalette } from './color'
-import { normalizePageLookLibrary, normalizeTintLibrary } from './looks'
+import {
+  normalizePageLookIntensity,
+  normalizePageLookLibrary,
+  normalizeTintLibrary,
+  PAGE_LOOK_INTENSITY_DEFAULT
+} from './looks'
 
 /** 'black' is Extra dark: the dark ramp with every surface taken to (near)
  *  pitch black, for OLED panels and dim rooms. It is a VARIANT of dark, not a
@@ -271,6 +276,17 @@ export interface Space {
    *  switch, not chosen alongside other looks. '' means off. */
   dyslexiaFont: string
   tint: string
+  /** How strongly the page look's pattern draws, 0..100, default 50 — see
+   *  shared/looks.ts. Independent of `tint`: this is the pattern's own
+   *  strength, not a colour wash. */
+  pageLookIntensity: number
+  /** When true, the pattern draws in the space's accent colour instead of the
+   *  theme's neutral ink wash. Off by default — a page look's rules/dots are
+   *  ink-coloured (`--wash`) until you opt in. One field, read from both the
+   *  Page look section (where the pattern lives) and the Appearance section
+   *  (where the accent is picked) — see SpacePage.tsx and SpaceAppearance in
+   *  Spaces.tsx. */
+  pageLookAccent: boolean
 }
 
 /** A space's whole look, with the question of *which folder* removed — every
@@ -437,7 +453,9 @@ export const DEFAULT_SPACE: Space = {
   font: '',
   uiFont: '',
   dyslexiaFont: '',
-  tint: ''
+  tint: '',
+  pageLookIntensity: PAGE_LOOK_INTENSITY_DEFAULT,
+  pageLookAccent: false
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -608,7 +626,9 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     font: shortString(s.font),
     uiFont: shortString(s.uiFont),
     dyslexiaFont: shortString(s.dyslexiaFont),
-    tint: shortString(s.tint)
+    tint: shortString(s.tint),
+    pageLookIntensity: normalizePageLookIntensity(s.pageLookIntensity),
+    pageLookAccent: typeof s.pageLookAccent === 'boolean' ? s.pageLookAccent : DEFAULT_SPACE.pageLookAccent
   }
 }
 

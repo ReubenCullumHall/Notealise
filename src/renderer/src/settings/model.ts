@@ -4,7 +4,7 @@
 // accent variables on <html>); persistence goes through IPC (window.api).
 
 import { hexToHsv, normalizeHex, rgbChannels } from '../../../shared/color'
-import { findPageLook, parseTint } from '../../../shared/looks'
+import { findPageLook, parseTint, PAGE_LOOK_INTENSITY_DEFAULT } from '../../../shared/looks'
 import { PALETTE, paletteEntry, splitToken } from '../../../shared/palette'
 import { activeSpace, type AppSettings, type ResolvedThemeId, type Space } from '../../../shared/settings'
 import { findFont, fontCssValue, type FontFallback } from './fonts'
@@ -448,6 +448,10 @@ export function applySettings(s: AppSettings): void {
   const pageTint = parseTint(a.tint)
   root.style.setProperty('--page-tint-rgb', pageTint ? rgbChannels(pageTint.hex) : '0 0 0')
   root.style.setProperty('--page-tint-alpha', pageTint ? String(pageTint.opacity / 100) : '0')
+  // The pattern's own strength and colour — see the comment on --page-look-rgb
+  // / --page-look-intensity in app.css for what these two axes mean.
+  root.style.setProperty('--page-look-intensity', String(a.pageLookIntensity / PAGE_LOOK_INTENSITY_DEFAULT))
+  root.dataset.pageLookAccent = a.pageLookAccent ? 'on' : 'off'
   root.dataset.motion = s.animationsEnabled ? 'on' : 'off'
   // Read by app.css to pin a note's body back to the theme's own ink while
   // every other label wears the accent.

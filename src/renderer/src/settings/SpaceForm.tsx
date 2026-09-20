@@ -112,9 +112,18 @@ export function SpaceForm({
         hint="Theme, accent colour, button edges, sidebar density and editor width"
       >
         {differs &&
-          (['theme', 'textTone', 'buttonDefinition', 'density', 'editorWidth', 'accent', 'accentMode'] as const).some(
-            differs
-          ) && (
+          (
+            [
+              'theme',
+              'textTone',
+              'buttonDefinition',
+              'density',
+              'editorWidth',
+              'accent',
+              'accentMode',
+              'pageLookAccent'
+            ] as const
+          ).some(differs) && (
             <p className="mb-2 text-[11.5px] text-ink-400">
               Some of these differ between your spaces <Differs />
             </p>
@@ -140,7 +149,7 @@ export function SpaceForm({
         openSignal={opens('Page')}
         hint="The paper itself — a pattern behind your writing, and a colour washed under it"
       >
-        {differs && (['pageLook', 'tint'] as const).some(differs) && (
+        {differs && (['pageLook', 'tint', 'pageLookIntensity', 'pageLookAccent'] as const).some(differs) && (
           <p className="mb-2 text-[11.5px] text-ink-400">
             Some of these differ between your spaces <Differs />
           </p>
