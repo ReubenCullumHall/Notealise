@@ -526,7 +526,15 @@ export function NotePane({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault()
+                    // Enter takes the name AND puts you in the note (Reuben,
+                    // 2026-09-20). The blur is what commits it; focus goes to
+                    // the editor a frame later, because `commitTitle` starts a
+                    // rename whose re-render would otherwise land on top of the
+                    // focus call and leave the caret nowhere. The caret keeps
+                    // whatever position it had, which on a note you have just
+                    // named is the start of an empty document.
                     ;(e.target as HTMLInputElement).blur()
+                    requestAnimationFrame(() => viewRef.current?.focus())
                   } else if (e.key === 'Escape') {
                     setTitleDraft(stripMd(nameOf(path)))
                     ;(e.target as HTMLInputElement).blur()

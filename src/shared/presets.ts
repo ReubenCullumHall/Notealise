@@ -159,21 +159,27 @@ export type LookPart = (typeof LOOK_PARTS)[number]
 const PART_KEYS: Record<LookPart, readonly (keyof SpaceLook)[]> = {
   // The emoji rides with appearance: it is the space's marker, and a look
   // without it is half a look (the user's call — applying DOES overwrite it).
-  appearance: ['emoji', 'theme', 'textTone', 'buttonDefinition', 'density', 'editorWidth', 'accent', 'accentMode', 'accentUiText', 'pageLook', 'font', 'uiFont', 'dyslexiaFont', 'tint', 'pageLookIntensity', 'pageLookAccent'],
+  // `islandName` rides with it for the same reason and on the same terms: it is
+  // a label this space wears, not a setting with a right answer, and a look
+  // that renamed the tab island would be as surprising either way round. Which
+  // NOTES are in that island is not here and cannot be — that lives per note in
+  // workspace.json (`EntryMeta.island`), so pouring a preset never moves a
+  // single note.
+  appearance: ['emoji', 'islandName', 'theme', 'textTone', 'buttonDefinition', 'density', 'editorWidth', 'accent', 'accentMode', 'accentUiText', 'pageLook', 'font', 'uiFont', 'dyslexiaFont', 'tint', 'pageLookIntensity', 'pageLookAccent'],
   colour: ['colorStyle', 'colorAuto', 'colorInherit', 'colorFadeNested', 'colorPalette'],
   arranging: ['freeArrange', 'compactNav'],
   links: ['showLinks', 'linksPosition'],
-  noteExtras: ['showPath', 'showNoteInfo', 'markdownPro', 'rawMarkStyle', 'rawMarkTint'],
+  noteExtras: ['showPath', 'showIsland', 'showNoteInfo', 'markdownPro', 'rawMarkStyle', 'rawMarkTint'],
   whileScrolling: ['pinLinks', 'pinPath', 'pinNoteHeader', 'pinTabs'],
   shortcuts: ['toolbarSlots']
 }
 
 export const PART_LABELS: Record<LookPart, { label: string; hint: string }> = {
-  appearance: { label: 'Appearance', hint: 'emoji, theme, accent, density, button edges' },
+  appearance: { label: 'Appearance', hint: 'emoji, tab island name, theme, accent, density, button edges' },
   colour: { label: 'Colour', hint: 'how entry colours paint, the palette, auto-colouring' },
   arranging: { label: 'Arranging', hint: 'sidebar order and the nav buttons' },
   links: { label: 'Links', hint: "whether a note's links strip shows, and where it sits" },
-  noteExtras: { label: 'Note extras', hint: 'the file path bar, last-edited time, and the raw-Markdown toggle' },
+  noteExtras: { label: 'Note extras', hint: 'the file path bar, the bookmark, last-edited time, and the raw-Markdown toggle' },
   whileScrolling: {
     label: 'While scrolling',
     hint: 'whether the tab strip, path bar, heading row and links strip stay put, or get out of the way'

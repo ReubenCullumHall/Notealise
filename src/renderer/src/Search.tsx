@@ -1,4 +1,5 @@
 import { Icon } from './icons'
+import { DRAG_SEARCH } from './tabs/island'
 
 export interface SearchHit {
   path: string
@@ -106,10 +107,6 @@ export function SearchBar({
           onChange={(e) => onQuery(e.target.value)}
           spellCheck={false}
         />
-        {/* No clear button. It only ever existed while there was a query — i.e.
-            exactly when the row is at its tightest and every pixel is the thing
-            you are typing into. Escape and a held Backspace both already clear
-            it, and neither costs the row any width (Reuben, 2026-09-06). */}
         <span className="h-4 w-px shrink-0 bg-ink-300/15" />
         {/* The three filters are one group, so they sit tighter to each other
             than to the divider and the input: the row's own `gap-1.5` still
@@ -117,6 +114,26 @@ export function SearchBar({
             closes the space INSIDE it. They were reading as three unrelated
             buttons spread along the pill. */}
         <div className="flex shrink-0 items-center gap-0.5">
+          {/* Clear, and with it the way back to your notes. It was taken out on
+              2026-09-06 as width the query needed more — but the results list
+              replaces the whole tree, and Escape is not a way out anyone finds
+              while looking at it: there was no visible way back to the note view
+              at all (Reuben, 2026-09-19). Same size and shape as the two filters
+              it leads, and only here while there is something to clear, so an
+              empty pill is exactly as wide as it was.
+              FIRST in the group, not last: it belongs to the words, so it sits
+              at the end of them rather than at the far edge of the pill, which
+              is where the cursor already is (Reuben, 2026-09-20). */}
+          {query && (
+            <button
+              onClick={() => onQuery('')}
+              data-tip="Clear the search"
+              aria-label="Clear the search"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-none bg-transparent p-0 text-accent-500 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-accent-600 focus-visible:ring-2 focus-visible:ring-brand-300"
+            >
+              <Icon name="x" className="h-4 w-4" />
+            </button>
+          )}
           <SearchToggle
             on={deep}
             onClick={onToggleDeep}
@@ -191,6 +208,15 @@ export function SearchResults({
               : 'hover:bg-surface/70')
           }
           style={{ paddingLeft: 'var(--row-pad0)' }}
+          draggable
+          // Drag a hit straight into the tab island. Nothing else in the app
+          // takes this type, so adding it cannot change where an existing drop
+          // lands — a result dragged anywhere else still does nothing, exactly
+          // as before.
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move'
+            e.dataTransfer.setData(DRAG_SEARCH, h.path)
+          }}
           onClick={(e) => onOpen(h, e.metaKey || e.ctrlKey)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') onOpen(h, e.metaKey || e.ctrlKey)

@@ -32,6 +32,11 @@ const CHROME: { key: keyof Space & string; label: string; hint: string }[] = [
     hint: 'A bar between the tabs and the format bar reading Space › Folder › Note. Clicking a folder in it opens that folder in the sidebar and closes the rest, so you can see what else is in there.'
   },
   {
+    key: 'showIsland',
+    label: 'Show the bookmark',
+    hint: 'The bookmark at the start of the tab strip, where you keep the notes you come back to most. Turn it off and it goes from this space; the notes in it are remembered for when you turn it back on.'
+  },
+  {
     key: 'showNoteInfo',
     label: 'Show when it was last edited',
     hint: 'Puts the time beside the word count, on your machine’s clock. Hover it for the full dates, including when the note was created.'

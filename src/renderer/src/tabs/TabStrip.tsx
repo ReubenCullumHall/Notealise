@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '../icons'
 import { BLANK, MAX_PANES, stripGroups } from './model'
+import { SEG_BASE, SEG_OFF, SEG_ON, TAB_BASE, TAB_OFF, TAB_ON } from './tabStyles'
 import type { Drag } from './NotePane'
 
 interface Props {
@@ -28,6 +29,11 @@ interface Props {
   onDragTab: (path: string | null) => void
   /** open an empty tab ("+"), which asks you to pick a note */
   onNewTab: () => void
+  /** the space's tab island (`Island.tsx`), already built by App and dropped in
+   *  at the left of the strip. Passed as an element rather than as eight more
+   *  props threaded through here: the strip is where it SITS, not something that
+   *  has any opinion about what is in it. */
+  island?: React.ReactNode
   dragging: Drag | null
   /** fade this out of the way (Settings → While scrolling → "Keep the tab
    *  strip on screen", off). Its layout space stays reserved — nothing below
@@ -39,26 +45,6 @@ const nameOf = (p: string): string => p.slice(p.lastIndexOf('/') + 1)
 const stripMd = (s: string): string => (s.toLowerCase().endsWith('.md') ? s.slice(0, -3) : s)
 const titleOf = (p: string): string => (p === BLANK ? 'Select a note' : stripMd(nameOf(p)))
 
-// Active/inactive follow the sidebar's space switcher rather than inventing a
-// second "selected" idiom: accent border + wash for the one you're on, a plain
-// hairline for the rest. `btn-edge` opts the inactive ones into the
-// button-definition setting; the active tab keeps its accent border, which is
-// how you can see which one you're in (CLAUDE.md, Tailwind-vs-app.css note).
-const TAB_BASE =
-  'press-row group relative flex shrink-0 cursor-pointer select-none items-center gap-1 rounded-lg border py-1 pl-3 pr-1 text-[13px] outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 '
-const TAB_ON = 'border-brand-400/60 bg-brand-500/15 text-brand-600 '
-const TAB_OFF =
-  'btn-edge border-ink-300/25 bg-transparent text-ink-500 hover:bg-ink-300/15 hover:text-ink-900 '
-
-// A SEGMENT of a grouped tab. The group draws the one border round the lot, so
-// a segment has none of its own — what separates two of them is the divider
-// below, and what marks the focused one is the accent wash it shares with a
-// lone active tab. TAB_SHOWN (a second, quieter "this is on screen" border)
-// used to say what the grouping now says outright, and went with this change.
-const SEG_BASE =
-  'press-row group/seg relative flex shrink-0 cursor-pointer select-none items-center gap-1 rounded-md py-0.5 pl-2.5 pr-1 text-[13px] outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 '
-const SEG_ON = 'bg-brand-500/15 text-brand-600 '
-const SEG_OFF = 'text-ink-600 hover:bg-ink-300/15 hover:text-ink-900 '
 
 /** The strip of open notes across the top of the editor area. Click to focus,
  *  × (or middle-click) to close, drag to reorder — or drag onto a pane's edge
@@ -82,6 +68,7 @@ export function TabStrip({
   onUngroup,
   onDragTab,
   onNewTab,
+  island,
   dragging,
   hidden
 }: Props): React.JSX.Element {
@@ -251,14 +238,15 @@ export function TabStrip({
       onDrop={drop}
       onDragLeave={clear}
     >
-      {/* An empty strip has to be exactly as tall as a full one, or opening the
-          first note shifts the page down — the thing reserving the space was
-          meant to prevent. Held open by a real tab that happens to be invisible,
-          so it can't drift out of step with the tab styling above it. */}
-      {tabs.length === 0 && (
-        <div className={TAB_BASE + TAB_OFF + 'invisible'} aria-hidden="true">
-          <span className="font-medium">Untitled</span>
-        </div>
+      {island}
+      {/* The island and the open tabs are two different questions — what you
+          keep to hand, and what you have open right now — so a hairline says so
+          rather than letting the chips read as more tabs. */}
+      {/* Only when there ARE tabs to divide it from: with none, a divider just
+          pushes the + away from the island for no reason (Reuben, 2026-09-19:
+          the + "should always be next to the commonly accessed area"). */}
+      {island && tabs.length > 0 && (
+        <span className="mx-1 h-5 w-px shrink-0 bg-ink-300/25" aria-hidden="true" />
       )}
 
       {items.map((item) =>
@@ -367,6 +355,37 @@ export function TabStrip({
         )
       )}
       {marker(null)}
+      {/* An empty strip has to be exactly as tall as a full one, or opening the
+          first note shifts the page down — the thing reserving the space was
+          meant to prevent. Held open by a real tab that happens to be invisible,
+          so it can't drift out of step with the tab styling above it.
+          The + shares a box with that spacer so the two sit flush:
+          as a strip item of its own the spacer also took a full tab's WIDTH,
+          which is the gap Reuben saw between the island and the + with no tabs
+          open. Zero-width and clipped, it still holds the strip at tab height. */}
+      <div
+        className={
+          'flex shrink-0 items-center ' +
+          // Deaf to the pointer while a drag is in flight. The drop indicator
+          // is a real 4px-wide element, so showing it SHIFTS whatever follows
+          // it — and the + is small enough to slide out from under the pointer
+          // entirely. That fired a dragleave, which cleared the indicator,
+          // which shifted the + back under the pointer, which fired dragenter…
+          // a flicker loop in which no drop ever landed, so a note dropped on
+          // the + did nothing (and a chip dropped there was removed from the
+          // island without becoming a tab). Ignoring the pointer hands those
+          // events to the strip itself, which does not move. Same shape as the
+          // 1px sidebar divider in CLAUDE.md's gotchas.
+          (dragging || groupDrag ? 'pointer-events-none ' : '')
+        }
+      >
+      {tabs.length === 0 && (
+        <div className="w-0 overflow-hidden" aria-hidden="true">
+          <div className={TAB_BASE + TAB_OFF + 'invisible'}>
+            <span className="font-medium">Untitled</span>
+          </div>
+        </div>
+      )}
       <button
         type="button"
         data-tip="New tab"
@@ -376,6 +395,7 @@ export function TabStrip({
       >
         <Icon name="plus" className="h-4 w-4" />
       </button>
+      </div>
     </div>
     {menu && (
       <TabGroupMenu

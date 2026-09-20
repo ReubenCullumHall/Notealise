@@ -212,6 +212,26 @@ export interface Space {
   pinLinks: boolean
   /** top (under the format bar) or fixed to the bottom of the note */
   linksPosition: LinksPosition
+  /** What this space's tab island is called — the collapsible group at the left
+   *  of the tab strip holding the notes you keep coming back to. Per space,
+   *  because the island is: each space keeps its own set (Reuben, 2026-09-17,
+   *  "we'll build one island per space atm").
+   *
+   *  The NAME is here rather than in workspace.json because it is a label you
+   *  chose for this space, like its emoji — the same kind of thing as `pageLook`
+   *  beside it. Which notes are in the island is the opposite kind of thing, a
+   *  property of each note, and lives in workspace.json with the pins and the
+   *  colours (`EntryMeta.island`). Empty string means "never renamed": the
+   *  strip then shows ISLAND_NAME_DEFAULT rather than an empty pill, so a space
+   *  whose settings.json predates this feature reads correctly. */
+  islandName: string
+  /** Show the tab island (the bookmark at the start of the tab strip) in this
+   *  space at all. ON for every space, including a brand-new one (Reuben,
+   *  2026-09-19: "add a setting in spaces to turn the icon off (automatically
+   *  one for all spaces when created)"). Off hides the bookmark and gives its
+   *  notes back their ordinary tabs; which notes were in it is remembered in
+   *  workspace.json, so turning it back on puts them straight back. */
+  showIsland: boolean
   /** show the `Space › Folder › Note` bar between the tabs and the format bar */
   showPath: boolean
   /** show when the note was made and last edited, beside its word count */
@@ -441,6 +461,8 @@ export const DEFAULT_SPACE: Space = {
   // On by default: knowing where the note you're reading actually lives is the
   // kind of thing you want in every space, and a new space starting without it
   // read as the feature being missing rather than switched off.
+  islandName: '',
+  showIsland: true,
   showPath: true,
   showNoteInfo: false,
   markdownPro: false,
@@ -613,6 +635,8 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     linksPosition: LINKS_POSITIONS.includes(s.linksPosition as LinksPosition)
       ? (s.linksPosition as LinksPosition)
       : DEFAULT_SPACE.linksPosition,
+    islandName: shortString(s.islandName),
+    showIsland: typeof s.showIsland === 'boolean' ? s.showIsland : DEFAULT_SPACE.showIsland,
     showPath: chrome(s.showPath, legacy.showPath, DEFAULT_SPACE.showPath),
     showNoteInfo:
       typeof s.showNoteInfo === 'boolean' ? s.showNoteInfo : DEFAULT_SPACE.showNoteInfo,

@@ -18,6 +18,19 @@ export interface EntryMeta {
    *  which is what lets free-arrange interleave them; absent → sorts last. */
   order?: number
   pinned?: boolean
+  /** position in this note's SPACE island — the collapsible "commonly accessed"
+   *  strip at the left of the tab bar (`tabs/island.ts`). Absent means "not in
+   *  the island", which is why it is a rank and not a boolean: the island has
+   *  its own hand-arranged order, independent of `order` (the sidebar's) and of
+   *  `pinned` (the sidebar's hoist). Those are three different questions about
+   *  the same note and deliberately do not share a field.
+   *
+   *  Which island a note belongs to is not stored: it is the island of the
+   *  space the note lives in, derived from its own path (`islandNotes`). That
+   *  is what makes a rename, a move to the bin or a deleted space cost nothing
+   *  here — `migrateKey` and `trashEntries` already carry this entry with them,
+   *  exactly as they do the pin and the colour. */
+  island?: number
   archived?: boolean
   /** epoch ms, set when archived; used by the archive's "recently archived" sort. */
   archivedAt?: number
@@ -420,6 +433,8 @@ export function normalizeEntry(raw: unknown): EntryMeta {
   if (order !== undefined) meta.order = order
   const pinned = bool(v.pinned)
   if (pinned !== undefined) meta.pinned = pinned
+  const island = num(v.island)
+  if (island !== undefined) meta.island = island
   const archived = bool(v.archived)
   if (archived !== undefined) meta.archived = archived
   const archivedAt = num(v.archivedAt)

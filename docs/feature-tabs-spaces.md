@@ -589,3 +589,54 @@ main routes by id — a catalogue id is a download, a UUID is a custom import. T
 that decision in the renderer, which got it wrong: Your collection called the custom-only path
 for a downloaded font, matched nothing in the manifest, and returned silently. The Remove button
 did nothing at all.
+## The tab island (built 2026-09-17 → 20)
+
+The bookmark at the start of the tab strip, holding the notes you keep coming back to. Opera's
+tab islands are the reference. `tabs/island.ts` (pure), `tabs/TabIsland.tsx` (the component),
+`tabs/tabStyles.ts` (the pill skins, shared with `TabStrip` so the two can't drift).
+
+**Membership is a rank on the note, never a stored list.** `EntryMeta.island` in `workspace.json`,
+and the island a note belongs to is the island of the space its own path sits in. That is what
+makes a rename, a bin, or a deleted space cost nothing here: `migrateKey` / `trashEntries` /
+`deleteSpace` already carry `EntryMeta` with them. A list would have to be taught about all three,
+and the one that got missed would be a chip pointing at nothing. The cost, accepted: a note moved
+to another space arrives in THAT space's island.
+
+**The NAME is per-space settings** (`Space.islandName`), because it is a label you chose, like the
+emoji — so it rides in a preset's `appearance` group and is overwritten by one, which Reuben
+confirmed (2026-09-20) is what he wants. `Space.showIsland` (default true, every space) turns it
+off; it rides in `noteExtras`. Both must appear in `PART_KEYS` or `presets.test.ts` fails — see
+CLAUDE.md pattern 5.
+
+**Island notes are NOT drawn as tabs** (`App.tsx`'s `stripTabs`). A note lives in one place on the
+strip: dragging a tab in MOVES it, and you keep reading it, with the folded bookmark lit to say
+where it went. The exception is a note inside a multi-pane split, which the group pill must keep
+showing or the strip would describe a split that isn't on screen.
+
+**Opening is a click, never a hover.** Hover-to-open shipped for two days and was measured throwing
+the first tab 446px sideways when the pointer merely rested on the bookmark — the tab you were
+reaching for ran away. The one non-click opener left is a drag resting on it (`ARM_MS`), which
+folds again when the drag ends. Open/close animates width with an overshoot curve — the deliberate
+exception to CLAUDE.md's motion rule, asked for by name, and off with `data-motion="off"`.
+
+**What the 20-check stress harness found** (a seeded vault: three spaces including `Work` vs
+`Workshop`, nested folders, duplicate titles, a 68-character title, a loose root note, 15 notes in
+one island). Five real faults, none of which the unit tests or a casual click-through could see:
+the open island burst past its 50% cap and painted over the tabs (`TAB_BASE`'s `shrink-0`); a
+hover-opened island folded mid-drag and unmounted the chip being dragged, so nothing was removed;
+"Add to…" was offered for notes outside the space and silently did nothing; two notes with the
+same title were indistinguishable (they now carry their folder); and a drop landing ON the `+`
+button did nothing at all, because the drop indicator's 4px shifts the `+` out from under the
+pointer and starts a dragenter/dragleave flicker loop — the same trap as the 1px sidebar divider
+in CLAUDE.md's gotchas. The `+` is `pointer-events-none` while a drag is in flight.
+
+**Sidebar/search/chip drags reach the tab strip and the panes** through one document-level
+`dragstart` listener in `App.tsx` that turns them into the same `{kind:'tab'}` drag an open tab
+already is. Everything downstream (`splitAt`, `showInPane`, `splitWith`) already opened a note that
+wasn't open yet, so nothing else needed changing. `dataTransfer.getData` is only readable during
+`dragstart` and `drop` — never `dragover` — which is why each source sets a named MIME type
+(`tabs/island.ts`) rather than everything sharing `text/plain`.
+
+**Known, pre-existing, not fixed here:** the strip is 42.5px with nothing open and 43px with one
+tab, because the invisible spacer tab that holds its height has no close button. Reproduced with
+the island switched off.

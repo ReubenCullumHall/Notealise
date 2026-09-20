@@ -5,6 +5,7 @@ import type { ColorStyle } from '../../shared/settings'
 import { inkOn, rgbChannels } from '../../shared/color'
 import { Icon } from './icons'
 import { colorOf, labelOf, metaOf, onDate, sortSiblings, splitMoved } from './organise/model'
+import { DRAG_NOTE } from './tabs/island'
 
 // The sidebar tree. Ported from the legacy prototype's row renderers
 // (legacy/src/App.jsx:521-722) so the two apps render the same sidebar: two-line
@@ -244,6 +245,12 @@ export function TreeView({
     onDragging(carry)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', carry.join('\n'))
+    // Named as well as plain, and BOTH are needed. The tree's own drops read
+    // `dragging` state and never touch the payload, so this changes nothing
+    // here — it is for the tab island, which is a different component and can
+    // only ask `dataTransfer.types` whether a drag is meant for it while the
+    // pointer is still moving (`tabs/island.ts`).
+    e.dataTransfer.setData(DRAG_NOTE, carry.join('\n'))
   }
   const endDrag = (): void => {
     onDragging(null)

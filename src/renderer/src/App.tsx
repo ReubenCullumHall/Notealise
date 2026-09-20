@@ -12,6 +12,18 @@ import { FormatToolbar } from './editor/FormatToolbar'
 import { NotePane, ROW_CLASS, type Drag } from './tabs/NotePane'
 import { PaneDivider } from './tabs/PaneDivider'
 import { TabStrip } from './tabs/TabStrip'
+import { Island } from './tabs/TabIsland'
+import {
+  DRAG_CHIP,
+  DRAG_NOTE,
+  DRAG_SEARCH,
+  inSpace as belongsToSpace,
+  islandNotes,
+  ISLAND_NAME_DEFAULT,
+  rankWrites,
+  withAdded,
+  withRemoved
+} from './tabs/island'
 import {
   activePath,
   closePane,
@@ -43,6 +55,8 @@ import {
 } from './tabs/model'
 import { applySettings, resolveTheme } from './settings/model'
 import { indexFingerprint, liveIndex, noteRefs } from './links/model'
+import { forbiddenIn, sanitizeFilename } from '../../shared/filenames'
+import { cleanIpcError } from './ipcError'
 import { PathBar } from './PathBar'
 import { Tooltip } from './Tooltip'
 import { StartupSplash } from './StartupSplash'
@@ -121,6 +135,22 @@ const spaceFolderOf = (path: string, spaces: Space[]): string => {
 }
 const baseName = (osPath: string): string => osPath.split(/[\\/]/).filter(Boolean).pop() ?? osPath
 const stripMd = (s: string): string => (s.toLowerCase().endsWith('.md') ? s.slice(0, -3) : s)
+
+/** Why a name came back different from the one that was typed.
+ *
+ *  Main decides the real filename (`shared/filenames.ts`, the same rules on both
+ *  platforms), and this says so in the user's own terms: which character it was,
+ *  and what the thing is actually called now. The old line — "adjusted for
+ *  cross-platform safety" — named neither, so the one question it raised ("what
+ *  did I do wrong?") was the one it didn't answer (Reuben, 2026-09-19). */
+const nameChangedNotice = (typed: string, actual: string): string => {
+  const bad = forbiddenIn(typed)
+  const list =
+    bad.length > 1 ? `${bad.slice(0, -1).join(' ')} or ${bad[bad.length - 1]}` : bad[0]
+  return bad.length
+    ? `A name can't contain ${list} — saved as "${stripMd(actual)}"`
+    : `Saved as "${stripMd(actual)}" — the name you typed wouldn't work on every computer`
+}
 // Counts what a reader sees, not what the file holds — see shared/plainText.ts
 // for why every markdown mark used to score as a word.
 /** What to call a column out loud — the pane divider's `aria-label` names the two
@@ -150,6 +180,13 @@ const EMPTY_WS: Workspace = { entries: {}, trash: [], recovery: [] }
 interface Notice {
   text: string
   action?: { label: string; run: () => void }
+  /** Hold a beat longer than the usual line. For something that went WRONG:
+   *  you did not ask for it, it is usually longer than a success message, and
+   *  there is generally something for you to do about it. Capped at 5s rather
+   *  than the 9s an `action` notice gets, because the strip has no dismiss
+   *  button — a line you cannot close is one you have to wait out, so it must
+   *  not outstay (Reuben, 2026-09-20). */
+  linger?: boolean
 }
 
 /** A tick and a label as one clickable row.
@@ -287,6 +324,11 @@ export default function App(): React.JSX.Element {
     }
     setWorkspaceRaw(next)
   }
+  // Is the tab island unfolded? Session state, not settings: the island folds
+  // itself the moment you take a note out of it, so "open" is where you are in a
+  // gesture rather than a preference, and a launch that came back expanded would
+  // be showing you the middle of something you finished last week.
+  const [islandOpen, setIslandOpen] = useState(false)
   // Which notes are open as tabs, and which of them each pane shows. All the
   // arithmetic (what a pane falls back to, where a dropped tab lands) is in
   // tabs/model.ts; App only holds the result and the documents behind it.
@@ -394,7 +436,10 @@ export default function App(): React.JSX.Element {
   const showNotice = useCallback((n: Notice): void => {
     setNotice(n)
     if (noticeTimer.current) clearTimeout(noticeTimer.current)
-    noticeTimer.current = setTimeout(() => setNotice(null), n.action ? 9000 : 4000)
+    noticeTimer.current = setTimeout(
+      () => setNotice(null),
+      n.action ? 9000 : n.linger ? 5000 : 4000
+    )
   }, [])
   /** Say one line and let it fade. The plain form — everything that is only
    *  telling you something, which is everything but the undo above. */
@@ -409,6 +454,9 @@ export default function App(): React.JSX.Element {
       promptResolve.current = resolve
     })
   }, [])
+  /** true when the press that started the click landed on the backdrop itself —
+   *  see the prompt's own note below. */
+  const promptDownOutside = useRef(false)
   const closePrompt = (v: string | null): void => {
     setPrompt(null)
     promptResolve.current?.(v)
@@ -855,6 +903,10 @@ export default function App(): React.JSX.Element {
 
       const swap = async (): Promise<void> => {
         spaceTabs.current.set(from, layoutRef.current)
+        // Each space has its OWN island, so the one you were looking into is not
+        // the one that arrives. Folding first means the new space's island is
+        // never shown mid-open with someone else's notes in it.
+        setIslandOpen(false)
         await changeSettings({ activeSpaceFolder: folder })
         applyLayout(spaceTabs.current.get(folder) ?? EMPTY_LAYOUT)
       }
@@ -1042,7 +1094,10 @@ export default function App(): React.JSX.Element {
         await loadTree()
         await openLink(actual, how)
         if (titleOf(actual) !== title) {
-          flash(`Made "${titleOf(actual)}" — "${title}" isn't a usable filename`)
+          // The link still resolves onto it — `resolveLink` tries the name as a
+          // FILENAME when the exact one matches nothing — so this says what it
+          // is called rather than warning that the link is broken.
+          flash(nameChangedNotice(title, titleOf(actual)))
         }
       } catch (e) {
         flash(`Couldn't make that note: ${(e as Error).message}`)
@@ -1362,7 +1417,17 @@ export default function App(): React.JSX.Element {
       const notes = noteRefs(treeRef.current).map((n) =>
         n.path === to ? { path: from, title: titleOf(from), kind: 'note' as const } : n
       )
-      const rows = linkRowsRef.current.filter((r) => r.path !== from)
+      // The LIVE index, not the last disk scan. A link you have just typed into
+      // an open note is only in its buffer: the app's own saves are echo-guarded
+      // so the watcher never re-scans them, and that note's row still says it
+      // has no links at all — so the loop below skipped it and the link was
+      // left pointing at a name nothing answers to. Write a link, rename the
+      // note you linked to, and the rename quietly missed it (Reuben,
+      // 2026-09-19). `liveIndex` lays the open buffers over the scan, which is
+      // what the links block has always read.
+      const rows = liveIndex(linkRowsRef.current, new Map(docsRef.current)).filter(
+        (r) => r.path !== from
+      )
       let changed = 0
       for (const row of rows) {
         if (!row.links.some((l) => l.target)) continue
@@ -1392,10 +1457,19 @@ export default function App(): React.JSX.Element {
       }
       if (changed) {
         flash(`Updated links in ${changed} ${changed === 1 ? 'note' : 'notes'}`)
+        // Re-read the tree, because nothing else will: these rewrites are the
+        // app's own writes, so the watcher's echo guard keeps them silent, and
+        // the sidebar's second line would go on quoting the OLD name while the
+        // file on disk already said the new one (found on the Windows pass,
+        // 2026-09-20). `flush` first — an open note's rewrite is still sitting
+        // in its buffer at this point, so reloading before it lands would read
+        // the old text straight back.
+        await flush()
+        await loadTree()
         void rescanLinks()
       }
     },
-    [flush, onDocChange, flash, rescanLinks]
+    [flush, onDocChange, flash, rescanLinks, loadTree]
   )
 
   // Anything that puts a note in a pane — a drop, a keyboard cycle, a restored
@@ -1852,13 +1926,188 @@ export default function App(): React.JSX.Element {
     void changeSettings({ spaces: current.spaces.map((sp) => ({ ...sp, accent: id })) })
   }
 
+  /** Every organise action goes through here — rename, move, delete, restore,
+   *  recolour, and the rest. When one fails, say so on the notice strip like
+   *  everything else in the app does.
+   *
+   *  It used to be `window.alert`, which meant a failed rename stopped the
+   *  renderer behind an OS dialog reading *"Error invoking remote method
+   *  'vault:renameEntry': Error: That name is too long…"* — main's own sentence
+   *  is written for people, the framing in front of it is not (Reuben,
+   *  2026-09-20, on the Windows verification pass). `cleanIpcError` takes the
+   *  framing off; the strip is the same channel `Save failed:` already uses.
+   *
+   *  No `<what> — ` half: `run` wraps 19 different actions and is handed only a
+   *  function, so it cannot know which one it is holding. Main's messages read
+   *  as whole sentences, so the `<why>` stands alone — see `notifyError`, the
+   *  editor's counterpart, which CAN name the attempt and therefore does. */
   const run = async (fn: () => Promise<void>): Promise<void> => {
     try {
       await fn()
     } catch (e) {
-      window.alert((e as Error).message ?? String(e))
+      // `cleanIpcError` answers '' when the message was nothing but framing.
+      // Saying something vague still beats a strip with no words in it, which
+      // reads as the action having quietly worked.
+      showNotice({ text: cleanIpcError(e) || "That didn't work.", linger: true })
     }
   }
+
+  // --- the tab island --------------------------------------------------------
+  // The collapsible group at the left of the tab strip (`tabs/Island.tsx`), one
+  // per space. Everything about WHAT is in it is derived here and written to
+  // workspace.json; the component owns only the gestures.
+
+  /** This space's island. Filtered against the live tree so a note deleted
+   *  outside the app stops being a chip — its rank stays in workspace.json, so
+   *  the file coming back restores its place (`island.ts`). */
+  const islandPaths = useMemo(() => {
+    const live = new Set(vaultNotes.filter((r) => r.kind === 'note').map((r) => r.path))
+    return islandNotes(workspace.entries, space.folder, live)
+  }, [workspace.entries, space.folder, vaultNotes])
+  const islandName = space.islandName || ISLAND_NAME_DEFAULT
+
+  /** Renumber the island to `next`. One `updateEntry` per note that actually
+   *  moved — `rankWrites` keeps that to the few positions a gesture disturbed,
+   *  and each reply is the whole workspace, so the LAST one is the truth. */
+  const writeIsland = (next: string[]): void => {
+    const writes = rankWrites(islandPaths, next)
+    if (!writes.length) return
+    void run(async () => {
+      let ws: Workspace | null = null
+      for (const w of writes) ws = await window.api.updateEntry(w.path, { island: w.island })
+      if (ws) setWorkspace(ws)
+    })
+  }
+
+  /** Only notes that live in THIS space can join its island. A note from
+   *  anywhere else (a loose note at the vault root, a search hit from another
+   *  space) would get a rank written and then never appear, because the island
+   *  it belongs to is its own space's — a gesture that visibly does nothing
+   *  (stress test T12). Refused out loud instead. */
+  const addToIsland = (paths: string[], before: string | null): void => {
+    const here = paths.filter((p) => belongsToSpace(p, space.folder))
+    if (here.length < paths.length) flash(`Only notes in this space can go in ${islandName}`)
+    if (here.length) writeIsland(withAdded(islandPaths, here, before))
+  }
+
+  const removeFromIsland = (path: string): void => writeIsland(withRemoved(islandPaths, path))
+
+  /** Rename the island. Per space, like its emoji — see `Space.islandName`. */
+  const renameIsland = (name: string): void =>
+    void changeSettings(withSpacePatch(settingsRef.current, space.folder, { islandName: name }))
+
+  /** A chip click. The note opens as an ORDINARY tab — the island is a shortcut
+   *  to the tab strip, not a second kind of open note — and the island folds up
+   *  behind you (Reuben's call). */
+  const openFromIsland = (path: string): void => {
+    setIslandOpen(false)
+    void openNote(path)
+  }
+
+  /** Dropped on the TAB STRIP (a gap, or the middle of a tab): the note now
+   *  lives in the strip, so it leaves the island rather than being in both.
+   *  Dropping on a PANE only shows it and changes nothing about where it lives
+   *  — reading an island note in a split does not evict it. */
+  const leaveIsland = (path: string): void => {
+    if (islandPaths.includes(path)) removeFromIsland(path)
+  }
+
+  /** What the tab strip is given: the open tabs MINUS the island's notes. A
+   *  note in the island lives there, and drawing it a second time as a tab was
+   *  the duplicate Reuben saw ("there is another copy that stays in the top
+   *  bar", 2026-09-19). You can still be reading it — its chip is highlighted,
+   *  and the folded bookmark lights up — it just has one home on the strip.
+   *
+   *  **Except inside a split.** A group pill is the screen's arrangement drawn
+   *  left to right; hiding one of its columns would show a split that is not
+   *  the one in front of you, and a split made entirely of island notes would
+   *  vanish from the strip altogether (`stripGroups` places a group at its
+   *  first member IN `tabs`). */
+  const stripTabs = useMemo(() => {
+    // Island switched off in this space: its notes are ordinary tabs again, or
+    // one you were reading would have no home on the strip at all.
+    if (!space.showIsland) return layout.tabs
+    const kept = new Set(islandPaths)
+    const grouped = layout.panes.length > 1 ? new Set(layout.panes) : new Set<string>()
+    return layout.tabs.filter((t) => !kept.has(t) || grouped.has(t))
+  }, [layout.tabs, layout.panes, islandPaths, space.showIsland])
+
+  // Taking the LAST note out folds the island (Reuben, 2026-09-19: "when there
+  // is nothing in it don't keep it expanded"). On the change only, not while it
+  // is empty: holding it shut would have made the bookmark unclickable on an
+  // empty island, which is the opposite of what a click there should do
+  // (2026-09-20). Opening an empty one by hand is now an ordinary open, and it
+  // stays open until clicked again.
+  const wasFilled = useRef(false)
+  useEffect(() => {
+    const filled = islandPaths.length > 0
+    if (wasFilled.current && !filled) setIslandOpen(false)
+    wasFilled.current = filled
+  }, [islandPaths.length])
+
+  // A note picked up in the SIDEBAR (a tree row or a search hit) or out of the
+  // ISLAND becomes the same drag an open tab already is. That one line is what
+  // lights up the tab strip's gaps, the middle of each tab (split with it), and
+  // each pane's left / right / centre — all of which were built for tabs and
+  // already open a note that is not open yet (`splitAt`, `showInPane` add it).
+  // Before this they ignored a sidebar drag entirely (Reuben, 2026-09-19: drag
+  // "a note from the sidebar into the commonly accessed area, the tab area, the
+  // tab area to enable split view and onto the left and right hand side of the
+  // screen").
+  //
+  // Listened for on the document because the three sources are three different
+  // components and none of them should have to know App exists. `dragstart` is
+  // the one moment the payload is readable before the drop (see
+  // `tabs/island.ts`), and React's own handler has run by then, so the row's
+  // setData is already done. One note only: a multi-select has no single
+  // column to become — it can still be dropped into the island, which takes a
+  // list.
+  const draggingFromOutside = useRef(false)
+  useEffect(() => {
+    const start = (e: DragEvent): void => {
+      const dt = e.dataTransfer
+      if (!dt) return
+      const raw = dt.getData(DRAG_NOTE) || dt.getData(DRAG_SEARCH) || dt.getData(DRAG_CHIP)
+      if (!raw) return
+      const notes = raw.split('\n').filter((p) => p.toLowerCase().endsWith('.md'))
+      if (notes.length !== 1) return
+      draggingFromOutside.current = true
+      setDrag({ kind: 'tab', path: notes[0] })
+    }
+    const end = (): void => {
+      if (!draggingFromOutside.current) return
+      draggingFromOutside.current = false
+      setDrag(null)
+    }
+    // A drag is over the moment something is dropped, and again the next time a
+    // button goes down anywhere. `dragend` alone is not enough: it fires on the
+    // element the drag STARTED from, and a sidebar row that the drop's own tree
+    // reload has already re-rendered away is not there to receive it. `drag`
+    // then stayed set for good — and NotePane's drop overlay is a full-pane,
+    // invisible layer, so it went on swallowing every click: the cursor could
+    // not be put back in the note and typing did nothing until the app was
+    // reloaded (Reuben, 2026-09-19, dragging notes into a split).
+    //
+    // Unguarded by `draggingFromOutside` on purpose — a tab, a column and a
+    // link chip each set `drag` through their own handlers, and the same lost
+    // `dragend` strands any of them. A pointerdown cannot arrive mid-drag (a
+    // native drag consumes the press), so it only ever means a new gesture is
+    // starting; `setDrag(null)` when it is already null re-renders nothing.
+    const over = (): void => {
+      draggingFromOutside.current = false
+      setDrag(null)
+    }
+    document.addEventListener('dragstart', start)
+    document.addEventListener('dragend', end)
+    document.addEventListener('drop', over)
+    window.addEventListener('pointerdown', over, true)
+    return () => {
+      document.removeEventListener('dragstart', start)
+      document.removeEventListener('dragend', end)
+      document.removeEventListener('drop', over)
+      window.removeEventListener('pointerdown', over, true)
+    }
+  }, [])
 
   // --- organise actions ------------------------------------------------------
 
@@ -2223,19 +2472,36 @@ export default function App(): React.JSX.Element {
 
   const rename = (node: TreeNode): Promise<void> =>
     run(async () => {
-      const next = await ask('Rename', nameOf(node.path))
-      if (next == null || !next.trim() || next.trim() === nameOf(node.path)) return
-      const to = joinPath(parentOf(node.path), next.trim())
+      // A NOTE is named without its `.md`, and gets it back below. The box used
+      // to show "Groceries.md" — so typing a new name over it left a file with
+      // no extension, which the sidebar doesn't list at all: the note simply
+      // vanished from the app, still on disk, with nothing said (Reuben,
+      // 2026-09-19). A folder has no extension and is shown as it is.
+      const isNote = node.type === 'file'
+      const shown = isNote ? stripMd(nameOf(node.path)) : nameOf(node.path)
+      const next = await ask('Rename', shown)
+      if (next == null || !next.trim() || next.trim() === shown) return
+      const typed = next.trim()
+      // Sanitised HERE as well as in main, because this is where the name is
+      // joined onto a path: a `/` typed in the box would otherwise read as a
+      // folder ("Meeting 9/10?" → rename into a "Meeting 9" folder that does
+      // not exist), and the rename failed with a raw ENOENT instead of simply
+      // replacing the character (Reuben, 2026-09-19). Main still sanitises what
+      // it is sent — this only decides what a typed name MEANS.
+      const safe = sanitizeFilename(typed).name
+      const to = joinPath(
+        parentOf(node.path),
+        isNote && !safe.toLowerCase().endsWith('.md') ? `${safe}.md` : safe
+      )
       const actualRel = await window.api.renameEntry(node.path, to)
       await loadTree()
       await loadWorkspace()
       remapOpen(node.path, actualRel)
       // Folders are skipped: a folder has no title for a link to name, and its
       // notes keep theirs, so every link through it still resolves.
-      if (node.type === 'file') await followRename(node.path, actualRel)
+      if (isNote) await followRename(node.path, actualRel)
       const actualName = nameOf(actualRel)
-      if (stripMd(actualName) !== stripMd(next.trim()))
-        flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
+      if (stripMd(actualName) !== stripMd(typed)) flash(nameChangedNotice(typed, actualName))
     })
 
   const openMenu = (e: React.MouseEvent, node: TreeNode | null, targets?: string[]): void => {
@@ -2266,6 +2532,22 @@ export default function App(): React.JSX.Element {
                 bottom: e.clientY
               })
           },
+          // Notes only: a folder in the island would be a chip that cannot open.
+          // Takes the whole selection when the row you clicked is part of one,
+          // the same rule as Colour above — Sidebar decides what `targets` is.
+          ...(node.type === 'file' && space.showIsland && belongsToSpace(node.path, space.folder)
+            ? [
+                islandPaths.includes(node.path)
+                  ? {
+                      label: `Remove from ${islandName}`,
+                      onClick: () => removeFromIsland(node.path)
+                    }
+                  : {
+                      label: `Add to ${islandName}`,
+                      onClick: () => addToIsland((targets ?? [node.path]).filter((p) => p.toLowerCase().endsWith('.md')), null)
+                    }
+              ]
+            : []),
           { label: 'Move to bin', danger: true, onClick: () => trash([node.path]) }
         ]
       : [
@@ -2545,15 +2827,16 @@ export default function App(): React.JSX.Element {
   // actually got, so the pane can show that rather than what was typed.
   const renameOpen = async (path: string, title: string): Promise<string | null> => {
     try {
-      const fname = title.toLowerCase().endsWith('.md') ? title : `${title}.md`
+      // Same as the sidebar's Rename: the typed title is ONE name, never a path.
+      const safeTitle = sanitizeFilename(title).name
+      const fname = safeTitle.toLowerCase().endsWith('.md') ? safeTitle : `${safeTitle}.md`
       const actualRel = await window.api.renameEntry(path, joinPath(parentOf(path), fname))
       await loadTree()
       await loadWorkspace()
       remapOpen(path, actualRel)
       await followRename(path, actualRel)
       const actualName = stripMd(nameOf(actualRel))
-      if (actualName !== title)
-        flash(`Renamed to "${actualName}" (adjusted for cross-platform safety)`)
+      if (actualName !== title) flash(nameChangedNotice(title, actualName))
       return actualName
     } catch (e) {
       flash((e as Error).message)
@@ -2673,16 +2956,26 @@ export default function App(): React.JSX.Element {
             second note would shove the text down mid-work, and the whole reason
             to reserve the space is that filling it moves nothing. */}
         <TabStrip
-          tabs={layout.tabs}
+          tabs={stripTabs}
           panes={layout.panes}
           active={openPath}
           onSelect={(p) => void openNote(p)}
           onClose={closeNote}
-          onReorder={(p, before) => applyLayout(moveTab(layoutRef.current, p, before))}
+          onReorder={(p, before) => {
+            // A note that is not open yet (dragged from the sidebar, a search
+            // hit, or a chip) opens first, then lands at the gap it was dropped
+            // in. `moveTab` alone refuses anything that isn't already a tab.
+            const l = layoutRef.current
+            applyLayout(moveTab(l.tabs.includes(p) ? l : openTab(l, p), p, before))
+            leaveIsland(p)
+          }}
           // A tab dropped on the MIDDLE of another tab. The strip only offers
           // the gesture where the model can honour it, so this is never a
           // silent no-op — see TabStrip's `canSplitOnto`.
-          onSplitWith={(target, dragged) => applyLayout(splitWith(layoutRef.current, target, dragged))}
+          onSplitWith={(target, dragged) => {
+            applyLayout(splitWith(layoutRef.current, target, dragged))
+            leaveIsland(dragged)
+          }}
           // Notes sharing the screen share one tab (tabs/model.ts's
           // `stripGroups`). These three are what you can do to that tab.
           onMoveGroup={(before) => applyLayout(moveGroup(layoutRef.current, before))}
@@ -2691,6 +2984,25 @@ export default function App(): React.JSX.Element {
           onDragTab={(path) => setDrag(path === null ? null : { kind: 'tab', path })}
           onNewTab={() => applyLayout(openTab(layoutRef.current, BLANK))}
           dragging={drag}
+          // One island per space, and only once there is a vault to hold one —
+          // during the splash and onboarding there is no space for it to belong
+          // to, and an empty "Drag notes here" prompt would be the first thing a
+          // new user saw.
+          island={
+            vault && space.showIsland ? (
+              <Island
+                name={islandName}
+                notes={islandPaths}
+                active={openPath}
+                open={islandOpen}
+                onToggle={() => setIslandOpen((o) => !o)}
+                onRename={renameIsland}
+                onOpen={openFromIsland}
+                onRemove={removeFromIsland}
+                onDropNotes={addToIsland}
+              />
+            ) : null
+          }
           hidden={!!openPath && !space.pinTabs && focusedScrolledPastTop}
         />
         {/* Between the tabs and the format bar, on a line of its own. The tabs
@@ -2851,8 +3163,32 @@ export default function App(): React.JSX.Element {
               <FormatToolbar viewRef={NO_VIEW} slots={space.toolbarSlots} onSetSlot={() => {}} />
               <span className="min-w-0 flex-1" />
             </div>
-            <div className="flex flex-1 items-center justify-center">
-              <div className="text-center">
+            <div
+              // With nothing open there are no panes, so none of their drop
+              // zones exist — a note dragged here from the sidebar, a search
+              // hit or the island just opens. Same accent-edge idiom as a
+              // pane's own zone, so it reads as the same kind of target.
+              className="relative flex flex-1 items-center justify-center"
+              onDragOver={(e) => {
+                if (drag?.kind !== 'tab') return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+              }}
+              onDrop={(e) => {
+                const d = drag
+                if (d?.kind !== 'tab') return
+                e.preventDefault()
+                setDrag(null)
+                applyLayout(openTab(layoutRef.current, d.path))
+              }}
+            >
+              {drag?.kind === 'tab' && (
+                <div
+                  className="pointer-events-none absolute inset-2 rounded-xl border-2 border-dashed border-brand-400"
+                  aria-hidden="true"
+                />
+              )}
+              <div className="pointer-events-none text-center">
                 <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface/70 text-brand-300 shadow-card">
                   <Icon name="doc" className="h-8 w-8" />
                 </div>
@@ -3110,7 +3446,21 @@ export default function App(): React.JSX.Element {
       )}
 
       {prompt && (
-        <div className="menu-backdrop" onClick={() => closePrompt(null)}>
+        // Closed by a click that BEGAN out here, not merely one that ended here.
+        // Selecting the name to type over it is a drag, and a drag that leaves
+        // the little box still fires its `click` on this backdrop — so
+        // over-reaching by a few pixels while selecting cancelled the rename
+        // (Reuben, 2026-09-20). The flag is set on the way down, where the
+        // intent actually is.
+        <div
+          className="menu-backdrop"
+          onMouseDown={(e) => {
+            promptDownOutside.current = e.target === e.currentTarget
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && promptDownOutside.current) closePrompt(null)
+          }}
+        >
           <div className="prompt" onClick={(e) => e.stopPropagation()}>
             <div className="prompt-title">{prompt.title}</div>
             {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
