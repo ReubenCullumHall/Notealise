@@ -113,6 +113,29 @@ The menu does not open until a letter is typed — completion only starts on typ
 on Windows 2026-09-20 via the same CDP pass: after `/link` inserts `[[]]`, no menu until a character
 went in. Not fixed — pre-existing, out of scope of the closing-bracket fix above.
 
+## Page looks — held out of v1.3.1, needs a Windows check
+
+Built 2026-09-19/20 (`579f3f0`), **Mac-verified only, and no CHANGELOG line by design** until Windows
+has been checked. v1.3.1 went out without it: a revert (`Hold Page looks out of v1.3.1`) sits under
+the tag, and the commit after the tag puts it back. So it is on `main` again and rides out with the
+next release unless it is held again.
+
+What it is: a per-space **Intensity** slider (0–100, 50 = exactly as before) and a **Match your accent
+colour** toggle; lined, grid, fine grid and graph tiled in whole periods; the lined rule moved onto
+the baseline; the split divider always drawn (3px, 5px on hover or drag, an 18px hit area, above the
+floating links strip); and the **Narrow lined** look removed.
+
+### Windows check — needed before it gets a CHANGELOG line
+The divider's 18px hit area now covers the left column's scrollbar thumb (noted on the Mac). Check
+on Windows, where scrollbars are drawn differently, that both the seam and the thumb can still be
+grabbed. The "glitch when resizing" the divider was reported to have was never reproduced (three
+harnesses, including real Electron); the drag now also ends if a button release is never seen.
+
+### Removing Narrow lined has no migration — decide before it ships
+A space saved on `lined-tight` keeps that id, and nothing in the app maps it to another look now, so
+it most likely shows a plain page. Not rendered — this is read from the code. Either map it to
+**Lined** on load or put the look back.
+
 ## Carried in from before this pass
 
 ### `EntryMeta.collapsed` is read by nothing
