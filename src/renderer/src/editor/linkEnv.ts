@@ -1,4 +1,5 @@
 import { Facet, StateEffect, StateField, type EditorState } from '@codemirror/state'
+import { cleanIpcError } from '../ipcError'
 import type { NoteRef } from '../../../shared/links'
 import type { MediaOrigin } from '../../../shared/workspace'
 import type { SpaceMark } from '../links/model'
@@ -133,16 +134,13 @@ export function notifyUser(state: EditorState, message: string): void {
 /** `notifyUser` for a caught error: `<what> — <why>`, with Electron's IPC
  *  wrapper stripped off the message.
  *
- *  An error crossing the IPC bridge arrives as "Error invoking remote method
- *  'asset:write': Error: <the real message>", and putting that in front of
- *  someone who just pasted a photo is worse than saying nothing. What survives
- *  the strip is worth keeping, though: main's own messages are written for
- *  people — including the "this folder is still syncing (OneDrive, Google Drive
- *  or iCloud) — wait a moment and try again" that `renameWithRetry` raises,
- *  which a synced vault hits routinely and which tells the user exactly what to
- *  do about it. */
+ *  The stripping itself is `cleanIpcError` (`../ipcError`), shared with App's
+ *  `run` — the sidebar's rename/move/delete actions need the same sentence out
+ *  of the same wrapper, and two copies of that regex would drift. This function
+ *  is the EDITOR's half: it can name what was being attempted, because a paste
+ *  handler knows it was a paste. `run` wraps 19 different actions and cannot,
+ *  so it shows the `<why>` alone. */
 export function notifyError(state: EditorState, what: string, e: unknown): void {
-  const raw = e instanceof Error ? e.message : String(e)
-  const why = raw.split('Error: ').pop()?.trim()
+  const why = cleanIpcError(e)
   notifyUser(state, why ? `${what} — ${why}` : what)
 }

@@ -668,3 +668,44 @@ editor sized itself far taller than the box regardless of padding.
 take is `.cm-scroller`'s `scrollHeight` against its `clientHeight` on an EMPTY document — they
 should be equal. Verified afterwards at 166/166 empty (no bar) and 166/381 with ten lines typed
 (scrolls, bar revealed only near the edge by `scrollbarReveal`).
+
+## Undo belongs to a note, and links survive an awkward name (2026-09-19/20)
+
+A bug hunt over the note-taking paths (12 findings, 10 fixed in this batch) landed four rules here.
+All four were reproduced in a real build and re-checked on Windows before they were logged.
+
+**Undo history is thrown away when a pane changes note, and when a note is reloaded from disk.**
+A pane never rebuilds its CodeMirror — it swaps the document in place, which is what keeps the
+cursor and the scroll — so before this the history simply followed you into the next note: one
+Cmd/Ctrl+Z too many in a note you had *just opened* undid the SWAP, filling it with the previous
+note's text, and `onDocChange` then autosaved that over the file. Proved at state level
+(`EditorState` + the real `history()`), then live. `history()` now sits in a **Compartment**
+(`editor/extensions.ts`'s `historyBox`) and `CodeEditor` empties it and puts a fresh one back
+around the swap — **two dispatches, and both are needed**: reconfiguring the compartment with a
+second `history()` leaves the existing field and its contents exactly where they were, because a
+`StateField`'s `init` only runs when the field is ADDED. Reuben's call (2026-09-19): undo starts
+fresh in each note, rather than each note keeping its own stack.
+
+**A `[[link]]` resolves onto the note its name really produced.** `?` `:` `/` `*` and friends
+cannot go in a filename, so `[[What next?]]` creates "What next-" — and the link then matched
+nothing, so every further click made "What next- (2)", "(3)"… `resolveLink` now tries the target
+as a FILENAME after the exact match fails (`sanitizeFilename` per segment), which is why
+`shared/filenames.ts` moved out of `main/`. Order matters: exact first, so a note genuinely called
+something else is never hijacked, and the user's own words stay in their note.
+
+**A path-form link is resolved and created inside the linking note's SPACE**, then from the vault
+root. `[[Ideas/Big idea]]` written in a Revision note means Revision's Ideas folder; it used to
+make a new top-level folder beside the spaces, so the note opened and could then not be found in
+the sidebar at all. The exact vault-root spelling is still tried FIRST and still wins — that is
+what the `[[` completion inserts for another space (`links/model.ts`'s `linkChoices`), so
+cross-space links are unaffected. `createNote` now makes missing parent folders, so clicking such
+a link no longer answers with a raw `ENOENT`.
+
+**`followRename` reads the LIVE index, not the last disk scan — and reloads the tree afterwards.**
+A link typed into an open note lives only in that buffer (the app's own saves are echo-guarded, so
+the watcher never re-scans them), and the note's row in the scan still said it had no links: the
+rename skipped it and left the link pointing at a name nothing answers to. It now lays the open
+buffers over the scan (`liveIndex`, the same thing the links block reads). The reloads at the end
+are for the same reason in the other direction: those rewrites are the app's own writes, so
+without an explicit `flush()` + `loadTree()` the sidebar's preview line went on quoting the old
+name (found on the Windows pass).

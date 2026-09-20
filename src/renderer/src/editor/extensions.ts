@@ -1,4 +1,4 @@
-import type { Extension } from '@codemirror/state'
+import { Compartment, type Extension } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { search, searchKeymap } from '@codemirror/search'
@@ -23,6 +23,11 @@ import { linkGestures } from './linkGestures'
 import { bold, insertMath, italic, strike, underline } from './formatCommands'
 import { DEFAULT_HL } from './palette'
 
+/** Holds `history()` so it can be swapped for an empty one — see its use below.
+ *  Module-level and shared by every editor: a Compartment is only a key, and
+ *  each EditorState resolves it against its own contents. */
+export const historyBox = new Compartment()
+
 // The base editor extension set. `markdownLanguage` as the base enables GFM
 // (strikethrough, tables, task lists) so those marks appear in the syntax tree.
 /** `links` is a `{ current }` box owned by the React layer and captured once, the
@@ -35,7 +40,14 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // but attachInput/attachFiles reach it through the state instead — see
     // `linkHandlersFacet`. Both read the same box, so they can't disagree.
     ...(links ? [linkHandlersFacet.of(links), linkGestures(links)] : []),
-    history(),
+    // In a Compartment so CodeEditor can throw the undo history away when the
+    // pane changes note. A pane never rebuilds its CodeMirror (it swaps the
+    // document in place, which is what keeps the cursor), so without this the
+    // history followed you from one note into the next: one Cmd+Z too many in
+    // the note you had just opened undid the SWAP and filled it with the
+    // previous note's text — which the autosave then wrote to its file
+    // (Reuben's call, 2026-09-19: undo starts fresh in each note).
+    historyBox.of(history()),
     // Our formatting bindings come first so they win over any defaults.
     keymap.of([
       // Ahead of defaultKeymap's own Backspace/Delete: these decline (return

@@ -2,7 +2,7 @@ import { app, dialog, type BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { sanitizeFilename } from './filenames'
+import { sanitizeFilename } from '../shared/filenames'
 import {
   fromPresetFile,
   IMPORTED_ORIGIN,

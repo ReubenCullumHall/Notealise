@@ -225,7 +225,18 @@ const api: VaultApi = {
     for (const [p, meta] of Object.entries(store.workspace.entries)) entries[remapPath(p, from, dest)] = meta
     store.workspace = { ...store.workspace, entries }
     save()
-    announce([from, dest])
+    // NO announce. Main doesn't either: every write it makes is echo-guarded
+    // (`markWrite` in main/vault.ts), so the app's OWN rename never comes back
+    // as an external change — the renderer reloads the tree and re-keys the open
+    // tabs itself. Announcing it here made the preview push a change naming the
+    // path that had just stopped existing, and App's external-change handler
+    // does the honest thing with a note it can no longer read: it closes the
+    // tab. So renaming from the title row emptied the pane and showed "Pick a
+    // note" — in the PREVIEW only, never in the real app (reported by another
+    // session 2026-09-20, reproduced here, and not reproducible in a real
+    // build). The other `announce` calls in this file have the same shape and
+    // are equally unfaithful to main; they are left alone because nothing has
+    // been seen to go wrong through them yet.
     return dest
   },
 

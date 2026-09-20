@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto'
 import type { TreeNode } from '../shared/types'
 import { toPreviewLine } from '../shared/plainText'
 import { indexLinks, stripMd, type LinkRow } from '../shared/links'
-import { sanitizeFilename } from './filenames'
+import { sanitizeFilename } from '../shared/filenames'
 import { indexEmbeds } from '../shared/attachments'
 import { heldPath, RECOVERY_DIR, TRASH_DIR } from '../shared/workspace'
 
@@ -553,6 +553,13 @@ async function uniqueName(dirAbs: string, stem: string, ext: string): Promise<st
  *  would be two fs operations, two watcher events, and a window in which the
  *  wrong filename is on disk. */
 export async function createNote(dirPath: string, name?: string): Promise<string> {
+  // Make the folder if it isn't there yet. `[[Ideas/Big idea]]` is a perfectly
+  // ordinary thing to write before the Ideas folder exists, and clicking it used
+  // to answer with a raw `ENOENT: no such file or directory` naming the user's
+  // full disk path (Reuben, 2026-09-19). Bounded like every other path here —
+  // `resolveInVault` refuses anything outside the vault, and `recursive` makes
+  // an existing folder a no-op rather than a collision.
+  await fs.mkdir(resolveInVault(dirPath), { recursive: true })
   const dirAbs = await resolveReal(dirPath)
   const stem = name ? sanitizeFilename(stripMd(name)).name : 'Untitled'
   const fname = await uniqueName(dirAbs, stem, '.md')

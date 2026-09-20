@@ -22,8 +22,43 @@ enough for a solo project). History before this file existed lives in the `v*` g
 - The row of linked notes at the top of a note now scrolls sideways with an ordinary mouse wheel
   as well as a trackpad swipe. Before, a note with more links than fit had no way to reach the
   rest unless you had a trackpad or a sideways-scrolling mouse
+- When renaming, moving or deleting a note doesn't work, the reason now appears on the strip at
+  the bottom of the window like every other message, and says only what went wrong: *That name
+  is too long — try something shorter, or a shallower folder.* It used to stop the app behind a
+  grey system box with the app's own internal plumbing written in front of the sentence
+- **Undo stays in the note you are in.** Pressing undo once too many in a note you had just
+  opened used to fill it with the previous note's text — and save that over it
+- **Typing can no longer go dead after dragging a note about.** Dragging a note into a split, a
+  folder or a tab sometimes left an invisible layer over the page: the cursor could not be put
+  back in the words and nothing typed until the app was restarted
+- **Renaming a note updates every link to it**, including a link you wrote earlier in the same
+  sitting — those were quietly left pointing at the old name. The linking note's line in the
+  sidebar now says the new name too, instead of quoting the old one until you looked elsewhere
+- **Renaming from the sidebar asks for the name, not the filename.** The box used to show
+  "Groceries.md", so typing a plain name over it left a file the app no longer listed and the
+  note disappeared from the sidebar. A name with a character that cannot go in a filename now
+  says which one: *A name can't contain / or ? — saved as "Meeting 9-10-"*
+- **A link to a note whose name can't be a filename now opens it.** `[[What next?]]` makes a note
+  called "What next-" and every click after that opens it — before, each click made another copy
+- **A link into a folder you haven't made yet makes it**, inside the space you are working in,
+  instead of failing with the app's internal error text
+- The search box has a clear button beside its two filters, so a search can be put away and the
+  notes brought back without reaching for the keyboard
 - Choosing a note after typing `[[` now finishes the link for you — the closing `]]` is added and
   the link appears straight away
+- **A bookmark at the start of the tab strip keeps the notes you come back to most.** Drag notes
+  into it from the folder list, from a search result or straight off a tab, and they stay a click
+  away instead of being found again every time. Folded it is a small bookmark and a count; click
+  it and it opens with a bounce to show what's inside. Click one to read it, drag one back out to
+  the tabs, or drag it away to remove it. Each space keeps its own, with its own name — double
+  click the bookmark to rename it — and it can be switched off per space under
+  Settings → Spaces → Note extras
+- **Notes can be dragged straight into the top of the window.** Drop one on a gap in the tab bar
+  to open it there, on the middle of a tab to read the two side by side, or on the left or right
+  of the page to open it in a column beside what you are reading. Dropping on an empty page opens
+  it. Search results work the same way
+- Pressing Enter after naming a note at the top of the page now puts the cursor in the note, so
+  you can start writing straight away instead of reaching for the mouse
 
 ## [1.3.0] - 2026-09-17
 - Smaller downloads. The Mac download is now built for one kind of Mac at a time instead of both

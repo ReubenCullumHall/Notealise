@@ -2,7 +2,8 @@ import { lineOfEmbed } from '../../../shared/attachments'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
-import { baseExtensions } from './extensions'
+import { history } from '@codemirror/commands'
+import { baseExtensions, historyBox } from './extensions'
 import { applyColor, clearColor } from './colorCommands'
 import { SelectionToolbar } from './SelectionToolbar'
 import { setLinkEnv, type LinkEnv, type LinkHandlers } from './linkEnv'
@@ -315,6 +316,18 @@ export function CodeEditor({
         ? { anchor: clamp(saved.anchor, next.length), head: clamp(saved.head, next.length) }
         : { anchor: 0 }
     })
+    // Throw the undo history away, because it describes a document that is no
+    // longer in this editor. Without it, Cmd+Z in the note you have just opened
+    // reached back past the swap and pulled the PREVIOUS note's text in — and
+    // the autosave wrote that into the new note's file (Reuben's call,
+    // 2026-09-19: undo starts fresh in each note). The same is true of a note
+    // reloaded because it changed on disk: your old edits no longer describe
+    // what is on screen, so undoing them would put back text nothing wrote.
+    // Emptying the compartment REMOVES the history field, so putting it back
+    // re-runs its initialiser — reconfiguring it with a second `history()`
+    // leaves the existing field, and its contents, exactly where they were.
+    view.dispatch({ effects: historyBox.reconfigure([]) })
+    view.dispatch({ effects: historyBox.reconfigure(history()) })
     programmatic.current = false
     view.scrollDOM.scrollTop = saved ? saved.scrollTop : 0
     prevPath.current = path

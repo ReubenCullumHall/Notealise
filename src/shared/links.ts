@@ -17,6 +17,8 @@
 //   [[Waves#Interference]]       target "Waves", heading set — lands mid-note
 //   [[#Interference]]            target "",     heading set — a jump within this note
 
+import { sanitizeFilename } from './filenames'
+
 /** One `[[…]]` occurrence in a document. */
 export interface WikiLink {
   /** offsets of the whole `[[…]]`, including both pairs of brackets */
@@ -255,15 +257,53 @@ export function resolveLink(link: WikiLink, notes: NoteRef[], fromPath: string):
   const withMd = target.toLowerCase().endsWith('.md') ? target : target + '.md'
   let candidates: NoteRef[]
 
+  /** The same target as a FILENAME — what `createNote` would really have called
+   *  it. `?` `:` `/` `*` and friends cannot go in a filename on Windows, so
+   *  `[[Q3: Review]]` makes a note called "Q3- Review" — and until 2026-09-20
+   *  the link then matched nothing, so clicking it again made "Q3- Review (2)",
+   *  and again, and again (Reuben). Tried only after the exact match fails, so
+   *  a note genuinely called something else is never hijacked, and the user's
+   *  own words stay in their note. */
+  const asFilename = (s: string): string =>
+    s
+      .split('/')
+      .map((seg) => sanitizeFilename(seg).name)
+      .join('/')
+
+  /** The space `fromPath` lives in — the top-level folder, "" for a note loose
+   *  at the vault root. A path target is tried inside it as well as from the
+   *  vault root: `[[Ideas/Big idea]]` written in a Revision note means the Ideas
+   *  folder in Revision, not a new top-level one beside the spaces — which is
+   *  where it landed until 2026-09-20, so the note opened and then could not be
+   *  found in the sidebar at all (Reuben). */
+  const homeSpace = fromPath.includes('/') ? fromPath.slice(0, fromPath.indexOf('/')) : ''
+  const inSpace = (p: string): string => (homeSpace ? `${homeSpace}/${p}` : p)
+
   if (target.includes('/')) {
     // An explicit path is a promise about where the thing is: honour it exactly
     // rather than falling back to a title match, or `[[Maths/Waves]]` would
     // quietly open `Physics/Waves.md` when the maths one hasn't been written yet.
     // Either spelling may be meant — `[[Physics/Term 3]]` is a folder and
     // `[[Physics/Waves]]` is a note — so both are tried.
-    candidates = notes.filter((n) => (n.kind === 'dir' ? eq(n.path, target) : eq(n.path, withMd)))
+    //
+    // Four passes, in the order a person means them: exactly as written (which
+    // is what the `[[` completion inserts for another space, so it must stay
+    // first and win), then inside this note's own space, then each of those as
+    // a real FILENAME (see `asFilename`).
+    const byPath = (dirPath: string, notePath: string): NoteRef[] =>
+      notes.filter((n) => (n.kind === 'dir' ? eq(n.path, dirPath) : eq(n.path, notePath)))
+    candidates = byPath(target, withMd)
+    if (candidates.length === 0 && homeSpace) candidates = byPath(inSpace(target), inSpace(withMd))
+    if (candidates.length === 0) candidates = byPath(asFilename(target), asFilename(withMd))
+    if (candidates.length === 0 && homeSpace) {
+      candidates = byPath(asFilename(inSpace(target)), asFilename(inSpace(withMd)))
+    }
   } else {
     candidates = notes.filter((n) => eq(n.title, target))
+    if (candidates.length === 0) {
+      const safe = asFilename(target)
+      candidates = notes.filter((n) => eq(n.title, safe))
+    }
   }
 
   if (candidates.length === 0) {
@@ -275,7 +315,9 @@ export function resolveLink(link: WikiLink, notes: NoteRef[], fromPath: string):
     const dir = dirName(fromPath)
     return {
       kind: 'missing',
-      suggestedPath: target.includes('/') ? withMd : (dir ? dir + '/' : '') + target + '.md'
+      // A path target is made INSIDE this note's space (see `homeSpace`); a bare
+      // title lands beside the note that mentioned it.
+      suggestedPath: target.includes('/') ? inSpace(withMd) : (dir ? dir + '/' : '') + target + '.md'
     }
   }
 

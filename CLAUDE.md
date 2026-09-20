@@ -161,7 +161,10 @@ Ships on Windows + macOS; a vault must survive moving between them. All of this 
   record named `/../../..` aimed the app's only hard `fs.rm` at the whole vault, unattended, from
   the launch sweep. Held-item segments are now validated in `shared/workspace.ts`
   (`isSafeHeldSegment`) as well.
-- **Filename sanitisation** (`filenames.ts`, applied on both OSes): strip control chars; replace
+- **Filename sanitisation** (`shared/filenames.ts` — moved out of `main/` on 2026-09-20 so the
+  RENDERER can reach the same answer: a `[[link]]` has to resolve onto the note the name really
+  produced, and the message naming the offending character is written in the UI. Applied on both
+  OSes): strip control chars; replace
   `< > : " / \ | ? *` with `-`; drop trailing dots/spaces; prefix reserved device names
   (`CON PRN AUX NUL COM1-9 LPT1-9`) with `_`. Surface the corrected name to the user; don't
   silently alter.
@@ -395,7 +398,7 @@ to be judged in the Electron window.
 
 **Tests are `vitest`, and cover pure logic only** (`*.test.ts` beside the module): `colorModel`,
 `editor/formatModel`, `editor/formatCommands`, `organise/model`, `tabs/model`, `shared/workspace`,
-`shared/settings`, `shared/presets`, `shared/update`, `main/filenames`. No React and no Electron — those need a
+`shared/settings`, `shared/presets`, `shared/update`, `shared/filenames`. No React and no Electron — those need a
 different kind of harness and are not worth the weight yet. Adding any *other* dependency still
 needs asking.
 
@@ -570,12 +573,29 @@ every session — see the table in **Folder structure** above for the full list.
   sidebar. Still not persisted — that is unchanged, only the representation moved.
   **`EntryMeta.collapsed` in `workspace.json` is now read by nothing** (it was only ever read by
   that XOR, and has never been written by anything). Flagged, not removed — see rule 9.
-- **CDP mouse and keyboard input do not reach this Electron renderer.** `page.mouse.click` /
-  `page.keyboard.type` produce no events at all — not even at `document` in the capture phase — so a
-  gesture that "does nothing" under puppeteer may be perfectly fine. Drive the UI with synthetic
-  events from `page.evaluate` instead: `new MouseEvent('mousedown', {bubbles, cancelable, composed,
-  clientX, clientY, metaKey…})` for the editor, `element.click()` for React buttons, and
-  `document.execCommand('insertText', …)` to type into CodeMirror (it handles `beforeinput`).
+- **CDP mouse and keyboard input reach this Electron renderer on BOTH platforms now.** The two
+  halves of this gotcha were measured independently on 2026-09-19/20 and agree: on macOS,
+  `page.mouse.click` placed the cursor in CodeMirror, `page.keyboard.type` typed into it,
+  `page.keyboard.press('Meta+z')` ran the real undo, and `drag_to` on a sidebar row performed a
+  genuine HTML5 drag that split a pane — every fix in that day's batch was verified that way. The
+  Windows measurement below found the same. **So: try real input FIRST on either platform, with a
+  control (do something you know works) before concluding an input never arrived; fall back to the
+  synthetic events below only when it genuinely does nothing.** What follows is the older
+  macOS-only finding, kept because its workarounds are still the fallback. Verified
+  2026-09-20 against a real main process on Windows (`electron-vite build` into a scratch dir,
+  then `electron.exe out/main/index.js --user-data-dir=… --remote-debugging-port=…`):
+  `page.keyboard.type` reaches CodeMirror, `page.keyboard.press('Control+z')` runs the real undo
+  keymap, `page.mouse.click` on a `.cm-wikilink` opens the link, and `page.mouse.down/move/up` on
+  a `draggable` sidebar row fires **genuine HTML5 drag-and-drop** — dragstart through drop — so
+  tab, split and folder drops can be driven end to end rather than reasoned about. A whole
+  verification pass (rename, undo, link clicks, four kinds of drag) ran on real input there.
+  **The older macOS reading — now superseded by the paragraph above, and left only as the
+  fallback recipe:** `page.mouse.click` / `page.keyboard.type` produce no events at all — not even at `document` in
+  the capture phase — so a gesture that "does nothing" under puppeteer may be perfectly fine.
+  Drive the UI with synthetic events from `page.evaluate` instead: `new MouseEvent('mousedown',
+  {bubbles, cancelable, composed, clientX, clientY, metaKey…})` for the editor, `element.click()`
+  for React buttons, and `document.execCommand('insertText', …)` to type into CodeMirror (it
+  handles `beforeinput`).
   React delegates `onMouseEnter`/`onBlur` from **`mouseover`/`focusout`**, so dispatching
   `mouseenter`/`blur` silently does nothing.
   **`page.mouse.wheel` and `page.mouse.move` DO reach it** (2026-09-18, macOS: a `deltaY` wheel
@@ -638,6 +658,17 @@ every session — see the table in **Folder structure** above for the full list.
   how long you wait. Confirmed 2026-08-29 chasing what looked like a broken auto-save before finding
   the stub. Verifying anything about presets — the tick-box labels in `shared/presets.ts`'s
   `PART_LABELS`, `pickLook`'s grouping, the apply/delete/import flow — needs the real Electron app.
+  **And it ANNOUNCES its own writes, where main deliberately does not — which manufactures bugs
+  that do not exist in the app.** Main echo-guards every write (`markWrite`), so the app's own
+  rename never comes back as an external change; `browserApi.renameEntry` used to push one naming
+  the path that had just stopped existing, and App's external-change handler did the honest thing
+  with a note it could no longer read — it closed the tab. So renaming from a note's title row
+  emptied the pane and showed "Pick a note" **in the preview only**. Reported as an app bug by
+  another session on 2026-09-20, reproduced at :5173, and NOT reproducible in a real build; the
+  announce is gone from `renameEntry`. `trashEntries`, `restoreEntries` and `deleteSpace` still
+  announce and are equally unfaithful — suspect them before the app if the preview misbehaves
+  around delete or restore. **The rule this is the third instance of: when the preview looks
+  broken, reproduce it in a real build before believing it.**
   It installs itself with a plain `window.api = api` at module load — so
   **`page.addInitScript` can `Object.defineProperty(window, 'api', {set})` and wrap the object as
   it's assigned**, overriding just that stub without editing the file. Verified 2026-08-17 on the
