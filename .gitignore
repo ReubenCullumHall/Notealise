@@ -61,6 +61,18 @@ __pycache__/
 *-MacBook Air.*
 *-MacBook Air
 
+# Working notes for Reuben and Claude — internal engineering context, not app code.
+# The repo stays PUBLIC (the download page reads the public GitHub API), but these
+# aren't meant for visitors: CLAUDE.md is internal build/architecture notes, docs/
+# includes security.md's list of known-open issues, PROJECT-CONTEXT-BRIEF.md is
+# product strategy, and CHANGELOG.md is edited constantly mid-feature and shows
+# in-progress work before release. Untracked going forward; still present in older
+# commit history (removing that needs a history rewrite — a separate, bigger job).
+/CLAUDE.md
+/docs/
+/PROJECT-CONTEXT-BRIEF.md
+/CHANGELOG.md
+
 # Credentials. Nothing of the sort has ever been committed here — this is
 # pre-emptive, because the repo is PUBLIC and signing is deferred rather than
 # cancelled: the day an Apple or Windows certificate arrives, a .p12 dropped in
