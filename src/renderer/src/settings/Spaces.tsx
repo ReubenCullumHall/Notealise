@@ -1103,7 +1103,7 @@ export function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Elem
             on={space.pageLookAccent}
             onClick={() => onChange({ pageLookAccent: !space.pageLookAccent })}
             label="Match your page look to it"
-            hint="Draws your page look's pattern \u2014 lines, dots, the grid \u2014 in this colour instead of your theme's ink. Also in Page \u2192 Page look."
+            hint={"Draws your page look's pattern \u2014 lines, dots, the grid \u2014 in this colour instead of your theme's ink. Also in Page \u2192 Page look."}
           />
         </div>
       </section>

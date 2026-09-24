@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { normalizeHex } from '../../../shared/color'
 import { ColorField } from '../color/Picker'
 import { Icon } from '../icons'
@@ -42,6 +42,19 @@ export function AccentPicker({
   // would be hidden with no way to see what the colour actually is.
   const [open, setOpen] = useState(custom)
   const [hex, setHex] = useState(custom ? accent : '#e07b5c')
+
+  // Opening "Any colour" has to show what it opened. In onboarding's Fonts step
+  // the panel lands below the bottom of the page's scroll area, so clicking +
+  // looked like it did nothing (measured 2026-09-24 on Windows: the hex box sat
+  // 244px under the fold). Only on a click that opens it — not on mount, where
+  // a custom colour already in force opens it and scrolling would skip past
+  // the heading.
+  const panel = useRef<HTMLDivElement>(null)
+  const wasOpen = useRef(open)
+  useEffect(() => {
+    if (open && !wasOpen.current) panel.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    wasOpen.current = open
+  }, [open])
 
   const dot = size === 'onboarding' ? 'h-7 w-7' : 'h-[30px] w-[30px]'
 
@@ -103,7 +116,7 @@ export function AccentPicker({
       </div>
 
       {open && (
-        <div className={'mt-3 w-full ' + (size === 'onboarding' ? 'max-w-[300px]' : 'max-w-[236px]')}>
+        <div ref={panel} className={'mt-3 w-full ' + (size === 'onboarding' ? 'max-w-[300px]' : 'max-w-[236px]')}>
           <ColorField
             value={hex}
             onChange={(next) => {

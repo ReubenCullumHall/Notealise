@@ -158,6 +158,16 @@ function sendToWindow(channel: string, payload: unknown): void {
   win.webContents.send(channel, payload)
 }
 
+/** Did the active vault already have a Notealise setup (`.mdnotes/settings.json`)
+ *  at the moment it was opened — read BEFORE this run could write one. Asking
+ *  the disk later is a race: the renderer saves settings into a vault it opens
+ *  within about a second (spaces sync, the session save), so onboarding's
+ *  Vault step would find the app's OWN fresh file and call a brand-new folder
+ *  "set up before". Measured 2026-09-24 on Windows after Settings → Reset to a
+ *  blank test vault: "Pick up where you left off" on a folder wiped a second
+ *  earlier. The stat is queued here, ahead of any write that could follow. */
+let establishedWhenOpened: Promise<boolean> = Promise.resolve(false)
+
 /** Point the vault at `root`: set the boundary, then (re)start the watcher so
  *  external changes are pushed to the renderer. Used on launch and on pick. */
 export function activateVault(root: string): void {
@@ -165,6 +175,7 @@ export function activateVault(root: string): void {
   // state before repointing, so nothing leaks across a vault switch.
   void resetWorkspaceForVaultSwitch()
   setVaultRoot(root)
+  establishedWhenOpened = vaultLooksEstablished(root)
   // Non-blocking, but not unhandled: fs.mkdir rejects on a read-only or
   // permission-denied vault folder, and an unhandled rejection in main is a
   // process-level crash, not a log line.
@@ -309,10 +320,7 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.exportTransfer, () => exportTransfer(activeWindow()))
   ipcMain.handle(CH.importTransfer, (_e, text?: string) => importTransfer(activeWindow(), text))
   ipcMain.handle(CH.transferInventory, () => transferInventory())
-  ipcMain.handle(CH.vaultEstablished, () => {
-    const root = getVaultRoot()
-    return root ? vaultLooksEstablished(root) : false
-  })
+  ipcMain.handle(CH.vaultEstablished, () => (getVaultRoot() ? establishedWhenOpened : false))
   ipcMain.handle(CH.getOnboarded, () => getHasOnboarded())
   ipcMain.handle(CH.setOnboarded, (_e, value: boolean) => setHasOnboarded(value))
   ipcMain.handle(CH.getOnboardingStep, () => getOnboardingStep())
