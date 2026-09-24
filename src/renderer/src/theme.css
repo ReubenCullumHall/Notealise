@@ -133,6 +133,10 @@
   --btn-edge: 122 122 122;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.6), 0 8px 24px -8px rgba(0, 0, 0, 0.8);
   --shadow-float: 0 2px 4px rgba(0, 0, 0, 0.6), 0 18px 40px -12px rgba(0, 0, 0, 0.9);
+  /* A card pushed flat into the page (onboarding's Import cards). Same two
+     layers as --shadow-card, only smaller, so the press animates between them
+     instead of jumping. */
+  --shadow-pressed: 0 0 1px rgba(0, 0, 0, 0.6), 0 2px 6px -4px rgba(0, 0, 0, 0.8);
   color-scheme: dark;
 
   /* editor syntax tokens (read by editor/highlight.ts) */
@@ -221,6 +225,7 @@
   --btn-edge: 118 118 115;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 24px -10px rgba(0, 0, 0, 0.16);
   --shadow-float: 0 2px 4px rgba(0, 0, 0, 0.06), 0 18px 40px -14px rgba(0, 0, 0, 0.22);
+  --shadow-pressed: 0 0 1px rgba(0, 0, 0, 0.05), 0 2px 6px -4px rgba(0, 0, 0, 0.12);
   color-scheme: light;
 
   --ed-muted: rgb(var(--ink-500));

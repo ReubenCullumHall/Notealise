@@ -9,7 +9,12 @@
 // 'spaces' with the same chip picked again just lands on "<name> (2)" rather
 // than colliding.
 
-export type StepId = 'welcome' | 'vault' | 'import' | 'spaces' | 'write' | 'diskProof' | 'fonts'
+// 'diskProof' ("That note is already a file") was cut 2026-09-24: the site
+// already makes that point, and the Vault step makes it again. Its one action,
+// "Show me the file", lives on the Write step now. A resume id of
+// 'diskProof' left in an older config falls back to 'welcome' (App.tsx
+// validates against STEPS).
+export type StepId = 'welcome' | 'vault' | 'import' | 'spaces' | 'write' | 'fonts'
 
 export const STEPS: readonly StepId[] = [
   'welcome',
@@ -17,7 +22,6 @@ export const STEPS: readonly StepId[] = [
   'import',
   'spaces',
   'write',
-  'diskProof',
   'fonts'
 ]
 

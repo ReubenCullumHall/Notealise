@@ -1,14 +1,15 @@
-import { useRef, useState } from 'react'
-import type { ResolvedThemeId } from '../../../shared/settings'
+import { useEffect, useRef, useState } from 'react'
+import type { AccentMode, ResolvedThemeId } from '../../../shared/settings'
 import { Icon } from '../icons'
+import { accentHue } from '../settings/model'
 import { STEPS, nextStep, prevStep, stepIndex, type StepId } from './model'
 import { WelcomeStep } from './steps/WelcomeStep'
 import { VaultStep } from './steps/VaultStep'
 import { ImportStep } from './steps/ImportStep'
 import { SpacesStep } from './steps/SpacesStep'
 import { WriteStep } from './steps/WriteStep'
-import { DiskProofStep } from './steps/DiskProofStep'
 import { FontsStep } from './steps/FontsStep'
+import { tiltFromPointer } from './press3d'
 
 /** What the current step reports up, so the ONE shared Continue button (never
  *  a per-step button — "same box, same size, every time") knows what to do. */
@@ -48,6 +49,9 @@ interface Props {
   noteFont: string
   /** same reasoning as noteFont, for the accent swatch added 2026-08-20 */
   accent: string
+  /** what that accent recolours (the active space's `accentMode`) — the Fonts
+   *  step's "Colour the text / Tint the whole page" choice, 2026-09-21 */
+  accentMode: AccentMode
   /** Which step to render first — App.tsx reads this from
    *  `userData/config.json` (main/config.ts's onboardingStep) before ever
    *  mounting this component, so a quit-and-relaunch mid-flow resumes here
@@ -57,6 +61,7 @@ interface Props {
   onOpenSpace: (folder: string) => Promise<void>
   onPickNoteFont: (id: string) => void
   onPickAccent: (id: string) => void
+  onPickAccentMode: (mode: AccentMode) => void
   /** Called once, at the very end of the flow — awaited, and NOT what
    *  unmounts this component (see onDismissed). Does the real finishing work
    *  (seeding the welcome notes, opening one) while onboarding is still
@@ -96,11 +101,13 @@ export function Onboarding({
   animationsEnabled,
   noteFont,
   accent,
+  accentMode,
   initialStep,
   onPickVault,
   onOpenSpace,
   onPickNoteFont,
   onPickAccent,
+  onPickAccentMode,
   onFinished,
   onDismissed
 }: Props): React.JSX.Element {
@@ -108,7 +115,7 @@ export function Onboarding({
   const [animKey, setAnimKey] = useState(0)
   // True for the brief window between clicking Continue/Back and the step
   // actually swapping — the CURRENT step's content fades OUT first, then
-  // swaps to the next step which fades IN (`onboarding-fade-in`). Without
+  // swaps to the next step which arrives (`onboarding-arrive`). Without
   // this the outgoing step just vanished on the same frame the incoming one
   // appeared — no exit motion at all, which read as an instant cut rather
   // than a crossfade. Sequential rather than a true simultaneous overlap on
@@ -140,8 +147,9 @@ export function Onboarding({
   // synchronously, which is what actually closes both windows; `busy` stays
   // purely for what it renders (the button's label and disabled state).
   const navLock = useRef(false)
-  // The note Write writes and Disk-proof shows off — lifted here because both
-  // steps need it, and re-reading it off disk would race the autosave.
+  // The note Write writes — lifted here so it survives stepping Back over
+  // Write, and so finishing can open it (`writtenNotePath`). Disk-proof, the
+  // step that used to show it off, was cut 2026-09-24.
   const [notePath, setNotePath] = useState<string | null>(null)
   const [noteText, setNoteText] = useState('')
   // The Write step's welcome-notes opt-in, lifted here for the same reason
@@ -164,8 +172,15 @@ export function Onboarding({
 
   const idx = stepIndex(step)
 
+  // Text mode's preview: once a real accent is in force, this page's own words
+  // take its colour (app.css's `.onboarding-accent-text`). Tint mode needs
+  // nothing here — the tinted ramp already repaints the page's paper. The hue
+  // check mirrors `applyAccent`'s own "is there an accent" test: the class
+  // reads `--ink-acc-*`, which only exist when that test passes.
+  const accentText = accentMode === 'text' && accent !== 'default' && accentHue(accent) != null
+
   // How long the outgoing step gets to fade out before the incoming one
-  // (still `onboarding-fade-in`'s own 260ms) takes over. Kept short — this
+  // (`onboarding-arrive`, 420ms, readable well before its settle ends) takes over. Kept short — this
   // is an 8-screen forced sequence, not a place to feel slow — but non-zero,
   // which is the entire fix: zero was the bug.
   const EXIT_MS = 150
@@ -269,6 +284,102 @@ export function Onboarding({
 
   const stepProps: OnboardingStepProps = { onReady: setReady, onAdvance: () => void onContinue() }
 
+  // Enter moves on (Reuben, 2026-09-24) — except where Enter already means
+  // something: inside a text box it types, and on a control reached with Tab
+  // it presses that control, as it would anywhere else. A control that merely
+  // has focus because it was CLICKED (a Spaces chip, say) does not count —
+  // otherwise "click Journal, press Enter" would un-tick Journal.
+  //
+  // Two measured traps decide how this is written:
+  //  - It judges `e.target`, the element Enter was pressed IN, never
+  //    `document.activeElement`. The Spaces "+ something else" box handles its
+  //    own Enter by adding the chip and closing — so by the time this
+  //    listener runs (after React's), focus is back on the page and Enter
+  //    would ALSO have moved on.
+  //  - "Reached with Tab" is tracked here, not read from `:focus-visible`:
+  //    Chromium flips a clicked button to `:focus-visible` the moment any key
+  //    is pressed, so at keydown every focused chip looked Tab-reached.
+  // The key presses Continue first and moves on a beat later, the way a click
+  // sinks on the way down and acts on the way up — so the key visibly does what
+  // a click would. It used to act in the same keydown: that put `data-pressed`
+  // and `disabled` (busy) into ONE render, and the press rule is
+  // `:not(:disabled)`, so the button never sank at all — it only faded to its
+  // greyed-out look (measured 2026-09-24, frame by frame, on Windows; the same
+  // code on the Mac). With animations off there is no press to show, so it
+  // acts at once.
+  const KEY_PRESS_MS = 120
+  const continueRef = useRef(onContinue)
+  continueRef.current = onContinue
+  const stepRef = useRef(step)
+  stepRef.current = step
+  const animationsRef = useRef(animationsEnabled)
+  animationsRef.current = animationsEnabled
+  const continueBtn = useRef<HTMLButtonElement>(null)
+  const [keyPressed, setKeyPressed] = useState(false)
+  useEffect(() => {
+    let pending = 0
+    let lastInputWasKey = false
+    let tabbedTo: EventTarget | null = null
+    const onPointer = (): void => {
+      lastInputWasKey = false
+    }
+    const onFocus = (e: FocusEvent): void => {
+      tabbedTo = lastInputWasKey ? e.target : null
+    }
+    const onModality = (): void => {
+      lastInputWasKey = true
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Enter' || e.repeat || e.isComposing || e.defaultPrevented) return
+      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+      const el = e.target
+      if (el instanceof HTMLElement && el !== document.body) {
+        const typing =
+          el.isContentEditable ||
+          el.closest('.cm-editor') != null ||
+          el instanceof HTMLTextAreaElement ||
+          el instanceof HTMLSelectElement ||
+          (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(el.type))
+        if (typing) return
+        if (el === tabbedTo) return
+      }
+      e.preventDefault()
+      // One press at a time: a second Enter inside the beat is the same press.
+      if (pending) return
+      if (!animationsRef.current) {
+        void continueRef.current()
+        return
+      }
+      const pressedOn = stepRef.current
+      // A key has no point to tip towards, so it sinks straight — clearing
+      // whatever tilt the last pointer press left on the button.
+      continueBtn.current?.style.setProperty('--tilt-x', '0deg')
+      continueBtn.current?.style.setProperty('--tilt-y', '0deg')
+      setKeyPressed(true)
+      pending = window.setTimeout(() => {
+        pending = 0
+        setKeyPressed(false)
+        // Unless something else moved the flow on meanwhile (a click inside
+        // the beat) — this press belonged to the step it was made on.
+        if (stepRef.current === pressedOn) void continueRef.current()
+      }, KEY_PRESS_MS)
+    }
+    // Capture for the bookkeeping, so it is current before anything else sees
+    // the event; bubble for Enter itself, so a handler that consumed it first
+    // (`defaultPrevented`) wins.
+    window.addEventListener('pointerdown', onPointer, true)
+    window.addEventListener('keydown', onModality, true)
+    window.addEventListener('focusin', onFocus, true)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointerdown', onPointer, true)
+      window.removeEventListener('keydown', onModality, true)
+      window.removeEventListener('focusin', onFocus, true)
+      window.removeEventListener('keydown', onKey)
+      window.clearTimeout(pending)
+    }
+  }, [])
+
   return (
     // z-55, not higher: Settings is z-[60] and has to land ABOVE this overlay
     // to be visible/clickable at all, should anything inside onboarding ever
@@ -277,6 +388,7 @@ export function Onboarding({
     <div
       className={
         'fixed inset-0 z-[55] flex items-center justify-center bg-paper' +
+        (accentText ? ' onboarding-accent-text' : '') +
         (animationsEnabled && closing ? ' onboarding-dismiss' : '')
       }
     >
@@ -314,7 +426,7 @@ export function Onboarding({
             style={{ width: '100%' }}
             className={
               'm-auto ' +
-              (!animationsEnabled ? '' : exiting ? 'onboarding-fade-out' : 'onboarding-fade-in')
+              (!animationsEnabled ? '' : exiting ? 'onboarding-fade-out' : 'onboarding-arrive')
             }
           >
             {step === 'welcome' && <WelcomeStep {...stepProps} theme={theme} />}
@@ -332,7 +444,12 @@ export function Onboarding({
               />
             )}
             {step === 'import' && (
-              <ImportStep {...stepProps} onOpenSpace={onOpenSpace} onImported={setImportNotePath} />
+              <ImportStep
+                {...stepProps}
+                onOpenSpace={onOpenSpace}
+                onImported={setImportNotePath}
+                animationsEnabled={animationsEnabled}
+              />
             )}
             {step === 'spaces' && (
               <SpacesStep {...stepProps} activeSpaceFolder={activeSpaceFolder} onOpenSpace={onOpenSpace} />
@@ -349,7 +466,6 @@ export function Onboarding({
                 onSeedWelcome={setSeedWelcome}
               />
             )}
-            {step === 'diskProof' && <DiskProofStep {...stepProps} notePath={notePath} noteText={noteText} />}
             {step === 'fonts' && (
               <FontsStep
                 {...stepProps}
@@ -358,17 +474,24 @@ export function Onboarding({
                 onPick={onPickNoteFont}
                 accent={accent}
                 onPickAccent={onPickAccent}
+                accentMode={accentMode}
+                onPickAccentMode={onPickAccentMode}
               />
             )}
           </div>
         </div>
 
         <div className="flex w-full flex-col items-center gap-5 pb-2">
+          {/* Raised when it can be pressed, flat on the page while it can't —
+              and it presses in like the Import cards (`.press-3d`). */}
           <button
+            ref={continueBtn}
             type="button"
             disabled={!ready.ready || busy || exiting || closing}
             onClick={() => void onContinue()}
-            className="press rounded-full bg-brand-600 px-7 py-2.5 text-[14px] font-medium text-paper transition duration-150 hover:bg-brand-700 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-brand-600"
+            onPointerDown={(e) => tiltFromPointer(e, 3)}
+            data-pressed={keyPressed ? '' : undefined}
+            className="press-3d rounded-full bg-brand-600 px-7 py-2.5 text-[14px] font-medium text-paper shadow-card transition duration-150 hover:bg-brand-700 disabled:cursor-default disabled:opacity-40 disabled:shadow-none disabled:hover:bg-brand-600"
           >
             {busy ? 'One moment…' : (ready.continueLabel ?? 'Continue')}
           </button>

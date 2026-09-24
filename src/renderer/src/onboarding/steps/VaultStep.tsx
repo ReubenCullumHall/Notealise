@@ -77,12 +77,11 @@ export function VaultStep({
     <div className="flex flex-col items-center gap-8 text-center">
       <div>
         <h1 className="font-display text-[24px] font-semibold text-ink-900">
-          Everything here is a file on your computer
+          Your notes live in a folder
         </h1>
         <p className="mx-auto mt-3 max-w-[440px] text-[14px] leading-relaxed text-ink-500">
-          Not a database. Not an account. No way to collect any data. Pick a folder and that&rsquo;s
-          where your notes live — you can open them in anything, and if you delete this app tomorrow
-          they&rsquo;re exactly where you left them.
+          Pick a folder and that&rsquo;s where your notes live — a folder on your computer so you have
+          control.
         </p>
       </div>
 
@@ -98,17 +97,13 @@ export function VaultStep({
                 still in it. Continue to pick up where you left off.
               </span>
             ) : (
-              <>
-                <span className="text-[12px] text-ink-500">
-                  This is yours. Nothing else goes in it.
+              existingCount != null &&
+              existingCount > 0 && (
+                <span className="text-[11.5px] text-ink-400">
+                  There are already {existingCount} {existingCount === 1 ? 'note' : 'notes'} in
+                  here. They&rsquo;ll show up as they are.
                 </span>
-                {existingCount != null && existingCount > 0 && (
-                  <span className="text-[11.5px] text-ink-400">
-                    There are already {existingCount} {existingCount === 1 ? 'note' : 'notes'} in
-                    here. They&rsquo;ll show up as they are.
-                  </span>
-                )}
-              </>
+              )
             )}
             <button
               type="button"

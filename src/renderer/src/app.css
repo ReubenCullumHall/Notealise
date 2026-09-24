@@ -446,6 +446,134 @@ button.icon:hover {
   .onboarding-fade-in, .onboarding-fade-out, .onboarding-dismiss { animation: none; }
 }
 
+/* The Import step's box between its two choices and the full panel
+   (2026-09-23). ImportStep.tsx sets an explicit pixel height from its content
+   on every resize, so this transition is what makes the heading glide up as
+   the panel opens instead of jumping. Decelerating, no overshoot — the motion
+   rule. 300ms matches ImportStep's MORPH_MS. `:root[data-motion='off']`
+   already flattens it along with every other transition. */
+.onboarding-morph {
+  transition: height 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-morph { transition: none; }
+}
+
+/* Onboarding's pressable controls — the Import step's two cards and the
+   Continue button (Reuben, 2026-09-23/24: "more defined, a slight 3d effect").
+   A real press rather than the app's flat `.press` squash: the control sinks,
+   its shadow flattens from --shadow-card to --shadow-pressed as if pushed into
+   the page, and it tips towards wherever the pointer went down — `--tilt-x` /
+   `--tilt-y`, set by onboarding/press3d.ts on pointerdown. Keyboard presses
+   have no point, so they sink straight. `[data-pressed]` holds the pose
+   without a pointer: a chosen card while the page fades around it, and
+   Continue for a moment when Enter pressed it.
+   At rest it is `none`, NOT an identity copy of the pressed list: any resting
+   3D transform keeps the control on its own compositor layer, and Windows then
+   draws its text with greyscale instead of ClearType smoothing — measured
+   2026-09-24 at 100/125/150%, the card and Continue text had no ClearType
+   pixels at all beside a ClearType heading. `none` still interpolates part by
+   part (it stands in for identity functions matching the other side), so the
+   press animates exactly as before; the text is only greyscale while it moves.
+   In fast, out slow — a press that
+   lags the finger feels spongy. Decelerating, no overshoot (CLAUDE.md's
+   motion rule). Declared after `@tailwind utilities`, which is what lets this
+   `transition` beat the element's own `transition duration-150`; the list
+   keeps the colour fades that utility carried. */
+.press-3d {
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  --press-sink: 2px;
+  --press-scale: 0.98;
+  transform: none;
+  transition-property: transform, box-shadow, opacity, background-color, color, border-color;
+  transition-duration: 220ms, 220ms, 200ms, 150ms, 150ms, 150ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1), ease-out, ease-out, ease, ease, ease;
+}
+.press-3d:active:not(:disabled),
+.press-3d[data-pressed]:not(:disabled) {
+  transform: perspective(700px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y))
+    translate3d(0, var(--press-sink), 0) scale(var(--press-scale));
+  --tw-shadow: var(--shadow-pressed);
+}
+.press-3d:active:not(:disabled) { transition-duration: 90ms, 90ms, 200ms, 150ms, 150ms, 150ms; }
+/* The shadow still flattens with motion off — it is the press, not a
+   movement — but nothing tilts or sinks. */
+@media (prefers-reduced-motion: reduce) {
+  .press-3d,
+  .press-3d:active:not(:disabled),
+  .press-3d[data-pressed]:not(:disabled) { transform: none; }
+}
+:root[data-motion='off'] .press-3d { transform: none !important; }
+
+/* The Import step's two cards (ImportStep.tsx's `Choice`). Once one is picked
+   it holds its pressed pose (`.press-3d[data-pressed]`) while everything else
+   fades — `aside` here, `.onboarding-recede` on the heading — and it leaves
+   last, with the step. The other card settles 6px and fades, set aside like a
+   sheet of paper: reference/05-brand-feel.md's "placed down". */
+/* The ring is the hover signal. Without this the global `button:hover` wash
+   (0,1,1) beats the card's own `bg-surface/70` utility (0,1,0) and turns it
+   flat grey in light. */
+.onboarding-choice:hover { background: rgb(var(--surface) / 0.7); }
+.onboarding-choice:active,
+.onboarding-choice[data-pressed] { --tw-ring-color: rgb(var(--ink-400) / 0.4); }
+.onboarding-choice[data-state='aside'] {
+  opacity: 0;
+  transform: perspective(700px) rotateX(0deg) rotateY(0deg) translate3d(0, 6px, 0) scale(0.98);
+  pointer-events: none;
+}
+.onboarding-choice:not([data-state='idle']) { cursor: default; }
+.onboarding-recede {
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-choice[data-state='aside'] { transform: none; }
+}
+
+/* Each onboarding step arrives "placed down" (2026-09-24,
+   reference/05-brand-feel.md's motion map: cards settle like paper set on a
+   table — a small drop from just above, then a soft stop). The site's own
+   version (landing.css, "Arrive and settle") is -16px and 1.03 over 0.9s; a
+   step change in a forced sequence wants the same shape, smaller and quicker,
+   so the page is readable at once and only the settle trails. Still a fade
+   and never a slide — the plain crossfade replaced a slide here on
+   2026-08-21 at Reuben's request. The drop comes from ABOVE on purpose: the
+   step's scroll box can't scroll to negative overflow, so the brief transform
+   never flashes a scrollbar the way a rise from below would. Not `both`-
+   filled, so no transform is left on the step once it lands (the stacking-
+   context trap in CLAUDE.md). */
+@keyframes onboarding-arrive {
+  from { opacity: 0; transform: translate3d(0, -8px, 0) scale(1.015); }
+  60% { opacity: 1; }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+.onboarding-arrive { animation: onboarding-arrive 420ms cubic-bezier(0.16, 1, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-arrive { animation: none; }
+}
+
+/* Onboarding's "Colour the text" preview (2026-09-21). In `text` mode the
+   accent normally reaches only a named list of headings and titles — none of
+   which exist on this screen — so picking a colour here changed nothing you
+   could see. Scoped to the overlay, this hands the page's STRONG ink (headline,
+   labels) the accented ramp; `applyAccent` writes `--ink-acc-*` in both modes.
+   Only 900–700, deliberately: all seven stops were tried first and measured —
+   with Lime, Teal, Sage or Amber the intro paragraph fell to 2.3:1 and the
+   small hints to 2.0:1 on the light theme (the neutral ones sit at 4.3 / 3.2),
+   while the headline stayed above 5.8. It is also what `text` mode does in the
+   app itself: headings and titles take the colour, other labels keep the
+   theme's ink.
+   Onboarding.tsx adds the class only when an accent is really in force: with
+   none set the variables don't exist, and a `var()` with no fallback would
+   blank every word on the page. The app underneath is untouched, and so is
+   `accentUiText` — this is a preview, not a setting. */
+.onboarding-accent-text {
+  --ink-900: var(--ink-acc-900);
+  --ink-800: var(--ink-acc-800);
+  --ink-700: var(--ink-acc-700);
+}
+
 /* The note's own properties — its word count and its edited/created stamps —
    and the third and last reader of `--ink-acc-*`. A class rather than a
    Tailwind utility because a utility cannot express the var fallback, and the

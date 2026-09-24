@@ -405,7 +405,7 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
       ))}
 
       <div className="border-t border-ink-300/15" />
-      <SettingRow title="Output folder" desc="Created as a new space in your vault — never merged into existing notes.">
+      <SettingRow title="Output folder name" desc="Created as a new space in your vault — never merged into existing notes.">
         <input
           value={spaceName}
           onChange={(e) => setSpaceName(e.target.value)}

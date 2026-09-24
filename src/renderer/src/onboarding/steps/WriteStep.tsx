@@ -59,29 +59,45 @@ export function WriteStep({
   onSeedWelcome,
   onReady
 }: Props): React.JSX.Element {
+  // Second and later saves write over the note this step already made.
+  // Creating a fresh one each time left the earlier file sitting in the vault
+  // as an orphan the user never asked for — reachable by going Back into
+  // Write, editing, and continuing. The FILENAME deliberately stays as first
+  // saved even if the first line has since changed: that's how the real app
+  // behaves too, a note is renamed by renaming it, not by editing its heading.
+  //
+  // Two callers since 2026-09-24 (Continue, and "Show me the file"), so the
+  // note is created at most once however they interleave: `created` holds the
+  // one createNote in flight, and `known` the path as soon as it exists —
+  // before the parent's `savedPath` prop has caught up.
+  const known = useRef<string | null>(savedPath)
+  const created = useRef<Promise<string> | null>(null)
+  const save = async (): Promise<string> => {
+    let path = known.current ?? savedPath
+    if (!path) {
+      created.current ??= window.api.createNote(spaceFolder, titleFromFirstLine(text))
+      path = await created.current
+    }
+    known.current = path
+    await window.api.writeNote(path, text)
+    onSaved(path)
+    return path
+  }
+
   // onReady's `commit` closes over `text`, so it has to be rebuilt whenever
   // `text` changes — a ref alone would go stale the moment they stopped typing.
+  const typed = text.trim().length > 0
   useEffect(() => {
-    const typed = text.trim().length > 0
-    onReady({
-      ready: typed,
-      commit: typed
-        ? async () => {
-            // Second and later commits write over the note this step already
-            // made. Creating a fresh one each time left the earlier file
-            // sitting in the vault as an orphan the user never asked for —
-            // reachable by going Back into Write, editing, and continuing.
-            // The FILENAME deliberately stays as first saved even if the first
-            // line has since changed: that's how the real app behaves too, a
-            // note is renamed by renaming it, not by editing its heading.
-            const path = savedPath ?? (await window.api.createNote(spaceFolder, titleFromFirstLine(text)))
-            await window.api.writeNote(path, text)
-            onSaved(path)
-          }
-        : undefined
-    })
+    onReady({ ready: typed, commit: typed ? async () => void (await save()) : undefined })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, spaceFolder, savedPath])
+
+  // What the cut "That note is already a file" step existed for, kept as one
+  // small link: saving is what makes the file, so it saves first, then opens
+  // the real folder window — the proof is the OS showing it, not a mockup.
+  const showFile = async (): Promise<void> => {
+    window.api.revealInFolder(await save())
+  }
 
   const hasHeading = /^#{1,6}\s+/m.test(text)
   const editorRef = useRef(null)
@@ -130,6 +146,20 @@ export function WriteStep({
           editorRef={editorRef}
         />
       </div>
+
+      {/* Only once there is something to be a file. */}
+      <button
+        type="button"
+        onClick={() => void showFile()}
+        tabIndex={typed ? 0 : -1}
+        aria-hidden={!typed}
+        className={
+          '-mt-3 rounded border-none bg-transparent p-0 text-[12.5px] text-ink-500 underline-offset-2 transition-opacity duration-200 hover:text-ink-700 hover:underline ' +
+          (typed ? 'opacity-100' : 'pointer-events-none opacity-0')
+        }
+      >
+        Show me the file
+      </button>
 
       <p className={'text-[12px] text-brand-600 transition-opacity duration-200 ' + (hasHeading ? 'opacity-100' : 'opacity-0')}>
         That&rsquo;s Markdown. The app hides the symbols while you&rsquo;re not on that line, so it stays

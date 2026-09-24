@@ -1,15 +1,16 @@
-import { useEffect } from 'react'
-import { DOWNLOADABLE_FONTS, FONTS, fontCssValue, type FontOption } from '../../settings/fonts'
+import { useEffect, useRef } from 'react'
+import { FONTS, fontCssValue, type FontOption } from '../../settings/fonts'
 import { AccentPicker } from '../../settings/AccentPicker'
-import type { ResolvedThemeId } from '../../../../shared/settings'
+import type { AccentMode, ResolvedThemeId } from '../../../../shared/settings'
 import type { OnboardingStepProps } from '../Onboarding'
 
 // The Customisation screen from the 2026-08-17 blueprint — now built down to
 // both halves: font, and (added 2026-08-20) accent colour, reusing the same
 // `ACCENTS` palette and the "apply to every space" pattern the font half
 // already used (App.tsx's pickOnboardingFont / pickOnboardingAccent). Colour
-// reach (text-only vs. surfaces too) stays a Settings-only control — one
-// decision here, not two.
+// reach (text-only vs. surfaces too) was Settings-only until 2026-09-21, when
+// Reuben asked for it here: it appears ONLY once a colour is picked, so the
+// screen stays a font pick for anyone who leaves the colour on Default.
 //
 // Only the BUNDLED faces are offered, deliberately, and this is the whole
 // reason the screen can exist at all: they ship inside the app (theme.css's
@@ -18,8 +19,11 @@ import type { OnboardingStepProps } from '../Onboarding'
 // entries have to be fetched from a CDN first (shared/fonts.ts), and a
 // first-run screen is the worst possible place to put a control that can fail
 // — an offline install would show four cards that do nothing. Those live one
-// place only: Settings → Your collection → Fonts, which the copy below points
-// at rather than pretending the choice here is the whole set.
+// place only: Settings → Your collection → Fonts. The pointer to it used to
+// be a footnote here too ("These five are built in… sixteen more live in
+// Settings"); cut 2026-09-23, Reuben's call — it was why this step scrolled
+// in the app's default window size, and it's a technical aside a first run
+// doesn't need.
 //
 // Writes `font` (a note's own text), not `uiFont` (the app's chrome) — the two
 // are separate settings on purpose, see SpaceFonts.tsx. This is a Markdown
@@ -32,17 +36,6 @@ import type { OnboardingStepProps } from '../Onboarding'
 // odd second thing to offer before the app has explained what it's for.
 const ORDER = ['inter', 'fraunces', 'jetbrains-mono', 'opendyslexic']
 const CHOICES: FontOption[] = ORDER.map((id) => FONTS.find((f) => f.id === id && f.source === 'bundled')!)
-
-// The copy below quotes two counts — the cards shown here, and everything else
-// in the catalogue. Both are derived, not written, so adding a font to
-// shared/fonts.ts keeps the sentence honest with no edit to this file.
-const BUILT_IN_COUNT = CHOICES.length + 1 // + the "App default" card
-const NUMBER_WORDS = [
-  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
-  'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen',
-  'seventeen', 'eighteen', 'nineteen', 'twenty'
-]
-const numberWord = (n: number): string => NUMBER_WORDS[n] ?? String(n)
 
 /** What each bundled face is actually FOR, in one line — the catalogue's own
  *  `blurb` is written for someone browsing Settings who already knows what a
@@ -61,6 +54,9 @@ interface Props extends OnboardingStepProps {
   onPick: (id: string) => void
   accent: string
   onPickAccent: (id: string) => void
+  /** what the picked colour recolours — the Space's `accentMode` */
+  accentMode: AccentMode
+  onPickAccentMode: (mode: AccentMode) => void
 }
 
 function FontCard({
@@ -102,7 +98,23 @@ function FontCard({
   )
 }
 
-export function FontsStep({ theme, value, onPick, accent, onPickAccent, onReady }: Props): React.JSX.Element {
+// Wording is Reuben's, 2026-09-21. The ids are the Space's own, so a pick here
+// is the same setting as Settings → Customisation's "Text only" / "Tinted".
+const REACH: { id: AccentMode; label: string }[] = [
+  { id: 'text', label: 'Colour the text' },
+  { id: 'tint', label: 'Tint the whole page' }
+]
+
+export function FontsStep({
+  theme,
+  value,
+  onPick,
+  accent,
+  onPickAccent,
+  accentMode,
+  onPickAccentMode,
+  onReady
+}: Props): React.JSX.Element {
   // Never gated: "App default" is a real answer, and it's the one already
   // selected — there is nothing here a person has to do before moving on.
   // The last step since Walkthrough was cut (2026-08-20) — the button that
@@ -112,13 +124,30 @@ export function FontsStep({ theme, value, onPick, accent, onPickAccent, onReady 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // The colour block is the bottom of a step that already scrolls in the app's
+  // default 1100×720 window, so the reach choice appearing under the swatches
+  // landed BELOW the fold (measured 2026-09-21: row at y 550–586 in a scroll box
+  // ending at 567) — the page recoloured and the new choice was out of sight.
+  // Bring the block's last line into view the moment a colour is first picked.
+  // Not on mount: coming Back to a step that already has a colour must not
+  // jump past its heading.
+  const colourEnd = useRef<HTMLParagraphElement>(null)
+  const hadColour = useRef(accent !== 'default')
+  useEffect(() => {
+    const has = accent !== 'default'
+    if (has && !hadColour.current) {
+      colourEnd.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+    hadColour.current = has
+  }, [accent])
+
   return (
     <div className="flex flex-col items-center gap-6 text-center">
       <div>
         <h1 className="font-display text-[24px] font-semibold text-ink-900">Pick a font to write in</h1>
         <p className="mx-auto mt-3 max-w-[440px] text-[14px] leading-relaxed text-ink-500">
-          This is the face your notes are written in. Every space can have its own, and you can change
-          it whenever you like — nothing here is locked in.
+          Every space can have its own, and you can change it whenever you like — nothing here is
+          locked in.
         </p>
       </div>
 
@@ -132,12 +161,6 @@ export function FontsStep({ theme, value, onPick, accent, onPickAccent, onReady 
         ))}
       </div>
 
-      <p className="max-w-[420px] text-[12px] leading-relaxed text-ink-400">
-        These {numberWord(BUILT_IN_COUNT)} are built in, so they work offline from the day you
-        install. Another {numberWord(DOWNLOADABLE_FONTS.length)} — plus any font file of your own —
-        live in <span className="text-ink-500">Settings → Your collection → Fonts</span>.
-      </p>
-
       <div className="flex flex-col items-center gap-2.5 border-t border-ink-300/15 pt-5">
         <p className="text-[12.5px] font-medium text-ink-700">And a colour, if you want one</p>
         {/* The same control as Settings → Appearance → Accent, component and
@@ -149,7 +172,36 @@ export function FontsStep({ theme, value, onPick, accent, onPickAccent, onReady 
           onPick={onPickAccent}
           size="onboarding"
         />
-        <p className="text-[11.5px] text-ink-400">
+        {/* Only once a colour is picked — 'default' is "no accent", so there is
+            nothing for a reach to apply to. The page behind it is the preview:
+            Onboarding.tsx recolours its own text for 'text' and the tinted
+            ramp repaints the page itself for 'tint'. */}
+        {accent !== 'default' && (
+          <div
+            className="mode-row onboarding-fade-in w-full max-w-[380px]"
+            // .mode-row's own 12px top margin is for Settings; the column's gap
+            // already spaces this one
+            style={{ marginTop: 0 }}
+            role="group"
+            aria-label="What the colour applies to"
+          >
+            {REACH.map((r) => {
+              const on = accentMode === r.id
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  className={'mode-btn' + (on ? ' on' : '')}
+                  aria-pressed={on}
+                  onClick={() => onPickAccentMode(r.id)}
+                >
+                  <span className="t text-center">{r.label}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+        <p ref={colourEnd} className="text-[11.5px] text-ink-400">
           Leave it on Default and the app stays neutral. Every space can have its own later.
         </p>
       </div>

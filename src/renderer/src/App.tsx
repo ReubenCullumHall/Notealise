@@ -84,6 +84,7 @@ import {
   SPACE_CAP,
   withNewSpace,
   withSpacePatch,
+  type AccentMode,
   type AppSettings,
   type Space
 } from '../../shared/settings'
@@ -1926,6 +1927,13 @@ export default function App(): React.JSX.Element {
     void changeSettings({ spaces: current.spaces.map((sp) => ({ ...sp, accent: id })) })
   }
 
+  /** The Fonts step's "Colour the text / Tint the whole page" — the Space's
+   *  own `accentMode`, on every space for the same reason as the two above. */
+  const pickOnboardingAccentMode = (mode: AccentMode): void => {
+    const current = settingsRef.current
+    void changeSettings({ spaces: current.spaces.map((sp) => ({ ...sp, accentMode: mode })) })
+  }
+
   /** Every organise action goes through here — rename, move, delete, restore,
    *  recolour, and the rest. When one fails, say so on the notice strip like
    *  everything else in the app does.
@@ -2879,11 +2887,13 @@ export default function App(): React.JSX.Element {
           animationsEnabled={settings.animationsEnabled}
           noteFont={space.font}
           accent={space.accent}
+          accentMode={space.accentMode}
           initialStep={onboardingResumeStep}
           onPickVault={pick}
           onOpenSpace={(folder) => openSpaceRef.current(folder)}
           onPickNoteFont={pickOnboardingFont}
           onPickAccent={pickOnboardingAccent}
+          onPickAccentMode={pickOnboardingAccentMode}
           onFinished={(path, opts) => finishOnboarding(path, opts)}
           onDismissed={() => {
             setHasOnboarded(true)
