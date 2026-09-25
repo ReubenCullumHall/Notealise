@@ -51,11 +51,15 @@ Feel free to reorganise it however you like — move notes, make folders, rename
  *
  *  Continue is ready from the moment this screen mounts: starting fresh with
  *  nothing imported is always a valid answer here, not a special case you
- *  have to opt into. Skip therefore just advances immediately (`onAdvance`)
- *  rather than routing through a second "are you sure" screen — that screen
- *  used to exist and only re-showed the same already-enabled Continue button,
- *  which was a confirmation step with no decision left to make. Changing
- *  your mind is still one Back click away, same as any other step. */
+ *  have to opt into. "Start fresh" therefore just advances immediately
+ *  (`onAdvance`) rather than routing through a second "are you sure" screen —
+ *  that screen used to exist and only re-showed the same already-enabled
+ *  Continue button, which was a confirmation step with no decision left to
+ *  make. Changing your mind is still one Back click away, same as any other
+ *  step. Once the panel is open, Continue is the way out without importing:
+ *  the "Skip — I'm starting fresh" link that used to sit under it said the
+ *  same thing as Continue, and at the default window size it sat half-hidden
+ *  behind it (removed at Reuben's call, 2026-09-25). */
 export function ImportStep({
   onOpenSpace,
   onImported,
@@ -188,36 +192,27 @@ export function ImportStep({
               />
             </div>
           ) : (
-            <>
-              <div
-                className={
-                  'w-full rounded-2xl bg-surface/70 px-5 py-4 text-left shadow-card' +
-                  (animationsEnabled ? ' onboarding-fade-in' : '')
-                }
-              >
-                <ImportPanel
-                  onOpenSpace={async (folder) => {
-                    await onOpenSpace(folder)
-                    // Routed through the same createNote/writeNote path every other
-                    // onboarding artefact uses (never a bespoke fs write) — see
-                    // main/vault.ts's createNote, which auto-suffixes on collision.
-                    const notePath = await window.api.createNote(folder, 'How this import is organised')
-                    await window.api.writeNote(notePath, ORGANISE_NOTE_TEXT)
-                    onImported(notePath)
-                    setImportedFolder(folder)
-                  }}
-                  onClose={() => {}}
-                  variant="onboarding"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={onAdvance}
-                className="rounded border-none bg-transparent p-0 text-[13.5px] text-ink-500 underline-offset-2 hover:text-ink-700 hover:underline"
-              >
-                Skip — I&rsquo;m starting fresh
-              </button>
-            </>
+            <div
+              className={
+                'w-full rounded-2xl bg-surface/70 px-5 py-4 text-left shadow-card' +
+                (animationsEnabled ? ' onboarding-fade-in' : '')
+              }
+            >
+              <ImportPanel
+                onOpenSpace={async (folder) => {
+                  await onOpenSpace(folder)
+                  // Routed through the same createNote/writeNote path every other
+                  // onboarding artefact uses (never a bespoke fs write) — see
+                  // main/vault.ts's createNote, which auto-suffixes on collision.
+                  const notePath = await window.api.createNote(folder, 'How this import is organised')
+                  await window.api.writeNote(notePath, ORGANISE_NOTE_TEXT)
+                  onImported(notePath)
+                  setImportedFolder(folder)
+                }}
+                onClose={() => {}}
+                variant="onboarding"
+              />
+            </div>
           )}
         </div>
       </div>

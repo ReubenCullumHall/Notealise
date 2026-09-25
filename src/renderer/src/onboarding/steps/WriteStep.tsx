@@ -123,7 +123,7 @@ export function WriteStep({
 
           Making the box a flex column gives `.cm-host` its `flex: 1` to fill
           and its `min-height: 0` to shrink against, so the editor lands at
-          exactly 166px (190 minus `py-3`). Scrolling then belongs to
+          exactly its box height minus `py-3`. Scrolling then belongs to
           CodeMirror's own `.cm-scroller`, which is the app's normal behaviour
           everywhere else: no bar until the text is longer than the box, and
           then only once the pointer comes near it (editor/scrollbarReveal.ts).
@@ -134,8 +134,13 @@ export function WriteStep({
           — see app.css. That padding is the real reason a scrollbar was there
           on an EMPTY box: it is scroll-past-the-end room for a full-window
           note, and 40vh of a 900px window is 360px of guaranteed overflow
-          inside a 166px box. */}
-      <div className="onb-write-box flex h-[190px] w-full max-w-[480px] flex-col overflow-hidden rounded-2xl bg-surface/70 px-4 py-3 text-left shadow-card">
+          inside a 166px box.
+
+          160px, not 190 (2026-09-25): at the default 1100×720 window, Windows'
+          menu bar leaves the page 466px and this step measured 484, so it
+          always scrolled there. 30px off this box, the tallest thing on the
+          page, brings it to 454 — still about five lines of writing room. */}
+      <div className="onb-write-box flex h-[160px] w-full max-w-[480px] flex-col overflow-hidden rounded-2xl bg-surface/70 px-4 py-3 text-left shadow-card">
         <CodeEditor
           path="onboarding-demo"
           doc={text}

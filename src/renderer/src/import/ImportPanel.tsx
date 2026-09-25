@@ -319,8 +319,12 @@ export function ImportPanel({ onOpenSpace, onClose, variant }: Props): React.JSX
       </SettingRow>
       {current.helpUrl && (
         <p className="-mt-2 text-[11.5px]">
+          {/* A text link, so it has to undo the global `button` rule's border,
+              padding and fill — including its `:hover` wash, which outranks a
+              plain utility (`hover:bg-transparent` is what beats it). Without
+              these it drew as a boxed button, here and in onboarding. */}
           <button
-            className="text-brand-600 underline-offset-2 hover:underline"
+            className="rounded border-none bg-transparent p-0 text-brand-600 underline-offset-2 hover:bg-transparent hover:underline"
             onClick={() => void window.api.openExternal(current.helpUrl!)}
           >
             Learn more about exporting from {current.label}
