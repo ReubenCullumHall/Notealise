@@ -633,3 +633,12 @@ describe('normalizeUpdatePrefs', () => {
     })
   })
 })
+
+describe('a space saved on the removed Narrow lined look', () => {
+  // Through the real loader, and through the preset path that shares it.
+  it('loads as Lined, in settings and in a saved preset', async () => {
+    const { normalizeSettings, normalizeLook } = await import('./settings')
+    expect(normalizeSettings({ spaces: [{ pageLook: 'lined-tight' }] }).spaces[0].pageLook).toBe('lined')
+    expect(normalizeLook({ pageLook: 'lined-tight' }).pageLook).toBe('lined')
+  })
+})

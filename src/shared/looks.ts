@@ -179,6 +179,14 @@ export function tintName(token: string): string {
  *  that a corrupted file can't hand the pickers ten thousand cards. */
 export const COLLECTION_CAP = 60
 
+/** A space's `pageLook` as stored, mapped onto a look this build still has.
+ *  "Narrow lined" (`lined-tight`) was removed in 579f3f0; a space or preset
+ *  saved on it would otherwise draw a plain page. Reuben, 2026-09-25: carry it
+ *  over to Lined. Everything else passes through untouched. */
+export function migratePageLook(id: string): string {
+  return id === 'lined-tight' ? 'lined' : id
+}
+
 /** Keep only ids this build actually knows how to draw, once each, never past
  *  the cap. Bundled looks are NOT stored — they're in the collection by
  *  definition — so the list holds exactly what was added. */

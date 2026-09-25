@@ -31,6 +31,7 @@ import { isColorToken, type ColorToken } from './palette'
 import { DEFAULT_PALETTE, normalizePalette } from './color'
 import {
   normalizePageLookIntensity,
+  migratePageLook,
   normalizePageLookLibrary,
   normalizeTintLibrary,
   PAGE_LOOK_INTENSITY_DEFAULT
@@ -646,7 +647,8 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
       : DEFAULT_SPACE.rawMarkStyle,
     rawMarkTint: isColorToken(s.rawMarkTint) ? s.rawMarkTint : DEFAULT_SPACE.rawMarkTint,
     toolbarSlots: normalizeSlots(s.toolbarSlots),
-    pageLook: shortString(s.pageLook),
+    // through migratePageLook: presets reach here too, via normalizeLook
+    pageLook: migratePageLook(shortString(s.pageLook)),
     font: shortString(s.font),
     uiFont: shortString(s.uiFont),
     dyslexiaFont: shortString(s.dyslexiaFont),

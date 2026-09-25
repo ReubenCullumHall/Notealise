@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   COLLECTION_CAP,
+  migratePageLook,
   normalizePageLookLibrary,
   normalizeTintLibrary,
   PAGE_LOOKS,
@@ -77,5 +78,16 @@ describe('the collection', () => {
     }
     const many = Array.from({ length: COLLECTION_CAP + 40 }, (_, i) => `#${i.toString(16).padStart(6, '0')}@10`)
     expect(normalizeTintLibrary(many)).toHaveLength(COLLECTION_CAP)
+  })
+})
+
+describe('migratePageLook', () => {
+  // Narrow lined was removed; a space still saved on it must not fall to a
+  // plain page (Reuben, 2026-09-25: map it to Lined).
+  it('carries the removed Narrow lined over to Lined', () => {
+    expect(migratePageLook('lined-tight')).toBe('lined')
+  })
+  it('leaves every other id alone, including none', () => {
+    for (const id of ['', 'lined', 'grid', 'dots', 'something-custom']) expect(migratePageLook(id)).toBe(id)
   })
 })
