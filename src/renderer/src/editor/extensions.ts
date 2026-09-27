@@ -13,6 +13,7 @@ import { scrollbarReveal } from './scrollbarReveal'
 import { webLinkGestures } from './webLinkPass'
 import { taskClick } from './taskPass'
 import { blockMath } from './blockMath'
+import { ruleSnap } from './ruleSnap'
 import { blockTable } from './blockTable'
 import { lineMove } from './lineMove'
 import { registerView } from './viewRegistry'
@@ -119,6 +120,9 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     webLinkGestures,
     taskClick,
     blockMath,
+    // Measures each formula on its own line so the Lined look can round it up
+    // to whole rules (ruleSnap.ts, app.css).
+    ruleSnap,
     blockTable,
     // The six-dot grip beside the active line (lineMove.ts). After the passes,
     // so it never competes with a widget for the same gesture.

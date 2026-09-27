@@ -842,6 +842,31 @@ button.icon:hover {
   text-align: center;
   margin: 0.3em 0;
 }
+/* On Lined a formula on its own line takes a whole number of rules, so the
+   lines below it stay on theirs (they sat ~5px off before, 2026-09-27).
+   editor/ruleSnap.ts measures the formula into --snap-h; this rounds it up to
+   whole rules and splits the difference above and below, so the formula sits
+   centred in its rules. `flow-root` and KaTeX's own margin at 0 keep that
+   measurement from depending on the padding it produces. */
+[data-page-look='lined'] .cm-math-display {
+  display: flow-root;
+  margin-top: 0;
+  margin-bottom: 0;
+  --snap-pad: calc((round(up, var(--snap-h, 0px), var(--page-rule)) - var(--snap-h, 0px)) / 2);
+  padding-top: var(--snap-pad);
+  padding-bottom: var(--snap-pad);
+}
+[data-page-look='lined'] .cm-math-display .katex-display {
+  margin: 0;
+}
+/* A formula on its own line sits on the page's colour too, so Lined, Grid,
+   Dots… never draw through it (Reuben, 2026-09-27: "the lines obscure the
+   latex formula"). Invisible on a plain page. A formula inside a sentence is
+   left alone — its line is text, and the pattern belongs behind text. */
+:root:not([data-page-look='none']) .cm-math-display:not(.cm-math-editing) {
+  background: var(--page-solid);
+  border-radius: var(--r-control);
+}
 .math-error {
   color: #e5484d;
   font-family: var(--font-mono);
@@ -1198,6 +1223,15 @@ button.icon:hover {
      seductive one.** 1.4 was picked by looking at both, and the cards still
      separate. */
   --page-tint-boost: 1;
+  /* The page's own colour as ONE solid value — the tint laid over the paper,
+     exactly as the writing area paints it. For things that sit ON the page and
+     must hide the pattern behind them without looking like a patch: the maths
+     band. Resolved here on <html>, from the active space's tint. */
+  --page-solid: color-mix(
+    in srgb,
+    rgb(var(--page-tint-rgb)) calc(var(--page-tint-alpha) * var(--page-tint-boost) * 100%),
+    rgb(var(--paper))
+  );
   --page-rule: 27.2px;
   --page-cell: 27.2px;
   /* The pattern's own colour and strength — two axes on top of the pattern
@@ -1215,8 +1249,27 @@ button.icon:hover {
      --page-line-strong below and by the grain look's own --grain vars. */
   --page-look-rgb: var(--wash);
   --page-look-intensity: 1;
-  --page-line: rgb(var(--page-look-rgb) / calc(0.13 * var(--page-look-intensity)));
-  --page-line-strong: rgb(var(--page-look-rgb) / calc(0.26 * var(--page-look-intensity)));
+  /* Two more multipliers, both measured rather than guessed (2026-09-27,
+     average and peak lightness difference against the page, light and dark):
+     --page-look-weight evens the looks out, so one slider position means about
+     the same strength whichever look you picked. Without it, at 50, Graph drew
+     7x as much line as Lined and Fine grid 5.6x, while Grain was all but
+     invisible. It is set per look below; 1 for the rest.
+     --page-look-boost is 1 in ink and --page-accent-boost with "Match your
+     accent colour" on: an accent at the ink's alpha drew at ~40% of the ink's
+     strength on dark and ~60% on light, so switching it on faded the pattern
+     rather than colouring it. Per theme, in the theme blocks below. */
+  --page-look-weight: 1;
+  --page-look-boost: 1;
+  --page-accent-boost: 1.4;
+  --page-line: rgb(
+    var(--page-look-rgb) /
+      calc(0.13 * var(--page-look-intensity) * var(--page-look-weight) * var(--page-look-boost))
+  );
+  --page-line-strong: rgb(
+    var(--page-look-rgb) /
+      calc(0.26 * var(--page-look-intensity) * var(--page-look-weight) * var(--page-look-boost))
+  );
   --page-look-image: none;
   --page-look-size: auto;
   /* How far a pattern of LINES stops short of a pane divider — and the width
@@ -1227,10 +1280,12 @@ button.icon:hover {
 }
 :root[data-page-look-accent='on'] {
   --page-look-rgb: var(--accent-500);
+  --page-look-boost: var(--page-accent-boost);
 }
 :root[data-theme='dark'],
 :root[data-theme='black'] {
   --page-tint-boost: 1.4;
+  --page-accent-boost: 2;
 }
 
 .edit-layer .cm-scroller {
@@ -1248,6 +1303,13 @@ button.icon:hover {
   background-origin: content-box;
 }
 
+/* Every look starts at weight 1 and the heavy ones below turn it down. Needed
+   on the attribute, not only on :root: a settings tile carries its own
+   data-page-look, and without this a Lined tile would inherit Graph's weight
+   from <html> whenever Graph is the page you're on. */
+[data-page-look] {
+  --page-look-weight: 1;
+}
 [data-page-look='none'] {
   --page-look-image: none;
 }
@@ -1327,6 +1389,7 @@ button.icon:hover {
 }
 [data-page-look='grid-fine'] {
   --page-cell: 13.6px;
+  --page-look-weight: 0.6;
 }
 /* HOW THE LINE LOOKS ARE TILED — lined, grid, fine grid, graph.
    A gradient has no size of its own, so `background-size: auto` makes it as big
@@ -1390,6 +1453,7 @@ button.icon:hover {
 [data-page-look='graph'] {
   --page-cell: 13.6px;
   --page-tile: calc(var(--page-cell) * 5);
+  --page-look-weight: 0.55;
   --page-look-image:
     repeating-linear-gradient(to bottom, var(--page-line-strong) 0 1px, transparent 1px calc(var(--page-cell) * 5)),
     repeating-linear-gradient(to right, var(--page-line-strong) 0 1px, transparent 1px calc(var(--page-cell) * 5)),
@@ -1409,8 +1473,13 @@ button.icon:hover {
    coarser layers stay, well under the others, to keep it from looking like
    uniform noise. */
 [data-page-look='grain'] {
-  --grain: rgb(var(--page-look-rgb) / calc(0.05 * var(--page-look-intensity)));
-  --grain-coarse: rgb(var(--page-look-rgb) / calc(0.035 * var(--page-look-intensity)));
+  --page-look-weight: 3;
+  --grain: rgb(
+    var(--page-look-rgb) / calc(0.05 * var(--page-look-intensity) * var(--page-look-weight) * var(--page-look-boost))
+  );
+  --grain-coarse: rgb(
+    var(--page-look-rgb) / calc(0.035 * var(--page-look-intensity) * var(--page-look-weight) * var(--page-look-boost))
+  );
   --page-look-image:
     radial-gradient(circle at 17% 29%, var(--grain) 0 0.6px, transparent 0.7px),
     radial-gradient(circle at 63% 11%, var(--grain) 0 0.6px, transparent 0.7px),
@@ -1432,6 +1501,21 @@ button.icon:hover {
   border-radius: var(--r-surface);
   background: rgb(var(--paper));
   border: 1px solid rgb(var(--wash) / 0.12);
+  /* Declared again HERE, not just inherited from :root. A custom property's
+     var()s are resolved on the element that declares it, so the :root copy
+     arrives already worked out from the ACTIVE space's strength and colour —
+     the tile's own inline --page-look-intensity / --page-look-rgb /
+     --page-look-boost (LookTile.tsx) were silently ignored by every look but
+     Grain, whose colours are declared on the look itself. Measured 2026-09-27:
+     a tile at strength 0 and one at 2 computed the identical colour. */
+  --page-line: rgb(
+    var(--page-look-rgb) /
+      calc(0.13 * var(--page-look-intensity) * var(--page-look-weight) * var(--page-look-boost))
+  );
+  --page-line-strong: rgb(
+    var(--page-look-rgb) /
+      calc(0.26 * var(--page-look-intensity) * var(--page-look-weight) * var(--page-look-boost))
+  );
 }
 .look-tile::before {
   content: '';
@@ -2892,7 +2976,14 @@ button.look-card:hover {
      overflows visibly, it is just quietly cut away. Any future control that
      overhangs an edge has to be measured against these four numbers. */
   padding: 20px 20px 20px 10px;
-  margin: calc(0.4em - 20px) -20px calc(0.4em - 20px) -10px;
+  /* The 28px on each side is the text column's own gutter (`.cm-line`'s
+     padding, editor/highlight.ts). A table is a block widget — a sibling of
+     the lines, not one of them — so that padding never reached it, and until
+     2026-09-27 every table ran 28px past the text on BOTH sides. In a narrow
+     column (a split, a small window) the right-hand overhang also went past
+     the edge of the note, so the whole note could be scrolled sideways by 20px
+     and a white scrollbar corner appeared at the bottom of the column. */
+  margin: calc(0.4em - 20px) calc(28px - 20px) calc(0.4em - 20px) calc(28px - 10px);
 }
 .cm-table table {
   border-collapse: collapse;
@@ -2950,6 +3041,44 @@ button.look-card:hover {
 }
 .cm-table td {
   color: rgb(var(--ink-700));
+}
+/* A TABLE ON A PATTERNED PAGE (2026-09-27). The pattern ran straight through
+   the cells — grid and graph lines crossing the words, dots inside the header
+   — so a table read as scribbled-over. It now sits on the page like a card:
+   filled with the page's own colour (the tint laid over the paper, exactly as
+   the scroller paints it) so the pattern stops at its border and the table
+   looks the same on every look. */
+:root:not([data-page-look='none']) .cm-table table {
+  background:
+    linear-gradient(
+      rgb(var(--page-tint-rgb) / calc(var(--page-tint-alpha) * var(--page-tint-boost))),
+      rgb(var(--page-tint-rgb) / calc(var(--page-tint-alpha) * var(--page-tint-boost)))
+    ),
+    rgb(var(--paper));
+}
+/* LINED keeps every line of a note on a rule, and a table used to break that:
+   its height was whatever its rows came to (123.5px for a three-row table), so
+   every line below it sat 9.5px off its rule. Here each row is exactly one rule
+   per line of text — `line-height` is the rule, no vertical padding, no floor
+   height — and the lines between cells are drawn with inset shadows, which take
+   no room, instead of borders, which do. The table's own space above and below
+   goes too (the margin cancels the chrome padding exactly), so a table takes a
+   whole number of rules and the page below it stays in step. */
+[data-page-look='lined'] .cm-table {
+  margin-top: -20px;
+  margin-bottom: -20px;
+}
+[data-page-look='lined'] .cm-table table {
+  box-shadow: inset 1px 1px 0 rgb(var(--ink-300) / 0.35);
+}
+[data-page-look='lined'] .cm-table th,
+[data-page-look='lined'] .cm-table td {
+  border: 0;
+  box-shadow: inset -1px -1px 0 rgb(var(--ink-300) / 0.35);
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: var(--page-rule);
+  height: auto;
 }
 .cm-table th:hover,
 .cm-table td:hover {
@@ -3387,7 +3516,8 @@ body.pane-resizing * {
   width: var(--page-gap);
   height: var(--page-gap);
 }
-.cm-scroller::-webkit-scrollbar-track {
+.cm-scroller::-webkit-scrollbar-track,
+.cm-scroller::-webkit-scrollbar-corner {
   background: transparent;
 }
 .cm-scroller::-webkit-scrollbar-thumb {

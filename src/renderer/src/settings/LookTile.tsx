@@ -61,7 +61,8 @@ export function LookTile({
     // app.css keys off for the real editor — that rule is scoped to `:root`
     // on purpose (so it inherits down to the scroller), and this tile is
     // never :root, so the same attribute here would just match nothing.
-    '--page-look-rgb': accent ? 'var(--accent-500)' : 'var(--wash)'
+    '--page-look-rgb': accent ? 'var(--accent-500)' : 'var(--wash)',
+    '--page-look-boost': accent ? 'var(--page-accent-boost)' : '1'
   } as React.CSSProperties
 
   return (
