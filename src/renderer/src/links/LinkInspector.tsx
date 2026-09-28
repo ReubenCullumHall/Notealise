@@ -50,7 +50,7 @@ export function LinkInspector({ at }: { at: Inspect }): React.JSX.Element {
           // Named, not just emoji'd: a space needn't have an emoji, and the
           // crossing is worth saying either way.
           <span className="ml-1.5 font-medium normal-case tracking-normal text-ink-400">
-            in {at.emoji ? at.emoji + ' ' : ''}
+            in {at.emoji && <><span className="space-emoji">{at.emoji}</span> </>}
             {at.space}
           </span>
         )}

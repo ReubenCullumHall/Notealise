@@ -4,7 +4,7 @@ import logoLight from './assets/logo/notealise-mark-circle-light.svg'
 import logoDark from './assets/logo/notealise-mark-circle-dark.svg'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
-import { activeSpace, withoutSpace, type AppSettings, type Space } from '../../shared/settings'
+import { activeSpace, shownEmoji, withoutSpace, type AppSettings, type Space } from '../../shared/settings'
 import type { UpdateStatus } from '../../shared/update'
 import { UpdateBanner } from './update/UpdateBanner'
 import { ArchiveIcon, BinIcon, Icon } from './icons'
@@ -926,7 +926,11 @@ export function Sidebar({
                   {/* pointer-events-none as well as the stillInside() guard: the
                       badge has no interaction of its own, so the cheapest fix is
                       for it never to be a drag target in the first place. */}
-                  {s.emoji || <span className="pointer-events-none text-[12px] font-semibold">{i + 1}</span>}
+                  {s.emoji ? (
+                    <span className="space-emoji pointer-events-none">{shownEmoji(s.emoji, settings.emojiStyle)}</span>
+                  ) : (
+                    <span className="pointer-events-none text-[12px] font-semibold">{i + 1}</span>
+                  )}
                 </button>
               )
             })}

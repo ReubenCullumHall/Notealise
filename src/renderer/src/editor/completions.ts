@@ -76,7 +76,9 @@ function wikiSource(context: CompletionContext): CompletionResult | null {
       // folder" read as an offer to create one; and the space is the thing
       // worth knowing here, because it is what decides whether a bare title
       // will find this at all.
-      space: (c.spaceEmoji ? c.spaceEmoji + ' ' : '') + c.space,
+      space: c.space,
+      // apart from the name so it can take the accent (app.css `.space-emoji`)
+      spaceEmoji: c.spaceEmoji,
       // CodeMirror's own icon classes: `type` becomes `cm-completionIcon-<type>`,
       // which app.css draws as a folder or a page.
       type: c.ref.kind === 'dir' ? 'folder' : 'note',
@@ -103,11 +105,18 @@ const MAX_HITS = 14
  *  and this has to sit against the far edge, under its heading. */
 const spaceColumn = {
   render(completion: Completion): HTMLElement | null {
-    const space = (completion as Completion & { space?: string }).space
-    if (!space) return null // the "/" menu's rows have no space
+    const { space, spaceEmoji } = completion as Completion & { space?: string; spaceEmoji?: string }
+    if (!space && !spaceEmoji) return null // the "/" menu's rows have no space
     const el = document.createElement('span')
     el.className = 'cm-wiki-space'
-    el.textContent = space
+    if (spaceEmoji) {
+      const em = document.createElement('span')
+      em.className = 'space-emoji'
+      // the space stays outside it: Noto Emoji's space is a whole emoji wide
+      em.textContent = spaceEmoji
+      el.append(em, ' ')
+    }
+    el.append(space ?? '')
     return el
   },
   // After the label; the CSS pushes it the rest of the way with margin-left:auto.

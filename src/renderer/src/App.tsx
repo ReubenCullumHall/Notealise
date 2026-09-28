@@ -81,6 +81,7 @@ import {
   activeSpace,
   DEFAULT_SETTINGS,
   reconcileSpaces,
+  shownEmoji,
   SPACE_CAP,
   withNewSpace,
   withSpacePatch,
@@ -1132,9 +1133,11 @@ export default function App(): React.JSX.Element {
   const linkEnvBase = useMemo(
     (): Omit<LinkEnv, 'path'> => ({
       notes: vaultNotes,
-      spaces: settings.spaces.map((sp) => ({ folder: sp.folder, emoji: sp.emoji }))
+      // already in the chosen emoji style, so the path bar, link chips and
+      // link hover cards draw it without each needing the setting
+      spaces: settings.spaces.map((sp) => ({ folder: sp.folder, emoji: shownEmoji(sp.emoji, settings.emojiStyle) }))
     }),
-    [vaultNotes, settings.spaces]
+    [vaultNotes, settings.spaces, settings.emojiStyle]
   )
 
   const linkHandlers = useMemo(
@@ -2787,10 +2790,13 @@ export default function App(): React.JSX.Element {
     return hits.map((h) => {
       if (h.spaceFolder === space.folder) return h
       const sp = settings.spaces.find((s) => s.folder === h.spaceFolder)
-      const tag = h.spaceFolder ? (sp?.emoji ? `${sp.emoji} ${h.spaceFolder}` : h.spaceFolder) : 'Loose notes'
-      return { ...h, spaceTag: tag }
+      return {
+        ...h,
+        spaceTag: h.spaceFolder || 'Loose notes',
+        spaceEmoji: h.spaceFolder && sp?.emoji ? shownEmoji(sp.emoji, settings.emojiStyle) : undefined
+      }
     })
-  }, [query, deep, allNotes, cacheVersion, openPath, allSpaces, space.folder, settings.spaces])
+  }, [query, deep, allNotes, cacheVersion, openPath, allSpaces, space.folder, settings.spaces, settings.emojiStyle])
 
   // Shown in the results header so the reordering isn't invisible — only when
   // it actually did something (an open note outside the space root).

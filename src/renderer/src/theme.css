@@ -31,6 +31,16 @@
    — see shared/fonts.ts's file header for why. */
 @font-face { font-family: 'OpenDyslexic'; font-style: normal; font-weight: 400; font-display: swap;
   src: url('./assets/fonts/opendyslexic-400.woff2') format('woff2'); }
+/* Noto Emoji — the ONE-COLOUR emoji set (OFL, ./assets/fonts/noto-emoji/OFL.txt),
+   so a space's emoji can be painted in the accent like the rest of the chrome
+   (app.css `.space-emoji`). Weight 500, from @fontsource/noto-emoji 5.3.2's
+   whole-set file (~480 KB). ONE file on purpose, not fontsource's slices: an
+   emoji built from several characters (🕵️‍♂️ is five) can only join up into one
+   picture inside one font file, and slicing split them across files.
+   size-adjust 90%: its outlines fill the whole square where a colour emoji's
+   soft edges don't, so at 100% they read a size larger (measured ~7% by ink). */
+@font-face { font-family: 'Noto Emoji'; font-style: normal; font-weight: 500; font-display: swap; size-adjust: 90%;
+  src: url('./assets/fonts/noto-emoji/noto-emoji-500.woff2') format('woff2'); }
 
 :root {
   /* Icon glyphs as CSS masks, for the two places a real <Icon> component cannot

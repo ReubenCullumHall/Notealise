@@ -13,9 +13,12 @@ export interface SearchHit {
    *  carried on every hit so opening one can switch spaces first, whether or
    *  not the badge below is showing. */
   spaceFolder?: string
-  /** emoji + name of that space, set only when it differs from the one you're
+  /** name of that space, set only when it differs from the one you're
    *  currently in — an all-spaces search result needs to say where it lives. */
   spaceTag?: string
+  /** that space's emoji, already in the chosen emoji style — separate from
+   *  `spaceTag` so it can take the accent (app.css `.space-emoji`) */
+  spaceEmoji?: string
 }
 
 interface Props {
@@ -235,6 +238,7 @@ export function SearchResults({
               className="tree-sub shrink-0 truncate rounded-full bg-ink-300/15 px-1.5 py-0.5 text-[11px] text-ink-500"
               data-tip={`Lives in ${h.spaceTag} — opening it switches you there`}
             >
+              {h.spaceEmoji && <><span className="space-emoji">{h.spaceEmoji}</span> </>}
               {h.spaceTag}
             </span>
           )}

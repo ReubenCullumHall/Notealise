@@ -62,7 +62,7 @@ export function PathBar({ path, spaces, onReveal, hidden }: Props): React.JSX.El
                 className="flex shrink-0 items-center gap-1 rounded border-none bg-transparent px-1 py-0.5 text-ink-500 outline-none transition duration-150 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
               >
                 {c.emoji && (
-                  <span aria-hidden="true" className="text-[10px] leading-none">
+                  <span aria-hidden="true" className="space-emoji text-[10px] leading-none">
                     {c.emoji}
                   </span>
                 )}

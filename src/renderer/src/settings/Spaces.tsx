@@ -9,6 +9,8 @@ import {
   withSpacePatch,
   withSpaceRenamed,
   type AppSettings,
+  shownEmoji,
+  type EmojiStyle,
   type Space
 } from '../../../shared/settings'
 import { ACCENT_MODES, DENSITIES, EDITOR_WIDTHS, resolveTheme, TEXT_TONES, THEMES } from './model'
@@ -24,6 +26,7 @@ import { PRESET_DRAG, PresetLibrary, type PresetActions } from './Presets'
 import { ALL_PARTS, vaultName, type SpacePreset } from '../../../shared/presets'
 import { HelpTip } from '../Tooltip'
 import { claimEscape } from './escapeClaims'
+import { EMOJI_DATA } from './emojiData.generated'
 
 /** Shown next to the option to keep a space's auto-saved preset when the space
  *  itself is deleted — wherever that option appears (this page's own Delete
@@ -105,122 +108,25 @@ const THEME_PREVIEW: Record<Space['theme'], { side: string; main: string; line: 
   light: { side: '#ffffff', main: '#f7f7f6', line: '#a3a3a3' }
 }
 
-// Deliberately single-code-point emoji with no U+FE0F variation selector: the
-// app bundles no emoji font (that would be a ~10MB dependency), so these render
-// from the OS — Segoe UI Emoji on Windows, Apple Color Emoji on macOS — and a
-// VS16 sequence can come out monochrome on Windows.
+// Every emoji up to Unicode 15.1 (1,897 of them, skin tones aside), grouped the way
+// Unicode groups them — tools/emoji/generate-emoji.mjs writes the table, and
+// its header says what is left out and why. It replaced a hand-picked 80 on
+// 2026-09-28: Reuben looked for a pen, a dress and a skirt and found nothing.
 //
-// `kw` is a handful of plain-English search terms per emoji — not a general
-// emoji-name table (that's the "few thousand" the picker below still isn't),
-// just enough to find something in this one curated set of 80 by typing what
-// it's called instead of scanning a grid for it.
-const EMOJI: { group: string; items: { e: string; kw: string }[] }[] = [
-  {
-    group: 'Objects',
-    items: [
-      { e: '📝', kw: 'notes memo write pencil' },
-      { e: '📎', kw: 'clip attach paperclip' },
-      { e: '📌', kw: 'pin pushpin mark' },
-      { e: '📁', kw: 'folder file' },
-      { e: '📓', kw: 'notebook journal' },
-      { e: '📚', kw: 'books library study' },
-      { e: '🔖', kw: 'bookmark tag label' },
-      { e: '🔑', kw: 'key unlock password' },
-      { e: '💼', kw: 'briefcase work business' },
-      { e: '📦', kw: 'box package archive' },
-      { e: '🧰', kw: 'toolbox tools kit' },
-      { e: '🔨', kw: 'hammer tool build fix' },
-      { e: '🧪', kw: 'test tube science lab experiment' },
-      { e: '🎒', kw: 'backpack bag school' },
-      { e: '💻', kw: 'laptop computer code' },
-      { e: '📱', kw: 'phone mobile device' }
-    ]
-  },
-  {
-    group: 'Symbols',
-    items: [
-      { e: '⭐', kw: 'star favorite favourite' },
-      { e: '✨', kw: 'sparkle shiny new' },
-      { e: '🔥', kw: 'fire hot trending' },
-      { e: '⚡', kw: 'bolt lightning fast energy' },
-      { e: '💡', kw: 'idea lightbulb bright' },
-      { e: '🎯', kw: 'target goal focus dart' },
-      { e: '🧩', kw: 'puzzle piece project' },
-      { e: '✅', kw: 'check done complete tick' },
-      { e: '❌', kw: 'cross no cancel wrong' },
-      { e: '🚩', kw: 'flag alert warning' },
-      { e: '💎', kw: 'gem diamond premium' },
-      { e: '🏆', kw: 'trophy award win' },
-      { e: '🔔', kw: 'bell notification alert' },
-      { e: '🎉', kw: 'party celebrate confetti' },
-      { e: '💜', kw: 'purple heart love' },
-      { e: '💙', kw: 'blue heart love' }
-    ]
-  },
-  {
-    group: 'Nature',
-    items: [
-      { e: '🌿', kw: 'leaf plant herb' },
-      { e: '🌸', kw: 'blossom flower cherry' },
-      { e: '🌊', kw: 'wave ocean sea water' },
-      { e: '🌙', kw: 'moon night crescent' },
-      { e: '🌵', kw: 'cactus desert plant' },
-      { e: '🍃', kw: 'leaves wind nature' },
-      { e: '🌻', kw: 'sunflower flower' },
-      { e: '🌲', kw: 'tree pine forest' },
-      { e: '🐝', kw: 'bee insect honey' },
-      { e: '🦋', kw: 'butterfly insect' },
-      { e: '🐬', kw: 'dolphin ocean animal' },
-      { e: '🌍', kw: 'earth globe world planet' },
-      { e: '🍂', kw: 'leaf autumn fall' },
-      { e: '🌴', kw: 'palm tree tropical' },
-      { e: '🗻', kw: 'mountain fuji peak' },
-      { e: '🌞', kw: 'sun face bright day' }
-    ]
-  },
-  {
-    group: 'Activity',
-    items: [
-      { e: '🧠', kw: 'brain mind think idea' },
-      { e: '👋', kw: 'wave hand hello greet' },
-      { e: '🎧', kw: 'headphones music audio' },
-      { e: '🏃', kw: 'run running exercise' },
-      { e: '🧘', kw: 'meditate yoga calm' },
-      { e: '☕', kw: 'coffee drink cafe' },
-      { e: '🍜', kw: 'noodles food ramen' },
-      { e: '🎸', kw: 'guitar music instrument' },
-      { e: '🎨', kw: 'art paint palette creative' },
-      { e: '🎬', kw: 'movie film clapper' },
-      { e: '📷', kw: 'camera photo picture' },
-      { e: '🎤', kw: 'mic microphone sing' },
-      { e: '🏀', kw: 'basketball sport ball' },
-      { e: '⚽', kw: 'soccer football sport ball' },
-      { e: '🎮', kw: 'game controller gaming' },
-      { e: '🥁', kw: 'drum music instrument' }
-    ]
-  },
-  {
-    group: 'Places',
-    items: [
-      { e: '🏠', kw: 'house home' },
-      { e: '🏢', kw: 'office building work' },
-      { e: '🏡', kw: 'home house garden' },
-      { e: '🏫', kw: 'school building education' },
-      { e: '🏥', kw: 'hospital medical health' },
-      { e: '🏰', kw: 'castle building' },
-      { e: '🚀', kw: 'rocket launch space' },
-      { e: '🚗', kw: 'car drive travel' },
-      { e: '🚲', kw: 'bike bicycle travel' },
-      { e: '🛫', kw: 'plane travel flight airport' },
-      { e: '🧭', kw: 'compass navigate direction' },
-      { e: '🌆', kw: 'city cityscape skyline' },
-      { e: '🌉', kw: 'bridge city' },
-      { e: '🗽', kw: 'statue liberty landmark' },
-      { e: '🎡', kw: 'ferris wheel fair carnival' },
-      { e: '⛺', kw: 'tent camp outdoors' }
-    ]
-  }
-]
+// `kw` is the name plus CLDR's search words, lower-cased, every run of
+// non-letters turned into one space and padded with a space either side — so
+// "starts a word" is just `kw.includes(' ' + query)`: "pen" finds pen, pencil
+// and penguin, not "open", and "t-shirt" and "t shirt" both find 👕.
+const words = (s: string): string => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ')
+const EMOJI: { group: string; items: { e: string; name: string; kw: string }[] }[] = EMOJI_DATA.map(
+  ({ group, rows }) => ({
+    group,
+    items: rows.split('\n').map((row) => {
+      const [e, name, tags] = row.split('\t')
+      return { e, name, kw: ` ${words(`${name} ${tags}`)} ` }
+    })
+  })
+)
 
 /** What a space is called. Its folder name IS its name; the fallback only shows
  *  for the whole-vault space a folder-less vault falls back to. */
@@ -375,7 +281,7 @@ export function Spaces({
                   setSpaceMenu({ x: e.clientX, y: e.clientY, space: s })
                 }}
               >
-                <span className="em">{s.emoji || i + 1}</span>
+                <span className={s.emoji ? 'em space-emoji' : 'em'}>{shownEmoji(s.emoji, settings.emojiStyle) || i + 1}</span>
                 <span className="nm">{spaceLabel(s)}</span>
               </button>
             )
@@ -468,8 +374,14 @@ export function Spaces({
         </SettingRow>
         <div className="border-t border-ink-300/15" />
 
-        <SettingRow title="Representational emoji" desc="Shown on the switcher and the tab above, so you can tell them apart at a glance.">
-          <EmojiPicker value={space.emoji} onPick={(emoji) => patch({ emoji })} />
+        <SettingRow
+          title="Representational emoji"
+          desc="Shown on the switcher and the tab above, so you can tell them apart at a glance. Full colour or your accent colour applies to every space."
+        >
+          <span className="flex items-center gap-2.5">
+            <EmojiStyleToggle value={settings.emojiStyle} onPick={(emojiStyle) => onChange({ emojiStyle })} />
+            <EmojiPicker value={space.emoji} onPick={(emoji) => patch({ emoji })} style={settings.emojiStyle} />
+          </span>
         </SettingRow>
         <div className="border-t border-ink-300/15" />
 
@@ -571,16 +483,87 @@ function NameField({
   )
 }
 
-/** A curated grid rather than a full emoji keyboard — a searchable set of
- *  several thousand would mean shipping an emoji data table, and picking a tab
- *  marker is not a task that needs one. The search box below filters only
- *  THIS curated 80, against the short `kw` tags on each one — not a general
- *  emoji-name lookup. */
-function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => void }): React.JSX.Element {
+const EMOJI_STYLES: { id: EmojiStyle; tip: string }[] = [
+  { id: 'colour', tip: 'Full colour' },
+  { id: 'accent', tip: 'Your accent colour' }
+]
+
+/** The two faces beside the picker: full-colour emoji, or the bundled
+ *  one-colour set painted in the accent. App-wide, not this space's — see
+ *  `emojiStyle` in shared/settings.ts — so it writes AppSettings directly.
+ *  Each face always draws in its OWN style, whichever is chosen, so the pair
+ *  is its own preview. Two separate chips rather than one joined control: the
+ *  same square, accent-bordered "on" look as the sidebar's space switcher, and
+ *  no shared seam between them to lose clicks on. */
+function EmojiStyleToggle({
+  value,
+  onPick
+}: {
+  value: EmojiStyle
+  onPick: (s: EmojiStyle) => void
+}): React.JSX.Element {
+  return (
+    <span className="flex items-center gap-1" role="group" aria-label="Emoji colour">
+      {EMOJI_STYLES.map((o) => {
+        const on = value === o.id
+        return (
+          <button
+            key={o.id}
+            aria-pressed={on}
+            aria-label={o.tip}
+            data-tip={o.tip}
+            onClick={() => onPick(o.id)}
+            className={
+              // 33px: the measured height of the Select button beside it
+              'flex h-[33px] w-[33px] items-center justify-center rounded-lg border text-[15px] leading-none outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+              // btn-edge only when off, as on the switcher: the chosen face
+              // keeps its accent border
+              (on ? 'border-accent-400/60 bg-accent-500/15' : 'btn-edge border-ink-300/30 bg-surface/70 hover:bg-ink-300/15')
+            }
+          >
+            <span className={o.id === 'accent' ? 'emoji-mono' : undefined}>🙂</span>
+          </button>
+        )
+      })}
+    </span>
+  )
+}
+
+/** One face per group for the jump row — picked to read as the group at a
+ *  glance, which Unicode's first-in-group often doesn't (Nature opens on a
+ *  monkey, Symbols on a cash machine). */
+const GROUP_FACE: Record<string, string> = {
+  Smileys: '😀',
+  People: '👋',
+  Nature: '🌿',
+  Food: '🍎',
+  Places: '✈️',
+  Activities: '⚽',
+  Objects: '💡',
+  Symbols: '❤️',
+  Flags: '🏳️'
+}
+
+/** Every emoji, searchable by name (see EMOJI above). The search box and a
+ *  jump-to-group row stay pinned at the top while the grid scrolls — at eight
+ *  a row, the full set is ~240 rows. Everything draws in the chosen emoji
+ *  style, so what you pick is what the switcher will show. */
+function EmojiPicker({
+  value,
+  onPick,
+  style
+}: {
+  value: string
+  onPick: (e: string) => void
+  style: EmojiStyle
+}): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const box = useRef<HTMLSpanElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  const headRef = useRef<HTMLDivElement>(null)
+  const groupRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   // Same close rules as the Select primitive: click-outside, and Escape
   // captured so it closes this rather than the settings window behind it.
@@ -617,13 +600,24 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
     searchRef.current?.focus()
   }, [open])
 
-  const q = query.trim().toLowerCase()
+  const q = words(query).trim()
   const groups = q
     ? EMOJI.map(({ group, items }) => ({
         group,
-        items: items.filter((it) => it.kw.includes(q) || group.toLowerCase().includes(q))
+        items: items.filter((it) => it.kw.includes(' ' + q) || group.toLowerCase().startsWith(q))
       })).filter(({ items }) => items.length > 0)
     : EMOJI
+  // Compared without the colour marker: a space saved by the old 80-emoji
+  // picker, or typed elsewhere, may differ from the table by exactly that.
+  const bare = shownEmoji(value, 'accent')
+
+  // Scrolls the group's heading to just under the pinned header rather than
+  // scrollIntoView, which would park it underneath the header.
+  const jump = (group: string): void => {
+    const el = groupRefs.current[group]
+    const list = listRef.current
+    if (el && list) list.scrollTop = el.offsetTop - (headRef.current?.offsetHeight ?? 0)
+  }
 
   return (
     <span ref={box} className="relative inline-flex">
@@ -635,62 +629,97 @@ function EmojiPicker({ value, onPick }: { value: string; onPick: (e: string) => 
           (open ? 'bg-brand-500/15 text-brand-600' : 'btn-edge bg-surface/70 text-ink-700 hover:text-ink-900')
         }
       >
-        <span className="text-[15px] leading-none">{value || '🙂'}</span>
+        <span className="space-emoji text-[15px] leading-none">{shownEmoji(value || '🙂', style)}</span>
         <span>{value ? 'Change' : 'Select'}</span>
       </button>
 
       {open && (
-        <div className="fade-in absolute right-0 top-9 z-40 max-h-[min(360px,55vh)] w-[268px] overflow-y-auto rounded-xl border border-ink-300/25 bg-surface p-2.5 shadow-float">
-          {/* Sticky, so scrolling a long search result doesn't scroll the box
-              you're about to type more into out of view. The negative margin
-              cancels the container's own padding so the search row spans it
-              full-width instead of floating inset. */}
-          <input
-            ref={searchRef}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search emoji…"
-            aria-label="Search emoji"
-            className="sticky top-0 z-10 -mx-2.5 -mt-2.5 mb-2 w-[calc(100%+20px)] border-0 border-b border-ink-300/20 bg-surface px-4 py-2 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400"
-          />
+        <div
+          ref={listRef}
+          className="fade-in absolute right-0 top-9 z-40 max-h-[min(360px,55vh)] w-[268px] overflow-y-auto rounded-xl border border-ink-300/25 bg-surface p-2.5 shadow-float"
+        >
+          {/* Sticky, so scrolling a long list doesn't scroll the box you're
+              about to type more into out of view. The negative margin cancels
+              the container's own padding so the header spans it full-width
+              instead of floating inset. */}
+          <div
+            ref={headRef}
+            className="sticky top-0 z-10 -mx-2.5 -mt-2.5 mb-2 border-b border-ink-300/20 bg-surface"
+          >
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search emoji…"
+              aria-label="Search emoji"
+              className="w-full border-0 bg-surface px-4 py-2 text-[12.5px] text-ink-900 outline-none placeholder:text-ink-400"
+            />
+            {!q && (
+              <div className="grid grid-cols-9 px-2 pb-1.5">
+                {EMOJI.map(({ group }) => (
+                  <button
+                    key={group}
+                    data-tip={group}
+                    aria-label={group}
+                    onClick={() => jump(group)}
+                    className="flex h-6 items-center justify-center rounded-md border-none bg-transparent text-[13px] leading-none outline-none transition duration-150 hover:bg-ink-300/15"
+                  >
+                    <span className="space-emoji">{shownEmoji(GROUP_FACE[group] ?? '', style)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* At the top, not after ~1,900 emoji: it used to sit under a grid
+              of 80, where it was one short scroll away. */}
+          {!q && value && (
+            <button
+              onClick={() => {
+                onPick('')
+                setOpen(false)
+              }}
+              className="mb-1 flex w-full items-center justify-center gap-1.5 rounded-lg border-none bg-transparent py-1.5 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-ink-300/15 hover:text-ink-900"
+            >
+              <Icon name="x" className="h-3.5 w-3.5" />
+              <span>No emoji</span>
+            </button>
+          )}
           {groups.length === 0 && (
             <p className="px-1 py-3 text-center text-[11.5px] text-ink-400">No matching emoji</p>
           )}
           {groups.map(({ group, items }) => (
-            <div key={group}>
+            <div
+              key={group}
+              ref={(el) => {
+                groupRefs.current[group] = el
+              }}
+            >
               <p className="pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-400">
                 {group}
               </p>
               <div className="grid grid-cols-8 gap-1">
-                {items.map(({ e }) => (
+                {items.map(({ e, name }) => (
                   <button
                     key={e}
-                    data-tip={e}
+                    data-tip={name}
+                    aria-label={name}
                     onClick={() => {
                       onPick(e)
                       setOpen(false)
                     }}
                     className={
                       'flex h-7 w-7 items-center justify-center rounded-md border-none text-[15px] leading-none outline-none transition duration-150 ' +
-                      (e === value ? 'bg-brand-500/15 ring-1 ring-brand-400' : 'bg-transparent hover:bg-ink-300/15')
+                      (shownEmoji(e, 'accent') === bare
+                        ? 'bg-brand-500/15 ring-1 ring-brand-400'
+                        : 'bg-transparent hover:bg-ink-300/15')
                     }
                   >
-                    {e}
+                    <span className="space-emoji">{shownEmoji(e, style)}</span>
                   </button>
                 ))}
               </div>
             </div>
           ))}
-          <button
-            onClick={() => {
-              onPick('')
-              setOpen(false)
-            }}
-            className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border-none bg-transparent py-1.5 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-ink-300/15 hover:text-ink-900"
-          >
-            <Icon name="x" className="h-3.5 w-3.5" />
-            <span>No emoji</span>
-          </button>
         </div>
       )}
     </span>

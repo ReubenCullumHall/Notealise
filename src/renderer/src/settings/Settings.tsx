@@ -173,7 +173,7 @@ const SEARCH_INDEX: SearchEntry[] = [
   { section: 'customisation', disclosure: 'Shortcuts', label: 'Custom buttons', hint: 'The four custom format-bar shortcut buttons.', keywords: 'format bar shortcuts toolbar bold italic custom' },
   { section: 'spaces', label: 'Add a space', hint: 'A new set of notes with its own look and folder.', keywords: 'new space create workspace' },
   { section: 'spaces', label: 'Space name', hint: 'What a space is called.', keywords: 'rename space title name' },
-  { section: 'spaces', label: 'Representational emoji', hint: 'Shown on the switcher and the tab above, so you can tell spaces apart.', keywords: 'emoji icon space icon avatar' },
+  { section: 'spaces', label: 'Representational emoji', hint: 'Shown on the switcher and the tab above, so you can tell spaces apart.', keywords: 'emoji icon space icon avatar colour color accent monochrome mono' },
   { section: 'spaces', label: 'Delete a space', hint: 'Remove a space and send its folder to your computer’s bin.', keywords: 'delete remove space folder rid' },
   { section: 'spaces', label: 'Saved presets', hint: 'Reusable looks you can apply to any space.', keywords: 'preset template save look apply' },
   { section: 'collection', label: 'Your collection', hint: 'The fonts, page looks and tints you have.', keywords: 'fonts page looks tints library collection installed owned' },

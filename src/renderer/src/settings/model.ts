@@ -453,6 +453,9 @@ export function applySettings(s: AppSettings): void {
   root.style.setProperty('--page-look-intensity', String(a.pageLookIntensity / PAGE_LOOK_INTENSITY_DEFAULT))
   root.dataset.pageLookAccent = a.pageLookAccent ? 'on' : 'off'
   root.dataset.motion = s.animationsEnabled ? 'on' : 'off'
+  // Global like `data-motion`: app.css's `.space-emoji` reads it to swap every
+  // space emoji to the one-colour set, painted in `--accent-500`.
+  root.dataset.emojiStyle = s.emojiStyle
   // Read by app.css to pin a note's body back to the theme's own ink while
   // every other label wears the accent.
   root.dataset.uiAccent = a.accentMode === 'text' && a.accentUiText ? 'on' : 'off'

@@ -62,6 +62,18 @@ export type DensityId = 'large' | 'cozy' | 'compact' | 'ultra'
  *  more of a large monitor, which 'normal' leaves as empty space either side. */
 export type EditorWidthId = 'normal' | 'wide' | 'full'
 export type AccentMode = 'text' | 'tint'
+/** How every space's emoji is drawn: the OS's own full-colour emoji, or the
+ *  bundled one-colour Noto Emoji set painted in the accent (theme.css). */
+export type EmojiStyle = 'colour' | 'accent'
+
+/** A space emoji as it should be drawn. Stored in Unicode's full form, whose
+ *  U+FE0F means "show me in colour" — and Chromium honours that by skipping the
+ *  one-colour font for a colour one, so ❤️, ✏️, 🕵️‍♂️ and ~400 others came out
+ *  in full colour in accent mode (measured 2026-09-28). Stripped for accent
+ *  only: in colour mode ✏ without it draws as a plain black text glyph. */
+export function shownEmoji(emoji: string, style: EmojiStyle): string {
+  return style === 'accent' ? emoji.replace(/️/g, '') : emoji
+}
 /** Where a note's or folder's own colour is painted in the sidebar, quietest
  *  first. 'tag' puts it on the grip — the 3×2 dot handle at the head of the row
  *  — so the row is marked without being recoloured. 'row' washes the row at low
@@ -401,6 +413,12 @@ export interface AppSettings {
    *  the dialog's own "Never ask again" does — Settings -> General turns it
    *  back on, so that button is never a one-way door. */
   confirmMediaDelete: boolean
+  /** Full-colour or accent-coloured space emoji. Global, against the settings
+   *  rule (CLAUDE.md: every look setting belongs to a space) — Reuben's call,
+   *  2026-09-28: the switcher shows every space's emoji side by side, and the
+   *  point is one colour across the whole app, not a mix. See
+   *  docs/product-rulings.md. */
+  emojiStyle: EmojiStyle
   // --- your collection: what a space's pickers are allowed to offer ---------
   /** Page look ids added from Settings -> Your collection -> Explore. The
    *  looks that ship in the collection (shared/looks.ts's 'bundled') are NOT
@@ -495,6 +513,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   playStartupAnimation: true,
   animationsEnabled: true,
   confirmMediaDelete: true,
+  emojiStyle: 'colour',
   pageLookLibrary: [],
   tintLibrary: []
 }
@@ -523,6 +542,7 @@ const LINKS_POSITIONS: readonly LinksPosition[] = ['top', 'bottom']
 const STARTUPS: readonly StartupId[] = ['empty', 'last']
 const DATE_FORMATS: readonly DateFormatId[] = ['full', 'short', 'mdy', 'dmy', 'ymd', 'relative']
 const NUMBER_FORMATS: readonly NumberFormatId[] = ['default', 'comma', 'dot']
+const EMOJI_STYLES: readonly EmojiStyle[] = ['colour', 'accent']
 
 const NAME_MAX = 40
 /** A ZWJ family emoji is 11 UTF-16 units, so this passes everything real while
@@ -724,6 +744,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
       typeof s.animationsEnabled === 'boolean' ? s.animationsEnabled : DEFAULT_SETTINGS.animationsEnabled,
     confirmMediaDelete:
       typeof s.confirmMediaDelete === 'boolean' ? s.confirmMediaDelete : DEFAULT_SETTINGS.confirmMediaDelete,
+    emojiStyle: EMOJI_STYLES.includes(s.emojiStyle as EmojiStyle)
+      ? (s.emojiStyle as EmojiStyle)
+      : DEFAULT_SETTINGS.emojiStyle,
     pageLookLibrary: normalizePageLookLibrary(s.pageLookLibrary),
     tintLibrary: normalizeTintLibrary(s.tintLibrary)
   }

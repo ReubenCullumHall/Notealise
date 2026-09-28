@@ -127,7 +127,7 @@ function Chip({
           className="h-3 w-3 shrink-0 opacity-60"
         />
         {entry.emoji && (
-          <span aria-hidden="true" className="shrink-0 text-[10px] leading-none">
+          <span aria-hidden="true" className="space-emoji shrink-0 text-[10px] leading-none">
             {entry.emoji}
           </span>
         )}

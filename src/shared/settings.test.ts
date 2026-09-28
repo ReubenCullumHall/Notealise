@@ -7,6 +7,7 @@ import {
   normalizeThemeCache,
   reconcileSpaces,
   settingsFromThemeCache,
+  shownEmoji,
   SPACE_CAP,
   withNewSpace,
   withoutSpace,
@@ -245,6 +246,24 @@ describe('normalizeSettings', () => {
     expect(s.pageLookLibrary).toEqual(['dots'])
     expect(s.tintLibrary).toEqual(['#abcdef@12'])
     expect(normalizeSettings({}).pageLookLibrary).toEqual([])
+  })
+
+  it('keeps space emoji in full colour unless accent was chosen', () => {
+    // a settings.json from before the accent face existed must look unchanged
+    expect(normalizeSettings({}).emojiStyle).toBe('colour')
+    expect(normalizeSettings({ emojiStyle: 'accent' }).emojiStyle).toBe('accent')
+    for (const bad of ['color', 'mono', '', 1, null]) {
+      expect(normalizeSettings({ emojiStyle: bad }).emojiStyle).toBe('colour')
+    }
+  })
+
+  it('drops the colour marker from an emoji only for the accent face', () => {
+    // U+FE0F makes Chromium skip the one-colour font; colour mode needs it,
+    // or a pencil draws as a black text glyph
+    const detective = '\u{1F575}️‍♂️'
+    expect(shownEmoji(detective, 'accent')).toBe('\u{1F575}‍♂')
+    expect(shownEmoji(detective, 'colour')).toBe(detective)
+    expect(shownEmoji('\u{1F4DA}', 'accent')).toBe('\u{1F4DA}')
   })
 
 })

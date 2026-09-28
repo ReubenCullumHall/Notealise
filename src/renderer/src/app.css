@@ -2714,6 +2714,21 @@ button.look-card:hover {
   line-height: 1;
   flex-shrink: 0;
 }
+/* A space's emoji, wherever it shows (switcher, these tabs, the path bar, link
+   chips, the picker). With Settings → Spaces → Representational emoji set to
+   the accent face it swaps to the bundled one-colour set (theme.css) and takes
+   `--accent-*`, which carries the accent in both accent modes — so it matches
+   the rest of the chrome instead of being the one thing in full colour.
+   `.emoji-mono` is the same look forced on, for that setting's own preview
+   button. Weight pinned: only 500 is bundled, and an inherited 600 would
+   otherwise be thickened artificially. */
+:root[data-emoji-style='accent'] .space-emoji,
+.emoji-mono {
+  font-family: 'Noto Emoji';
+  font-weight: 500;
+  font-style: normal;
+  color: rgb(var(--accent-500));
+}
 .space-tab .nm {
   font-size: 12.5px;
   font-weight: 500;
