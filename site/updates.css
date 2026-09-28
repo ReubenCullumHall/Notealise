@@ -1,0 +1,213 @@
+/* What's new (updates.html) — the three release cards, and the pop-up a card
+   opens into. Reuben, 2026-09-28: each card about three quarters of a screen
+   tall, with the update's title and what changed; it opens like Settings does
+   in the app — the page behind goes soft and blurred, and the sheet grows out
+   of the card you pressed (Settings grows out of its gear; same curves, see
+   app.css .genie). The cards are written by tools/whats-new.py; the motion is
+   updates.js. Reads nav.css's colours only — nothing here has its own. */
+
+/* Scrolling is locked while the pop-up is open; keeping the scrollbar's room
+   stops the page (and the top bar) jumping sideways when it goes. */
+html { scrollbar-gutter: stable; }
+html.rel-lock { overflow: hidden; }
+
+.page-main--wide { width: min(760px, 100%); }
+
+.rels {
+  display: flex; flex-direction: column;
+  gap: clamp(20px, 4vh, 40px);
+  margin: 44px 0 0;
+}
+
+/* ── A card ─────────────────────────────────────────────────────────────── */
+.rel {
+  position: relative;
+  display: flex; flex-direction: column;
+  height: 75vh; height: 75svh; min-height: 440px;
+  padding: clamp(22px, 3.4vw, 34px) clamp(20px, 3.4vw, 34px) 0;
+  background: var(--raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color .18s ease;
+}
+.rel:hover { border-color: var(--line-2); }
+
+.rel-head { position: relative; padding-right: 52px; }
+.rel-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+  margin: 0 0 14px;
+  font: var(--eyebrow); letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.rel-tag {
+  color: var(--on-accent); background: var(--accent);
+  padding: 2px 8px; border-radius: 2px;
+  text-transform: uppercase; letter-spacing: var(--eyebrow-tracking);
+  margin-right: 4px;
+}
+.rels .rel-title, .rel-dialog .rel-title {
+  margin: 0;
+  font-family: var(--serif); font-optical-sizing: auto;
+  font-size: clamp(2rem, 5.4vw, 2.9rem); font-weight: 500; letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+/* The "this opens" mark in the corner. Takes the page colour when the card is
+   hovered — colour only, nothing moves (the app's hover rule). */
+.rel-icon, .rel-close {
+  display: grid; place-items: center;
+  width: 38px; height: 38px;
+  border: 1px solid var(--line-2); border-radius: 999px;
+  color: var(--soft); background: transparent;
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+.rel-icon { position: absolute; top: -4px; right: 0; }
+.rel-icon svg, .rel-close svg {
+  width: 14px; height: 14px;
+  fill: none; stroke: currentColor; stroke-width: 1.5;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.rel:hover .rel-icon { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+
+/* The list — the changelog's own lines, numbered. On the card it runs out
+   under a fade; the pop-up shows it whole. */
+.rel-list {
+  list-style: none; margin: 26px 0 0; padding: 0;
+}
+.rel .rel-list {
+  flex: 1 1 auto; min-height: 0; overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 150px), transparent);
+          mask-image: linear-gradient(#000 calc(100% - 150px), transparent);
+}
+.rel-list li {
+  display: grid; grid-template-columns: 2.1em 1fr; gap: 0 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.rel-n {
+  padding-top: 3px;
+  font: 500 12px/1.6 var(--mono); letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.rel-list p {
+  margin: 0;
+  font-size: 15.5px; line-height: 1.6;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.rel-list strong { font-weight: 600; }
+.rel-list code {
+  font: 500 0.88em/1 var(--mono);
+  padding: 0.12em 0.36em;
+  background: var(--code-bg);
+  border-radius: 4px;
+}
+
+/* The button at the foot of the card. Its ::after stretches over the whole
+   card, so a tap anywhere on it opens it — and it stays one real button for a
+   keyboard or a screen reader. */
+.rel-open {
+  align-self: flex-start;
+  margin: 4px 0 clamp(22px, 3.4vw, 30px);
+  padding: 10px 18px;
+  font: 500 14px/1.2 var(--sans); color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line-2); border-radius: 999px;
+  cursor: pointer;
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+.rel-open::after { content: ""; position: absolute; inset: 0; }
+.rel:hover .rel-open { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.rel-open:focus { outline: none; }
+.rel-open:focus-visible::after { outline: 2px solid var(--ink); outline-offset: -2px; border-radius: 10px; }
+
+/* Placed down (05-brand-feel's motion map: cards settle like paper on a
+   table). Rests at transform: none. */
+.js .rel {
+  opacity: 0;
+  transform: translateY(32px) rotate(-0.5deg);
+  transition: opacity .5s ease, transform .75s cubic-bezier(0.22, 1, 0.36, 1), border-color .18s ease;
+}
+.js .rel.is-in { opacity: 1; transform: none; }
+/* While its pop-up is open the card IS the pop-up, so it leaves the table. */
+.js .rel.is-lifted { visibility: hidden; }
+
+/* No script, or a browser with no pop-up: every card shows its whole list. */
+html:not(.js) .rel, html.rel-flat .rel { height: auto; min-height: 0; cursor: auto; }
+html:not(.js) .rel .rel-list, html.rel-flat .rel .rel-list { -webkit-mask-image: none; mask-image: none; }
+html:not(.js) .rel-open, html:not(.js) .rel-icon,
+html.rel-flat .rel-open, html.rel-flat .rel-icon { display: none; }
+html:not(.js) .rel .rel-list, html.rel-flat .rel .rel-list { padding-bottom: 12px; }
+
+/* ── The pop-up ─────────────────────────────────────────────────────────── */
+.rel-dialog {
+  width: min(760px, calc(100vw - 32px)); max-width: none;
+  height: min(900px, calc(100vh - 48px)); height: min(900px, calc(100dvh - 48px)); max-height: none;
+  margin: auto; padding: 0;
+  border: 0; background: transparent; color: var(--ink);
+  overflow: visible;
+  font-family: var(--sans); -webkit-font-smoothing: antialiased;
+}
+.rel-dialog * { box-sizing: border-box; }
+.rel-dialog:focus { outline: none; }
+.rel-sheet {
+  display: flex; flex-direction: column;
+  height: 100%;
+  background: var(--raised);
+  border: 1px solid var(--line-2); border-radius: 10px;
+  overflow: hidden;
+}
+.rel-dialog-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+  padding: clamp(22px, 3.4vw, 34px) clamp(20px, 3.4vw, 34px) 20px;
+  border-bottom: 1px solid var(--line);
+}
+.rel-close { flex: none; cursor: pointer; }
+.rel-close:hover { background: var(--code-bg); color: var(--ink); }
+.rel-close:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rel-dialog-body {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 clamp(20px, 3.4vw, 34px) 32px;
+}
+.rel-dialog-body .rel-list { margin-top: 0; }
+.rel-dialog-body .rel-list li:first-child { border-top: 0; }
+
+/* The page behind: the app's Settings backdrop — half the page colour, 5px of
+   blur. Written out rather than read from nav.css, because older browsers
+   don't hand the page's colours down to a pop-up's backdrop. */
+.rel-dialog::backdrop {
+  background: rgb(255 255 255 / 0.5);
+  -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .rel-dialog::backdrop { background: rgb(0 0 0 / 0.5); }
+}
+:root[data-theme="dark"] .rel-dialog::backdrop { background: rgb(0 0 0 / 0.5); }
+.rel-dialog[open]::backdrop { animation: rel-fade 280ms cubic-bezier(0.33, 1, 0.68, 1) both; }
+.rel-dialog.is-closing::backdrop { animation: rel-fade-out 220ms cubic-bezier(0.5, 0, 1, 0.5) both; }
+@keyframes rel-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rel-fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+/* Phone: the pop-up takes the screen, with a thin margin so it still reads as
+   a sheet lifted off the page. */
+@media (max-width: 560px) {
+  .page-main--wide { padding-left: 16px; padding-right: 16px; }
+  .rel-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100vh - 16px); height: calc(100dvh - 16px);
+  }
+  .rel-list p { font-size: 15px; }
+  .rel-list li { grid-template-columns: 1.6em 1fr; gap: 0 8px; }
+  /* The date and the count don't fit on one line beside the corner mark, so
+     the count takes its own line rather than leaving the dot hanging. */
+  .rel-dot { display: none; }
+  .rel-count { flex-basis: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .rel { transform: none; transition: opacity .3s ease, border-color .18s ease; }
+  .rel-dialog[open]::backdrop, .rel-dialog.is-closing::backdrop { animation-duration: 1ms; }
+}

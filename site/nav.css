@@ -9,7 +9,7 @@
    Used by:
    - index.html  — the bar is hidden on load and slid in by nav.js on the first
      scroll past the hero, then stays put (see the "site nav" section of DESIGN.md).
-   - tutorials.html / students.html / about.html / updates.html — the bar is
+   - tutorials.html / students.html / updates.html — the bar is
      present from load (markup carries `is-visible`); nav.js only runs the reveal
      when a `[data-topbar-reveal]` element is on the page.
 
@@ -75,12 +75,11 @@
 
   /* Each page's own highlighter colour, chosen by meaning (Reuben, 2026-09-14,
      reference/05-brand-feel.md): Tutorials = study (sky), What's new = fresh
-     (sage), About = personal (rose), Students = the crayon yellow. Soft
-     highlighter tones, so the yellow stays the loudest. Also the colour of each
-     page's divider tab in the top menu. */
+     (sage), Students = the crayon yellow. (About = rose was dropped with the
+     About page, 2026-09-28.) Soft highlighter tones, so the yellow stays the
+     loudest. Also the colour of each page's divider tab in the top menu. */
   --c-tutorials: #a9d5f3;
   --c-updates: #b8dfa9;
-  --c-about: #f3b8c9;
   --c-students: #f5c518;
   /* Text sitting ON one of those fills. Dark in both themes: they are all
      light colours, so light text on them would never read. */
@@ -258,7 +257,7 @@
 
 /* Each page link carries its page's colour as an underline (Reuben,
    2026-09-14 — replaced the divider tabs the same day). Tutorials sky,
-   Students yellow, About rose, What's new sage (tokens above). The page you
+   Students yellow, What's new sage (tokens above). The page you
    are on reads in full ink and weight. */
 .topbar-links {
   justify-self: center;
@@ -278,7 +277,6 @@
 }
 .topbar-links a[href$="tutorials.html"] { --tab-c: var(--c-tutorials); }
 .topbar-links a[href$="students.html"] { --tab-c: var(--c-students); }
-.topbar-links a[href$="about.html"] { --tab-c: var(--c-about); }
 .topbar-links a[href$="updates.html"] { --tab-c: var(--c-updates); }
 .topbar-links a:hover { color: var(--ink); }
 /* The Students link reads "Notealise for students" on desktop; at the mobile
@@ -363,7 +361,7 @@ html.topbar-in .mark { opacity: 0; pointer-events: none; }
   .explore-title::after { transition: none; }
 }
 
-/* ── Inner-page shell (tutorials / students / about / updates) ────────── */
+/* ── Inner-page shell (tutorials / students / updates) ────────── */
 body.page {
   background: var(--bg); color: var(--ink);
   font-family: var(--sans); font-size: 16px; font-weight: 400; line-height: 1.6;
@@ -434,7 +432,6 @@ body.page * { box-sizing: border-box; }
    to carry the class. */
 body.page.page-theme-students  { --accent: var(--c-students); }
 body.page.page-theme-tutorials { --accent: var(--c-tutorials); }
-body.page.page-theme-about     { --accent: var(--c-about); }
 body.page.page-theme-updates   { --accent: var(--c-updates); }
 body.page[class*="page-theme-"] .page-eyebrow {
   display: inline-block;

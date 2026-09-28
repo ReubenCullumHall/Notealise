@@ -16,8 +16,9 @@
   <meta name="twitter:title" content="What's new in Notealise" />
   <meta name="twitter:description" content="A running list of what each update adds and fixes." />
   <link rel="stylesheet" href="nav.css" />
+  <link rel="stylesheet" href="updates.css?v=20260928c" />
   <!-- dev theme switch (nav.js): applies a saved Light/Dark choice before paint; only ever set on local addresses -->
-  <script>try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+  <script>document.documentElement.classList.add("js");try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 </head>
 <body class="page page-theme-updates">
   <header class="topbar is-visible">
@@ -28,7 +29,6 @@
     <nav class="topbar-links">
       <a href="tutorials.html">Tutorials</a>
       <a href="students.html"><span class="tb-wide">Notealise for students</span><span class="tb-narrow">Students</span></a>
-      <a href="about.html">About</a>
       <a href="updates.html">What&rsquo;s new</a>
     </nav>
     <div class="topbar-social">
@@ -47,13 +47,169 @@
     </div>
   </header>
 
-  <main class="page-main">
+  <main class="page-main page-main--wide">
     <p class="page-eyebrow">What&rsquo;s new</p>
     <h1>Recent <span class="hl">changes</span></h1>
-    <p class="page-lede">A running list of what each update adds and fixes. It starts
-      with the next release.</p>
+    <p class="page-lede">A running list of what each update adds and fixes.</p>
+
+    <!-- The last three releases, one card each. Built by tools/whats-new.py from
+         CHANGELOG.md's dated sections, word for word — edit the changelog and
+         re-run it, never the cards by hand. updates.js opens a card into the
+         pop-up below. -->
+    <div class="rels">
+      <!-- whats-new:start -->
+      <article class="rel" data-version="1.3.1">
+        <header class="rel-head">
+          <p class="rel-meta"><span class="rel-tag">Latest</span><time datetime="2026-09-20">20 September 2026</time><span class="rel-dot" aria-hidden="true">&middot;</span><span class="rel-count">15 changes</span></p>
+          <h2 class="rel-title">Version <span class="hl">1.3.1</span></h2>
+          <span class="rel-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg></span>
+        </header>
+        <ol class="rel-list">
+          <li><span class="rel-n">01</span><p>The download page opens with the <strong>Notealise</strong> wordmark writing itself large in the middle of a plain screen — white, or black if your computer is set to dark — then shrinking into its usual place as the screen fades away, before the rest of the page comes in. On a slow connection the page no longer shows itself finished, blanks, and starts over; the wordmark video now loads first instead of last, and the pictures further down wait their turn. Once per visit, and links straight to a section skip it</p></li>
+          <li><span class="rel-n">02</span><p>On a computer, <strong>Try it</strong> on the download page is only as tall as its own controls now. On a big screen it used to stretch to the full height, leaving a long stretch of empty paper under the note, and on a short laptop screen the <strong>Colour</strong> row was cut off with no way to scroll to it. It plays itself on a computer too, the way it does on a phone, until you click it</p></li>
+          <li><span class="rel-n">03</span><p>The row of linked notes at the top of a note now scrolls sideways with an ordinary mouse wheel as well as a trackpad swipe. Before, a note with more links than fit had no way to reach the rest unless you had a trackpad or a sideways-scrolling mouse</p></li>
+          <li><span class="rel-n">04</span><p>When renaming, moving or deleting a note doesn’t work, the reason now appears on the strip at the bottom of the window like every other message, and says only what went wrong: <em>That name is too long — try something shorter, or a shallower folder.</em> It used to stop the app behind a grey system box with the app’s own internal plumbing written in front of the sentence</p></li>
+          <li><span class="rel-n">05</span><p><strong>Undo stays in the note you are in.</strong> Pressing undo once too many in a note you had just opened used to fill it with the previous note’s text — and save that over it</p></li>
+          <li><span class="rel-n">06</span><p><strong>Typing can no longer go dead after dragging a note about.</strong> Dragging a note into a split, a folder or a tab sometimes left an invisible layer over the page: the cursor could not be put back in the words and nothing typed until the app was restarted</p></li>
+          <li><span class="rel-n">07</span><p><strong>Renaming a note updates every link to it</strong>, including a link you wrote earlier in the same sitting — those were quietly left pointing at the old name. The linking note’s line in the sidebar now says the new name too, instead of quoting the old one until you looked elsewhere</p></li>
+          <li><span class="rel-n">08</span><p><strong>Renaming from the sidebar asks for the name, not the filename.</strong> The box used to show “Groceries.md”, so typing a plain name over it left a file the app no longer listed and the note disappeared from the sidebar. A name with a character that cannot go in a filename now says which one: <em>A name can’t contain / or ? — saved as “Meeting 9-10-”</em></p></li>
+          <li><span class="rel-n">09</span><p><strong>A link to a note whose name can’t be a filename now opens it.</strong> <code>[[What next?]]</code> makes a note called “What next-” and every click after that opens it — before, each click made another copy</p></li>
+          <li><span class="rel-n">10</span><p><strong>A link into a folder you haven’t made yet makes it</strong>, inside the space you are working in, instead of failing with the app’s internal error text</p></li>
+          <li><span class="rel-n">11</span><p>The search box has a clear button beside its two filters, so a search can be put away and the notes brought back without reaching for the keyboard</p></li>
+          <li><span class="rel-n">12</span><p>Choosing a note after typing <code>[[</code> now finishes the link for you — the closing <code>]]</code> is added and the link appears straight away</p></li>
+          <li><span class="rel-n">13</span><p><strong>A bookmark at the start of the tab strip keeps the notes you come back to most.</strong> Drag notes into it from the folder list, from a search result or straight off a tab, and they stay a click away instead of being found again every time. Folded it is a small bookmark and a count; click it and it opens with a bounce to show what’s inside. Click one to read it, drag one back out to the tabs, or drag it away to remove it. Each space keeps its own, with its own name — double click the bookmark to rename it — and it can be switched off per space under Settings → Spaces → Note extras</p></li>
+          <li><span class="rel-n">14</span><p><strong>Notes can be dragged straight into the top of the window.</strong> Drop one on a gap in the tab bar to open it there, on the middle of a tab to read the two side by side, or on the left or right of the page to open it in a column beside what you are reading. Dropping on an empty page opens it. Search results work the same way</p></li>
+          <li><span class="rel-n">15</span><p>Pressing Enter after naming a note at the top of the page now puts the cursor in the note, so you can start writing straight away instead of reaching for the mouse</p></li>
+        </ol>
+        <button class="rel-open" type="button" aria-haspopup="dialog">See all 15 changes</button>
+      </article>
+      <article class="rel" data-version="1.3.0">
+        <header class="rel-head">
+          <p class="rel-meta"><time datetime="2026-09-17">17 September 2026</time><span class="rel-dot" aria-hidden="true">&middot;</span><span class="rel-count">14 changes</span></p>
+          <h2 class="rel-title">Version <span class="hl">1.3.0</span></h2>
+          <span class="rel-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg></span>
+        </header>
+        <ol class="rel-list">
+          <li><span class="rel-n">01</span><p>Smaller downloads. The Mac download is now built for one kind of Mac at a time instead of both at once, and packed tighter — about a third of its old size — and both installers leave out files the app never used</p></li>
+          <li><span class="rel-n">02</span><p>The favourite star on a sidebar row stays where it is when you hover the row, so you can click it again to unfavourite. Hovering used to swap it for the row’s other buttons, which left nothing to click</p></li>
+          <li><span class="rel-n">03</span><p>The <strong>Lined</strong> page look is an even ruled page now. Every line takes exactly one rule — a heading as much as a paragraph — and the words sit just above it, like writing on paper. Before, a heading knocked every line after it out of step with the rules. The rules are spaced to fit a large heading, so ordinary text gets more room between lines</p></li>
+          <li><span class="rel-n">04</span><p>On a phone, <strong>Try it</strong> on the download page has all its controls again. A strip of tools runs along the bottom of the note — Typeface, Spacing, Theme, Colour, Accent — the way a photo editor lays them out, and the note stays in full view above it while you change things. Turned sideways, it lays out like the desktop: controls on the left, the note on the right</p></li>
+          <li><span class="rel-n">05</span><p>On a phone or tablet, the end of the download page says <strong>Not available on your device</strong> above the two download buttons, rather than drawing a path to downloads that can’t run there. Computers still get the path</p></li>
+          <li><span class="rel-n">06</span><p>The wordmark’s write-on at the top of the download page is a real ink recording now, not a generated one — the generated version could let a stroke on “l” or “e” pop in slightly ahead of the pen instead of drawing smoothly</p></li>
+          <li><span class="rel-n">07</span><p>Macs with an Intel processor have their own download, so neither kind of Mac downloads the other’s half. <strong>Download for macOS</strong> gives your Mac the version made for it. When your browser doesn’t say which Mac you have — Safari never does — it asks first, in the page’s own light or dark look, with where to check in <strong>About This Mac</strong>, then fades through to the install steps as the download starts. Those steps name the version you got, with the other one a click away</p></li>
+          <li><span class="rel-n">08</span><p>On a Mac, the app’s update check only ever offers the version made for that Mac</p></li>
+          <li><span class="rel-n">09</span><p>The download page is rebuilt around a numbered walk-through — what it is, what it isn’t, picking your paper, moving in, a working demo, then the questions — instead of one long pitch. It follows whether your computer is set to light or dark, and each page of the site carries its own quiet highlighter colour</p></li>
+          <li><span class="rel-n">10</span><p><strong>01 What it is</strong> shows the same two notes side by side behind a slider you drag: a Journal space in roomy cream serif, and a Research space that is dark, tight and packed with one-line rows, a chart, a table and a checklist. Same app, two completely different rooms</p></li>
+          <li><span class="rel-n">11</span><p><strong>Try it</strong> on the download page can now change the paper too — Plain, Lined, Grid or Dots — and each space keeps its own, the way the real app does. On a phone it plays through those choices by itself until you touch it. The note is sized to the roomiest setting it can be put into, so it no longer grows and shrinks as you change things</p></li>
+          <li><span class="rel-n">12</span><p>In dark, the site is properly black rather than very-dark-brown — the same black the app itself uses — and the highlighter behind the headlines sits behind the words as a deepened marker instead of a bright yellow bar under them. Every page colour keeps its own hue in dark</p></li>
+          <li><span class="rel-n">13</span><p>Start scrolling during the page’s opening animation and the rest of the front page now sweeps up into place in order, rather than snapping in all at once</p></li>
+          <li><span class="rel-n">14</span><p>The two install guides — the pages explaining the warning Windows and macOS show the first time you open Notealise — look like the rest of the site now. They follow your light or dark setting instead of always being white, and use the site’s own headline and label type rather than your computer’s default font</p></li>
+        </ol>
+        <button class="rel-open" type="button" aria-haspopup="dialog">See all 14 changes</button>
+      </article>
+      <article class="rel" data-version="1.0.2">
+        <header class="rel-head">
+          <p class="rel-meta"><time datetime="2026-09-07">7 September 2026</time><span class="rel-dot" aria-hidden="true">&middot;</span><span class="rel-count">73 changes</span></p>
+          <h2 class="rel-title">Version <span class="hl">1.0.2</span></h2>
+          <span class="rel-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg></span>
+        </header>
+        <ol class="rel-list">
+          <li><span class="rel-n">01</span><p>Notes sharing the screen now share a tab. A split reads as one wide tab with a small divider at each seam, in the order the columns sit on screen, so you can see what is open without looking at the window. Drag its grip to move them all together, drag a name out to take that note out of the split, or right-click a name for the same in words</p></li>
+          <li><span class="rel-n">02</span><p><strong>Drag a tab onto the middle of another tab</strong> to put the two side by side. The one you drop onto keeps the left, the one you dragged arrives on its right. Dropping on a tab’s left or right edge still moves it along the strip, as before</p></li>
+          <li><span class="rel-n">03</span><p>Every column except the leftmost has a button to swap it with the one on its left — the same thing dragging a column’s top row has always done, now with something on screen that says so</p></li>
+          <li><span class="rel-n">04</span><p><strong>Cmd/Ctrl+S</strong> shows and hides the sidebar. It and <strong>Cmd/Ctrl+\</strong> (open another column) are in the <strong>View</strong> menu, so the shortcuts are somewhere you can find them rather than only in the app’s head</p></li>
+          <li><span class="rel-n">05</span><p>Buttons, tabs and sidebar rows give slightly under the click. Hover still never moves anything — only your own press does. Off entirely with <strong>Interface animations</strong></p></li>
+          <li><span class="rel-n">06</span><p>Your accent colour now marks what it is for. Headings, note and folder titles, the settings list, the sidebar’s own buttons, the search bar’s glow and a note’s word count take it; hints, labels, and the words you write in a note do not. <strong>Colour all UI text</strong> puts it back on every label if you want that, and even then your writing stays yours to colour. Picking a colour used to repaint every word in the app, which was a lot of colour for a writing app</p></li>
+          <li><span class="rel-n">07</span><p>The first-run intro asks whether to add the welcome notes. Leave it on and they arrive as before; switch it off and you land on the note you wrote yourself, in an otherwise empty vault</p></li>
+          <li><span class="rel-n">08</span><p>Selected things actually show their highlight again. The soft background behind the open tab, the selected sidebar row, the current settings section and the active toolbar buttons had quietly been rendering as nothing at all</p></li>
+          <li><span class="rel-n">09</span><p>One set of colours, everywhere. The colours you can put on text, on a highlight, on a note or folder, on the accent, and under a page are now the same ten, in the same order, in a picker that looks the same in every one of those places — the first-run intro included. There were three unrelated sets before, so “violet” meant one colour as an accent and a different one on text. Every picker also has <strong>Any colour</strong> behind it now: a saturation square, a hue slider and a hex field, so you are never held to the ten. One thing worth knowing about the difference: a preset colour adjusts itself to light and dark so your writing stays readable on both, while a colour you type stays exactly the colour you typed</p></li>
+          <li><span class="rel-n">10</span><p>Hold <strong>Shift</strong> and scroll to slide between spaces. The space you are leaving pushes off and the next one arrives from the other side, the way switching desktops does; the search bar, the space buttons and the footer stay where they are. It gives way to anything that genuinely scrolls sideways, so a wide table or a long code block still scrolls instead of changing space</p></li>
+          <li><span class="rel-n">11</span><p>Every switch and tick box takes your accent colour when it is on, and the theme’s own grey when it is off. They stayed grey before unless you had also set the accent to reach surfaces — which is not the default, so for most people the accent never reached them at all</p></li>
+          <li><span class="rel-n">12</span><p>The colour bar over selected text waits for you to finish choosing. It no longer chases the pointer across the words you are selecting: it appears when you let go, or when the selection has stopped moving</p></li>
+          <li><span class="rel-n">13</span><p>Hovering a note or a folder no longer opens a little card over the row. The buttons sit on the row itself, and the row’s own text fades out beneath them rather than being covered up</p></li>
+          <li><span class="rel-n">14</span><p>Right-clicking a note or a folder now offers only what belongs to it — rename, colour, move to bin. <strong>New note</strong> and <strong>New folder</strong> moved to where they mean something: the empty part of the sidebar, and a folder row’s own buttons. Colour is on that menu and on the selection bar, where it colours everything you have picked at once</p></li>
+          <li><span class="rel-n">15</span><p>The word count moved to the left-hand end of the toolbar, away from the split-screen button, and stays put however long the note’s name is</p></li>
+          <li><span class="rel-n">16</span><p>The search bar’s magnifier and the divider before the filters sit back into the panel instead of reading as controls, and the filters group together rather than spreading along the pill. The border still lights up when you click in to type</p></li>
+          <li><span class="rel-n">17</span><p>An open folder with nothing in it says “This folder is currently empty”. It only offers “Drop items here” while you are actually holding something</p></li>
+          <li><span class="rel-n">18</span><p><strong>Start empty</strong> is now <strong>Start with nothing open</strong>, and says outright that your notes are all still in the sidebar. The old wording read as though the vault itself would be empty</p></li>
+          <li><span class="rel-n">19</span><p>The writing box in the first-run intro no longer shows a scrollbar before you have typed anything, and the font step no longer cuts off its own heading when you open the colour field</p></li>
+          <li><span class="rel-n">20</span><p>The sidebar’s edge no longer explains that you can drag it</p></li>
+          <li><span class="rel-n">21</span><p>A note’s title now sits above the note, in the same column as the words, instead of away in the toolbar. It used to start further and further from your writing the wider you opened the window; now the title and the first line share an edge. Click it to rename, exactly as before</p></li>
+          <li><span class="rel-n">22</span><p>Hovering a button changes its colour, and that is all it does. Buttons used to bounce and lift as the pointer crossed them, on a springy overshoot that belonged in a livelier app than this one. The place that spring survives is dragging, where it is telling you something — the bin and the archive still open their lids to show the note will land there</p></li>
+          <li><span class="rel-n">23</span><p>An empty button on the format bar is now a dashed outline rather than a question mark, so it reads as room for a command instead of an icon that failed to load</p></li>
+          <li><span class="rel-n">24</span><p>Corners are consistent throughout: one shape for things you click, one for things that hold other things, one for pills and counts. There were twenty different corner sizes in the app before this, and nothing said which meant what</p></li>
+          <li><span class="rel-n">25</span><p>The foot of the sidebar reads as one row instead of three floating cards. The bin and the archive are now two halves of a single button with a line between them, and the settings cog sits beside them in the same colours — all of it flat on the panel instead of casting a shadow. Dragging a note onto the bin or the archive still works exactly as before</p></li>
+          <li><span class="rel-n">26</span><p>A note with no links says just “No links yet”, with no rule under it, instead of a full-width line of instructions above every unlinked note. The hint about typing <code>[[</code> is on the tooltip</p></li>
+          <li><span class="rel-n">27</span><p>Fixed: typing at either end of coloured text put a stray <code>&lt;/span&gt;</code> or <code>&lt;mark&gt;</code> into the note. Colouring a word and then pressing space with the cursor at its right-hand edge was the way to see it, but the left-hand edge did the same. The tag is markup you are never meant to look at, so a duplicate appearing mid-sentence had no explanation and nothing obvious to do about it</p></li>
+          <li><span class="rel-n">28</span><p>The <strong>Any colour</strong> panel on the colour bar is the width of the bar rather than running past it, and a line now separates the highlight/text switch from the ten colours, so the switch reads as the thing that decides what they do</p></li>
+          <li><span class="rel-n">29</span><p>Fixed: <strong>Delete space</strong> turned into a blank red button once you had clicked it. Its “Click again to delete” was red on red and only appeared when you hovered. The bin’s own <strong>Delete all now</strong> had the same fault once armed</p></li>
+          <li><span class="rel-n">30</span><p>Fixed on Windows: importing from Notion, Markdown or HTML offered a folder picker only, so a <code>.zip</code> could not be chosen at all — typing its path in answered “The folder name is not valid”, under a dialog headed “Choose your Notion export (.zip or an already-unzipped folder)”. Windows cannot show one dialog that takes either, so those three formats now offer two buttons — choose a file, or choose a folder. It had been that way in every Windows build</p></li>
+          <li><span class="rel-n">31</span><p>Pictures in a note now only come from your own vault. A note that points at a picture on the web, or at a file elsewhere on your computer, shows the same placeholder as one whose file has gone. This closes something worth naming plainly: a note someone else wrote could quietly tell its author the moment you opened it, just by pointing at an image on their server</p></li>
+          <li><span class="rel-n">32</span><p>The app can no longer delete your vault. A damaged or tampered-with record in the seven-day recovery net could aim its one permanent delete at the whole folder, on the next launch, with nothing asked and nothing to undo. That delete is now fenced to the recovery folder itself</p></li>
+          <li><span class="rel-n">33</span><p>Importing a file someone sent you can no longer read the rest of your computer. A crafted export could name any file on disk and have it copied into your vault alongside your notes</p></li>
+          <li><span class="rel-n">34</span><p>Notealise now refuses an archive built to escape the folder it unpacks into, or to fill your disk — a few hundred kilobytes could expand to gigabytes with nothing to stop it or say so</p></li>
+          <li><span class="rel-n">35</span><p>An import no longer leaves a full second copy of everything it unpacked sitting in your computer’s temporary folder afterwards</p></li>
+          <li><span class="rel-n">36</span><p><strong>Stop</strong> during an import now stops it. It used to say “Stopping…” while carrying on</p></li>
+          <li><span class="rel-n">37</span><p>Reopening the window from the Dock no longer shows a JavaScript error, and the file pickers reopen with it properly</p></li>
+          <li><span class="rel-n">38</span><p>Only one copy of Notealise runs at a time. Two on the same vault could overwrite each other’s pins, ordering and bin</p></li>
+          <li><span class="rel-n">39</span><p>A note whose name begins with two dots now opens instead of reporting that it escapes the vault</p></li>
+          <li><span class="rel-n">40</span><p>Pressing quit twice quickly no longer beats the save it was waiting for, and rapid window-switching can no longer let an older version of a note overwrite a newer one</p></li>
+          <li><span class="rel-n">41</span><p>A font that fails to download properly is now refused rather than installed as a broken file</p></li>
+          <li><span class="rel-n">42</span><p>The download page reads as a page now, not just a button. Under the wordmark sits a strip of four facts — $0, plain <code>.md</code> files, any typeface or colour, spaces you name yourself — then three short sections on what Notealise is, what it isn’t and who it’s for, then the real app running inline to try before downloading, then a path that draws itself down to the Windows and macOS buttons. The look you pick in the inline app carries through to the end</p></li>
+          <li><span class="rel-n">43</span><p>Pages on notealise.com now carry share metadata, so a pasted or posted link shows its title and a one-line description instead of a bare address</p></li>
+          <li><span class="rel-n">44</span><p>A tagline now writes itself in under the wordmark on the download page — “the bridge between complexity and constraint”, starting once the wordmark settles. <code>bridge</code> is drawn along an arch and drops onto the line, <code>complexity</code> is bold with small oxblood marks orbiting it, and <code>constraint</code> is squeezed out of bold into italic</p></li>
+          <li><span class="rel-n">45</span><p>Page looks and tints are real. A space can now be written on lined, grid, dot-grid, graph or narrow-ruled paper, or a soft grain, with a colour of your choosing washed under the words — set per space, or for every space at once under Customisation. The pattern is spaced to the editor’s own lines and scrolls with what you write; the tint sits behind the text, so nothing loses contrast</p></li>
+          <li><span class="rel-n">46</span><p>Your collection now shows only what you actually have. Everything you don’t — the sixteen downloadable fonts, the five extra page looks, the tint wheel — moved to a new <strong>Explore and install more</strong> page behind a door at the foot of each shelf, opening on the shelf you came from</p></li>
+          <li><span class="rel-n">47</span><p>Page looks can be requested: if the paper you want doesn’t exist, the Page looks tab has a form that sends the request straight to Notealise</p></li>
+          <li><span class="rel-n">48</span><p>Removing a font, page look or tint now also takes it off any space using it, rather than leaving that space wearing something its own picker no longer lists</p></li>
+          <li><span class="rel-n">49</span><p>Fixed: Remove on a downloaded font did nothing at all — it called the custom-import path, which matched nothing and returned silently. Downloaded fonts can now really be uninstalled</p></li>
+          <li><span class="rel-n">50</span><p>Fixed the format bar’s empty buttons and its colour menu opening <em>behind</em> the note, so every click on them landed in the text instead of the menu. Both now open in front, centred under the button you clicked</p></li>
+          <li><span class="rel-n">51</span><p>The colour popover reopens on whichever of highlight or text colour you used last, instead of resetting to highlight every time you select something</p></li>
+          <li><span class="rel-n">52</span><p>Colour and highlight no longer show the HTML behind them while you write — the code stays hidden even with the cursor inside the phrase, and deleting part of a coloured phrase keeps the rest coloured rather than leaving stray code in the note. Markdown pro still shows the real source</p></li>
+          <li><span class="rel-n">53</span><p>Highlights now fit the text at every size. On a heading the colour was being drawn at body-text height, so the tops and tails of the letters sat outside it</p></li>
+          <li><span class="rel-n">54</span><p>The word count now counts what you’d read rather than what the file holds — headings, bold markers, table pipes, link addresses and colour tags no longer score as words. The sidebar’s preview line reads cleanly for the same reason</p></li>
+          <li><span class="rel-n">55</span><p>Markdown pro can fade the syntax marks it reveals so you read past them, or colour them in any of the palette’s colours so they stand out — under Note extras, per space. The eye button hides itself in raw view, where the code behind a photo is already on screen</p></li>
+          <li><span class="rel-n">56</span><p>Settings → Customisation can now set the theme. Theme and text colour sit inside the Appearance section in both places now — Customisation, where a change answers for every space at once, and Spaces → that space, where it answers for one</p></li>
+          <li><span class="rel-n">57</span><p>Search box in the space emoji picker — type what you’re looking for instead of scanning the grid</p></li>
+          <li><span class="rel-n">58</span><p>The Settings General tab is tidied: the legal notice and licences link move to the bottom, the “replay the intro” and blank-test-vault controls get their own “Vault reset” section (out of the old “Developer” heading) with plainer wording, and the note explaining a note’s edit time now sits with the date format it describes. Section headings sit closer to their descriptions throughout, so the page reads as groups rather than one flat list</p></li>
+          <li><span class="rel-n">59</span><p>Fixed the note’s own heading row (Bold, Italic, custom buttons, title, stats, split view) appearing to vanish while scrolling — it was never actually moving, the links strip above it was sliding up and parking on top of it. The links strip now hides cleanly instead</p></li>
+          <li><span class="rel-n">60</span><p>Split the “Linking content” settings section, which had settings unrelated to links (the file path bar, edit time, Markdown pro) filed under it — those three are now under a new “Note extras” section (renamed from “Note chrome”), and “Links” holds just the two settings actually about links</p></li>
+          <li><span class="rel-n">61</span><p>Pressing Escape to close a dropdown or a confirm dialog inside Settings no longer also closes the whole Settings window a moment later</p></li>
+          <li><span class="rel-n">62</span><p>The tab strip, the file path bar and the note’s own heading row can now each be kept on screen or set to get out of the way while you scroll, the same as the links strip already could — all four default to staying on screen, grouped in one new “While scrolling” section per space</p></li>
+          <li><span class="rel-n">63</span><p>Saved presets’ “choose what to bring” checkboxes now match the settings page — Links, Note extras and While scrolling are separate ticks instead of one combined “Note chrome”, which also fixes applying a preset silently skipping the new tab-strip/path-bar/heading-row scroll settings</p></li>
+          <li><span class="rel-n">64</span><p>Reworded every screen of the first-run walkthrough. The Spaces screen’s examples swap “Revision” for “Research”, and the font screen now counts the built-in and downloadable fonts itself so the numbers stay right as the collection grows</p></li>
+          <li><span class="rel-n">65</span><p>The welcome notes a first run leaves you on are rewritten, and the sidebar is now arranged rather than alphabetical — the “Things you can delete” folder on top, “Start here” under it, then the rest in reading order. A note you write during the walkthrough settles at the bottom</p></li>
+          <li><span class="rel-n">66</span><p>Picking a single space in the walkthrough now also creates a second one, “Default”, with a note in it — so moving a note between spaces is something you can try straight away rather than read about</p></li>
+          <li><span class="rel-n">67</span><p>New spaces mix notes and folders in one order by default (it was folders always on top), and a note or folder you create lands at the bottom of its list, ready to drag where you want, instead of dropping in wherever its name falls alphabetically. Existing spaces keep the setting they already had</p></li>
+          <li><span class="rel-n">68</span><p>Fixed: the page look and tint cards in Your collection didn’t respond to a click — they looked like a picker but were inert. Clicking one now puts it on the space you were last in, and Spaces → Page shows a full-width preview of what that space’s writing area actually looks like, since the settings window covers the real editor while you’re choosing</p></li>
+          <li><span class="rel-n">69</span><p>Startup is now a single dropdown, matching Date format and the other pickers, instead of two full-height option cards — the two are the same kind of choice and now look like it</p></li>
+          <li><span class="rel-n">70</span><p>The settings disclosure rows (Appearance, Fonts, Page, Colour and the rest, wherever they appear) are grouped into one bordered list with a hairline between each, instead of nine separate bordered cards stacked apart — and every row is now one line, so the list has a steady rhythm instead of alternating short and tall</p></li>
+          <li><span class="rel-n">71</span><p>Settings search understands a typed question, not just a keyword — “how do I make the app dark” now finds Theme instead of matching every row that happens to contain “show”. A search with no matches keeps the page list on screen instead of replacing it with one sentence, and a result that lives inside a folded section (most of Customisation) now opens that section and scrolls to it, instead of landing you on a page of closed rows with the answer still hidden</p></li>
+          <li><span class="rel-n">72</span><p>Notealise now has a Privacy page and Terms of use, linked from the foot of every page on notealise.com. Between them they say plainly what the app does and doesn’t send — the update check, and nothing else unless you ask for a font — and that your notes stay yours</p></li>
+          <li><span class="rel-n">73</span><p>Settings → Legal now says the same thing in the app itself: what stays on your computer, what the app sends, that there’s no warranty, and the law it’s governed by — with a link out to the full pages for whoever wants them</p></li>
+        </ol>
+        <button class="rel-open" type="button" aria-haspopup="dialog">See all 73 changes</button>
+      </article>
+      <!-- whats-new:end -->
+    </div>
+
     <a class="page-back" href="index.html">&larr; Back to home</a>
   </main>
+
+  <dialog class="rel-dialog" aria-labelledby="relDialogTitle">
+    <div class="rel-sheet">
+      <header class="rel-dialog-head">
+        <div class="rel-dialog-titles">
+          <p class="rel-meta" data-slot="meta"></p>
+          <h2 class="rel-title" id="relDialogTitle" data-slot="title"></h2>
+        </div>
+        <button class="rel-close" type="button" aria-label="Close">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+        </button>
+      </header>
+      <div class="rel-dialog-body" data-slot="body"></div>
+    </div>
+  </dialog>
 
   <footer class="footer">
     <span class="footer-brand">Notealise <span class="footer-est">est. 2026</span></span>
@@ -65,5 +221,6 @@
   </footer>
 
   <script src="nav.js"></script>
+  <script src="updates.js?v=20260928a"></script>
 </body>
 </html>
