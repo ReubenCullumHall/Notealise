@@ -692,6 +692,16 @@ export default function App(): React.JSX.Element {
       setWordCounts((c) => remapRecord(c, map))
       setVersions((v) => remapRecord(v, map))
       applyLayout(renamePath(layoutRef.current, oldPath, newRel))
+      // A tab open in a space that ISN'T on screen right now lives in
+      // spaceTabs' stash (see its declaration), not in layoutRef — the line
+      // above never reaches it. Repath every stashed space too, or switching
+      // back to it later re-opens the note at a path that no longer exists
+      // (spotted 2026-09-28: drag a note onto another space's tab while it's
+      // open, and switching between spaces can start the stash before this
+      // rename's remap has landed).
+      for (const [folder, stashed] of spaceTabs.current) {
+        spaceTabs.current.set(folder, renamePath(stashed, oldPath, newRel))
+      }
     },
     [applyLayout]
   )
