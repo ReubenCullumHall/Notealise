@@ -4,9 +4,11 @@ import { syntaxTree } from '@codemirror/language'
 import { isRaw } from './rawView'
 import {
   MIN_COLS,
+  MIN_WIDTH,
   moveColumn,
   padRows,
   parseAlign,
+  parseWidths,
   readCell,
   removeColumn,
   removeRow,
@@ -15,6 +17,7 @@ import {
   serializeTable,
   setAlign,
   setCell,
+  setWidths,
   splitRow,
   type Align,
   type TableModel
@@ -91,7 +94,7 @@ const editCell = StateField.define<EditTarget | null>({
 })
 
 interface FoundTable {
-  /** start of the first line */
+  /** start of the first line — the `<!-- widths -->` line when it has one */
   from: number
   /** end of the LAST line, with no trailing newline — the range a rewrite
    *  replaces. Distinct from `blockTo` on purpose: replacing the newline too
@@ -124,11 +127,16 @@ function findTables(state: EditorState): FoundTable[] {
       }
       if (!header.length) return // not a table this app can draw or write back
 
+      // The `<!-- widths: … -->` line directly above belongs to the table: it is
+      // hidden with it and rewritten with it, so the block starts THERE.
+      const above = firstLine > 1 ? doc.line(firstLine - 1) : null
+      const widths = above ? parseWidths(above.text) : null
+
       out.push({
-        from: doc.line(firstLine).from,
+        from: widths && above ? above.from : doc.line(firstLine).from,
         to: doc.line(lastLine).to,
         blockTo: lastLine < doc.lines ? doc.line(lastLine + 1).from : doc.line(lastLine).to,
-        model: padRows({ header, align, rows })
+        model: padRows(widths ? { header, align, rows, widths } : { header, align, rows })
       })
     }
   })
@@ -253,6 +261,7 @@ class TableWidget extends WidgetType {
         // the row grows with it, the way it does in Notion.
         const input = document.createElement('textarea')
         input.className = 'cm-table-editor'
+        cell.classList.add('cm-table-cell-editing') // the outline is the cell's, not the textarea's
         input.rows = 1
         input.value = value
         if (a) input.style.textAlign = a
@@ -268,9 +277,10 @@ class TableWidget extends WidgetType {
 
         input.addEventListener('input', grow)
         input.addEventListener('keydown', (e) => {
-          // Enter commits rather than inserting a line break: a GFM cell cannot
-          // contain one at all, so there is nothing for a newline to mean here.
-          if (e.key === 'Enter') {
+          // Enter commits. Shift+Enter falls through to the textarea and makes
+          // a new line in the cell, written to the file as `<br>` (writeCell) —
+          // the same split as Notion and most chat boxes.
+          if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
             commit(row, col, input.value, null)
           } else if (e.key === 'Tab') {
@@ -566,6 +576,77 @@ class TableWidget extends WidgetType {
       return btn
     }
 
+    /**
+     * The line on the right edge of column `i`, dragged sideways to make that
+     * column wider or narrower — the way Notion does it. Only that column
+     * changes; everything to its right slides along with the edge.
+     *
+     * The first drag on a table that has never been sized takes every column's
+     * CURRENT width as its starting point, so nothing else jumps when the table
+     * stops filling the note.
+     *
+     * Nothing is written while the pointer moves — the widths are drawn straight
+     * onto the table — and ONE change goes into the note on release. So a drag
+     * is one step for Cmd+Z, and the table isn't rebuilt under the pointer on
+     * every frame.
+     */
+    const sizeHandle = (i: number): HTMLElement => {
+      const bar = document.createElement('div')
+      bar.className = 'cm-table-col-size'
+      bar.setAttribute('aria-hidden', 'true')
+      bar.addEventListener('mousedown', (e) => {
+        e.preventDefault() // no text selection, no cursor placed in the note
+        e.stopPropagation()
+        const startX = e.clientX
+        const start =
+          this.model.widths ?? headerCells.map((th) => Math.round(th.getBoundingClientRect().width))
+        let current = start
+        bar.classList.add('cm-table-col-size-on')
+        // Keep the resize cursor while the pointer runs ahead of the thin bar.
+        document.body.classList.add('table-col-resizing')
+
+        const onMove = (m: MouseEvent): void => {
+          current = start.map((w, c) =>
+            c === i ? Math.max(MIN_WIDTH, Math.round(w + m.clientX - startX)) : w
+          )
+          drawWidths(current)
+          positionChrome()
+        }
+        const onUp = (): void => {
+          window.removeEventListener('mousemove', onMove)
+          window.removeEventListener('mouseup', onUp)
+          bar.classList.remove('cm-table-col-size-on')
+          document.body.classList.remove('table-col-resizing')
+          // A click without a drag changes nothing — an unsized table stays
+          // unsized rather than being pinned at whatever width it had.
+          if (current !== start) apply(setWidths(this.model, current))
+        }
+        window.addEventListener('mousemove', onMove)
+        window.addEventListener('mouseup', onUp)
+      })
+      return bar
+    }
+
+    // Column widths live on a <colgroup>, which `table-layout: fixed` reads
+    // before the first row. Always present, width-less until the table is
+    // sized: an empty <col> changes nothing, and having it already there lets a
+    // drag on an unsized table set widths without restructuring mid-drag.
+    const colgroup = document.createElement('colgroup')
+    const cols = this.model.header.map(() => colgroup.appendChild(document.createElement('col')))
+    table.appendChild(colgroup)
+
+    /** Draw the table at these widths. A sized table is exactly as wide as its
+     *  columns add up to — narrower than the note leaves the space beside it
+     *  empty, wider scrolls sideways like any wide table — instead of the
+     *  unsized table's "fill the note, share it out evenly". */
+    const drawWidths = (ws: number[]): void => {
+      const px = ws.map((w) => Math.max(MIN_WIDTH, w))
+      cols.forEach((c, i) => (c.style.width = `${px[i]}px`))
+      table.style.width = `${px.reduce((a, b) => a + b, 0)}px`
+      wrap.classList.add('cm-table-sized')
+    }
+    if (this.model.widths) drawWidths(this.model.widths)
+
     const thead = document.createElement('thead')
     const htr = document.createElement('tr')
     // Kept for `positionChrome` and the hover wiring below — both need to map
@@ -634,6 +715,10 @@ class TableWidget extends WidgetType {
       grid.appendChild(align)
       grid.appendChild(handle)
     })
+    // Appended after the alignment marks and grips, and kept clear of them in
+    // `positionChrome` — the bar sits on the column's right edge, where the
+    // alignment mark also lives, and nothing may cover a control.
+    const sizeBars = this.model.header.map((_, i) => grid.appendChild(sizeHandle(i)))
 
     // Hovering a header cell reveals ITS OWN column's chrome — the same
     // "only the area it's over" scoping the rest of the chrome already has.
@@ -661,10 +746,13 @@ class TableWidget extends WidgetType {
         // by `.cm-table`'s horizontal scroll: scrolling moves `grid` (and
         // everything positioned against it) as one rigid unit, so a position
         // measured once stays correct at any scroll offset.
-        align.style.left = `${r.right - gridRect.left - 14}px`
+        // 18px in from the edge, not 14: the resize bar below claims the 3px
+        // either side of the edge, and the mark must end before it starts.
+        align.style.left = `${r.right - gridRect.left - 18}px`
         align.style.top = `${r.top - gridRect.top + 1}px`
         handle.style.left = `${r.left - gridRect.left + r.width / 2}px`
         handle.style.top = `${r.top - gridRect.top - 18}px`
+        sizeBars[i].style.left = `${r.right - gridRect.left}px`
       })
     }
     // Not mounted yet when toDOM runs (no parent, so every rect above would

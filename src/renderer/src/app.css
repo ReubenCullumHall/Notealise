@@ -3162,6 +3162,53 @@ button.look-card:hover {
 /* The insertion line shown while dragging a column, moved by JS to whichever
    boundary the pointer is nearest. Absolutely positioned against
    `.cm-table-grid` (`position: relative`), spanning it top to bottom. */
+/* A RESIZED TABLE (blockTable.ts `drawWidths`) is as wide as its columns, not
+   the note — so the box holding it, and the + bars hanging off that box's
+   edges, shrink to the table instead of staying note-wide. */
+.cm-table-sized .cm-table-grid { width: fit-content; }
+/* The cell `min-width` above is the unsized table's guard against slivers. A
+   sized table has its own floor (MIN_WIDTH in tableModel.ts), and a cell floor
+   wider than its column would push the table past the widths it was given. */
+.cm-table-sized th,
+.cm-table-sized td { min-width: 0; }
+
+/* The line on each column's right edge, dragged sideways to resize it
+   (blockTable.ts `sizeHandle`), like Notion's. A 6px strip centred on the edge,
+   the table's full height; the 2px line in it shows only on hover and while
+   dragging. The alignment mark is placed to end before this strip starts
+   (`positionChrome`), so neither covers the other. */
+.cm-table-col-size {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  margin-left: -3px;
+  cursor: col-resize;
+}
+.cm-table-col-size::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: rgb(var(--brand-500));
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.cm-table-col-size:hover::after,
+.cm-table-col-size-on::after { opacity: 1; }
+/* The pointer outruns a 6px strip at once, so the cursor is held at the window
+   level for the drag — the same as the split-column divider (`pane-resizing`). */
+body.table-col-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+body.table-col-resizing * {
+  cursor: col-resize !important;
+}
+
 .cm-table-col-drop {
   position: absolute;
   top: 0;
@@ -3227,7 +3274,12 @@ button.look-card:hover {
 /* The open cell. A textarea, not an input: a cell wraps, and a single-line input
    can only ever grow sideways — which is what made one long sentence stretch its
    column across the whole note. This grows downwards, sized to its content on
-   every keystroke. */
+   every keystroke.
+   It draws NOTHING of its own (Reuben, 2026-09-27: "get rid of it"). It used to
+   carry the outline and a filled background, so in a tall row it was a small
+   one-line box floating at the top of the cell — and on Lined, where cells
+   have no vertical padding, its negative margin pushed it out over the cell's
+   top edge. The outline is on the whole cell now (`.cm-table-cell-editing`). */
 .cm-table-editor {
   display: block;
   width: 100%;
@@ -3235,9 +3287,9 @@ button.look-card:hover {
   margin: -0.32em -0.6em;
   padding: 0.32em 0.6em;
   border: none;
-  border-radius: var(--r-control);
-  outline: 2px solid rgb(var(--brand-400));
-  background: rgb(var(--surface));
+  border-radius: 0;
+  outline: none;
+  background: transparent;
   color: inherit;
   font: inherit;
   line-height: inherit;
@@ -3245,6 +3297,25 @@ button.look-card:hover {
   overflow: hidden;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* The cell being typed in: the outline goes round the WHOLE cell, its full
+   height and width, with rounded corners (Reuben, 2026-09-28).
+   A drawn frame, not `outline` or `border-radius` on the cell: a table with
+   `border-collapse: collapse` ignores border-radius on its cells, so an outline
+   there can only be square. The corner is the old typing box's — `--r-control`
+   plus the 2px line, which is how an outline round a --r-control box draws.
+   Takes no room (absolutely placed), so Lined's rows stay whole rules, and lets
+   every click through to the text box under it. One positioned child only — see
+   positionChrome in blockTable.ts on what two do to a cell's height. */
+.cm-table th.cm-table-cell-editing::after,
+.cm-table td.cm-table-cell-editing::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 2px solid rgb(var(--brand-400));
+  border-radius: calc(var(--r-control) + 2px);
+  pointer-events: none;
 }
 
 /* The alignment cycle, in the corner of each header cell. Absolutely positioned
