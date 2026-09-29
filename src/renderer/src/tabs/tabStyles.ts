@@ -25,3 +25,36 @@ export const SEG_BASE =
   'press-row group/seg relative flex shrink-0 cursor-pointer select-none items-center gap-1 rounded-md py-0.5 pl-2.5 pr-1 text-[13px] outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 '
 export const SEG_ON = 'bg-brand-500/15 text-brand-600 '
 export const SEG_OFF = 'text-ink-600 hover:bg-ink-300/15 hover:text-ink-900 '
+
+// The island's open/close bounce, shared with the + button's new tab so both
+// move on one curve. See TabIsland.tsx for why an overshoot is allowed here.
+export const BOUNCE_MS = 460
+export const BOUNCE = 'cubic-bezier(0.34, 1.45, 0.64, 1)'
+/** The same curve with far less overshoot — a 1.5% settle instead of 6.6%.
+ *  Reuben, 2026-09-24: the split's divider was "moving so much" (cut by about
+ *  70%: 10px of swing measured down to 3), and a closing tab should be softer.
+ *  `SOFT_Y1` is the control point that makes it, for `bounceAt`. */
+export const SOFT_Y1 = 1.217
+export const BOUNCE_SOFT = `cubic-bezier(0.34, ${SOFT_Y1}, 0.64, 1)`
+export const motionOn = (): boolean =>
+  document.documentElement.dataset.motion !== 'off' &&
+  !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+/** Where the BOUNCE curve is at `x` (0–1 of the way through the time), so a
+ *  motion that can't be handed to the browser as one eased keyframe pair can
+ *  still be built from samples of the same curve. Used for a closing tab: its
+ *  width stops at zero, but the strip closing up behind it has to carry the
+ *  overshoot on its own. */
+export const bounceAt = (x: number, y1 = 1.45): number => {
+  const [x1, x2, y2] = [0.34, 0.64, 1]
+  const bez = (t: number, a: number, b: number): number =>
+    3 * a * t * (1 - t) ** 2 + 3 * b * t ** 2 * (1 - t) + t ** 3
+  let lo = 0
+  let hi = 1
+  for (let i = 0; i < 30; i++) {
+    const mid = (lo + hi) / 2
+    if (bez(mid, x1, x2) < x) lo = mid
+    else hi = mid
+  }
+  return bez((lo + hi) / 2, y1, y2)
+}

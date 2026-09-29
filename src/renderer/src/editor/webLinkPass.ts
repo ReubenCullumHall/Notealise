@@ -1,6 +1,7 @@
 import { Decoration, EditorView } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
-import { overlapsSelection, type Pass } from './livePreview'
+import { cursorWithin, type Pass } from './livePreview'
+import { clickOrDrag } from './clickOrDrag'
 
 // Web links you can actually click. `[text](url)`, `<https://…>` and a bare
 // `https://…` all get a `.cm-weblink` span carrying the target, and clicking
@@ -42,10 +43,11 @@ export const webLinkPass: Pass = (view, _active, push) => {
       to,
       enter: (node) => {
         if (node.name === 'Link' || node.name === 'Autolink') {
-          // Leave it alone while the cursor is in it: the raw markdown is
+          // Leave it alone while the cursor is in it (a cursor, not a drag-
+          // selection passing over it): the raw markdown is
           // showing for editing, and marking it then would make the source
           // text itself clickable.
-          if (overlapsSelection(view, node.from, node.to)) return
+          if (cursorWithin(view, node.from, node.to)) return
           let url = ''
           const marks: { from: number; to: number }[] = []
           for (let c = node.node.firstChild; c; c = c.nextSibling) {
@@ -71,7 +73,7 @@ export const webLinkPass: Pass = (view, _active, push) => {
           // and marking it twice would overlap ranges.
           const parent = node.node.parent
           if (parent && (parent.name === 'Link' || parent.name === 'Autolink')) return
-          if (overlapsSelection(view, node.from, node.to)) return
+          if (cursorWithin(view, node.from, node.to)) return
           push(node.from, node.to, linkMark(doc.sliceString(node.from, node.to)), false)
         }
       }
@@ -81,16 +83,16 @@ export const webLinkPass: Pass = (view, _active, push) => {
 
 /** Click a web link to open it in the real browser. Plain click follows, the
  *  same gesture a `[[wiki link]]` uses — there is only one thing an external
- *  link can do, so no modifier means anything different here. `mousedown` with
- *  preventDefault, so the click doesn't also drop a cursor into the text. */
+ *  link can do, so no modifier means anything different here. A drag that
+ *  starts on one selects text instead (clickOrDrag.ts). */
 export const webLinkGestures = EditorView.domEventHandlers({
-  mousedown: (event, _view) => {
+  mousedown: (event, view) => {
     if (event.button !== 0) return false
     const el = (event.target as HTMLElement | null)?.closest?.('.cm-weblink')
     const href = el?.getAttribute('data-href')
     if (!href) return false
-    event.preventDefault()
-    void window.api.openExternal(href)
+    // Opens on a click; a drag starting here selects the text instead.
+    clickOrDrag(event, view, () => void window.api.openExternal(href))
     return true
   }
 })

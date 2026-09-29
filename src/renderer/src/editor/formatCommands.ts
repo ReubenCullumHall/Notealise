@@ -1,46 +1,215 @@
-import { EditorSelection } from '@codemirror/state'
+import { EditorSelection, type EditorState } from '@codemirror/state'
 // Type-only: nothing here calls an EditorView static, and keeping it a type
 // import means the commands can be exercised against a plain EditorState.
 import type { EditorView } from '@codemirror/view'
-import { mathInsert, toggleMarker, wrapRange, type MarkerKind, type MarkerMode } from './formatModel'
+import {
+  mathInsert,
+  splitMarker,
+  toggleMarker,
+  toggleStyle,
+  wrapRange,
+  type MarkerKind,
+  type MarkerMode,
+  type Range,
+  type WrapResult
+} from './formatModel'
+import { formatEdit, markPairs, unsplittable, type MarkPair } from './markPairs'
+import { colorPairs } from './colorTags'
+import { setTyping, typingField, type Typing } from './markEditing'
+import { isRaw } from './rawView'
 import { emptyTable, serializeTable } from './tableModel'
+import { mathText, openMathEdit, type MathKind } from './mathEdit'
+import { findToggles, toggleAtTitle, unwrapSpec, wrappable, wrapSpec } from './toggleModel'
 
 // Toolbar/keymap formatting. Bold/italic/strikethrough are plain Markdown;
 // underline has no Markdown syntax so it uses inline HTML (<u>), the same as
 // Obsidian. Math is a $$…$$ block. All operate on the live EditorView.
 
-function toggleWrap(view: EditorView, open: string, close: string = open): void {
-  const doc = view.state.doc.toString()
-  view.dispatch(
-    view.state.changeByRange((range) => {
-      const r = wrapRange(doc, range.from, range.to, open, close)
+// `kind` is the style's name in markPairs (the syntax-tree node, or `tag:u`), so
+// the toggle can find the spans already there instead of guessing from the text.
+function toggleWrap(view: EditorView, kind: string, open: string, close: string = open): void {
+  const { state } = view
+  if (typingStyle(view, kind, open, close)) return
+  const doc = state.doc.toString()
+  const spec = state.changeByRange((range) => {
+      let r: WrapResult | null = null
+      if (!range.empty) {
+        // Whole lines either side, so a span that starts before the selection
+        // on the same line (or a <u> opened earlier in it) is found.
+        const from = state.doc.lineAt(range.from).from
+        const to = state.doc.lineAt(range.to).to
+        const pairs = markPairs(state, from, to)
+        const found = pairs.filter((p) => p.kind === kind)
+        const { foreign, atoms } = obstacles(state, from, to, kind, pairs)
+        r = toggleStyle(doc, range.from, range.to, open, close, found, FLANKED.has(kind), foreign, atoms)
+        if (!r) return { range } // only spaces or line markers selected: nothing to style
+      } else {
+        r = wrapRange(doc, range.from, range.to, open, close)
+      }
       return {
         changes: { from: r.from, to: r.to, insert: r.insert },
         range: EditorSelection.range(r.selFrom, r.selTo)
       }
     })
-  )
+  view.dispatch({ ...spec, annotations: formatEdit.of(true) })
   view.focus()
 }
 
-export const bold = (view: EditorView): void => toggleWrap(view, '**')
-export const italic = (view: EditorView): void => toggleWrap(view, '*')
-export const underline = (view: EditorView): void => toggleWrap(view, '<u>', '</u>')
-export const strike = (view: EditorView): void => toggleWrap(view, '~~')
+/** What a style must work around between `from` and `to`: other styles' marks
+ *  (it stops at them rather than tangling with them) and things it can only
+ *  wrap whole (markPairs.ts's `unsplittable`). */
+function obstacles(
+  state: EditorState,
+  from: number,
+  to: number,
+  kind: string,
+  pairs: MarkPair[]
+): { foreign: Range[]; atoms: Range[] } {
+  const foreign: Range[] = []
+  for (const p of pairs) {
+    if (p.kind === kind || p.kind === 'InlineCode') continue // code is an atom, below
+    foreign.push({ from: p.openFrom, to: p.openTo }, { from: p.closeFrom, to: p.closeTo })
+  }
+  for (const c of colorPairs(state, from, to)) {
+    foreign.push({ from: c.openFrom, to: c.openTo }, { from: c.closeFrom, to: c.closeTo })
+  }
+  const atoms = unsplittable(state, from, to)
+  if (kind !== 'InlineCode') return { foreign, atoms }
+  // Code can't hold a link at all — inside backticks it would show as raw
+  // `[text](url)` — so for code those are left out, not wrapped whole. (Other
+  // code spans are this style's own, found as `found`.)
+  const code = new Set(pairs.filter((p) => p.kind === 'InlineCode').map((p) => p.openFrom))
+  return { foreign: [...foreign, ...atoms.filter((r) => !code.has(r.from))], atoms: [] }
+}
 
-/** Insert a $$…$$ math block; wraps the selection, or drops the cursor between $$$$. */
+const FLANKED = new Set(['StrongEmphasis', 'Emphasis', 'Strikethrough'])
+
+/** A style shortcut with NOTHING selected (Reuben, 2026-09-25): writes nothing
+ *  yet — it sets how the next character you type comes out (markEditing's
+ *  `typingField`), the way a word processor's Bold button does. The old way
+ *  wrote an empty `****` into the note, on screen until you typed into it.
+ *  Returns false when this doesn't apply (a selection, several cursors,
+ *  Markdown pro, or an editor without markEditing — the tests' plain state). */
+function typingStyle(view: EditorView, kind: string, open: string, close: string): boolean {
+  const { state } = view
+  const sel = state.selection
+  if (sel.ranges.length !== 1 || !sel.main.empty || isRaw(state)) return false
+  const current = state.field(typingField, false)
+  if (current === undefined) return false
+  const pos = sel.main.head
+  const set = (t: Typing | null): true => {
+    view.dispatch({ effects: setTyping.of(t) })
+    view.focus()
+    return true
+  }
+
+  // Already waiting here: this press adds or removes a style from the wait.
+  if (current && current.pos === pos) {
+    if (current.kind !== 'wrap') return set(null) // e.g. just moved a space out: stop the style there
+    const has = current.styles.includes(kind)
+    const styles = has ? current.styles.filter((k) => k !== kind) : [...current.styles, kind]
+    return set(styles.length ? waitFor(styles) : null)
+  }
+
+  // Inside a span of this style: switching it off.
+  const line = state.doc.lineAt(pos)
+  const span = markPairs(state, line.from, line.to).find(
+    (p) => p.kind === kind && p.openTo <= pos && pos <= p.closeFrom
+  )
+  if (span) {
+    if (pos === span.closeFrom) return set({ kind: 'exit', pos, to: span.closeTo })
+    if (pos === span.openTo) return set({ kind: 'exit', pos, to: span.openFrom })
+    // In the middle: what you type next goes between a close and a re-open.
+    return set({ kind: 'wrap', pos, before: close, after: open, holdSpaces: false, styles: [] })
+  }
+  return set(waitFor([kind]))
+
+  function waitFor(styles: string[]): Typing {
+    const marks = styles.map((k) => MARKS[k])
+    return {
+      kind: 'wrap',
+      pos,
+      before: marks.map((m) => m[0]).join(''),
+      after: marks.map((m) => m[1]).reverse().join(''),
+      holdSpaces: styles.some((k) => FLANKED.has(k)),
+      styles
+    }
+  }
+}
+
+/** Each style's open and close marks, by its markPairs kind. */
+const MARKS: Record<string, [string, string]> = {
+  StrongEmphasis: ['**', '**'],
+  Emphasis: ['*', '*'],
+  Strikethrough: ['~~', '~~'],
+  InlineCode: ['`', '`'],
+  'tag:u': ['<u>', '</u>']
+}
+
+export const bold = (view: EditorView): void => toggleWrap(view, 'StrongEmphasis', '**')
+export const italic = (view: EditorView): void => toggleWrap(view, 'Emphasis', '*')
+export const underline = (view: EditorView): void => toggleWrap(view, 'tag:u', '<u>', '</u>')
+export const strike = (view: EditorView): void => toggleWrap(view, 'Strikethrough', '~~')
+
+/** Insert a $$…$$ maths block (wrapping the selection) and open the maths box
+ *  on it, where you type the LaTeX and watch it draw on the line. In Markdown
+ *  pro there is no box: the cursor lands between the $$ as it always did. */
 export function insertMath(view: EditorView): void {
   const { from, to } = view.state.selection.main
   const inner = view.state.doc.sliceString(from, to)
-  const insert = mathInsert(inner)
-  view.dispatch({
-    changes: { from, to, insert },
-    selection: inner ? { anchor: from + 2, head: from + 2 + inner.length } : { anchor: from + 2 }
-  })
-  view.focus()
+  if (isRaw(view.state)) {
+    const insert = mathInsert(inner)
+    view.dispatch({
+      changes: { from, to, insert },
+      selection: inner ? { anchor: from + 2, head: from + 2 + inner.length } : { anchor: from + 2 }
+    })
+    view.focus()
+    return
+  }
+  const alone = aloneOnLine(view.state, from, to)
+  // Several selected lines only survive as a fenced block — a one-line $$…$$
+  // with a line break inside it is no longer maths to any renderer.
+  const kind: MathKind = alone && inner.includes('\n') ? 'fenced' : 'display'
+  openInBox(view, from, to, kind, kind === 'fenced' ? inner : inner.replace(/\s*\n\s*/g, ' '), alone)
 }
 
-export const inlineCode = (view: EditorView): void => toggleWrap(view, '`')
+/** Insert $…$ maths inside a sentence and open the maths box on it. Nothing is
+ *  written until you type — an empty `$$` would read as a display block. */
+export function insertInlineMath(view: EditorView): void {
+  const { from, to } = view.state.selection.main
+  const inner = view.state.doc.sliceString(from, to).replace(/\s*\n\s*/g, ' ').trim()
+  if (isRaw(view.state)) {
+    const insert = `$${inner}$`
+    view.dispatch({
+      changes: { from, to, insert },
+      selection: inner ? { anchor: from + 1, head: from + 1 + inner.length } : { anchor: from + 1 }
+    })
+    view.focus()
+    return
+  }
+  openInBox(view, from, to, 'inline', inner, false)
+}
+
+/** Nothing but whitespace on the line either side of [from, to]. */
+function aloneOnLine(state: EditorState, from: number, to: number): boolean {
+  const a = state.doc.lineAt(from)
+  const b = state.doc.lineAt(to)
+  return !a.text.slice(0, from - a.from).trim() && !b.text.slice(to - b.from).trim()
+}
+
+/** Write the formula over [from, to] and open the box on it, in one step. The
+ *  editor's cursor waits just past the formula; the box takes the keyboard
+ *  (mathEditor.ts focuses it once it's on screen). */
+function openInBox(view: EditorView, from: number, to: number, kind: MathKind, latex: string, alone: boolean): void {
+  const insert = mathText(kind, latex)
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: from + insert.length },
+    effects: openMathEdit.of({ from, to: from + insert.length, latex, kind, alone })
+  })
+}
+
+export const inlineCode = (view: EditorView): void => toggleWrap(view, 'InlineCode', '`')
 
 // --- block-level commands ------------------------------------------------------
 // Headings, lists and quotes rewrite whole lines rather than wrapping a range, so
@@ -151,6 +320,27 @@ export function wikiLink(view: EditorView): void {
 }
 
 export const horizontalRule = (view: EditorView): void => insertBlock(view, '---')
+
+/** A toggle list (toggleModel.ts). The line the cursor is on becomes its
+ *  title, without any list or heading mark it had; further selected lines go
+ *  inside it. On a toggle's title, the button takes the toggle away again and
+ *  "/" leaves it be — the same set-vs-toggle split as the block commands. */
+export function toggleList(view: EditorView, mode: MarkerMode = 'toggle'): void {
+  const { state } = view
+  const { from, to } = state.selection.main
+  const first = state.doc.lineAt(from).number
+  const last = state.doc.lineAt(to).number
+  const t = toggleAtTitle(findToggles(state), first)
+  if (t) {
+    if (mode === 'toggle') view.dispatch(unwrapSpec(state, t, from - t.prefixEnd))
+  } else {
+    // A selection that would cut an existing toggle in half wraps only its
+    // first line.
+    const end = wrappable(state, first, last) ? last : first
+    view.dispatch(wrapSpec(state, first, end, splitMarker(state.doc.line(first).text).body, 'end'))
+  }
+  view.focus()
+}
 
 /**
  * A starter table: 2×2 on screen — two columns, a header row and one body row.

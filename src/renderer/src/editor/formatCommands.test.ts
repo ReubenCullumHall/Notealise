@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { EditorState, type TransactionSpec } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 import {
+  bold,
   codeBlock,
   horizontalRule,
   inlineCode,
+  italic,
   link,
+  strike,
   table,
   toggleBlock,
+  underline,
   wikiLink
 } from './formatCommands'
 
@@ -174,5 +179,115 @@ describe('set vs toggle', () => {
       toggleBlock(view, 'h2', mode)
       expect(read()).toBe('## he|llo')
     }
+  })
+})
+
+// Bold/italic/strike/underline/code over a selection that does NOT exactly match
+// an existing span — the case that used to wrap it twice and show raw marks
+// (Reuben, 2026-09-25). Word-processor rule: all selected text already styled →
+// take it off; otherwise → put it on all of it. Needs the real markdown parser,
+// because the spans already there are found in its syntax tree.
+describe('style toggles over a mismatched selection', () => {
+  function md(doc: string, sel: string): { view: EditorView; read: () => string } {
+    const at = doc.indexOf(sel)
+    let state = EditorState.create({
+      doc,
+      selection: { anchor: at, head: at + sel.length },
+      extensions: [markdown({ base: markdownLanguage })]
+    })
+    const view = {
+      get state() {
+        return state
+      },
+      dispatch: (spec: TransactionSpec) => {
+        state = state.update(spec).state
+      },
+      focus: () => {}
+    }
+    const read = (): string => {
+      const { from: f, to: t } = state.selection.main
+      const s = state.doc.toString()
+      return s.slice(0, f) + '«' + s.slice(f, t) + '»' + s.slice(t)
+    }
+    return { view: view as unknown as EditorView, read }
+  }
+
+  it('underlines the extra space too, then a second click takes it off everything', () => {
+    // What a drag over "styled words " selects: the hidden </u> comes with it.
+    const { view, read } = md('Plain <u>styled words</u> here', 'styled words</u> ')
+    underline(view)
+    expect(read()).toBe('Plain <u>«styled words »</u>here')
+    underline(view)
+    expect(read()).toBe('Plain «styled words »here')
+  })
+
+  it('bold plus one more letter: bolds all of it, then unbolds all of it', () => {
+    const { view, read } = md('Plain **styled words** here', 'styled words** h')
+    bold(view)
+    expect(read()).toBe('Plain **«styled words h»**ere')
+    bold(view)
+    expect(read()).toBe('Plain «styled words h»ere')
+  })
+
+  it('bold plus a trailing space unbolds straight away — a space cannot be bold in Markdown', () => {
+    // `**words **` does not parse, so the space can never carry bold; counting it
+    // would make the button bold-forever and never able to take it off.
+    const { view, read } = md('Plain **styled words** here', 'styled words** ')
+    bold(view)
+    expect(read()).toBe('Plain «styled words »here')
+  })
+
+  it('a plain word plus the start of a styled span styles the lot as ONE span', () => {
+    for (const [cmd, o, c] of [
+      [bold, '**', '**'],
+      [italic, '*', '*'],
+      [strike, '~~', '~~'],
+      [underline, '<u>', '</u>'],
+      [inlineCode, '`', '`']
+    ] as const) {
+      const { view, read } = md(`Plain ${o}styled words${c} here`, `Plain ${o}styled`)
+      cmd(view)
+      expect(read()).toBe(`${o}«Plain styled» words${c} here`)
+      cmd(view)
+      // The space before "words" was styled and wasn't selected, so it stays
+      // styled — except for * ** ~~, where a span can't start on a space.
+      const flanked = o !== '<u>' && o !== '`'
+      expect(read()).toBe(flanked ? `«Plain styled» ${o}words${c} here` : `«Plain styled»${o} words${c} here`)
+    }
+  })
+
+  it('un-styling part of a span leaves the rest styled, with no mark left on a space', () => {
+    const b = md('Plain **styled words** here', 'words')
+    bold(b.view)
+    expect(b.read()).toBe('Plain **styled** «words» here')
+    const u = md('Plain <u>styled words</u> here', 'words')
+    underline(u.view)
+    expect(u.read()).toBe('Plain <u>styled </u>«words» here')
+  })
+
+  it('joins two spans into one when the selection bridges them', () => {
+    const { view, read } = md('**one** and **two**', 'one** and **two')
+    bold(view)
+    expect(read()).toBe('**«one and two»**')
+  })
+
+  it('un-bolding a word then bolding it again gives back ONE span, not two', () => {
+    const { view, read } = md('Plain **styled words** here', 'words')
+    bold(view)
+    expect(read()).toBe('Plain **styled** «words» here')
+    bold(view)
+    expect(read()).toBe('Plain **styled «words»** here')
+  })
+
+  it('never puts a style over a list marker on a later line', () => {
+    const { view, read } = md('- one\n- two', 'one\n- two')
+    bold(view)
+    expect(read()).toBe('- **«one**\n- **two»**')
+  })
+
+  it('does nothing when only a space is selected for bold', () => {
+    const { view, read } = md('a b', ' ')
+    bold(view)
+    expect(read()).toBe('a« »b')
   })
 })

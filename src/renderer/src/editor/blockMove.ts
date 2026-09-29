@@ -1,5 +1,6 @@
 import type { EditorState } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
+import { findToggles, isToggleMarkup, toggleAtTitle } from './toggleModel'
 
 // Which lines the line-grip picks up.
 //
@@ -18,6 +19,9 @@ export interface BlockRange {
 }
 
 const isBlank = (text: string): boolean => text.trim() === ''
+/** Where a paragraph stops: a blank line, or a toggle list's markup line (a
+ *  paragraph written straight under a title is still not part of the title). */
+const isEdge = (text: string): boolean => isBlank(text) || isToggleMarkup(text)
 
 /** The fenced code block containing `pos`, or null.
  *
@@ -42,13 +46,14 @@ function fenceAt(state: EditorState, pos: number): { from: number; to: number } 
 
 /** The lines the grip on `pos`'s line would move.
  *
- *  Three rules, in order:
+ *  Four rules, in order:
  *
  *  1. **A selection wins.** Select four lines and the grip moves those four —
  *     the explicit answer always beats the inferred one, and it is the only way
  *     to move part of a paragraph.
- *  2. **A fenced code block moves whole** (see `fenceAt`).
- *  3. **Otherwise the paragraph**: the run of non-blank lines around the cursor.
+ *  2. **A toggle list moves whole** when the cursor is on its title.
+ *  3. **A fenced code block moves whole** (see `fenceAt`).
+ *  4. **Otherwise the paragraph**: the run of non-blank lines around the cursor.
  *     A blank line is its own block, which is what lets an empty line be pushed
  *     around to open up space rather than being silently glued to a neighbour.
  *
@@ -64,6 +69,11 @@ export function blockRange(state: EditorState): BlockRange {
     return { from: first.from, to: last.to }
   }
 
+  // A toggle list moves whole — title, everything inside it, and its end —
+  // when you grab its title, open or shut (Notion's rule).
+  const toggle = toggleAtTitle(findToggles(state), doc.lineAt(sel.head).number)
+  if (toggle) return { from: toggle.from, to: doc.line(toggle.endLine).to }
+
   const fence = fenceAt(state, sel.head)
   if (fence) {
     // Out to whole lines: the node starts at the ``` and ends at the closing
@@ -76,8 +86,8 @@ export function blockRange(state: EditorState): BlockRange {
 
   let first = line.number
   let last = line.number
-  while (first > 1 && !isBlank(doc.line(first - 1).text)) first--
-  while (last < doc.lines && !isBlank(doc.line(last + 1).text)) last++
+  while (first > 1 && !isEdge(doc.line(first - 1).text)) first--
+  while (last < doc.lines && !isEdge(doc.line(last + 1).text)) last++
   return { from: doc.line(first).from, to: doc.line(last).to }
 }
 

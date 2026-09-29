@@ -61,7 +61,7 @@ export function LinkingGuide(): React.JSX.Element {
         it still reads sensibly — nothing about this app is needed to make sense of it later.
       </p>
 
-      <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">The five forms</h3>
+      <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">The six forms</h3>
       <div className="mt-3 flex flex-col gap-2">
         <Form type="[[Waves]]" title="By name" reads={<Chip>Waves</Chip>}>
           The everyday one. If two notes share a name, the nearest wins — the one in the same folder,
@@ -99,6 +99,24 @@ export function LinkingGuide(): React.JSX.Element {
           on its own jumps within the note you&rsquo;re already in.
         </Form>
 
+        <Form
+          type="[[Waves#^k3x9]]"
+          title="Straight to a paragraph"
+          reads={
+            <Chip>
+              Waves <span className="px-0.5 text-ink-300">›</span>{' '}
+              <span className="text-ink-500">A wave carries energy…</span>
+            </Chip>
+          }
+        >
+          Opens the note at that paragraph, list item or quote, and lights it up for a moment. The
+          link reads as the paragraph&rsquo;s first words, as they are now. To make one, right-click
+          the six dots beside a line and choose <span className="font-medium">Copy link to block</span>,
+          then paste it into any note. The paragraph gets a short hidden tag at its end,{' '}
+          <code className="font-mono">^k3x9</code>, which is how the link finds it. Obsidian
+          understands these links too.
+        </Form>
+
         <Form type="[[Term 3]]" title="A folder" reads={<Chip dir>Term 3</Chip>}>
           A folder has nothing to open, so clicking it <span className="font-medium">shows</span> it:
           the sidebar opens that folder and closes the others. Folders carry a folder icon so you can
@@ -125,6 +143,12 @@ export function LinkingGuide(): React.JSX.Element {
           [[Physics/Wav<span className="ml-3 font-sans text-ink-400">— narrowed inside Physics</span>
         </div>
       </div>
+      <p className="mt-2 text-[12px] leading-relaxed text-ink-500">
+        Or step through it. Folders and notes in the list have an arrow at the end: press{' '}
+        <span className="font-medium">→</span> or click the arrow to go inside. Inside a note the
+        list is its headings, so you can link straight to one.{' '}
+        <span className="font-medium">←</span> or the name at the top goes back.
+      </p>
       <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">
         A link that already crosses spaces keeps working wherever you are — this only decides what
         the picker offers. Those links are drawn with a dotted leading edge, and hovering one names
@@ -135,9 +159,13 @@ export function LinkingGuide(): React.JSX.Element {
       <div className="mt-2 flex flex-col gap-1 text-[12px] text-ink-600">
         {[
           ['Click', 'Opens in a new tab — the note you were reading stays open'],
-          ['Ctrl / Cmd + click', 'Opens it here instead, replacing this note'],
+          ['Cmd + click (Ctrl on Windows)', 'Opens it here instead, replacing this note'],
           ['Alt + click', 'Opens it beside this one, in a new column'],
           ['Drag it', 'Drop it into any column'],
+          [
+            'Right-click it',
+            'Point it somewhere else. The list opens on that note’s headings, or on its folder if you right-click the note’s name. Esc leaves it as it was'
+          ],
           ['A note that isn’t written yet', 'Shown dashed. Clicking makes it, next to this note']
         ].map(([k, v]) => (
           <div key={k} className="flex gap-3 rounded-lg px-2 py-1.5 ring-1 ring-ink-300/15">

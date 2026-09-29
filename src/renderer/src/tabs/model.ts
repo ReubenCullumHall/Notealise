@@ -16,6 +16,21 @@
  *     losable by design (rule 2): absent, malformed, or the wrong length all
  *     read as "equal columns", so nothing here has to defend against a
  *     hand-edited settings.json — `paneSizes` is the only way anything reads it.
+ *  5. every `parked` split has 2+ notes, all of them open tabs, none of them on
+ *     screen, none of them the blank, and no note in two of them.
+ *
+ *  **A split is the user's arrangement** (Reuben, 2026-09-25). Only a gesture
+ *  aimed at a column — splitting, dropping onto a pane, closing or taking out a
+ *  column — changes which notes are in it. Opening a note somewhere else never
+ *  borrows one of its columns: Cmd/Ctrl+click adds a tab behind it (`addTab`),
+ *  and going to a note outside it (a sidebar click, a tab click, the +) PARKS
+ *  the split as one joined tab you can click to get back to (`showTab`).
+ *
+ *  **Closing a note in a split closes it — tab and all** (Reuben, 2026-09-27).
+ *  The x on its piece of the joined tab and the x in its column's header are
+ *  the same action (`closeTab`); keeping it open is its own gesture, a drag of
+ *  its tab out of the split (`takeOutOfSplit`). And what is left of the split
+ *  stays where it was drawn in the strip (`keepGroupSlot`).
  */
 
 /** Side-by-side panes, capped. Three 366px columns in a 1100px window is
@@ -42,6 +57,17 @@ export interface TabLayout {
    *  Read it through `paneSizes`, never directly; write it only through the
    *  helpers below, which keep it in step with `panes` on every add, remove and
    *  reorder. Absent means equal columns, which is what every split starts as. */
+  sizes?: number[]
+  /** splits you have stepped out of, each still one joined tab in the strip —
+   *  invariant 5. Absent means none. */
+  parked?: Split[]
+}
+
+/** A split that isn't on screen: its columns, which one you were in, and how
+ *  wide they were, so going back to it puts it back exactly as it was. */
+export interface Split {
+  panes: string[]
+  focus: number
   sizes?: number[]
 }
 
@@ -76,6 +102,78 @@ const replaceAt = (xs: string[], i: number, x: string): string[] =>
   xs.map((v, j) => (j === i ? x : v))
 
 const withoutAt = (xs: string[], i: number): string[] => xs.filter((_, j) => j !== i)
+
+// --- parked splits (invariant 5) -------------------------------------------
+
+/** Which parked split `path` is in, or -1. */
+const parkedIndex = (l: TabLayout, path: string): number =>
+  (l.parked ?? []).findIndex((g) => g.panes.includes(path))
+
+/** `parked` with no empty list left behind: none reads as absent, so a layout
+ *  that never parked anything and one whose parked splits have all gone are the
+ *  same value (and persist the same way). */
+const withParked = (l: TabLayout, parked: Split[]): TabLayout => {
+  const { parked: _old, ...rest } = l
+  return parked.length ? { ...rest, parked } : rest
+}
+
+/** Take `path` out of whatever parked split holds it. A split left with one
+ *  note is no split, so it dissolves and that note is an ordinary tab again. */
+function unpark(l: TabLayout, path: string): TabLayout {
+  const at = parkedIndex(l, path)
+  if (at === -1) return l
+  const g = l.parked![at]
+  const i = g.panes.indexOf(path)
+  const panes = withoutAt(g.panes, i)
+  const next = [...l.parked!]
+  if (panes.length < 2) next.splice(at, 1)
+  else
+    next[at] = {
+      panes,
+      focus: clampFocus(panes, g.focus > i ? g.focus - 1 : g.focus),
+      sizes: sizesRemove({ tabs: [], panes: g.panes, focus: 0, sizes: g.sizes }, i)
+    }
+  return withParked(l, next)
+}
+
+/** Step out of the split on screen: it becomes a parked split and the screen is
+ *  left empty for the caller to fill. The blank can't be parked — it is a
+ *  question waiting on this screen, not a note — so its column is dropped from
+ *  the parked copy, and if that leaves fewer than two notes there is nothing to
+ *  park. Not a split at all: nothing to do. */
+function parkScreen(l: TabLayout): TabLayout {
+  if (l.panes.length < 2) return l
+  const keep = l.panes.map((p, i) => (p === BLANK ? -1 : i)).filter((i) => i !== -1)
+  if (keep.length < 2) return { ...l, panes: [], focus: 0, sizes: undefined }
+  let sized: TabLayout = l
+  for (let i = l.panes.length - 1; i >= 0; i--)
+    if (l.panes[i] === BLANK) sized = { ...sized, panes: withoutAt(sized.panes, i), sizes: sizesRemove(sized, i) }
+  const focused = l.panes[l.focus] === BLANK ? keep[0] : l.focus
+  const split: Split = {
+    panes: sized.panes,
+    focus: sized.panes.indexOf(l.panes[focused]),
+    sizes: sized.sizes
+  }
+  return withParked({ ...l, panes: [], focus: 0, sizes: undefined }, [...(l.parked ?? []), split])
+}
+
+/** Bring parked split `at` back on screen, focused on `path` if it's in it. The
+ *  split on screen now, if there is one, parks in its place; a single note
+ *  simply stays open as a tab. */
+function restoreSplit(l: TabLayout, at: number, path?: string): TabLayout {
+  const g = l.parked![at]
+  const others = withParked(l, l.parked!.filter((_, i) => i !== at))
+  const off = parkScreen(others)
+  const focus = path && g.panes.includes(path) ? g.panes.indexOf(path) : g.focus
+  return tidy({ ...off, panes: [...g.panes], focus: clampFocus(g.panes, focus), sizes: g.sizes })
+}
+
+/** Where a note opened "next to" the split on screen goes in the strip: straight
+ *  after the split's last member, so it reads as the tab beside it. */
+function afterScreen(l: TabLayout): number {
+  const last = Math.max(...l.panes.map((p) => l.tabs.indexOf(p)))
+  return last === -1 ? l.tabs.length : last + 1
+}
 
 // --- pane widths (invariant 4) ---------------------------------------------
 
@@ -185,11 +283,53 @@ function neighbour(tabs: string[], from: number, taken: Set<string>): string | n
 export function openTab(l: TabLayout, path: string): TabLayout {
   const shown = l.panes.indexOf(path)
   if (shown !== -1) return { ...l, focus: shown }
+  const parked = parkedIndex(l, path)
+  if (parked !== -1) return restoreSplit(l, parked, path)
   const tabs = l.tabs.includes(path) ? l.tabs : [...l.tabs, path]
   const panes = l.panes.length ? replaceAt(l.panes, l.focus, path) : [path]
   // Swapping the note inside a column leaves the columns alone, so the widths
   // carry over; opening the FIRST pane is a fresh layout and starts even.
   return tidy({ tabs, panes, focus: clampFocus(panes, l.focus), sizes: l.panes.length ? l.sizes : undefined })
+}
+
+/** GO to a note — a tab clicked in the strip, Cmd/Ctrl+1…9, Ctrl+Tab. Nothing
+ *  closes. Something on screen gets the focus; a note in a parked split brings
+ *  that split back; anything else, while a split is on screen, parks the split
+ *  and shows the note on its own — it is not dropped into one of the split's
+ *  columns (invariant 5's note). With no split, the note simply takes the
+ *  screen and the one you were on stays open as a tab. */
+export function showTab(l: TabLayout, path: string): TabLayout {
+  // A blank column is waiting for exactly this — "click one in the sidebar, or
+  // a tab above, to open it here" — so a tab clicked while it's focused fills it.
+  const fillsBlank = l.panes[l.focus] === BLANK
+  if (l.panes.includes(path) || parkedIndex(l, path) !== -1 || l.panes.length < 2 || fillsBlank)
+    return openTab(l, path)
+  const off = parkScreen(l)
+  const tabs = l.tabs.includes(path) ? l.tabs : [...l.tabs.slice(0, afterScreen(l)), path, ...l.tabs.slice(afterScreen(l))]
+  return tidy({ ...off, tabs, panes: [path], focus: 0 })
+}
+
+/** Open a note in a NEW tab — Cmd/Ctrl+click, a link opened in a new tab, a
+ *  note dropped on the strip. With a split on screen it opens BEHIND it, like a
+ *  browser's background tab: the split is left exactly as it was. Otherwise it
+ *  is `openTab`: it takes the screen and the previous note stays open. */
+export function addTab(l: TabLayout, path: string): TabLayout {
+  if (l.panes.length < 2 || l.panes.includes(path) || parkedIndex(l, path) !== -1)
+    return l.panes.length < 2 || l.panes.includes(path) ? openTab(l, path) : l
+  if (l.tabs.includes(path)) return l
+  return { ...l, tabs: [...l.tabs, path] }
+}
+
+/** The + button: a new blank tab, and you're on it — as a browser's + is. With
+ *  a split on screen the split parks (see `showTab`) rather than giving up one
+ *  of its columns to the blank. */
+export function newBlankTab(l: TabLayout): TabLayout {
+  if (l.panes.length < 2) return openTab(l, BLANK)
+  // At the END of the strip, as the + always adds — it comes out of the + —
+  // rather than beside the split the way a note opened from it does.
+  const off = parkScreen(l)
+  const tabs = l.tabs.includes(BLANK) ? l.tabs : [...l.tabs, BLANK]
+  return tidy({ ...off, tabs, panes: [BLANK], focus: 0 })
 }
 
 /** Open a note IN PLACE of the focused one — an ordinary click in the sidebar.
@@ -211,6 +351,11 @@ export function replaceActive(l: TabLayout, path: string): TabLayout {
     return { ...l, focus: shown }
   }
   if (!l.panes.length) return openTab(l, path)
+  // A split is never rearranged by a sidebar click. Picking a note for its
+  // blank column is the one exception — that column exists to be filled. Any
+  // other note (or one in a parked split) is somewhere else to GO: see showTab.
+  if (parkedIndex(l, path) !== -1 || (l.panes.length > 1 && l.panes[l.focus] !== BLANK))
+    return showTab(l, path)
   const leaving = l.panes[l.focus]
   const panes = replaceAt(l.panes, l.focus, path)
   const tabs = l.tabs.includes(path)
@@ -224,7 +369,7 @@ export function replaceActive(l: TabLayout, path: string): TabLayout {
  *  a settings.json can be hand-edited, so nothing here is trusted: the result is
  *  reduced to something that satisfies both invariants or to nothing at all. */
 export function restoreLayout(
-  saved: { tabs: string[]; panes: string[]; focus: number; sizes?: number[] },
+  saved: { tabs: string[]; panes: string[]; focus: number; sizes?: number[]; parked?: Split[] },
   exists: (path: string) => boolean
 ): TabLayout {
   const tabs = saved.tabs.filter((p, i) => saved.tabs.indexOf(p) === i && exists(p))
@@ -239,7 +384,24 @@ export function restoreLayout(
   // so rather than guess which width belonged to which survivor, the split
   // reopens even. A losable sidecar losing gracefully (rule 2).
   const kept = saved.panes.length === panes.length ? saved.sizes : undefined
-  return { tabs, panes, focus: clampFocus(panes, saved.focus), sizes: kept }
+  // Parked splits, held to invariant 5 against what came back: members that
+  // are open, not on screen and not already claimed; fewer than two left and
+  // it is no longer a split. Widths follow the same all-or-nothing rule.
+  const claimed = new Set(panes)
+  const parked: Split[] = []
+  for (const g of saved.parked ?? []) {
+    const members = g.panes
+      .filter((p, i) => g.panes.indexOf(p) === i && tabs.includes(p) && !claimed.has(p))
+      .slice(0, MAX_PANES)
+    if (members.length < 2) continue
+    members.forEach((p) => claimed.add(p))
+    parked.push({
+      panes: members,
+      focus: clampFocus(members, g.focus),
+      sizes: g.panes.length === members.length ? g.sizes : undefined
+    })
+  }
+  return withParked({ tabs, panes, focus: clampFocus(panes, saved.focus), sizes: kept }, parked)
 }
 
 /** Jump to the nth tab in the strip (Cmd/Ctrl+1…9). Out of range is a no-op
@@ -247,7 +409,25 @@ export function restoreLayout(
  *  one", and landing on the third instead is a silent lie about what happened. */
 export function selectTab(l: TabLayout, index: number): TabLayout {
   const path = l.tabs[index]
-  return path == null ? l : openTab(l, path)
+  return path == null ? l : showTab(l, path)
+}
+
+/** `tabs` — the strip once `path` has left `group` (a split, on screen or
+ *  parked), closed or still open. A joined tab is drawn where its FIRST member
+ *  sits in the strip (`stripGroups`), so when that member leaves, the next one
+ *  moves into its place — or straight after it, if it stays open as a tab of
+ *  its own: what is left of the split stays where you saw it, rather than
+ *  jumping along to wherever its own tab happened to be (Reuben, 2026-09-26 —
+ *  a note leaving a split should look like closing any other tab). */
+function keepGroupSlot(l: TabLayout, path: string, group: string[], tabs: string[]): string[] {
+  const at = l.tabs.indexOf(path)
+  const rest = group.filter((p) => p !== path)
+  if (rest.some((p) => l.tabs.indexOf(p) < at)) return tabs // not the one it was drawn at
+  const next = tabs.findIndex((t) => rest.includes(t))
+  if (next === -1) return tabs
+  const others = withoutAt(tabs, next)
+  const slot = others.includes(path) ? others.indexOf(path) + 1 : at
+  return [...others.slice(0, slot), tabs[next], ...others.slice(slot)]
 }
 
 /** Close a tab. If a pane was showing it, that pane takes the neighbouring tab;
@@ -257,18 +437,40 @@ export function closeTab(l: TabLayout, path: string): TabLayout {
   if (at === -1) return l
   const tabs = withoutAt(l.tabs, at)
   const pane = l.panes.indexOf(path)
-  if (pane === -1) return { ...l, tabs } // open but not on screen
+  if (pane === -1) {
+    // open but not on screen
+    const parked = parkedIndex(l, path)
+    const kept = parked === -1 ? tabs : keepGroupSlot(l, path, l.parked![parked].panes, tabs)
+    return unpark({ ...l, tabs: kept }, path)
+  }
+  // A column of a split closes with its tab — nothing is pulled in to fill it
+  // (Reuben, 2026-09-25: the next tab "shouldn't open in that split view").
+  if (l.panes.length > 1) {
+    const panes = withoutAt(l.panes, pane)
+    return tidy({
+      ...l,
+      tabs: keepGroupSlot(l, path, l.panes, tabs),
+      panes,
+      focus: clampFocus(panes, l.focus > pane ? l.focus - 1 : l.focus),
+      sizes: sizesRemove(l, pane)
+    })
+  }
   // A blank column exists only to hold the note you were about to pick, so when
   // it goes the column goes with it. Backfilling it — the right answer for a
   // real note's pane — would drop a note you did not ask for into a space you
   // opened for one you did. Unless it is the LAST pane: closing down to zero
   // panes with tabs still open would leave the strip pointing at nothing.
-  const next =
-    path === BLANK && l.panes.length > 1 ? null : neighbour(tabs, at, takenBy(l.panes, pane))
+  // The only note on screen: the tab beside it takes the screen. Notes in a
+  // parked split are skipped — pulling one out would break that split up —
+  // and if nothing else is left, the nearest parked split comes back instead.
+  const inParked = new Set((l.parked ?? []).flatMap((g) => g.panes))
+  const next = neighbour(tabs, at, new Set([...takenBy(l.panes, pane), ...inParked]))
   // Backfilled: the column stays, so its width does too.
-  if (next) return { tabs, panes: replaceAt(l.panes, pane, next), focus: l.focus, sizes: l.sizes }
+  if (next) return { ...l, tabs, panes: replaceAt(l.panes, pane, next), focus: l.focus, sizes: l.sizes }
+  if (l.parked?.length) return restoreSplit({ ...l, tabs, panes: [], focus: 0, sizes: undefined }, 0)
   const panes = withoutAt(l.panes, pane)
   return {
+    ...l,
     tabs,
     panes,
     focus: clampFocus(panes, l.focus > pane ? l.focus - 1 : l.focus),
@@ -288,7 +490,7 @@ export function cycle(l: TabLayout, dir: 1 | -1): TabLayout {
   for (let step = 1; step <= n; step++) {
     const cand = l.tabs[(((from + dir * step) % n) + n) % n]
     if (cand === cur) break // wrapped all the way round to where we started
-    if (!taken.has(cand)) return openTab(l, cand)
+    if (!taken.has(cand)) return showTab(l, cand)
   }
   return l // every other tab is already on screen
 }
@@ -298,6 +500,7 @@ export function cycle(l: TabLayout, dir: 1 | -1): TabLayout {
  *  now has none, so it collapses rather than picking an unrelated one. */
 export function showInPane(l: TabLayout, path: string, pane: number): TabLayout {
   if (pane < 0 || pane >= l.panes.length) return l
+  l = unpark(l, path) // dropped onto a column: it leaves any parked split
   const tabs = l.tabs.includes(path) ? l.tabs : [...l.tabs, path]
   const from = l.panes.indexOf(path)
   if (from === pane) return { ...l, tabs, focus: pane }
@@ -313,6 +516,7 @@ export function showInPane(l: TabLayout, path: string, pane: number): TabLayout 
  *  a pane's left or right edge. Capped at MAX_PANES, except when the note is
  *  already on screen, which only reorders the panes and can't add one. */
 export function splitAt(l: TabLayout, path: string, at: number): TabLayout {
+  if (l.panes.length < MAX_PANES || l.panes.includes(path)) l = unpark(l, path)
   const from = l.panes.indexOf(path)
   // The one visible note, dropped on its own edge. There are no other panes to
   // reorder, so this is unambiguously the split gesture — and the pane it
@@ -322,7 +526,7 @@ export function splitAt(l: TabLayout, path: string, at: number): TabLayout {
     const other = neighbour(l.tabs, 0, new Set(l.panes))
     if (!other) return l
     const left = at <= 0
-    return { tabs: l.tabs, panes: left ? [path, other] : [other, path], focus: left ? 0 : 1 }
+    return { ...l, tabs: l.tabs, panes: left ? [path, other] : [other, path], focus: left ? 0 : 1, sizes: undefined }
   }
   if (from === -1 && l.panes.length >= MAX_PANES) return l
   const tabs = l.tabs.includes(path) ? l.tabs : [...l.tabs, path]
@@ -334,7 +538,7 @@ export function splitAt(l: TabLayout, path: string, at: number): TabLayout {
   // A note arriving from the tab strip is a NEW column and takes an even share;
   // one already on screen is the same column moving, and keeps the width it had.
   const sizes = from === -1 ? sizesInsert(l, index) : sizesReinsert(l, from, index)
-  return { tabs, panes, focus: index, sizes }
+  return { ...l, tabs, panes, focus: index, sizes }
 }
 
 /** Split two OPEN NOTES side by side — a tab dropped on the middle of another
@@ -377,6 +581,7 @@ export function splitBlank(l: TabLayout): TabLayout {
   const at = l.focus + 1
   const tabs = l.tabs.includes(BLANK) ? l.tabs : [...l.tabs, BLANK]
   return {
+    ...l,
     tabs,
     panes: [...l.panes.slice(0, at), BLANK, ...l.panes.slice(at)],
     focus: at,
@@ -393,6 +598,7 @@ export function closePane(l: TabLayout, pane: number): TabLayout {
   const panes = withoutAt(l.panes, pane)
   return {
     ...l,
+    tabs: keepGroupSlot(l, l.panes[pane], l.panes, l.tabs),
     panes,
     focus: clampFocus(panes, l.focus > pane ? l.focus - 1 : l.focus),
     sizes: sizesRemove(l, pane)
@@ -448,29 +654,32 @@ export function swapPanes(l: TabLayout, a: number, b: number): TabLayout {
  *  A single pane groups nothing: one note on screen is not a split, and a
  *  one-segment group would just be a tab wearing a costume. */
 export function stripGroups(l: TabLayout): string[][] {
-  if (l.panes.length <= 1) return l.tabs.map((t) => [t])
-  const inGroup = new Set(l.panes)
+  // The split on screen, then every parked one: each drawn once, at its
+  // leftmost member, in its own column order.
+  const groups = [...(l.panes.length > 1 ? [l.panes] : []), ...(l.parked ?? []).map((g) => g.panes)]
+  if (!groups.length) return l.tabs.map((t) => [t])
+  const owner = new Map<string, number>()
+  groups.forEach((g, i) => g.forEach((p) => owner.set(p, i)))
+  const placed = new Set<number>()
   const items: string[][] = []
-  let placed = false
   for (const t of l.tabs) {
-    if (!inGroup.has(t)) {
-      items.push([t])
-      continue
-    }
-    if (!placed) {
-      items.push([...l.panes])
-      placed = true
+    const g = owner.get(t)
+    if (g === undefined) items.push([t])
+    else if (!placed.has(g)) {
+      items.push([...groups[g]])
+      placed.add(g)
     }
   }
   return items
 }
 
 /** Take one note out of the split — right-click a segment, or drag it out of
- *  the group. Its column closes; the note stays OPEN as an ordinary tab, which
- *  is exactly what closing a pane has always meant. */
+ *  the group. Its column closes; the note stays OPEN as an ordinary tab. This
+ *  is the only way to keep it: an x on it, the column's own included, closes
+ *  the note (see the rules at the top of this file). */
 export function takeOutOfSplit(l: TabLayout, path: string): TabLayout {
   const at = l.panes.indexOf(path)
-  return at === -1 ? l : closePane(l, at)
+  return at === -1 ? unpark(l, path) : closePane(l, at)
 }
 
 /** Split them all apart: back to one column, every other note still open as its
@@ -482,11 +691,14 @@ export function takeOutOfSplit(l: TabLayout, path: string): TabLayout {
  *  window with every real note hidden behind it — an answer to a question
  *  nobody asked. It collapses onto a real column instead, and the blank retires
  *  by the ordinary rules (`tidy`, invariant 3). */
-export function ungroupPanes(l: TabLayout): TabLayout {
+export function ungroupPanes(l: TabLayout, path?: string): TabLayout {
+  // A parked split's menu: that split comes apart into ordinary tabs.
+  const parked = path === undefined ? -1 : parkedIndex(l, path)
+  if (parked !== -1) return withParked(l, l.parked!.filter((_, i) => i !== parked))
   if (l.panes.length <= 1) return l
   const focused = l.panes[l.focus]
   const keep = focused === BLANK ? (l.panes.find((p) => p !== BLANK) ?? focused) : focused
-  return tidy({ tabs: l.tabs, panes: [keep], focus: 0, sizes: undefined })
+  return tidy({ ...l, panes: [keep], focus: 0, sizes: undefined })
 }
 
 /** Drag the whole group along the strip. Every note on screen travels together
@@ -495,10 +707,10 @@ export function ungroupPanes(l: TabLayout): TabLayout {
  *
  *  Dropping the group inside itself is a no-op rather than an error: there is
  *  no arrangement it could mean, and the strip offers no indicator there. */
-export function moveGroup(l: TabLayout, before: string | null): TabLayout {
-  if (l.panes.length <= 1) return l
-  if (before !== null && l.panes.includes(before)) return l
-  const group = l.panes.filter((p) => l.tabs.includes(p))
+export function moveGroup(l: TabLayout, before: string | null, members: string[] = l.panes): TabLayout {
+  if (members.length <= 1) return l
+  if (before !== null && members.includes(before)) return l
+  const group = members.filter((p) => l.tabs.includes(p))
   if (!group.length) return l
   const rest = l.tabs.filter((t) => !group.includes(t))
   const at = before === null ? rest.length : rest.indexOf(before)
@@ -520,7 +732,8 @@ export function moveTab(l: TabLayout, path: string, before: string | null): TabL
 export function renamePath(l: TabLayout, from: string, to: string): TabLayout {
   const map = (p: string): string =>
     p === from ? to : p.startsWith(from + '/') ? to + p.slice(from.length) : p
-  return { tabs: l.tabs.map(map), panes: l.panes.map(map), focus: l.focus, sizes: l.sizes }
+  const parked = l.parked?.map((g) => ({ ...g, panes: g.panes.map(map) }))
+  return withParked({ tabs: l.tabs.map(map), panes: l.panes.map(map), focus: l.focus, sizes: l.sizes }, parked ?? [])
 }
 
 /** Close every tab that lives under one of `roots` — binned, deleted, or gone

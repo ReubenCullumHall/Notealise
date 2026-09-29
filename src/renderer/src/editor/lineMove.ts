@@ -1,6 +1,7 @@
 import { EditorView, ViewPlugin, type PluginValue, type ViewUpdate } from '@codemirror/view'
 import { attachDragHandle, type DragSource } from './attachMove'
 import { blockRange, canMoveBlock } from './blockMove'
+import { openBlockLinkMenu } from './copyBlockLink'
 
 // The six-dot grip beside the line you are on, for moving a paragraph up or
 // down the note — the same handle a photo already has, and the same one the
@@ -31,7 +32,7 @@ const LINE_SOURCE: DragSource = {
     view.focus()
   },
   className: 'cm-line-grip',
-  label: 'Drag to move this block up or down in the note'
+  label: 'Drag to move this block up or down in the note. Right-click to copy a link to it'
 }
 
 /** How far into the gutter the grip sits. The gutter is 28px and the grip 20px,
@@ -52,6 +53,17 @@ class LineGrip implements PluginValue {
     // rebuilds. The cost is that it does not scroll on its own, which is what
     // the listener below is for.
     view.dom.appendChild(this.btn)
+    // Right-click: "Copy link to block" (copyBlockLink.ts). The press itself is
+    // kept from taking focus, or the editor would blur, the grip would hide
+    // under the pointer and the menu would open beside nothing.
+    this.btn.addEventListener('mousedown', (e) => {
+      if (e.button === 2) e.preventDefault()
+    })
+    this.btn.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      openBlockLinkMenu(view, e.clientX, e.clientY)
+    })
     this.onScroll = () => this.place()
     view.scrollDOM.addEventListener('scroll', this.onScroll, { passive: true })
     this.place()

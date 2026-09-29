@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import logoLight from './assets/logo/notealise-mark-circle-light.svg'
 import logoDark from './assets/logo/notealise-mark-circle-dark.svg'
@@ -20,6 +20,7 @@ import { ancestorsOf } from './links/model'
 import { ContextMenu } from './ContextMenu'
 import { SearchBar, SearchResults, type SearchHit } from './Search'
 import { TreeView, type Selection, type TreeActions } from './TreeView'
+import { motionOn } from './tabs/tabStyles'
 import {
   ARCHIVE_SORTS,
   archivedRoots,
@@ -37,6 +38,14 @@ import {
 // (legacy/src/App.jsx:157-1036) so the two apps read as the same product:
 // header + archive toggle, the spotlight search pill, the Note/Folder bar, a
 // Pinned section, the tree, and the archive and bin shelf views.
+
+/** Collapsing and showing the sidebar: how long, and on what curve. The panel's
+ *  own slide is CSS (app.css, `.sidebar-shell`) and repeats these two values —
+ *  change one, change both, or the panel icon arrives before or after the
+ *  panel does. A gentle start and a long settle (Reuben, 2026-09-25: "a bit
+ *  smoother and a tiny bit slower" than the 300ms quick-out it replaced). */
+const SIDEBAR_SLIDE_MS = 380
+const SIDEBAR_SLIDE_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 interface Props {
   /** The space-switch slide's current animation class, or '' — see App's
@@ -373,10 +382,159 @@ export function Sidebar({
   const SIDEBAR_DEFAULT = 288
   const SIDEBAR_NARROW = 220
   const [collapsed, setCollapsed] = useState(false)
+  // The panel icon is ONE object that travels (Reuben, 2026-09-25: it
+  // "glitches"). It used to be two: the header's collapse button slid away with
+  // the panel while a separate "show sidebar" button faded up in the corner, on
+  // top of the tab strip's bookmark — and on the way back that button vanished
+  // in a frame. Now the corner button starts exactly where the header button
+  // was, glides to the corner as the panel slides out, and glides back to hand
+  // over to the header button when it slides in. `returning` keeps it mounted
+  // for that trip home; the header button is hidden while the corner one is
+  // out, so there is never a second icon on screen.
+  const [returning, setReturning] = useState(false)
+  const headerBtn = useRef<HTMLButtonElement>(null)
+  const cornerBtn = useRef<HTMLButtonElement>(null)
+  // …and once it has landed it gets out of the way (Reuben, 2026-09-25: it sat
+  // on top of the tab strip's bookmark and hid it). `peek` is whether it is out
+  // in the corner; otherwise it is tucked off the window's left edge. Set with
+  // the collapse itself, so it lands visible and you see where it went.
+  const [peek, setPeek] = useState(false)
+  const peekRef = useRef(false)
+  peekRef.current = peek
+  const shut = (next: boolean): void => {
+    setCollapsed(next)
+    setReturning(!next && motionOn())
+    setPeek(next)
+  }
+
+  // Reaching for it: push the pointer against the window's left edge (any
+  // height) or into the very top-left corner and it nudges out. It stays while
+  // the pointer is on or near it, and tucks away a moment after it leaves.
+  // Hovering the bookmark itself never brings it out — that is the point.
+  useEffect(() => {
+    if (!collapsed) return
+    const EDGE = 8 // px in from the left edge, or down from the top near the corner
+    let timer = 0
+    const tuckIn = (ms: number): void => {
+      if (timer) return
+      timer = window.setTimeout(() => {
+        timer = 0
+        setPeek(false)
+      }, ms)
+    }
+    const stay = (): void => {
+      window.clearTimeout(timer)
+      timer = 0
+      setPeek(true)
+    }
+    // landed in the corner: hold a beat so you see where it went, then tuck
+    tuckIn(SIDEBAR_SLIDE_MS + 450)
+    const onMove = (e: PointerEvent): void => {
+      const x = e.clientX
+      const y = e.clientY
+      if (x <= EDGE || (y <= EDGE && x <= 64)) return stay()
+      if (!peekRef.current) return
+      const r = cornerBtn.current?.getBoundingClientRect()
+      const near = !!r && x >= r.left - 12 && x <= r.right + 12 && y >= r.top - 12 && y <= r.bottom + 12
+      if (near) stay()
+      else tuckIn(300)
+    }
+    // A window that is not against the screen's edge: the pointer leaves
+    // through its left side instead of stopping there, so that counts too.
+    const onLeave = (e: MouseEvent): void => {
+      if (e.clientX <= EDGE * 2) stay()
+    }
+    window.addEventListener('pointermove', onMove)
+    document.documentElement.addEventListener('mouseleave', onLeave)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('pointermove', onMove)
+      document.documentElement.removeEventListener('mouseleave', onLeave)
+    }
+  }, [collapsed])
   // Assigned on every render, like `revealRef` above — the ref is only ever
   // read from an event (a menu command), never during one of these renders, so
   // it is always the current setter by the time anything calls it.
-  if (collapseRef) collapseRef.current = () => setCollapsed((c) => !c)
+  if (collapseRef) collapseRef.current = () => shut(!collapsed)
+
+  // The icon's trip, on the panel's own timing so the two arrive together.
+  // Measured before paint, so its first frame is already in the right place.
+  useLayoutEffect(() => {
+    const corner = cornerBtn.current
+    const header = headerBtn.current
+    if (!corner || !header) return
+    if (!motionOn()) {
+      setReturning(false)
+      return
+    }
+    const look = (el: HTMLElement): Keyframe => {
+      const s = getComputedStyle(el)
+      return {
+        backgroundColor: s.backgroundColor,
+        borderColor: s.borderColor,
+        boxShadow: s.boxShadow,
+        backdropFilter: s.backdropFilter,
+        color: s.color
+      }
+    }
+    // Where it is now: part-way along if a trip was cut short (Cmd/Ctrl+S
+    // pressed twice quickly), otherwise the header button's spot.
+    const trip = corner.getAnimations().find((a) => a.id === 'sb-icon')
+    const was = corner.getBoundingClientRect()
+    const wasLook = trip ? look(corner) : null
+    trip?.cancel()
+    const restLook = look(corner)
+    // The header button's resting spot, from layout offsets rather than its
+    // rect: the panel is mid-slide, and offsets ignore that transform.
+    const aside = header.closest('aside')
+    if (!aside) return
+    let hx = 0
+    let hy = 0
+    for (let el: HTMLElement | null = header; el && el !== aside; el = el.offsetParent as HTMLElement | null) {
+      hx += el.offsetLeft
+      hy += el.offsetTop
+    }
+    const box = aside.getBoundingClientRect()
+    const home = { x: box.left + hx + header.offsetWidth / 2, y: box.top + hy + header.offsetHeight / 2 }
+    // Its own corner spot, from layout too: when it is coming home from tucked
+    // away, its CSS transform is still mid-change and a rect would include it.
+    // (It is position: fixed, so these offsets are from the window's corner.)
+    const at = { x: corner.offsetLeft + corner.offsetWidth / 2, y: corner.offsetTop + corner.offsetHeight / 2 }
+    const move = (p: { x: number; y: number }): string => `translate(${p.x - at.x}px, ${p.y - at.y}px)`
+    // The header button has no fill, border or shadow; the corner one does.
+    const homeLook: Keyframe = {
+      backgroundColor: 'rgba(0, 0, 0, 0)',
+      borderColor: 'rgba(0, 0, 0, 0)',
+      boxShadow: 'none',
+      backdropFilter: 'blur(0px)',
+      color: getComputedStyle(header).color
+    }
+    const opts = { duration: SIDEBAR_SLIDE_MS, easing: SIDEBAR_SLIDE_EASE, id: 'sb-icon' }
+    if (collapsed) {
+      const from = trip ? { x: was.left + was.width / 2, y: was.top + was.height / 2 } : home
+      corner.animate(
+        [
+          { transform: move(from), ...(wasLook ?? homeLook) },
+          // takes on its button fill early, so it reads as its own object
+          // before it reaches the tab strip
+          { offset: 0.6, ...restLook },
+          { transform: 'none', ...restLook }
+        ],
+        opts
+      )
+    } else {
+      const from = { x: was.left + was.width / 2, y: was.top + was.height / 2 }
+      const back = corner.animate(
+        [
+          { transform: move(from), ...(wasLook ?? restLook) },
+          { offset: 0.4, ...homeLook },
+          { transform: move(home), ...homeLook }
+        ],
+        { ...opts, fill: 'forwards' }
+      )
+      back.onfinish = () => setReturning(false)
+    }
+  }, [collapsed])
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
   const [resizing, setResizing] = useState(false)
   const narrow = !collapsed && sidebarWidth <= SIDEBAR_NARROW
@@ -412,6 +570,27 @@ export function Sidebar({
   const searching = searchHits !== null
   const selCount = selection.paths.size
   const clearSel = useCallback((): void => setSelection({ paths: new Set() }), [])
+
+  // The tree settles back in when you come back to it — from a search, the bin
+  // or the archive — with the same small rise those three views already arrive
+  // with (`.fade-in`); it was the one view that snapped in. Animates the list's
+  // own scroller rather than wrapping the tree in a new element, so the
+  // right-click on empty space and every drop target keep the same boxes.
+  // WAAPI with no fill, so nothing is left holding a transform afterwards.
+  const onTree = !searching && !inBin && !inArchive
+  const wasOnTree = useRef(onTree)
+  useLayoutEffect(() => {
+    const back = onTree && !wasOnTree.current
+    wasOnTree.current = onTree
+    if (!back || !motionOn()) return
+    listRef.current?.animate(
+      [
+        { opacity: 0, transform: 'translate3d(0, 5px, 0)' },
+        { opacity: 1, transform: 'none' }
+      ],
+      { duration: 240, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
+    )
+  }, [onTree])
 
   // Escape leaves selection mode. It is one of exactly two ways out (the other
   // is the Clear button below) — clicking the background deliberately does not
@@ -493,11 +672,14 @@ export function Sidebar({
   return (
     <>
     <aside
-      style={{ width: collapsed ? 0 : sidebarWidth }}
+      // `--sb-w` lets the contents keep the full width while the aside itself
+      // closes, so collapsing slides them away instead of squeezing them
+      // (app.css, `.sidebar-shell`).
+      style={{ width: collapsed ? 0 : sidebarWidth, '--sb-w': `${sidebarWidth}px` } as React.CSSProperties}
       className={
-        'relative flex h-full shrink-0 select-none flex-col overflow-hidden bg-surface/45 backdrop-blur ' +
-        (collapsed ? '' : 'border-r border-ink-300/25 ') +
-        (resizing ? '' : 'transition-[width] duration-150 ') +
+        'sidebar-shell relative flex h-full shrink-0 select-none flex-col overflow-hidden bg-surface/45 backdrop-blur ' +
+        (collapsed ? 'sb-shut ' : 'border-r border-ink-300/25 ') +
+        (resizing ? '' : 'sb-glide ') +
         (compactNav ? 'sidebar-narrow' : '')
       }
       onContextMenu={(e) => {
@@ -511,7 +693,7 @@ export function Sidebar({
         <div
           onMouseDown={startResize}
           className={
-            'absolute right-0 top-0 z-40 h-full w-1.5 cursor-col-resize select-none ' +
+            'sb-handle absolute right-0 top-0 z-40 h-full w-1.5 cursor-col-resize select-none ' +
             (resizing ? 'bg-brand-400/60' : 'hover:bg-brand-400/40')
           }
         />
@@ -526,9 +708,15 @@ export function Sidebar({
           {vaultName}
         </p>
         <button
-          onClick={() => setCollapsed(true)}
+          ref={headerBtn}
+          onClick={() => shut(true)}
           data-tip={'Collapse sidebar  (Cmd/Ctrl+S)'}
-          className="press flex shrink-0 items-center justify-center rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
+          className={
+            'press flex shrink-0 items-center justify-center rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+            // `invisible`, not opacity: it has to go in the same frame the
+            // corner button takes its place, and opacity is on its transition.
+            (collapsed || returning ? 'invisible' : '')
+          }
         >
           <Icon name="panelLeft" className="h-4 w-4" />
         </button>
@@ -572,7 +760,7 @@ export function Sidebar({
           lines whatever is selected, instead of it growing under your cursor as
           you add rows. */}
       {selCount > 0 && (
-        <div className="fade-in mx-3 mb-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] text-brand-600">
+        <div className="sb-inset fade-in mx-3 mb-1.5 rounded-lg bg-brand-50 px-3 py-1.5 text-[11px] text-brand-600">
           <div className="flex items-center gap-2">
             <span className="flex-1 truncate font-medium">{selCount} selected</span>
             {/* The second way to a colour, and the only one that reaches a whole
@@ -1004,7 +1192,7 @@ export function Sidebar({
           Under live evaluation, not yet logged to CHANGELOG.md's Unreleased.
           inset-x-3 (rather than a fixed width) is what lets them track the
           sidebar's width as it's resized. */}
-      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-40 flex items-end gap-2">
+      <div className="sb-strip pointer-events-none absolute inset-x-3 bottom-3 z-40 flex items-end gap-2">
         <SettingsButton
             settings={settings}
             onChange={onChangeSettings}
@@ -1140,11 +1328,21 @@ export function Sidebar({
     {/* A sibling of <aside>, not a fixed descendant of it: the aside's own
         backdrop-blur makes it a containing block for position:fixed, which
         would trap this at width 0 once collapsed. */}
-    {collapsed && (
+    {(collapsed || returning) && (
       <button
-        onClick={() => setCollapsed(false)}
+        ref={cornerBtn}
+        onClick={() => shut(false)}
+        // reached by Tab while tucked away: come out, so focus is visible
+        onFocus={() => setPeek(true)}
+        onBlur={() => setPeek(false)}
         data-tip={'Show sidebar  (Cmd/Ctrl+S)'}
-        className="press btn-edge fixed left-2 top-3 z-40 flex items-center justify-center rounded-lg border border-ink-300/30 bg-surface/90 p-1.5 text-ink-500 shadow-card backdrop-blur transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
+        className={
+          // No Tailwind `transition`: `.sb-corner` (app.css) carries the full
+          // list, since the slide in and out needs its own timings.
+          'sb-corner press btn-edge fixed left-2 top-3 z-40 flex items-center justify-center rounded-lg border border-ink-300/30 bg-surface/90 p-1.5 text-ink-500 shadow-card backdrop-blur hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+          // on its way home it is only a picture of the header button
+          (returning ? 'pointer-events-none' : collapsed && !peek ? 'sb-tucked' : '')
+        }
       >
         <Icon name="panelLeft" className="h-4 w-4" />
       </button>

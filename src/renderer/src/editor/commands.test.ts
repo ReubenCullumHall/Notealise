@@ -38,6 +38,7 @@ const PERSISTED_IDS = [
   'code',
   'codeBlock',
   'math',
+  'mathInline',
   'link',
   'table',
   'rule'
@@ -111,6 +112,14 @@ describe('matchesQuery', () => {
     const hits = SLASH_COMMANDS.filter((c) => matchesQuery(c, 'link'))
     expect(hits[0].id).toBe('wikilink')
     expect(hits.map((c) => c.id)).toContain('link')
+  })
+
+  it('offers the inline formula before inline code for "inline"', () => {
+    // Reuben typed "/inline" + Enter for an inline equation and got `code`
+    // (2026-09-27). Same rule as "link": the first hit is what Enter picks.
+    const hits = SLASH_COMMANDS.filter((c) => matchesQuery(c, 'inline'))
+    expect(hits[0].id).toBe('mathInline')
+    expect(hits.map((c) => c.id)).toContain('code')
   })
 
   it('offers everything for an empty query', () => {

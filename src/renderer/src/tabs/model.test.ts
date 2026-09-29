@@ -28,6 +28,9 @@ import {
   MIN_PANE_PX,
   paneSizes,
   resizePanes,
+  addTab,
+  showTab,
+  newBlankTab,
   type TabLayout
 } from './model'
 
@@ -54,6 +57,20 @@ const invariants = (l: TabLayout): void => {
   const rendered = paneSizes(l)
   expect(rendered).toHaveLength(l.panes.length)
   if (rendered.length) expect(rendered.reduce((a, b) => a + b, 0)).toBeCloseTo(1)
+  // 5: parked splits are real splits of open, off-screen notes, none shared
+  const seen = new Set(l.panes)
+  for (const g of l.parked ?? []) {
+    expect(g.panes.length).toBeGreaterThanOrEqual(2)
+    expect(g.panes).not.toContain(BLANK)
+    for (const p of g.panes) {
+      expect(l.tabs).toContain(p)
+      expect(seen.has(p)).toBe(false)
+      seen.add(p)
+    }
+    expect(g.focus).toBeLessThan(g.panes.length)
+    if (g.sizes !== undefined) expect(g.sizes).toHaveLength(g.panes.length)
+  }
+  if (l.parked) expect(l.parked.length).toBeGreaterThan(0)
 }
 
 /** Two columns, a.md | b.md. `opened` leaves only the LAST note in a pane, so
@@ -103,11 +120,14 @@ describe('opening', () => {
     expect(l.tabs).toEqual(['a.md', 'b.md', 'd.md'])
   })
 
-  it('only closes the outgoing note when the incoming one is already a tab', () => {
+  it('in a split, a sidebar click on a note outside it parks the split and shows that note alone', () => {
+    // Reuben, 2026-09-25: a note from outside the split must not take over one
+    // of its columns. Nothing closes, and the split waits as one joined tab.
     const split = splitAt(opened('a.md', 'b.md', 'c.md'), 'a.md', 0) // panes: a | c, b open
     const l = replaceActive({ ...split, focus: 1 }, 'b.md')
-    expect(l.panes).toEqual(['a.md', 'b.md'])
-    expect(l.tabs).toEqual(['a.md', 'b.md']) // c.md left, b.md stayed where it was
+    expect(l.panes).toEqual(['b.md'])
+    expect(l.tabs).toEqual(expect.arrayContaining(['a.md', 'b.md', 'c.md']))
+    expect(l.parked).toEqual([{ panes: ['a.md', 'c.md'], focus: 1, sizes: undefined }])
     invariants(l)
   })
 
@@ -180,7 +200,10 @@ describe('cycling', () => {
   it('skips notes another pane is already showing', () => {
     const l = splitAt(opened('a.md', 'b.md', 'c.md'), 'a.md', 0) // panes: a | c
     const next = cycle({ ...l, focus: 1 }, 1)
-    expect(next.panes).toEqual(['a.md', 'b.md']) // a is on screen, so c → b
+    // a is on screen, so c → b — and b is outside the split, so going to it
+    // parks the split rather than putting b in c's column.
+    expect(next.panes).toEqual(['b.md'])
+    expect(next.parked?.[0].panes).toEqual(['a.md', 'c.md'])
     invariants(next)
   })
 
@@ -676,5 +699,186 @@ describe('the strip when notes are sharing the screen', () => {
     expect(moveGroup(l, 'c.md')).toBe(l) // c.md is in the group
     const one = opened('a.md', 'b.md')
     expect(moveGroup(one, 'a.md')).toBe(one)
+  })
+})
+
+describe('a split is the user\'s arrangement (parked splits)', () => {
+  it('Cmd/Ctrl+click in a split opens a tab behind it and leaves every column alone', () => {
+    const l = addTab(twoCols(), 'c.md')
+    expect(l.panes).toEqual(['a.md', 'b.md'])
+    expect(l.tabs).toEqual(['a.md', 'b.md', 'c.md'])
+    invariants(l)
+  })
+
+  it('Cmd/Ctrl+click with one note on screen shows the new note, the old one staying open', () => {
+    const l = addTab(opened('a.md'), 'b.md')
+    expect(l.panes).toEqual(['b.md'])
+    expect(l.tabs).toEqual(['a.md', 'b.md'])
+    invariants(l)
+  })
+
+  it('clicking a tab never closes the one you were on', () => {
+    // It used to go through the sidebar's replace rule and close it.
+    const l = showTab(opened('a.md', 'b.md'), 'a.md')
+    expect(l.panes).toEqual(['a.md'])
+    expect(l.tabs).toEqual(['a.md', 'b.md'])
+    invariants(l)
+  })
+
+  it('a note opened from a split lands in the tab right after the split', () => {
+    const base = addTab(twoCols(), 'z.md') // a | b on screen, z behind
+    const l = replaceActive(base, 'c.md')
+    expect(l.tabs).toEqual(['a.md', 'b.md', 'c.md', 'z.md'])
+    expect(l.panes).toEqual(['c.md'])
+    invariants(l)
+  })
+
+  it('clicking a parked split brings it back as it was — columns, widths and focus', () => {
+    const split = { ...resizePanes(twoCols(), 1, 3, 1), focus: 1 }
+    const away = showTab(addTab(split, 'c.md'), 'c.md')
+    expect(away.panes).toEqual(['c.md'])
+    const back = showTab(away, 'a.md')
+    expect(back.panes).toEqual(['a.md', 'b.md'])
+    expect(back.sizes).toEqual(split.sizes)
+    expect(back.focus).toBe(0) // the column you clicked
+    expect(back.tabs).toContain('c.md') // the note you were on stays open
+    expect(back.parked).toBeUndefined()
+    invariants(back)
+  })
+
+  it('going from one split to another parks the first', () => {
+    const one = addTab(addTab(twoCols(), 'c.md'), 'd.md') // a | b, c and d behind
+    const away = showTab(one, 'c.md')
+    const two = splitAt(away, 'd.md', 1) // c | d on screen, a | b parked
+    const back = showTab(two, 'b.md')
+    expect(back.panes).toEqual(['a.md', 'b.md'])
+    expect(back.parked).toEqual([{ panes: ['c.md', 'd.md'], focus: 1, sizes: undefined }])
+    invariants(back)
+  })
+
+  it('closing a column\'s tab closes the column — nothing is pulled in to fill it', () => {
+    const l = closeTab(addTab(threeCols(), 'd.md'), 'b.md')
+    expect(l.panes).toEqual(['a.md', 'c.md'])
+    expect(l.tabs).toContain('d.md')
+    invariants(l)
+  })
+
+  it('closing the split\'s first note leaves the rest where the joined tab was', () => {
+    // a | b on screen, x open between them in the strip. The joined tab is drawn
+    // at a's place, so b must take that place rather than jump past x.
+    const l = moveTab(addTab(twoCols(), 'x.md'), 'x.md', 'b.md')
+    expect(stripGroups(l)).toEqual([['a.md', 'b.md'], ['x.md']])
+    const one = closeTab(l, 'a.md')
+    expect(one.tabs).toEqual(['b.md', 'x.md'])
+    expect(one.panes).toEqual(['b.md'])
+    invariants(one)
+    const three = moveTab(addTab(threeCols(), 'x.md'), 'x.md', 'b.md') // a | b | c, x after a
+    const two = closeTab(three, 'a.md')
+    expect(stripGroups(two)).toEqual([['b.md', 'c.md'], ['x.md']])
+    invariants(two)
+    // Any other member closing leaves the strip's order alone.
+    expect(closeTab(l, 'b.md').tabs).toEqual(['a.md', 'x.md'])
+  })
+
+  it('closing a column keeps what is left of the split in its place too', () => {
+    // The column's own x: the note stays open as a tab of its own, and the
+    // rest of the split sits straight after it rather than past x.
+    const l = moveTab(addTab(twoCols(), 'x.md'), 'x.md', 'b.md') // a | b, x between
+    const left = closePane(l, 0)
+    expect(left.tabs).toEqual(['a.md', 'b.md', 'x.md'])
+    expect(left.panes).toEqual(['b.md'])
+    invariants(left)
+    // Closing any other column leaves the strip's order alone.
+    expect(closePane(l, 1).tabs).toEqual(['a.md', 'x.md', 'b.md'])
+  })
+
+  it('the same for a parked split', () => {
+    const l = moveTab(addTab(twoCols(), 'x.md'), 'x.md', 'b.md')
+    const away = showTab(addTab(l, 'z.md'), 'z.md') // a | b parked
+    expect(stripGroups(away)).toEqual([['a.md', 'b.md'], ['x.md'], ['z.md']])
+    const one = closeTab(away, 'a.md')
+    expect(one.tabs).toEqual(['b.md', 'x.md', 'z.md'])
+    expect(one.parked).toBeUndefined()
+    invariants(one)
+  })
+
+  it('closing the last loose note brings a parked split back rather than splitting it up', () => {
+    const away = showTab(addTab(twoCols(), 'c.md'), 'c.md') // c alone, a | b parked
+    const l = closeTab(away, 'c.md')
+    expect(l.panes).toEqual(['a.md', 'b.md'])
+    expect(l.parked).toBeUndefined()
+    invariants(l)
+  })
+
+  it('closing a note in a parked split shrinks it, and a split of one comes apart', () => {
+    const away = showTab(addTab(threeCols(), 'd.md'), 'd.md') // a | b | c parked
+    const two = closeTab(away, 'b.md')
+    expect(two.parked?.[0].panes).toEqual(['a.md', 'c.md'])
+    invariants(two)
+    const none = closeTab(two, 'a.md')
+    expect(none.parked).toBeUndefined()
+    expect(none.tabs).toEqual(['c.md', 'd.md'])
+    invariants(none)
+  })
+
+  it('the + in a split opens a blank on its own; the blank is never parked', () => {
+    const l = newBlankTab(addTab(twoCols(), 'c.md'))
+    expect(l.panes).toEqual([BLANK])
+    expect(l.tabs).toEqual(['a.md', 'b.md', 'c.md', BLANK]) // at the end, by the +
+    expect(l.parked?.[0].panes).toEqual(['a.md', 'b.md'])
+    invariants(l)
+    // a split with a blank column parks without it
+    const withBlank = splitBlank(twoCols()) // a | blank | b (beside the focused a)
+    const off = showTab(addTab(withBlank, 'c.md'), 'c.md')
+    // (the blank was focused, so the tab filled it instead — see the blank rule)
+    expect(off.panes).toEqual(['a.md', 'c.md', 'b.md'])
+    const away = replaceActive(addTab({ ...off, focus: 0 }, 'd.md'), 'd.md')
+    expect(away.parked?.[0].panes).toEqual(['a.md', 'c.md', 'b.md'])
+    invariants(away)
+  })
+
+  it('draws each parked split as one joined tab at its leftmost member', () => {
+    const away = showTab(addTab(twoCols(), 'c.md'), 'c.md')
+    expect(stripGroups(away)).toEqual([['a.md', 'b.md'], ['c.md']])
+  })
+
+  it('taking a note out of, or ungrouping, a parked split leaves ordinary tabs', () => {
+    const away = showTab(addTab(threeCols(), 'd.md'), 'd.md')
+    expect(takeOutOfSplit(away, 'c.md').parked?.[0].panes).toEqual(['a.md', 'b.md'])
+    const apart = ungroupPanes(away, 'a.md')
+    expect(apart.parked).toBeUndefined()
+    expect(apart.panes).toEqual(['d.md'])
+    invariants(apart)
+  })
+
+  it('follows a rename into a parked split', () => {
+    const away = showTab(addTab(twoCols(), 'c.md'), 'c.md')
+    expect(renamePath(away, 'a.md', 'x.md').parked?.[0].panes).toEqual(['x.md', 'b.md'])
+  })
+
+  it('restores parked splits from a saved session, dropping any that no longer hold', () => {
+    const exists = (p: string): boolean => p !== 'gone.md'
+    const l = restoreLayout(
+      {
+        tabs: ['a.md', 'b.md', 'c.md', 'd.md', 'gone.md'],
+        panes: ['c.md'],
+        focus: 0,
+        parked: [
+          { panes: ['a.md', 'b.md'], focus: 1, sizes: [0.7, 0.3] },
+          { panes: ['d.md', 'gone.md'], focus: 0 }, // one member left: not a split
+          { panes: ['c.md', 'a.md'], focus: 0 } // both already claimed
+        ]
+      },
+      exists
+    )
+    expect(l.parked).toEqual([{ panes: ['a.md', 'b.md'], focus: 1, sizes: [0.7, 0.3] }])
+    invariants(l)
+  })
+
+  it('dragging a parked split along the strip moves it as one block', () => {
+    const away = showTab(addTab(addTab(twoCols(), 'c.md'), 'd.md'), 'c.md') // tabs a b c d
+    const moved = moveGroup(away, null, ['a.md', 'b.md'])
+    expect(moved.tabs).toEqual(['c.md', 'd.md', 'a.md', 'b.md'])
+    invariants(moved)
   })
 })

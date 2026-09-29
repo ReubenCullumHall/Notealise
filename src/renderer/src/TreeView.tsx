@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import type { ColorStyle } from '../../shared/settings'
@@ -6,6 +6,8 @@ import { inkOn, rgbChannels } from '../../shared/color'
 import { Icon } from './icons'
 import { colorOf, labelOf, metaOf, onDate, sortSiblings, splitMoved } from './organise/model'
 import { DRAG_NOTE } from './tabs/island'
+import { anyDeleted, pendingCreated, takeCreated, wasDeleted } from './organise/arrivals'
+import { BOUNCE, BOUNCE_MS, BOUNCE_SOFT, SOFT_Y1, bounceAt, motionOn } from './tabs/tabStyles'
 
 // The sidebar tree. Ported from the legacy prototype's row renderers
 // (legacy/src/App.jsx:521-722) so the two apps render the same sidebar: two-line
@@ -401,6 +403,8 @@ export function TreeView({
     return (
       <div
         key={node.path}
+        data-row-path={node.path}
+        data-row-box={node.path}
         role="button"
         tabIndex={0}
         className={rowClass(node, c) + (depth > 0 ? ' nested' : '') + (depth > 0 && colorFadeNested ? ' colorFade' : '')}
@@ -512,13 +516,14 @@ export function TreeView({
     const isPinned = metaOf(workspace, node.path).pinned === true
     const c = rowColor(node.path)
     return (
-      <div key={node.path}>
+      <div key={node.path} data-row-box={node.path}>
         <div
           // Scrolled to when the path bar reveals this folder. A ref on the row
           // rather than a querySelector from Sidebar: the row knows whether it
           // is the target, and a selector would have to guess which of the four
           // TreeViews rendered it.
           ref={node.path === revealTarget ? revealRef : undefined}
+          data-row-path={node.path}
           className={rowClass(node, c) + (depth > 0 ? ' nested' : '') + (depth > 0 && colorFadeNested ? ' colorFade' : '')}
           style={{ marginLeft: marginFor(depth), paddingLeft: 'var(--row-pad0)', ...colorVars(c) }}
           draggable={!shelved}
@@ -644,7 +649,7 @@ export function TreeView({
         </div>
 
         {expandedNow && (
-          <div className="relative mt-0.5">
+          <div className="relative mt-0.5" data-kids-of={node.path}>
             {/* Connects a folder's contents back to it — the guide line a flat
                 indent alone doesn't give you, so where a nested group ends is
                 as legible as where it starts. This folder's own box starts at
@@ -709,12 +714,248 @@ export function TreeView({
     )
   }
 
+  // A row made by New note / New folder grows in: its height opens on the tab
+  // strip's bounce and the rows below slide down with it, the same slow settle
+  // as a new tab. Only in the main tree — the other lists never show a note the
+  // moment it is made. See organise/arrivals.ts for what gets marked.
+  const box = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => {
+    // The tree and the Pinned list — the lists a note is made or binned in
+    // front of. The Archive list is a shelf, and nothing is created there.
+    if (!(mode === 'tree' || mode === 'pinned') || !box.current) return
+    for (const path of pendingCreated()) {
+      const row = box.current.querySelector<HTMLElement>(`[data-row-path="${CSS.escape(path)}"]`)
+      if (!row) continue
+      takeCreated(path)
+      if (!motionOn()) continue
+      // Inside a folder opening in this same render (opened straight after a
+      // note was made or put back in it), the folder's own grow brings the row
+      // in. Growing the row as well left the folder measured a row short while
+      // both moved.
+      // `wasOpen` is still the last render's here: the folder effect below,
+      // which updates it, runs after this one.
+      let kids = row.parentElement?.closest<HTMLElement>('[data-kids-of]')
+      let carried = false
+      while (kids && !carried) {
+        const p = kids.dataset.kidsOf as string
+        carried = !!wasOpen.current && !wasOpen.current.has(p) && expanded.has(p)
+        kids = kids.parentElement?.closest<HTMLElement>('[data-kids-of]')
+      }
+      if (carried) continue
+      const cs = getComputedStyle(row)
+      const h = row.getBoundingClientRect().height
+      row.style.overflow = 'hidden'
+      const grow = row.animate(
+        [
+          { height: '0px', minHeight: '0px', paddingTop: '0px', paddingBottom: '0px', marginTop: '0px', marginBottom: '0px' },
+          { height: `${h}px`, minHeight: '0px', paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, marginTop: cs.marginTop, marginBottom: cs.marginBottom }
+        ],
+        { duration: BOUNCE_MS, easing: BOUNCE }
+      )
+      const done = (): void => {
+        row.style.overflow = ''
+      }
+      grow.onfinish = done
+      grow.oncancel = done
+    }
+  })
+
+  // Move to bin, the other way round: the row shrinks shut and the rows below
+  // close up on the same bounce, overshooting a little and settling — the
+  // closing-tab motion turned on its side.
+  //
+  // React has already removed the row by the time this runs, so each render
+  // notes where every row sits; a binned one's old element is put back in its
+  // spot as an inert stand-in, shrunk, and removed. A folder's box holds its
+  // open contents too, so they go with it.
+  const placed = useRef(new Map<string, { el: HTMLElement; parent: Element; next: Element | null }>())
+  useLayoutEffect(() => {
+    if (!(mode === 'tree' || mode === 'pinned') || !box.current) return
+    const was = placed.current
+    const now = new Map<string, { el: HTMLElement; parent: Element; next: Element | null }>()
+    box.current.querySelectorAll<HTMLElement>('[data-row-box]').forEach((el) => {
+      if (el.parentElement)
+        now.set(el.dataset.rowBox as string, { el, parent: el.parentElement, next: el.nextElementSibling })
+    })
+    placed.current = now
+    if (!anyDeleted()) return
+    // Last first, so a run of binned neighbours each finds the one after it
+    // already back in place to sit in front of.
+    const gone = [...was.keys()].filter((p) => !now.has(p)).reverse()
+    const STEPS = 24
+    for (const path of gone) {
+      if (!wasDeleted(path) || !motionOn()) continue
+      const { el, parent, next } = was.get(path)!
+      if (!parent.isConnected) continue // inside a folder that went too
+      el.removeAttribute('data-row-box')
+      el.removeAttribute('data-row-path')
+      el.setAttribute('aria-hidden', 'true')
+      el.style.pointerEvents = 'none'
+      parent.insertBefore(el, next && next.isConnected && next.parentElement === parent ? next : null)
+      const cs = getComputedStyle(el)
+      const h = el.getBoundingClientRect().height
+      const [pt, pb, mt, mb] = [cs.paddingTop, cs.paddingBottom, cs.marginTop, cs.marginBottom].map(parseFloat)
+      el.style.overflow = 'hidden'
+      const frames: Keyframe[] = []
+      for (let i = 0; i <= STEPS; i++) {
+        const p = bounceAt(i / STEPS)
+        const left = Math.max(0, 1 - p)
+        frames.push({
+          offset: i / STEPS,
+          height: `${h * left}px`,
+          minHeight: '0px',
+          paddingTop: `${pt * left}px`,
+          paddingBottom: `${pb * left}px`,
+          marginTop: `${mt * left}px`,
+          // Past zero the rows below keep rising for the overshoot, then settle.
+          marginBottom: `${mb * left - h * Math.max(0, p - 1)}px`
+        })
+      }
+      const shrink = el.animate(frames, { duration: BOUNCE_MS, fill: 'forwards' })
+      const bye = (): void => el.remove()
+      shrink.onfinish = bye
+      shrink.oncancel = bye
+    }
+  })
+
+  // A folder's contents open and fold shut instead of appearing and vanishing
+  // (Reuben, 2026-09-25: "sidebar a bit more animated"). The same grow as a new
+  // row above, on the SOFT bounce: a folder can be twenty rows tall, and the
+  // full bounce's 6.6% of that is a long swing, where a 1.5% settle still reads
+  // as the same family. Keyed off `expanded` changing, so the chevron, a click
+  // on the name and the path bar's reveal all move alike, while contents that
+  // turn up for any other reason (the tree coming back from a search, a space
+  // switch) just appear.
+  //
+  // Folding shut is Move to bin's trick again: React has already removed the
+  // contents, so the old element goes back in as an inert stand-in and shrinks
+  // away. Opening a folder that is still folding shut starts from wherever the
+  // stand-in had got to, so a quick double-click turns round instead of jumping.
+  const wasOpen = useRef<Set<string> | null>(null)
+  const kids = useRef(new Map<string, { el: HTMLElement; parent: Element; next: Element | null }>())
+  const growing = useRef(new Map<string, { anim: Animation; h: number }>())
+  const folding = useRef(new Map<string, HTMLElement>())
+  useLayoutEffect(() => {
+    if (!box.current) return
+    const before = wasOpen.current
+    wasOpen.current = new Set(expanded)
+    const was = kids.current
+    const now = new Map<string, { el: HTMLElement; parent: Element; next: Element | null }>()
+    box.current.querySelectorAll<HTMLElement>('[data-kids-of]').forEach((el) => {
+      if (el.parentElement)
+        now.set(el.dataset.kidsOf as string, { el, parent: el.parentElement, next: el.nextElementSibling })
+    })
+    kids.current = now
+    if (!before || !motionOn()) return
+
+    // Shut: outermost first (document order), and a folder inside one that is
+    // already folding rides along inside its parent's stand-in.
+    const standIns: HTMLElement[] = []
+    for (const [path, { el, parent, next }] of was) {
+      if (!before.has(path) || expanded.has(path) || now.has(path)) continue
+      if (standIns.some((s) => s.contains(el))) continue
+      if (!parent.isConnected) continue // the folder itself went — binned, moved
+      // Still opening? Start from the height it had reached.
+      let from: number | null = null
+      const g = growing.current.get(path)
+      if (g) {
+        const p = g.anim.effect?.getComputedTiming().progress ?? 1
+        from = g.h * Math.min(1, Math.max(0, p))
+        g.anim.onfinish = null
+        g.anim.oncancel = null
+        g.anim.cancel()
+        growing.current.delete(path)
+      }
+      el.removeAttribute('data-kids-of')
+      el.querySelectorAll('[data-kids-of], [data-row-box], [data-row-path]').forEach((n) => {
+        n.removeAttribute('data-kids-of')
+        n.removeAttribute('data-row-box')
+        n.removeAttribute('data-row-path')
+      })
+      el.setAttribute('aria-hidden', 'true')
+      el.inert = true
+      el.style.pointerEvents = 'none'
+      el.style.overflow = 'hidden'
+      parent.insertBefore(el, next && next.isConnected && next.parentElement === parent ? next : null)
+      const h = from ?? el.getBoundingClientRect().height
+      const mt = parseFloat(getComputedStyle(el).marginTop)
+      const STEPS = 24
+      const frames: Keyframe[] = []
+      for (let i = 0; i <= STEPS; i++) {
+        const p = bounceAt(i / STEPS, SOFT_Y1)
+        const left = Math.max(0, 1 - p)
+        frames.push({
+          offset: i / STEPS,
+          height: `${h * left}px`,
+          minHeight: '0px',
+          marginTop: `${mt * left}px`,
+          // Past zero the rows below keep rising for the overshoot, then settle.
+          marginBottom: `${-h * Math.max(0, p - 1)}px`,
+          // Fading as they are covered, gone just before the end. Faster than
+          // this (gone by half shut) left an empty band where the rows had
+          // been for a frame or two before the gap closed.
+          opacity: Math.max(0, 1 - p / 0.8)
+        })
+      }
+      const shrink = el.animate(frames, { duration: BOUNCE_MS, fill: 'forwards' })
+      folding.current.set(path, el)
+      const bye = (): void => {
+        el.remove()
+        if (folding.current.get(path) === el) folding.current.delete(path)
+      }
+      shrink.onfinish = bye
+      shrink.oncancel = bye
+      standIns.push(el)
+    }
+
+    // Open — outermost only again: the path bar can open a whole chain at once,
+    // and a folder growing inside a folder that is itself growing leaves a gap
+    // at the bottom of the outer one, which was measured at full height.
+    const opened: HTMLElement[] = []
+    for (const [path, { el }] of now) {
+      if (!expanded.has(path) || before.has(path)) continue
+      if (opened.some((o) => o.contains(el))) continue
+      opened.push(el)
+      let from = 0
+      const old = folding.current.get(path)
+      if (old) {
+        from = old.getBoundingClientRect().height
+        folding.current.delete(path)
+        old.getAnimations().forEach((a) => {
+          a.onfinish = null
+          a.oncancel = null
+          a.cancel()
+        })
+        old.remove()
+      }
+      const mt = getComputedStyle(el).marginTop
+      const h = el.getBoundingClientRect().height
+      el.style.overflow = 'hidden'
+      const grow = el.animate(
+        [
+          { height: `${from}px`, minHeight: '0px', marginTop: from ? mt : '0px', opacity: from ? 1 : 0 },
+          { offset: 0.7, opacity: 1 },
+          { height: `${h}px`, minHeight: '0px', marginTop: mt, opacity: 1 }
+        ],
+        { duration: BOUNCE_MS, easing: BOUNCE_SOFT }
+      )
+      growing.current.set(path, { anim: grow, h })
+      const done = (): void => {
+        el.style.overflow = ''
+        if (growing.current.get(path)?.anim === grow) growing.current.delete(path)
+      }
+      grow.onfinish = done
+      grow.oncancel = done
+    }
+  })
+
   const { moved: movedTop, rest: restTop } = reorders
     ? splitMoved(nodes, workspace, freeArrange)
     : { moved: [] as TreeNode[], rest: sortSiblings(nodes, workspace, freeArrange) }
 
   return (
     <div
+      ref={box}
       onDragOver={(e) => {
         if (shelved || !dropOk(rootDir)) return
         e.preventDefault()

@@ -18,6 +18,7 @@
 //   [[#Interference]]            target "",     heading set — a jump within this note
 
 import { sanitizeFilename } from './filenames'
+import type { BlockInfo } from './blocks'
 
 /** One `[[…]]` occurrence in a document. */
 export interface WikiLink {
@@ -84,6 +85,13 @@ export interface LinkRow {
    *  reader treats an absent list as empty. Both real producers — main's
    *  `scanLinks` and `liveIndex` — always fill it. */
   embeds?: string[]
+  /** every block in this note that carries a link tag (` ^k3x9`), with the first
+   *  words a link to it shows — `shared/blocks.ts`. Optional for the same reason
+   *  `embeds` is; absent means "none known". */
+  blocks?: BlockInfo[]
+  /** every heading's words (`shared/blocks.ts` `indexHeadings`). Optional, like
+   *  the two above. */
+  headings?: string[]
 }
 
 /** A link as the index remembers it: enough to resolve it later, plus the line it

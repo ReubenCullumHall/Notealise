@@ -8,9 +8,11 @@ import {
 import { EditorView, keymap } from '@codemirror/view'
 import { colorPairs, pairAtEdge, SCAN } from './colorTags'
 import { isRaw } from './rawView'
+import { formatEdit, unsplittable } from './markPairs'
 import { type Layer, setLastLayer, tagFor } from './palette'
 import { recolor } from './colorModel'
 import { normalizeHex } from '../../../shared/color'
+import { scanLinks } from '../../../shared/links'
 
 // Thin CodeMirror wrappers over the pure model in colorModel.ts, plus the two
 // keyboard/cleanup behaviours the tags need now that they are NEVER shown
@@ -39,14 +41,31 @@ export function applyColor(view: EditorView, layer: Layer, name: string | null):
   // opens on the one you actually last reached for. `name === null` is a clear,
   // not a choice of layer, so it does not count.
   if (name !== null) setLastLayer(layer)
-  const r = recolor(view.state.doc.toString(), sel.from, sel.to, tagFor(layer), name)
+  // A colour tag inside backticks or a link is literal text, so widen the
+  // selection over any code span or link it only partly covers.
+  let { from, to } = sel
+  for (const a of unsplittable(view.state, view.state.doc.lineAt(from).from, view.state.doc.lineAt(to).to)) {
+    if (a.from < to && a.to > from) {
+      from = Math.min(from, a.from)
+      to = Math.max(to, a.to)
+    }
+  }
+  // `[[Links]]` are not text to colour: the words around one take the colour,
+  // the link itself never does (Reuben, 2026-09-29). It used to be wrapped whole.
+  const lineFrom = view.state.doc.lineAt(from).from
+  const links = scanLinks(view.state.doc.sliceString(lineFrom, view.state.doc.lineAt(to).to), lineFrom)
+  const r = recolor(view.state.doc.toString(), from, to, tagFor(layer), name, links)
   if (view.state.doc.sliceString(r.from, r.to) === r.insert) {
     view.focus() // nothing to change (e.g. clearing a layer that isn't there)
     return
   }
   view.dispatch({
     changes: { from: r.from, to: r.to, insert: r.insert },
-    selection: { anchor: r.selFrom, head: r.selTo }
+    selection: { anchor: r.selFrom, head: r.selTo },
+    // Deliberate, so neither keep-pairs-whole mend second-guesses it: recolor
+    // rewrites a stretch that can hold the OTHER layer's tag, which a mend read
+    // as deleted and wrote back a second time (`here</mark></mark>`).
+    annotations: formatEdit.of(true)
   })
   view.focus()
 }
@@ -129,6 +148,9 @@ const mendColorPairs = EditorState.transactionFilter.of((tr) => {
   // yours to edit. Putting a `</mark>` back that you just deliberately deleted,
   // while you are looking straight at it, is the worst version of this feature.
   if (isRaw(tr.startState)) return tr
+  // A style toggle rewrote marks on purpose (markPairs.ts's formatEdit): a tag
+  // it replaced and wrote back is not a tag you deleted.
+  if (tr.annotation(formatEdit)) return tr
   const old = tr.startState
   const newDoc = tr.newDoc
   const changes: ChangeSpec[] = []

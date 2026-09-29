@@ -1,8 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ContextMenu } from '../ContextMenu'
 import { Icon } from '../icons'
-import { dragCarriesNotes, DRAG_CHIP, pathsFromDrag } from './island'
-import { SEG_BASE, SEG_OFF, SEG_ON, TAB_BASE, TAB_OFF } from './tabStyles'
+import { dragCarriesNotes, DRAG_CHIP, DRAG_FROM_STRIP, pathsFromDrag } from './island'
+import {
+  BOUNCE_MS,
+  BOUNCE_SOFT,
+  bounceAt,
+  motionOn,
+  SOFT_Y1,
+  SEG_BASE,
+  SEG_OFF,
+  SEG_ON,
+  TAB_BASE,
+  TAB_OFF
+} from './tabStyles'
 
 interface Props {
   /** what this space calls its island, already defaulted — never empty */
@@ -19,8 +30,9 @@ interface Props {
   /** click a chip: open it as an ordinary tab */
   onOpen: (path: string) => void
   onRemove: (path: string) => void
-  /** `paths` land in front of `before` (null = at the end) */
-  onDropNotes: (paths: string[], before: string | null) => void
+  /** `paths` land in front of `before` (null = at the end). `fromStrip` — the
+   *  drag was a tab pulled off the tab strip. */
+  onDropNotes: (paths: string[], before: string | null, fromStrip: boolean) => void
 }
 
 const titleOf = (p: string): string => {
@@ -45,11 +57,8 @@ const folderOf = (p: string): string => {
  *  It is here because Reuben asked for it by name, on a click-driven change
  *  of state rather than a hover, and it stays off with the rest of the app's
  *  motion (`data-motion="off"`, or the OS's reduce-motion setting). */
-const BOUNCE_MS = 460
-const BOUNCE = 'cubic-bezier(0.34, 1.45, 0.64, 1)'
-const motionOn = (): boolean =>
-  document.documentElement.dataset.motion !== 'off' &&
-  !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+// BOUNCE_MS, BOUNCE and motionOn live in tabStyles.ts: the + button's new tab
+// grows in on the same curve (TabStrip.tsx).
 
 /** A horizontal mask that fades out whichever edges have more past them. */
 const FADE = '28px'
@@ -228,7 +237,7 @@ export function Island({
     // — the island holds notes, so anything without a note's extension is
     // dropped on the floor rather than becoming a chip that cannot open.
     const files = paths.filter((p) => p.toLowerCase().endsWith('.md'))
-    if (files.length) onDropNotes(files, before ?? null)
+    if (files.length) onDropNotes(files, before ?? null, e.dataTransfer.types.includes(DRAG_FROM_STRIP))
     leave()
   }
 
@@ -280,10 +289,34 @@ export function Island({
     // width on the way out and under it on the way back, and chips spilling
     // over the tabs for those frames is exactly the fault the width cap fixed.
     el.style.overflow = 'hidden'
-    const width = el.animate([{ width: `${from}px` }, { width: `${to}px` }], {
-      duration: BOUNCE_MS,
-      easing: BOUNCE
-    })
+    // Softer than it was (Reuben, 2026-09-24: "it needs to bounce but not
+    // overlap other features/buttons"). Opening still swings a little wide.
+    // Folding never gets narrower than the folded bookmark — it used to dip
+    // 10px under it, cutting the count off and sliding the divider over the
+    // bookmark — so its settle is carried by the strip instead, capped just
+    // short of the gap, the same way a closing tab's is.
+    let width: Animation
+    if (expanded) {
+      width = el.animate([{ width: `${from}px` }, { width: `${to}px` }], {
+        duration: BOUNCE_MS,
+        easing: BOUNCE_SOFT
+      })
+    } else {
+      const strip = el.closest('.tab-strip')
+      const gap = strip ? parseFloat(getComputedStyle(strip).columnGap) || 0 : 0
+      const settle = Math.max(0, gap - 1)
+      const STEPS = 24
+      const frames: Keyframe[] = []
+      for (let i = 0; i <= STEPS; i++) {
+        const p = bounceAt(i / STEPS, SOFT_Y1)
+        frames.push({
+          offset: i / STEPS,
+          width: `${to + (from - to) * Math.max(0, 1 - p)}px`,
+          marginRight: `${-Math.min(settle, (from - to) * Math.max(0, p - 1))}px`
+        })
+      }
+      width = el.animate(frames, { duration: BOUNCE_MS })
+    }
     const done = (): void => {
       el.style.overflow = ''
       lastWidth.current = el.getBoundingClientRect().width

@@ -11,6 +11,11 @@ import { selectionIsEmbed } from './attachSelect'
 import { rawViewOf } from './rawView'
 import { mediaSourceOf } from './mediaSource'
 import type { Layer } from './palette'
+import { blockIdOf, blockLineOf } from '../../../shared/blocks'
+import { scanLinks } from '../../../shared/links'
+import { findHeading, linkTargets, targetAtLine } from './blockIds'
+import { flashLines } from './blockFlash'
+import { relinkClosed, relinkOpen } from './relink'
 
 interface Props {
   /** vault-relative path of the open note (identity for cursor/scroll memory) */
@@ -38,6 +43,14 @@ interface Props {
   /** Markdown pro: show this note as raw Markdown — every syntax mark visible,
    *  tables and maths as their source. Styling is untouched either way. */
   raw?: boolean
+}
+
+/** Is the selection wholly inside one `[[link]]`? */
+function insideWikiLink(state: EditorState): boolean {
+  const { from, to } = state.selection.main
+  const line = state.doc.lineAt(from)
+  if (to > line.to) return false
+  return scanLinks(line.text, line.from).some((l) => from >= l.from && to <= l.to)
 }
 
 interface Saved {
@@ -142,8 +155,10 @@ export function CodeEditor({
     const box = container.current
     // A selected EMBED is not selected text: the grip selects a photo or video
     // as one object (attachSelect), and offering to bold or highlight it makes
-    // no sense. Its own affordance is the ring plus Backspace.
-    if (sel.empty || !box || selectionIsEmbed(view.state)) {
+    // no sense. Its own affordance is the ring plus Backspace. Nor is a
+    // selection inside a `[[link]]` — a link takes no colour (Reuben,
+    // 2026-09-29), so a colour bar there would offer what can't happen.
+    if (sel.empty || !box || selectionIsEmbed(view.state) || insideWikiLink(view.state)) {
       cancelSettle()
       setTb(null)
       return
@@ -253,7 +268,12 @@ export function CodeEditor({
           rawBox.current.of(rawViewOf(!!rawRef.current)),
           mediaSourceBox.current.of(mediaSourceOf(!!mediaSourceRef.current)),
           EditorView.updateListener.of((u) => {
-            if (u.docChanged && !programmatic.current) onChangeRef.current(u.state.doc.toString())
+            // While a link is being re-pointed (relink.ts) the text holds a
+            // half-made link, which must never be saved — not by the autosave,
+            // and not into the note you leave if you switch notes mid-choice.
+            // What is passed on is the text as it stands when the choice ends.
+            const saveable = !relinkOpen(u.state) && (u.docChanged || relinkClosed(u.startState, u.state))
+            if (saveable && !programmatic.current) onChangeRef.current(u.state.doc.toString())
             if (u.selectionSet || u.docChanged || u.geometryChanged) refreshToolbar(u.view)
           })
         ]
@@ -343,27 +363,38 @@ export function CodeEditor({
     viewRef.current?.dispatch({ effects: setLinkEnv.of(env) })
   }, [env])
 
-  // `[[Note#Heading]]`: the note opens first and the heading is found second.
-  // Keyed on `version` as well as the heading, because the document arrives in a
-  // separate effect and searching it before it lands finds nothing.
+  // `[[Note#Heading]]` and `[[Note#^k3x9]]`: the note opens first and the
+  // heading or block is found second. Keyed on `version` as well, because the
+  // document arrives in a separate effect and searching it before it lands
+  // finds nothing.
   useEffect(() => {
     const view = viewRef.current
     if (!view || !revealHeading) return
-    const want = revealHeading.trim().toLowerCase()
-    for (let n = 1; n <= view.state.doc.lines; n++) {
-      const line = view.state.doc.line(n)
-      const m = /^#{1,6}\s+(.*)$/.exec(line.text)
-      if (!m || m[1].trim().toLowerCase() !== want) continue
-      view.dispatch({
-        selection: { anchor: line.from },
-        effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 24 })
-      })
-      view.focus()
-      return
+    const doc = view.state.doc
+    let found: number | null = null
+    const id = blockIdOf(revealHeading)
+    if (id) {
+      found = blockLineOf(doc.toString(), id)
+    } else {
+      // By its words, or by the path of headings above it when another heading
+      // shares them (`findHeading`). Read from the syntax tree, so a `# comment`
+      // line inside a code block is never taken for a heading.
+      found = findHeading(linkTargets(view.state), revealHeading)?.line ?? null
     }
-    // No such heading: the note is open and the cursor is at the top, which is
-    // where it would have been anyway. Silently landing at the start beats an
-    // error about a heading the user can simply see isn't there.
+    // Not there: the note is open and the cursor is at the top, which is where
+    // it would have been anyway. Silently landing at the start beats an error
+    // about a heading the user can simply see isn't there.
+    if (found === null) return
+    const line = doc.line(found)
+    const end = doc.line(targetAtLine(view.state, found)?.endLine ?? found)
+    view.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 24 }),
+      // `select`, so cursorSnap moves it past a list item's hidden bullet
+      userEvent: 'select'
+    })
+    flashLines(view, line.from, end.from)
+    view.focus()
   }, [revealHeading, path, version])
 
   // "Show me where this picture is." Same shape as the heading jump above,

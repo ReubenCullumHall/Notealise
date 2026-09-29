@@ -8,10 +8,12 @@ import type { MarkerKind } from './formatModel'
 import {
   codeBlock,
   inlineCode,
+  insertInlineMath,
   insertMath,
   link,
   table,
   toggleBlock,
+  toggleList,
   horizontalRule,
   wikiLink
 } from './formatCommands'
@@ -171,6 +173,19 @@ export const EDITOR_COMMANDS: EditorCommand[] = [
     run: block('checklist')
   },
   {
+    id: 'toggle',
+    label: 'Toggle list',
+    hint: 'A line with an arrow that hides what is inside it  (type > then space)',
+    group: 'Lists',
+    glyph: iconFace('toggle'),
+    terms: ['toggle', 'collapse', 'fold', 'hide', 'expand', 'dropdown', 'details', 'accordion', '>'],
+    // Button: a second press takes the toggle away again. "/": always makes one.
+    run: (view, slash) => {
+      consume(view, slash)
+      toggleList(view, slash ? 'set' : 'toggle')
+    }
+  },
+  {
     id: 'quote',
     label: 'Quote',
     hint: 'Indented quote block',
@@ -178,6 +193,21 @@ export const EDITOR_COMMANDS: EditorCommand[] = [
     glyph: iconFace('quote'),
     terms: ['quote', 'blockquote', 'cite'],
     run: block('quote')
+  },
+  {
+    // Ahead of Inline code, so "/inline" + Enter gives the maths: Reuben typed
+    // exactly that for an inline equation and got `code` (2026-09-27). The "/"
+    // menu keeps this list's order (completions.ts, filter: false).
+    id: 'mathInline',
+    label: 'Inline formula',
+    hint: 'A $…$ formula inside a sentence',
+    group: 'Blocks',
+    glyph: textFace('$x$', 'font-display italic'),
+    terms: ['math', 'latex', 'formula', 'equation', 'tex', 'inline'],
+    run: insert(insertInlineMath),
+    // Nothing is written until you type in the maths box: an empty inline
+    // formula has no Markdown form (`$$` would start a display block).
+    deferred: true
   },
   {
     id: 'code',
@@ -203,7 +233,7 @@ export const EDITOR_COMMANDS: EditorCommand[] = [
     hint: 'A $$…$$ maths block  (Ctrl/Cmd+Shift+L)',
     group: 'Blocks',
     glyph: textFace('ƒx', 'font-display italic'),
-    terms: ['math', 'latex', 'formula', 'equation', 'tex'],
+    terms: ['math', 'latex', 'formula', 'equation', 'tex', 'block'],
     run: insert(insertMath)
   },
   {

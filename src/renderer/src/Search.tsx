@@ -79,7 +79,10 @@ export function SearchBar({
 }: Props): React.JSX.Element {
   return (
     <div className="px-3 pb-2">
-      <div className="btn-edge flex items-center gap-1.5 rounded-full border border-ink-300/30 bg-surface/70 py-1.5 pl-3 pr-1.5 focus-within:border-accent-300 focus-within:ring-4 focus-within:ring-accent-100">
+      {/* The focus border and glow live in app.css (`.search-pill`), not as
+          `focus-within:` utilities, because they fade in and out now and the
+          two directions need different timings. */}
+      <div className="search-pill btn-edge flex items-center gap-1.5 rounded-full border border-ink-300/30 bg-surface/70 py-1.5 pl-3 pr-1.5">
         {/* Quieter than the ink ramp's own floor: at full --ink-300 the glyph
             and the divider read as controls you were meant to do something
             with. They are furniture, so they sit back into the pill and let

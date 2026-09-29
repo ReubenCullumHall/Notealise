@@ -2,11 +2,14 @@ import { Decoration, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import type { SyntaxNode } from '@lezer/common'
 import katex from 'katex'
-import { overlapsSelection, type Pass } from './livePreview'
+import type { Pass } from './livePreview'
+import { mathEditOf } from './mathEdit'
 
 // LaTeX math via KaTeX. Block math is $$…$$, inline is $…$ (both valid CommonMark
-// math, so files still render in Obsidian/GitHub). Off the cursor line the math is
-// replaced with a rendered widget; on the cursor line the raw $…$ shows for editing.
+// math, so files still render in Obsidian/GitHub). The math is always replaced
+// with a rendered widget — the raw $…$ never shows outside Markdown pro (Reuben,
+// 2026-09-27: Backspacing the space after a formula flipped it to its dollar
+// signs). It is edited in the maths box instead (mathEditor.ts).
 class MathWidget extends WidgetType {
   constructor(
     readonly latex: string,
@@ -60,8 +63,9 @@ export function inCode(node: SyntaxNode | null): boolean {
 // Scan for single-line $$…$$ and inline $…$, emitting absolute offsets. Multi-line
 // $$ blocks are left raw (a ViewPlugin cannot replace across line breaks). Escaped
 // \$ is skipped; inline delimiters may not be space-adjacent (so "$5 and $10" is
-// not math).
-function scanMath(
+// not math). Exported for mathEditor.ts, so a click on a drawn formula finds
+// the same span this pass drew.
+export function scanMath(
   text: string,
   base: number,
   emit: (from: number, to: number, latex: string, display: boolean) => void
@@ -124,12 +128,12 @@ function scanMath(
 export const mathPass: Pass = (view, _active, push) => {
   const tree = syntaxTree(view.state)
   const doc = view.state.doc
+  // The formula open in the maths box (or just closed from it) is drawn by
+  // mathEditor.ts, live as you type, so it is left alone here.
+  const edit = mathEditOf(view.state)
   for (const { from, to } of view.visibleRanges) {
     scanMath(doc.sliceString(from, to), from, (mFrom, mTo, latex, display) => {
-      // the math span itself, not the whole line: finishing "$x$" and typing on
-      // past it (same line) should re-render it even though the cursor is
-      // still on that line
-      if (overlapsSelection(view, mFrom, mTo)) return
+      if (edit && mFrom < edit.to && mTo > edit.from) return
       if (inCode(tree.resolveInner(mFrom, 1))) return
       push(mFrom, mTo, Decoration.replace({ widget: new MathWidget(latex, display) }), true)
     })

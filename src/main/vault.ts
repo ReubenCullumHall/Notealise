@@ -7,6 +7,7 @@ import { toPreviewLine } from '../shared/plainText'
 import { indexLinks, stripMd, type LinkRow } from '../shared/links'
 import { sanitizeFilename } from '../shared/filenames'
 import { indexEmbeds } from '../shared/attachments'
+import { indexBlocks, indexHeadings } from '../shared/blocks'
 import { heldPath, RECOVERY_DIR, TRASH_DIR } from '../shared/workspace'
 
 // ---------------------------------------------------------------------------
@@ -406,7 +407,7 @@ export async function scanLinks(paths?: string[]): Promise<LinkRow[]> {
   for (const abs of files) {
     const text = await fs.readFile(abs, 'utf8').catch(() => null)
     if (text === null) continue // deleted between the watcher event and here, or unreadable
-    rows.push({ path: toRel(abs), links: indexLinks(text), embeds: indexEmbeds(text) })
+    rows.push({ path: toRel(abs), links: indexLinks(text), embeds: indexEmbeds(text), blocks: indexBlocks(text), headings: indexHeadings(text) })
   }
   return rows
 }

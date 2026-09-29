@@ -14,6 +14,7 @@ import { SourceFolder } from './SourceFolder'
 import { TransferData } from './TransferData'
 import { Recovery } from './Recovery'
 import { ImportPanel } from '../import/ImportPanel'
+import { motionOn } from '../tabs/tabStyles'
 import { DATE_FORMATS, NUMBER_FORMATS, formatDate, localZone, timezones } from '../intl'
 import { MAC_INSTALL_GUIDE_URL, type UpdateStatus } from '../../../shared/update'
 import type { PresetActions } from './Presets'
@@ -703,6 +704,43 @@ function SettingsWindow({
    *  scrolls it to the setting (`landing`, below). */
   const pageRef = useRef<HTMLDivElement>(null)
 
+  // The window flies out of the gear as a clean sheet, then fills: the nav
+  // ripples in top to bottom, then the page (Reuben, 2026-09-25). Started the
+  // moment the genie is armed, so the delays count from its first frame. WAAPI
+  // rather than CSS so it plays exactly once per opening — a CSS entrance would
+  // replay every time the nav remounts, which it does whenever a settings
+  // search is cleared. No `fill: forwards`: the content rests at no transform,
+  // which Windows needs for sharp text (CLAUDE.md).
+  const navRef = useRef<HTMLElement>(null)
+  useLayoutEffect(() => {
+    if (!armed || !motionOn()) return
+    const rise = [
+      { opacity: 0, transform: 'translateY(6px)' },
+      { opacity: 1, transform: 'none' }
+    ]
+    const ease = 'cubic-bezier(0.16, 1, 0.3, 1)'
+    navRef.current?.querySelectorAll<HTMLElement>('[data-arrive]').forEach((el, i) => {
+      el.animate(rise, { duration: 300, delay: 90 + i * 12, easing: ease, fill: 'backwards' })
+    })
+    pageRef.current?.animate(rise, { duration: 340, delay: 150, easing: ease, fill: 'backwards' })
+  }, [armed])
+
+  // Changing page settles the new one in with the same small rise, instead of
+  // swapping it in a single frame. The first render is the opening above.
+  const shownSection = useRef(section)
+  useLayoutEffect(() => {
+    if (shownSection.current === section) return
+    shownSection.current = section
+    if (!motionOn()) return
+    pageRef.current?.animate(
+      [
+        { opacity: 0, transform: 'translateY(4px)' },
+        { opacity: 1, transform: 'none' }
+      ],
+      { duration: 240, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
+    )
+  }, [section])
+
   /** Where a search result goes: its page (and tab, and fold), and then the
    *  setting itself. Landing on the right page wasn't enough — testing every
    *  result on 2026-09-29 found eleven that opened the right page or fold
@@ -807,12 +845,13 @@ function SettingsWindow({
         {/* `gap-2`: six entries in a tall column read as a cramped block at
             the old 2px gap (Reuben, 2026-09-29: "space the icons out a bit
             more"). */}
-        <nav aria-label="Settings pages" className="flex w-48 shrink-0 flex-col gap-2 border-r border-ink-300/20 p-2">
+        <nav ref={navRef} aria-label="Settings pages" className="flex w-48 shrink-0 flex-col gap-2 border-r border-ink-300/20 p-2">
           {GROUPS.map((g) => {
             const on = group.id === g.id
             return (
               <button
                 key={g.id}
+                data-arrive
                 onClick={() => goTo(g.pages[0].id)}
                 aria-current={on}
                 className={

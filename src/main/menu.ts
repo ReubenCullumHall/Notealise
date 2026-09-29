@@ -129,8 +129,14 @@ export function installMenu(): void {
             { role: 'front' }
           ]
         }
-      : // Windows' stock window menu binds Alt+F4, not Ctrl+W, so it can stay.
-        { role: 'windowMenu' }
+      : // Windows' stock window menu ALSO binds Ctrl+W (its Close item), and on
+        // Windows closing the window quits the app. Whenever the tab keyboard
+        // lets Ctrl+W through — the key held down (repeats are ignored), or no
+        // tab open — a real Ctrl+W shut the whole app (found 2026-09-28 with
+        // real OS keys; CDP keys skip the menu, which is why no earlier check
+        // saw it). So the same hand-built menu as the Mac's, with Close on
+        // Shift+Ctrl+W.
+        { label: 'Window', submenu: [{ role: 'minimize' }, closeWindow] }
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }

@@ -5,7 +5,10 @@ import { search, searchKeymap } from '@codemirror/search'
 import { drawSelection, EditorView, keymap } from '@codemirror/view'
 import { editorStyling } from './highlight'
 import { colorEditing } from './colorCommands'
+import { markEditing } from './markEditing'
+import { cursorSnap } from './cursorSnap'
 import { livePreview } from './livePreview'
+import { linkEdges } from './linkEdges'
 import { imageClick } from './imagePass'
 import { attachInput } from './attachInput'
 import { attachDeleteKeys, embedSelectionAttr } from './attachSelect'
@@ -14,8 +17,14 @@ import { webLinkGestures } from './webLinkPass'
 import { taskClick } from './taskPass'
 import { blockMath } from './blockMath'
 import { ruleSnap } from './ruleSnap'
+import { mathEditor } from './mathEditor'
 import { blockTable } from './blockTable'
+import { toggleList } from './toggleList'
+import { toggleMarkdown } from './toggleModel'
 import { lineMove } from './lineMove'
+import { blockFlash } from './blockFlash'
+import { dropCopiedTags } from './blockIds'
+import { relink } from './relink'
 import { registerView } from './viewRegistry'
 import { applyColor } from './colorCommands'
 import { completionExtension } from './completions'
@@ -80,7 +89,9 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // searchKeymap binding (Mod-f open, Mod-g/F3 next, Escape close, Mod-d
     // select-next-occurrence, Mod-Alt-g goto-line) is free.
     keymap.of(searchKeymap),
-    markdown({ base: markdownLanguage }),
+    // `toggleMarkdown` teaches the parser the `<details>` title and end lines
+    // a toggle list is stored as (toggleModel.ts).
+    markdown({ base: markdownLanguage, extensions: [toggleMarkdown] }),
     EditorView.lineWrapping,
     // Stop switching the machine's OWN spell checker off. CodeMirror hardcodes
     // `spellcheck: "false"` onto its editable element (view/index.js's
@@ -111,22 +122,43 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     embedSelectionAttr,
     scrollbarReveal,
     livePreview,
+    // Backspace/Delete just beside a link edit the text you can see rather
+    // than the hidden brackets (linkEdges.ts).
+    linkEdges,
     // Backspace at a colour tag's edge + the empty-pair sweep. Beside
     // livePreview because the two are halves of one thing: that hides the tags,
     // this keeps them editable while hidden.
     colorEditing,
+    // The same two safety nets for bold/italic/strike/code/<u> and friends,
+    // whose marks are also never shown now (markEditing.ts).
+    markEditing,
+    // Keeps the cursor on the visible side of hidden marks (clicks, End, Home,
+    // Enter) — the other half of never showing them (cursorSnap.ts).
+    cursorSnap,
     imageClick,
     attachInput,
     webLinkGestures,
     taskClick,
+    // Toggle lists: the arrow, the indent and the hidden lines (toggleList.ts).
+    // Ahead of blockMath and blockTable, which ask it what is hidden.
+    toggleList,
     blockMath,
     // Measures each formula on its own line so the Lined look can round it up
     // to whole rules (ruleSnap.ts, app.css).
     ruleSnap,
+    // The maths box: insert or click a formula and edit it in a box under the
+    // line while it redraws as you type (mathEditor.ts).
+    mathEditor,
     blockTable,
     // The six-dot grip beside the active line (lineMove.ts). After the passes,
     // so it never competes with a widget for the same gesture.
     lineMove,
+    // The heading or block a link lands on, lit for a moment (blockFlash.ts).
+    blockFlash,
+    // A pasted copy of a tagged block drops the copy's tag (blockIds.ts).
+    dropCopiedTags,
+    // Right-click a link to point it somewhere else (relink.ts).
+    relink,
     // Makes this view findable by a drag that starts in another pane
     // (viewRegistry.ts) — the one place in editor/ that looks sideways.
     registerView,

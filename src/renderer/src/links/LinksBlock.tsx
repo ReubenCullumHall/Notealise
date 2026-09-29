@@ -87,7 +87,7 @@ function Chip({
       rect: { left: r.left, top: r.top, bottom: r.bottom }
     })
   }
-  const label = entry.title + (entry.heading ? ' › ' + entry.heading : '')
+  const label = entry.title + (entry.headingText ? ' › ' + entry.headingText : '')
   return (
     <span className="relative shrink-0">
       <button

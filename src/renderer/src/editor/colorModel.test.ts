@@ -165,3 +165,21 @@ describe('recolor with a custom hex', () => {
     expect(applyTo(doc, ...sel(doc, 'hello'), '#ff0000')).toBe('hello world')
   })
 })
+
+describe('links take no colour (Reuben, 2026-09-29)', () => {
+  it('colouring a sentence with a link in it colours the words around the link, not the link', () => {
+    const text = 'see [[Waves]] now'
+    const r = recolor(text, 0, text.length, 'mark', 'amber', [{ from: 4, to: 13 }])
+    expect(r.insert).toBe('<mark class="hl-amber">see </mark>[[Waves]]<mark class="hl-amber"> now</mark>')
+  })
+  it('a colour already round a link comes off it when that stretch is recoloured', () => {
+    const text = '<mark class="hl-sage">see [[Waves]]</mark>'
+    const r = recolor(text, 22, 35, 'mark', 'amber', [{ from: 26, to: 35 }])
+    expect(r.insert).toBe('<mark class="hl-amber">see </mark>[[Waves]]')
+  })
+  it('the toggle still works: words already that colour, around a link, clear', () => {
+    const text = '<mark class="hl-amber">see </mark>[[Waves]]'
+    const r = recolor(text, 0, text.length, 'mark', 'amber', [{ from: 34, to: 43 }])
+    expect(r.insert).toBe('see [[Waves]]')
+  })
+})

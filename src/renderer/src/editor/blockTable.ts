@@ -2,6 +2,7 @@ import { StateEffect, StateField, type EditorState, type Extension } from '@code
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { isRaw } from './rawView'
+import { depthOfLine, findToggles, hiddenLine } from './toggleModel'
 import {
   MIN_COLS,
   MIN_WIDTH,
@@ -178,7 +179,10 @@ class TableWidget extends WidgetType {
     readonly from: number,
     readonly to: number,
     /** the cell open for editing in THIS table, if any */
-    readonly edit: { row: number; col: number } | null
+    readonly edit: { row: number; col: number } | null,
+    /** how many toggle lists it sits inside — a block is not a line, so the
+     *  toggle's line indent never reaches it (toggleList.ts) */
+    readonly depth = 0
   ) {
     super()
   }
@@ -190,12 +194,16 @@ class TableWidget extends WidgetType {
   private key(): string {
     // `from`/`to` are in here so a table that merely moved is rebuilt: its
     // handlers close over those offsets to write back to the right place.
-    return JSON.stringify([this.model, this.from, this.to, this.edit])
+    return JSON.stringify([this.model, this.from, this.to, this.edit, this.depth])
   }
 
   toDOM(view: EditorView): HTMLElement {
     const wrap = document.createElement('div')
     wrap.className = 'cm-table'
+    if (this.depth) {
+      wrap.classList.add('cm-in-toggle')
+      wrap.style.setProperty('--toggle-depth', String(this.depth))
+    }
     const table = document.createElement('table')
 
     /** The open input, if this render has one. Held so that clicking straight
@@ -787,18 +795,24 @@ function build(state: EditorState): DecorationSet {
   // see, so raw view has to reach this StateField and not just the passes.
   if (isRaw(state)) return Decoration.none
   const target = state.field(editCell, false) ?? null
+  const toggles = findToggles(state)
+  const lineOf = (pos: number): number => state.doc.lineAt(pos).number
   return Decoration.set(
-    findTables(state).map((t) =>
-      Decoration.replace({
-        widget: new TableWidget(
-          t.model,
-          t.from,
-          t.to,
-          target && target.table === t.from ? { row: target.row, col: target.col } : null
-        ),
-        block: true
-      }).range(t.from, t.blockTo)
-    ),
+    findTables(state)
+      // Inside a shut toggle: not drawn at all, the toggle hides those lines.
+      .filter((t) => !hiddenLine(toggles, lineOf(t.from)))
+      .map((t) =>
+        Decoration.replace({
+          widget: new TableWidget(
+            t.model,
+            t.from,
+            t.to,
+            target && target.table === t.from ? { row: target.row, col: target.col } : null,
+            depthOfLine(toggles, lineOf(t.from))
+          ),
+          block: true
+        }).range(t.from, t.blockTo)
+      ),
     true
   )
 }

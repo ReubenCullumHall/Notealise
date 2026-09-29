@@ -126,6 +126,10 @@ export const DRAG_NOTE = 'application/x-notes-note'
 export const DRAG_SEARCH = 'application/x-notes-search'
 /** a chip being dragged along, or out of, the island it is already in */
 export const DRAG_CHIP = 'application/x-notes-island'
+/** set BESIDE `DRAG_TAB` when the drag started on the tab strip itself, as
+ *  opposed to a links-strip chip or a note link: only a tab pulled off the strip
+ *  is a request to MOVE that note into the island — see App's `addToIsland` */
+export const DRAG_FROM_STRIP = 'application/x-notes-from-strip'
 
 const NOTE_TYPES = [DRAG_CHIP, DRAG_TAB, DRAG_SEARCH, DRAG_NOTE] as const
 

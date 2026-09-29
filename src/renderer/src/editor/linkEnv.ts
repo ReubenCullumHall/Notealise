@@ -1,6 +1,7 @@
 import { Facet, StateEffect, StateField, type EditorState } from '@codemirror/state'
 import { cleanIpcError } from '../ipcError'
 import type { NoteRef } from '../../../shared/links'
+import type { BlockInfo } from '../../../shared/blocks'
 import type { MediaOrigin } from '../../../shared/workspace'
 import type { SpaceMark } from '../links/model'
 
@@ -32,6 +33,13 @@ export interface LinkEnv {
   spaces: SpaceMark[]
   /** the note this editor is showing; "" before one is open */
   path: string
+  /** each note's tagged blocks, by path — what a `[[Note#^k3x9]]` shows after the
+   *  note's name. Optional: an editor with no vault behind it (onboarding, the
+   *  tests) simply has none. */
+  blocks?: ReadonlyMap<string, BlockInfo[]>
+  /** each note's headings, by path — so a heading link written as a path
+   *  (`[[Note#a#b]]`) can show just the heading it lands on */
+  headings?: ReadonlyMap<string, string[]>
 }
 
 export const EMPTY_ENV: LinkEnv = { notes: [], spaces: [], path: '' }
@@ -84,6 +92,11 @@ export interface LinkHandlers {
    *  App owns the dialog, the "ask me about this" setting, and the binning —
    *  see `MediaDelete` for what it is handed. */
   confirmMediaDelete: (req: MediaDelete) => void
+  /** A note's text — the open buffer when it has one, so what the `[[` picker
+   *  lists inside a note is what you have typed, not what was last saved. */
+  readNote: (path: string) => Promise<string>
+  /** Show the app's right-click menu at a point on screen. */
+  menu: (x: number, y: number, items: { label: string; run: () => void }[]) => void
 }
 
 /** What `confirmMediaDelete` is given. A named type because three layers pass it

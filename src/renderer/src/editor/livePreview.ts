@@ -4,8 +4,10 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 import { syntaxTree } from '@codemirror/language'
 import { colorPairs, isEmptyPair } from './colorTags'
 import { mathPass } from './mathPass'
+import { mathEditField } from './mathEdit'
 import { setLinkEnv } from './linkEnv'
 import { wikiPass } from './wikiPass'
+import { blockTagPass } from './blockTags'
 import { imagePass } from './imagePass'
 import { videoPass } from './videoPass'
 import { inlineHtmlPass } from './inlineHtmlPass'
@@ -13,10 +15,18 @@ import { webLinkPass } from './webLinkPass'
 import { taskPass } from './taskPass'
 
 // ---------------------------------------------------------------------------
-// Live preview: hide markdown syntax marks on every line EXCEPT the one(s) the
-// cursor/selection touches, so text just *looks* formatted while staying plain
-// markdown underneath. Styling itself comes from the HighlightStyle in
-// highlight.ts; this file only hides marks and swaps list bullets.
+// Live preview: hide markdown syntax marks so text just *looks* formatted while
+// staying plain markdown underneath. The marks you TYPE show again while you are
+// at them (Reuben, 2026-09-27, reversing 2026-09-25's "always hidden": without
+// the `#` there was no telling you were typing a heading): a heading's `#` and a
+// quote's `>` on the line(s) the cursor or selection is on; `**` `*` `~~` `` ` ``
+// only while a cursor touches that span — finish `*word*`, type a space, and it
+// turns italic there and then, not when you leave the line. Hidden everywhere are only
+// the things that have a drawing of their own doing that job: maths (the maths
+// box, mathEditor.ts), a bullet's dot, a checkbox, a toggle's arrow, a table's
+// grid, and the colour / underline HTML nobody types by hand. Links keep their
+// own rule (a cursor strictly inside). Styling itself comes from the
+// HighlightStyle in highlight.ts; this file hides marks and swaps list bullets.
 //
 // Everything is driven off the @lezer/markdown SYNTAX TREE — never a regex over
 // the document (nested/escaped markdown breaks regex; the tree already solves
@@ -40,6 +50,28 @@ class BulletWidget extends WidgetType {
     return false
   }
 }
+
+/** `---` drawn as the line it stands for. It used to sit in the note as three
+ *  literal dashes — raw Markdown on screen (found 2026-09-25 testing every form
+ *  the app writes; the Insert divider command writes exactly this). Same rule as
+ *  the reading view's `.prose-note hr`, inline here so no stylesheet has to
+ *  change with it. */
+class RuleWidget extends WidgetType {
+  eq(): boolean {
+    return true
+  }
+  toDOM(): HTMLElement {
+    const s = document.createElement('span')
+    s.className = 'cm-hr'
+    s.style.cssText =
+      'display:inline-block;width:100%;vertical-align:middle;border-top:1px solid rgb(var(--wash) / 0.12)'
+    return s
+  }
+  ignoreEvent(): boolean {
+    return false
+  }
+}
+const ruleDeco = Decoration.replace({ widget: new RuleWidget() })
 
 /** Exported for `wikiPass`, which hides `[[` / `]]` exactly as this file hides a
  *  `**` — one definition, so "hidden" can't come to mean two different things. */
@@ -100,10 +132,72 @@ export function overlapsSelection(view: EditorView, from: number, to: number): b
   return false
 }
 
+/** Whether a CURSOR (not a selection) sits inside (from, to). What a link's
+ *  address reveals on: you placed the cursor there to edit it. A
+ *  drag-selection passing over one must not open it up — the text would jump
+ *  sideways under the pointer mid-drag (Reuben, 2026-09-25).
+ *
+ *  Strictly inside: a cursor at either EDGE is beside the link, not in it
+ *  (Reuben, 2026-09-27 — typing a space before a link, or Backspacing the one
+ *  after it, flipped it to its code). Backspace/Delete at the edge is
+ *  linkEdges.ts's, so the hidden brackets can't be half-deleted. */
+export function cursorWithin(view: EditorView, from: number, to: number): boolean {
+  return view.state.selection.ranges.some((r) => r.empty && r.head > from && r.head < to)
+}
+
+/** What an empty heading or quote says, in pale grey, until you type — so a
+ *  line you've just made a heading doesn't look like an empty line (Reuben,
+ *  2026-09-27). Pushed as a zero-length point, which `push` lets through only
+ *  for this kind. */
+class HintWidget extends WidgetType {
+  constructor(readonly text: string, readonly size: string) {
+    super()
+  }
+  eq(other: HintWidget): boolean {
+    return other.text === this.text && other.size === this.size
+  }
+  toDOM(): HTMLElement {
+    const s = document.createElement('span')
+    s.className = 'cm-md-hint'
+    s.textContent = this.text
+    // The heading's own size and weight (highlight.ts): the hint sits outside
+    // the heading's styled text, so it does not inherit them.
+    if (this.size) s.style.cssText = this.size
+    return s
+  }
+  ignoreEvent(): boolean {
+    return false
+  }
+}
+const HEADING_HINT_STYLE = [
+  'font-size:1.7em;font-weight:700',
+  'font-size:1.4em;font-weight:700',
+  'font-size:1.2em;font-weight:600',
+  'font-weight:600',
+  'font-weight:600',
+  'font-weight:600'
+]
+const headingHints = HEADING_HINT_STYLE.map((size, i) =>
+  Decoration.widget({ widget: new HintWidget('Heading ' + (i + 1), size), side: 1, hint: true })
+)
+const quoteHint = Decoration.widget({ widget: new HintWidget('Quote', ''), side: 1, hint: true })
+
 // Pass 1: standard markdown marks, located in the syntax tree.
 const markdownPass: Pass = (view, active, push) => {
   const doc = view.state.doc
   const tree = syntaxTree(view.state)
+  // In Markdown pro every mark is pushed, so each one gets its raw-view style.
+  const shown = isRaw(view.state) ? new Set<number>() : active
+  const onShownLine = (pos: number): boolean => shown.has(doc.lineAt(pos).number)
+  const raw = isRaw(view.state)
+  /** Where you clicked or started selecting (a selection's fixed end) is inside
+   *  the span or right at either end of it. The ends count, so the marks stay
+   *  while you type the closing `*` and go the moment a space moves you past it.
+   *  Only that fixed end counts, never the moving one: a drag that starts
+   *  outside a styled word and crosses it leaves it alone (the 2026-09-25 jump),
+   *  and one that starts on it keeps it open instead of closing it mid-drag. */
+  const touched = (from: number, to: number): boolean =>
+    !raw && view.state.selection.ranges.some((r) => r.anchor >= from && r.anchor <= to)
   for (const { from, to } of view.visibleRanges) {
     tree.iterate({
       from,
@@ -112,14 +206,36 @@ const markdownPass: Pass = (view, active, push) => {
         const name = node.name
 
         if (name === 'ListMark') {
-          if (active.has(doc.lineAt(node.from).number)) return
-          if (/^[-*+]$/.test(doc.sliceString(node.from, node.to))) {
+          // A dash is a dash until the space after it: the parser already calls
+          // a lone `-` a list item, and drawing the dot at once hid what you
+          // had typed (Reuben, 2026-09-27). The dot is the bullet's own drawing,
+          // so it stays on the line you're on too.
+          const after = doc.sliceString(node.to, node.to + 1)
+          if (/^[-*+]$/.test(doc.sliceString(node.from, node.to)) && (after === ' ' || after === '\t')) {
             push(node.from, node.to, bulletDeco, true)
           }
           return
         }
+        if (/^ATXHeading[1-6]$/.test(name)) {
+          // `# ` with nothing after it yet: say which heading, in pale grey.
+          const line = doc.lineAt(node.from)
+          const m = /^(#{1,6})[ \t]+$/.exec(line.text)
+          if (m) push(line.to, line.to, headingHints[m[1].length - 1], false)
+          return undefined // on into its HeaderMark
+        }
+        if (name === 'Blockquote') {
+          const line = doc.lineAt(node.from)
+          if (line.number === doc.lineAt(node.to).number && /^>[ \t]+$/.test(line.text)) {
+            push(line.to, line.to, quoteHint, false)
+          }
+          return undefined
+        }
+        if (name === 'HorizontalRule') {
+          push(node.from, node.to, ruleDeco, true)
+          return
+        }
         if (name === 'HeaderMark' || name === 'QuoteMark') {
-          if (active.has(doc.lineAt(node.from).number)) return
+          if (onShownLine(node.from)) return
           let end = node.to
           // also swallow the single space after "# " and "> "
           if (doc.sliceString(end, end + 1) === ' ') end++
@@ -127,18 +243,15 @@ const markdownPass: Pass = (view, active, push) => {
           return
         }
         if (name === 'EmphasisMark' || name === 'StrikethroughMark') {
-          // the enclosing Emphasis/StrongEmphasis/Strikethrough span, not the
-          // mark's own (single-line) range or the whole line
           const parent = node.node.parent
-          if (parent && overlapsSelection(view, parent.from, parent.to)) return
+          if (parent && touched(parent.from, parent.to)) return
           push(node.from, node.to, hideDeco, true)
           return
         }
         if (name === 'CodeMark') {
           // inline-code backticks only, never fenced-code fences
           const parent = node.node.parent
-          if (parent && parent.name === 'InlineCode') {
-            if (overlapsSelection(view, parent.from, parent.to)) return
+          if (parent && parent.name === 'InlineCode' && !touched(parent.from, parent.to)) {
             push(node.from, node.to, hideDeco, true)
           }
           return
@@ -176,14 +289,14 @@ const markdownPass: Pass = (view, active, push) => {
             }
             if (!hasUrl) return
           }
-          if (parent && overlapsSelection(view, parent.from, parent.to)) return
+          if (parent && cursorWithin(view, parent.from, parent.to)) return
           push(node.from, node.to, hideDeco, true) // [ ] ( )
           return
         }
         if (name === 'URL') {
           const parent = node.node.parent
           if (parent && parent.name === 'Link') {
-            if (overlapsSelection(view, parent.from, parent.to)) return
+            if (cursorWithin(view, parent.from, parent.to)) return
             push(node.from, node.to, hideDeco, true)
           }
         }
@@ -294,7 +407,9 @@ export const PASSES: Pass[] = [
   inlineHtmlPass,
   taskPass,
   webLinkPass,
-  wikiPass
+  wikiPass,
+  // a block's ` ^k3x9` link tag (blockTags.ts)
+  blockTagPass
 ]
 
 function build(view: EditorView): {
@@ -305,7 +420,9 @@ function build(view: EditorView): {
   const active = activeLineSet(view)
   const items: Deco[] = []
   const push: Push = (from, to, deco, atomic, inner) => {
-    if (to > from) items.push({ from, to, deco, atomic, inner })
+    // Zero-length only for markdownPass's pale hints; any other empty range is
+    // nothing and would upset the builder.
+    if (to > from || (to === from && deco.spec.hint)) items.push({ from, to, deco, atomic, inner })
   }
   // Markdown pro. `highlight.ts` is untouched either way, so bold is still bold
   // and a heading is still large — the user's call over a flat monospace view,
@@ -370,7 +487,10 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         // lives on Transaction, NOT on ViewUpdate — checked against the
         // installed .d.ts rather than assumed.
         u.transactions.some((tr) => tr.reconfigured) ||
-        u.transactions.some((tr) => tr.effects.some((e) => e.is(setLinkEnv)))
+        u.transactions.some((tr) => tr.effects.some((e) => e.is(setLinkEnv))) ||
+        // The maths box opening or closing on a formula: mathPass leaves that
+        // one to mathEditor.ts while it's open, and takes it back after.
+        u.startState.field(mathEditField, false) !== u.state.field(mathEditField, false)
       ) {
         const r = build(u.view)
         this.decorations = r.decorations
@@ -399,5 +519,27 @@ const atomicHidden = EditorView.atomicRanges.of(
 const colorInner = Prec.highest(
   EditorView.decorations.of((view) => view.plugin(livePreviewPlugin)?.inner ?? Decoration.none)
 )
+
+/** Where the unbroken run of hidden text starting at `pos` ends (`pos` itself if
+ *  nothing hidden starts there). cursorSnap.ts uses it to tell "the cursor is
+ *  just before a hidden `</u>` at the end of the line" from "inside the words". */
+export function hiddenRunEnd(view: EditorView, pos: number): number {
+  const hidden = view.plugin(livePreviewPlugin)?.hidden
+  if (!hidden) return pos
+  let end = pos
+  let grew = true
+  while (grew) {
+    grew = false
+    hidden.between(end, end + 1, (from, to) => {
+      if (from <= end && to > end) {
+        end = to
+        grew = true
+        return false
+      }
+      return undefined
+    })
+  }
+  return end
+}
 
 export const livePreview = [livePreviewPlugin, atomicHidden, colorInner]

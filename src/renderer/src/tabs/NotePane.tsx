@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { CodeEditor } from '../editor'
 import { FormatToolbar } from '../editor/FormatToolbar'
 import { Icon } from '../icons'
+import { BOUNCE_MS, BOUNCE_SOFT, motionOn } from './tabStyles'
+import { takePaneStart } from './stripMotion'
+import { startPaneReorder } from './paneReorder'
 import { formatDateTime, formatNumber, formatWhenShort } from '../intl'
 import { HoverCard } from '../HoverCard'
 import { LinksBlock, LINKS_BLOCK_HEIGHT } from '../links/LinksBlock'
@@ -15,13 +18,13 @@ import type { AppSettings, LinksPosition } from '../../../shared/settings'
 /** Where a dragged tab or column would land in this pane. */
 export type DropZone = 'left' | 'center' | 'right'
 
-/** What is being dragged. A tab comes from the strip and may not be open yet; a
- *  column is already on screen and carries the index it came from, which is what
- *  lets a drop reorder the panes instead of opening anything. */
+/** What is being dragged: a tab from the strip, which may not be open yet.
+ *  (Columns used to be dragged through here too, as `kind: 'pane'`; they are
+ *  rearranged by their top edge now, which never goes through a drop —
+ *  tabs/paneReorder.ts.) */
 export interface Drag {
-  kind: 'tab' | 'pane'
+  kind: 'tab'
   path: string
-  from?: number
 }
 
 interface Props {
@@ -95,19 +98,21 @@ interface Props {
   onSplit: () => void
   /** false at the column cap — the only thing that can stop a new column now */
   canSplit: boolean
+  /** the column's x: closes the NOTE, tab and all, exactly like the x on its
+   *  tab — keeping it open is a drag of its tab out of the split (Reuben,
+   *  2026-09-27) */
   onClosePane: () => void
   /** swap this column with the one on its LEFT — the button beside the split
    *  control. Undefined for the leftmost column, which has nothing to its left
    *  to trade with; every other column can reach any position by repeating it.
-   *  Redundant with dragging the header row (`onDragPane`) and deliberately so:
-   *  the drag was there first and stays, but nothing on screen said it existed. */
+   *  Redundant with dragging the column by its top edge (`onReorder`), and
+   *  deliberately so: the button is the route a keyboard can reach. */
   onSwapLeft?: () => void
+  /** move THIS column to position `to` — the drag along its top edge (only
+   *  offered in a split — one column has no order to rearrange) */
+  onReorder: (to: number) => void
   /** what is being dragged right now, or null */
   dragging: Drag | null
-  /** start dragging THIS column (only offered in a split — one column has no
-   *  order to rearrange) */
-  onDragPane: () => void
-  onDragEnd: () => void
   /** whether the left/right zones are offered for the drag in progress: a
    *  column being rearranged always may, a tab needs room for a new column */
   edgeDrops: boolean
@@ -186,9 +191,8 @@ export function NotePane({
   canSplit,
   onClosePane,
   onSwapLeft,
+  onReorder,
   dragging,
-  onDragPane,
-  onDragEnd,
   edgeDrops,
   onDropTab,
   size
@@ -208,8 +212,8 @@ export function NotePane({
   }, [path])
 
   const outgoing = useMemo(
-    () => (blank ? [] : outgoingLinks(path, doc, env.notes, env.spaces)),
-    [blank, path, doc, env.notes, env.spaces]
+    () => (blank ? [] : outgoingLinks(path, doc, env.notes, env.spaces, env.blocks, env.headings)),
+    [blank, path, doc, env.notes, env.spaces, env.blocks, env.headings]
   )
   const incoming = useMemo(
     () => (blank ? [] : incomingLinks(path, linkIndex, env.notes, env.spaces)),
@@ -301,6 +305,45 @@ export function NotePane({
     setZone(zoneAt(e))
   }
 
+  // A column added to a split grows out from nothing on the tab strip's bounce
+  // (Reuben, 2026-09-23), rather than arriving at full width. Keyed off the
+  // NOTE, not the mount: the columns are keyed by position, so a note dropped on
+  // the left edge lands in the first column while React mounts the last one.
+  // App's `applyLayout` says which note joined (stripMotion.ts). A split
+  // restored at launch, switched to with its space, or gone back to from the
+  // strip just appears.
+  const col = useRef<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    const el = col.current
+    const from = takePaneStart(path)
+    if (!el || from === null || !motionOn()) return
+    if (from > 0) {
+      // A column the join pushed along starts at the width it had and gives way
+      // the way any column does when the split changes — `.pane-col`'s own
+      // transition, read back rather than copied so the two can't drift.
+      const cs = getComputedStyle(el)
+      el.animate([{ flexGrow: from }, { flexGrow: el.style.flexGrow || 1 }], {
+        duration: parseFloat(cs.transitionDuration) * 1000,
+        easing: cs.transitionTimingFunction
+      })
+      return
+    }
+    // Clipped while it is narrower than its contents, or the first frames spill
+    // the "Select a note" prompt past the window edge.
+    el.style.overflow = 'hidden'
+    // The soft curve: the full bounce swung the divider between the columns
+    // too far (Reuben, 2026-09-24 — cut by about 70%).
+    const grow = el.animate([{ flexGrow: 0 }, { flexGrow: el.style.flexGrow || 1 }], {
+      duration: BOUNCE_MS,
+      easing: BOUNCE_SOFT
+    })
+    const done = (): void => {
+      el.style.overflow = ''
+    }
+    grow.onfinish = done
+    grow.oncancel = done
+  }, [path])
+
   const zoneBox: Record<DropZone, string> = {
     left: 'inset-y-2 left-2 w-[calc(50%-0.5rem)]',
     right: 'inset-y-2 right-2 w-[calc(50%-0.5rem)]',
@@ -309,6 +352,7 @@ export function NotePane({
 
   return (
     <section
+      ref={col}
       className={
         'pane-col relative flex min-w-0 flex-col ' +
         (split ? 'border-l border-ink-300/25 first:border-l-0 ' : '')
@@ -322,26 +366,31 @@ export function NotePane({
       onFocusCapture={onFocus}
       aria-label={blank ? 'Select a note' : stripMd(nameOf(path))}
     >
+      {/* The column's drag handle, in a split: the 10px of padding between the
+          top of the column and the format buttons (Reuben, 2026-09-26). Not
+          dressed as a control — empty space until hovered, when the app's
+          six-dot grip fades in, turned to lie across the strip. It stops 10px
+          short of each side so it never sits on the divider's grab area, and
+          ends where the buttons begin, so it covers nothing (CLAUDE.md,
+          "Nothing covers a control"). This replaced dragging the whole row,
+          which lived in the gaps between buttons nobody could find. */}
+      {split && !headerHidden && (
+        <div
+          aria-hidden
+          className="pane-grab group absolute inset-x-[10px] top-0 z-20 flex h-[10px] cursor-grab touch-none items-center justify-center"
+          onPointerDown={(e) => col.current && startPaneReorder(e, col.current, onReorder)}
+        >
+          <Icon
+            name="grip"
+            className="pane-grip h-3.5 w-3.5 rotate-90 text-ink-400 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+          />
+        </div>
+      )}
       <div
-        // The row is the column's own drag handle. Guarded rather than wrapped
-        // in a separate grip: at a third of the window there is no room for one,
-        // and a drag that starts on the title or a button must stay theirs.
-        draggable={split}
-        onDragStart={(e) => {
-          if ((e.target as HTMLElement).closest('input, button')) {
-            e.preventDefault()
-            return
-          }
-          e.dataTransfer.effectAllowed = 'move'
-          e.dataTransfer.setData('application/x-notes-pane', path)
-          onDragPane()
-        }}
-        onDragEnd={onDragEnd}
         className={
           ROW_CLASS +
           ' transition-[opacity,transform] duration-150' +
           (headerHidden ? ' pointer-events-none -translate-y-1 opacity-0' : ' translate-y-0 opacity-100') +
-          (split ? ' cursor-grab active:cursor-grabbing' : '') +
           // In a split, the accent line is how you can see which column the
           // keyboard is pointing at. A single pane has nothing to distinguish
           // itself from, so it leaves the reserved line transparent.
@@ -418,7 +467,7 @@ export function NotePane({
           {onSwapLeft && (
             <button
               className={ROW_BTN}
-              data-tip="Move this column to the left  ·  or drag this row"
+              data-tip="Move this column to the left  ·  or drag its top edge"
               aria-label="Move this column to the left"
               onClick={onSwapLeft}
             >
@@ -442,8 +491,8 @@ export function NotePane({
           {split && (
             <button
               className={ROW_BTN}
-              data-tip="Close this column (the note stays open as a tab)"
-              aria-label="Close this column"
+              data-tip="Close this note  ·  to keep it open, drag its tab out of the split"
+              aria-label="Close this note"
               onClick={onClosePane}
             >
               <Icon name="x" className="h-4 w-4" />

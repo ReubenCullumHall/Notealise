@@ -1,4 +1,5 @@
-import { Decoration } from '@codemirror/view'
+import { Decoration, WidgetType } from '@codemirror/view'
+import { blockIdOf, headingShown } from '../../../shared/blocks'
 import { syntaxTree } from '@codemirror/language'
 import { dirName, resolveLink, scanLinks, type WikiLink } from '../../../shared/links'
 import { hideDeco, type Pass } from './livePreview'
@@ -47,10 +48,9 @@ function linkMark(cls: string, target: string, title: string, open: boolean): De
     // No `title`: the app raises its own card on hover (linkGestures), which
     // lands right under the link instead of wherever the OS decides to put a
     // native tooltip after a delay it picks.
-    const attributes: Record<string, string> = { 'data-wiki': target }
-    // Only a link that goes somewhere is draggable — creating a file mid-drag to
-    // satisfy a drop that may never land is worse than not offering the gesture.
-    if (open) attributes.draggable = 'true'
+    // `spellcheck="false"`: a link's words are a note's name, not writing — the
+    // spelling underline has no business on them (Reuben, 2026-09-29).
+    const attributes: Record<string, string> = { 'data-wiki': target, spellcheck: 'false' }
     d = Decoration.mark({ class: cls, attributes })
     markCache.set(key, d)
   }
@@ -62,6 +62,37 @@ function linkMark(cls: string, target: string, title: string, open: boolean): De
  *  boxes (which is exactly how it looked before). Hidden, the heading half wears
  *  a `›` from CSS instead and the two halves close up into one pill. */
 const hashHide = Decoration.replace({})
+
+/** The block half of `[[Waves#^k3x9]]`: its first words, drawn in place of the
+ *  tag. A widget because those words are not in THIS note to be marked — they
+ *  live in the one the link points at. Set as text, never as HTML
+ *  (docs/security.md): they come out of a note. */
+class BlockLabelWidget extends WidgetType {
+  constructor(
+    readonly label: string,
+    readonly cls: string,
+    readonly target: string
+  ) {
+    super()
+  }
+  eq(other: BlockLabelWidget): boolean {
+    return other.label === this.label && other.cls === this.cls && other.target === this.target
+  }
+  toDOM(): HTMLElement {
+    const el = document.createElement('span')
+    el.className = this.cls
+    el.dataset.wiki = this.target
+    el.textContent = this.label
+    return el
+  }
+  // Clicks and drags belong to linkGestures, exactly as on the marked half.
+  ignoreEvent(): boolean {
+    return false
+  }
+}
+
+const blockLabelDeco = (label: string, cls: string, target: string): Decoration =>
+  Decoration.replace({ widget: new BlockLabelWidget(label, cls, target) })
 
 /** What a link resolves to, plus the bits the DOM needs. Exported so the click
  *  handler in `extensions.ts` answers the same question the same way. */
@@ -158,7 +189,10 @@ export const wikiPass: Pass = (view, _active, push) => {
       // `overlapsSelection`'s inclusive edge: that is where the cursor lands the
       // moment a note is chosen from the picker, and holding the link raw there
       // would show `[[Waves]]` until something else was typed.
-      if (view.state.selection.ranges.some((r) => r.from < link.to && r.to >= link.from)) continue
+      // And only a CURSOR, not a drag-selection passing over it (2026-09-25).
+      // Nor one just BEFORE the "[[" (2026-09-27): typing a space in front of a
+      // link flipped it to its brackets. Backspace/Delete there: linkEdges.ts.
+      if (view.state.selection.ranges.some((r) => r.empty && r.head < link.to && r.head > link.from)) continue
       if (inCode(tree.resolveInner(link.from, 1))) continue
 
       const r = env ? resolveInEnv(env, link) : null
@@ -218,7 +252,23 @@ export const wikiPass: Pass = (view, _active, push) => {
           const at = innerFrom + hash
           text(textFrom, at)
           push(at, at + 1, hashHide, true)
-          text(at + 1, innerTo, ' cm-wikilink-heading cm-wikilink-tail')
+          const id = blockIdOf(link.heading)
+          if (id && env && r?.path) {
+            // `^k3x9` means nothing to a reader: show the block's first words
+            // instead, as it reads now (shared/blocks.ts). A tag nobody carries
+            // any more says so, dashed like a note that doesn't exist.
+            const found = env.blocks?.get(r.path)?.find((b) => b.id.toLowerCase() === id.toLowerCase())
+            const c = cls + ' cm-wikilink-heading cm-wikilink-tail' + (found ? '' : ' cm-wikilink-new')
+            push(at + 1, innerTo, blockLabelDeco(found ? found.label : 'block not found', c, target), true)
+          } else {
+            // `[[Note#testing#testing]]` — a path of headings, written when two
+            // share their words (blockIds.ts `headingAnchor`). Shown as the one
+            // it lands on, the way a folder path shows only the note.
+            const shown = headingShown(link.heading ?? '', r?.path ? env?.headings?.get(r.path) : undefined)
+            const cut = shown !== link.heading ? innerFrom + inner.lastIndexOf('#') + 1 : at + 1
+            if (cut > at + 1) push(at + 1, cut, hideDeco, true)
+            text(cut, innerTo, ' cm-wikilink-heading cm-wikilink-tail')
+          }
         }
       }
     }

@@ -6,6 +6,7 @@ export type IconName =
   | 'doc'
   | 'folder'
   | 'chevron'
+  | 'toggle'
   | 'grip'
   | 'plus'
   | 'gear'
@@ -62,6 +63,13 @@ const PATHS: Record<IconName, React.JSX.Element> = {
   ),
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />,
   chevron: <path d="M9 6l6 6-6 6" />,
+  // A toggle list: the arrow, then the lines it hides.
+  toggle: (
+    <>
+      <path d="M4 6.5l3.5 3.5L4 13.5" />
+      <path d="M11 10h9M11 15.5h9M11 20h6" />
+    </>
+  ),
   edit: <path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z" />,
   eye: (
     <>

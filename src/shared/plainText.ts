@@ -36,6 +36,12 @@ export function toPlainText(md: string): string {
       // counting `\int_0^1` as two words is worse than counting it as none.
       .replace(/\$\$[\s\S]*?\$\$/g, ' ')
       .replace(/\$[^$\n]+\$/g, ' ')
+      // A block's link tag (` ^k3x9`, shared/blocks.ts) is an address, not a
+      // word. The app hides it, so counting it would count something nobody sees.
+      // Same shape as blocks.ts's TAG_AT_END — three or more characters, not only
+      // digits, so "mc ^2" is still counted (written out here: blocks.ts imports
+      // this file, and importing back would make a loop).
+      .replace(/(^|[ \t]+)\^(?![0-9]+[ \t]*\r?$)[A-Za-z0-9-]{3,}[ \t]*(?=\r?$)/gm, '')
       // Images go entirely — alt text is a description of a picture, not words
       // on the page. Must run BEFORE links, or `!` is left stranded.
       .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')

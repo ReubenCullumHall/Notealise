@@ -95,7 +95,11 @@ export function recolor(
   selFrom: number,
   selTo: number,
   tag: 'mark' | 'span',
-  name: string | null
+  name: string | null,
+  /** stretches that never take a colour — the `[[links]]` (Reuben,
+   *  2026-09-29: "the app thinks a linked note isn't text"). Selected, they
+   *  come out with none; the words around them are coloured as asked. */
+  bare: { from: number; to: number }[] = []
 ): RegionChange {
   const spans = parseSpans(text, tag)
 
@@ -114,9 +118,10 @@ export function recolor(
 
   // Flatten the region to content characters, each tagged with its current
   // colour and whether it's inside the selection. Tag characters are dropped.
-  const chars: { ch: string; colour: string | null; sel: boolean }[] = []
+  const chars: { ch: string; colour: string | null; sel: boolean; bare: boolean }[] = []
+  const isBare = (p: number): boolean => bare.some((b) => p >= b.from && p < b.to)
   const pushRange = (from: number, to: number, colour: string | null): void => {
-    for (let p = from; p < to; p++) chars.push({ ch: text[p], colour, sel: p >= selFrom && p < selTo })
+    for (let p = from; p < to; p++) chars.push({ ch: text[p], colour, sel: p >= selFrom && p < selTo, bare: isBare(p) })
   }
   let cursor = regionStart
   for (const s of regionSpans) {
@@ -127,10 +132,11 @@ export function recolor(
   if (cursor < regionEnd) pushRange(cursor, regionEnd, null)
 
   // Toggle: if every selected char is already `name`, clear instead of re-wrapping.
-  const selected = chars.filter((c) => c.sel)
+  // A link's characters don't count — they never have a colour to compare.
+  const selected = chars.filter((c) => c.sel && !c.bare)
   const alreadyTarget = name !== null && selected.length > 0 && selected.every((c) => c.colour === name)
   const effective = alreadyTarget ? null : name
-  for (const c of chars) if (c.sel) c.colour = effective
+  for (const c of chars) if (c.sel) c.colour = c.bare ? null : effective
 
   // Emit, merging equal-coloured runs into single tags; record where each content
   // char lands in the output so the resulting selection can be computed.

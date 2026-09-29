@@ -367,6 +367,10 @@ export interface SessionLayout {
    *  needs no migration. Shape only here, as above — that the fractions describe
    *  the panes that actually came back is `restoreLayout`'s call. */
   sizes?: number[]
+  /** splits the user had stepped out of, each still one joined tab — the
+   *  columns, which one was focused, and their widths. Shape only here too;
+   *  `restoreLayout` decides which still hold. Absent means none. */
+  parked?: { panes: string[]; focus: number; sizes?: number[] }[]
 }
 
 export const EMPTY_SESSION: SessionLayout = { tabs: [], panes: [], focus: 0 }
@@ -770,12 +774,26 @@ function normalizeSession(raw: unknown): SessionLayout {
   // entry by entry: a part-mended array is a layout nobody chose, and the
   // fallback (even columns) is always a defensible one. `restoreLayout` applies
   // the same all-or-nothing rule against the notes that still exist.
-  const s = raw.sizes
-  const sizes =
+  const widths = (s: unknown): number[] | undefined =>
     Array.isArray(s) && s.length > 0 && s.every((v) => typeof v === 'number' && Number.isFinite(v) && v > 0)
       ? (s as number[])
       : undefined
-  return { tabs: paths(raw.tabs), panes: paths(raw.panes), focus: Math.max(0, focus), sizes }
+  const sizes = widths(raw.sizes)
+  const parked = (Array.isArray(raw.parked) ? raw.parked : [])
+    .filter(isPlainObject)
+    .map((g) => ({
+      panes: paths(g.panes),
+      focus: typeof g.focus === 'number' && Number.isInteger(g.focus) ? Math.max(0, g.focus) : 0,
+      sizes: widths(g.sizes)
+    }))
+    .filter((g) => g.panes.length >= 2)
+  return {
+    tabs: paths(raw.tabs),
+    panes: paths(raw.panes),
+    focus: Math.max(0, focus),
+    sizes,
+    ...(parked.length ? { parked } : {})
+  }
 }
 
 /** Always exactly TOOLBAR_SLOTS strings — a short, long, or junk-filled array

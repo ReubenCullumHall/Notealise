@@ -11,6 +11,8 @@ import type { SectionId } from './settings/Settings'
 import { FormatToolbar } from './editor/FormatToolbar'
 import { NotePane, ROW_CLASS, type Drag } from './tabs/NotePane'
 import { PaneDivider } from './tabs/PaneDivider'
+import { markCreated, markDeleted } from './organise/arrivals'
+import { noteLayoutChange, notePaneChange } from './tabs/stripMotion'
 import { TabStrip } from './tabs/TabStrip'
 import { Island } from './tabs/TabIsland'
 import {
@@ -26,7 +28,6 @@ import {
 } from './tabs/island'
 import {
   activePath,
-  closePane,
   closeTab,
   closeUnder,
   cycle,
@@ -51,6 +52,9 @@ import {
   takeOutOfSplit,
   ungroupPanes,
   moveGroup,
+  addTab,
+  showTab,
+  newBlankTab,
   type TabLayout
 } from './tabs/model'
 import { applySettings, resolveTheme } from './settings/model'
@@ -667,9 +671,14 @@ export default function App(): React.JSX.Element {
    *  call site — and `layoutRef` stays correct for the handler that runs next,
    *  before React has re-rendered. */
   const applyLayout = useCallback(
-    (next: TabLayout): void => {
+    /** `quiet` — the whole strip is being swapped (switching space, restoring
+     *  the last session, changing vault), so nothing is "opening" or "closing"
+     *  and the strip should not animate as if it were. */
+    (next: TabLayout, quiet = false): void => {
       const prev = layoutRef.current
       if (next === prev) return
+      if (!quiet) noteLayoutChange(prev.tabs, next.tabs)
+      notePaneChange(quiet ? [] : prev.panes, next.panes, paneSizes(prev))
       layoutRef.current = next
       setLayout(next)
       for (const gone of prev.tabs) if (!next.tabs.includes(gone)) dropDoc(gone)
@@ -877,7 +886,7 @@ export default function App(): React.JSX.Element {
    *  so this only reads from disk the first time. */
   const openNote = useCallback(
     async (p: string, newTab = false): Promise<void> => {
-      applyLayout(newTab ? openTab(layoutRef.current, p) : replaceActive(layoutRef.current, p))
+      applyLayout(newTab ? addTab(layoutRef.current, p) : replaceActive(layoutRef.current, p))
       if (!docsRef.current.has(p)) await loadDoc(p)
     },
     [applyLayout, loadDoc]
@@ -920,7 +929,7 @@ export default function App(): React.JSX.Element {
         // never shown mid-open with someone else's notes in it.
         setIslandOpen(false)
         await changeSettings({ activeSpaceFolder: folder })
-        applyLayout(spaceTabs.current.get(folder) ?? EMPTY_LAYOUT)
+        applyLayout(spaceTabs.current.get(folder) ?? EMPTY_LAYOUT, true)
       }
 
       if (!settingsRef.current.animationsEnabled) {
@@ -1083,17 +1092,27 @@ export default function App(): React.JSX.Element {
     [applyLayout, loadDoc]
   )
 
+  /** Ask the pane showing `p` to go to a heading or block. Cleared first, so
+   *  asking for the SAME one again — the same link clicked twice — is still a new
+   *  request: the pane only looks when the request changes, and until
+   *  2026-09-29 a second click on a link to where you'd scrolled away from did
+   *  nothing (found in the block-links bug check). */
+  const requestHeading = useCallback((p: string, heading: string): void => {
+    setPendingHeading(null)
+    requestAnimationFrame(() => setPendingHeading({ path: p, heading }))
+  }, [])
+
   const openLink = useCallback(
     async (p: string, how: OpenHow, heading?: string | null): Promise<void> => {
       // A note belongs to its space. Following a link into another one takes you
       // there rather than dragging the note across — otherwise the tab strip
       // would show a note the sidebar beside it can't.
       await enterSpace(spaceOf(p))
-      if (heading) setPendingHeading({ path: p, heading })
+      if (heading) requestHeading(p, heading)
       if (how === 'split') await openBeside(p)
       else await openNote(p, how === 'tab')
     },
-    [openBeside, openNote, enterSpace]
+    [openBeside, openNote, enterSpace, requestHeading]
   )
 
   /** Clicking a `[[link]]` to a note nobody has written yet: make it, beside the
@@ -1103,6 +1122,7 @@ export default function App(): React.JSX.Element {
     async (dir: string, title: string, how: OpenHow): Promise<void> => {
       try {
         const actual = await window.api.createNote(dir, title)
+        markCreated(actual)
         await loadTree()
         await openLink(actual, how)
         if (titleOf(actual) !== title) {
@@ -1141,7 +1161,7 @@ export default function App(): React.JSX.Element {
   /** What the editors need to know about the vault. Per-pane `path` is added by
    *  the pane itself — a link resolves relative to the note it is written in. */
   const linkEnvBase = useMemo(
-    (): Omit<LinkEnv, 'path'> => ({
+    (): Omit<LinkEnv, 'path' | 'blocks' | 'headings'> => ({
       notes: vaultNotes,
       // already in the chosen emoji style, so the path bar, link chips and
       // link hover cards draw it without each needing the setting
@@ -1154,7 +1174,7 @@ export default function App(): React.JSX.Element {
     (): LinkHandlers => ({
       open: (p, how, heading) => void openLink(p, how, heading),
       create: (dir, title, how) => void createFromLink(dir, title, how),
-      jump: (heading) => setPendingHeading({ path: activePath(layoutRef.current) ?? '', heading }),
+      jump: (heading) => requestHeading(activePath(layoutRef.current) ?? '', heading),
       reveal: (folder) => void reveal(folder),
       inspect: (at) => setInspect(at as Inspect | null),
       dragStart: (p) => setDrag({ kind: 'tab', path: p }),
@@ -1211,9 +1231,11 @@ export default function App(): React.JSX.Element {
         setKeepAsking(true)
         setConfirmClosing(false)
         setMediaConfirm(req)
-      }
+      },
+      readNote: async (p) => docsRef.current.get(p) ?? (await window.api.readNote(p)),
+      menu: (x, y, items) => setMenu({ x, y, items: items.map((it) => ({ label: it.label, onClick: it.run })) })
     }),
-    [openLink, createFromLink, reveal, flash, showNotice]
+    [openLink, createFromLink, reveal, flash, showNotice, requestHeading]
   )
 
   // Delete-then-confirm for a photo or video pulled out of a note. The editor
@@ -1390,6 +1412,11 @@ export default function App(): React.JSX.Element {
    *  This is the app KNOWING a picture is in a note, rather than trusting a
    *  breadcrumb written when one was deleted. */
   const mediaUsage_ = useMemo(() => mediaUsage(linkIndex), [linkIndex])
+  /** Each note's tagged blocks, off the same index — what a `[[Note#^k3x9]]`
+   *  shows after the note's name (shared/blocks.ts). */
+  const linkBlocks = useMemo(() => new Map(linkIndex.map((r) => [r.path, r.blocks ?? []])), [linkIndex])
+  /** …and their headings, for a heading link written as a path (shared/blocks.ts). */
+  const linkHeadings = useMemo(() => new Map(linkIndex.map((r) => [r.path, r.headings ?? []])), [linkIndex])
   /** The same map, reachable from `linkHandlers` — which is memoised, so it
    *  cannot close over `mediaUsage_` and see anything but the first render's
    *  answer. Same reason `settingsRef` exists beside it. */
@@ -1510,7 +1537,7 @@ export default function App(): React.JSX.Element {
           const owner = p.includes('/') ? p.slice(0, p.indexOf('/')) : ''
           return !owner || owner === home || !s.spaces.some((sp) => sp.folder === owner)
         }
-        applyLayout(restoreLayout(s.session, (p) => mine(p) && !!findNode(t, p)))
+        applyLayout(restoreLayout(s.session, (p) => mine(p) && !!findNode(t, p)), true)
       }
       // From here the layout is the user's, and worth saving. Until it is, an
       // empty layout must NOT be written back — that would wipe the session
@@ -1591,7 +1618,10 @@ export default function App(): React.JSX.Element {
           tabs: layout.tabs,
           panes: layout.panes,
           focus: layout.focus,
-          sizes: layout.sizes
+          sizes: layout.sizes,
+          // Splits you've stepped out of come back after a restart too. Absent
+          // when there are none, like `sizes`.
+          parked: layout.parked
         }
       })
     }, 400)
@@ -1812,7 +1842,7 @@ export default function App(): React.JSX.Element {
       setVault(v)
       // A different vault means different files: drop every tab and its buffer.
       sessionReady.current = false
-      applyLayout(EMPTY_LAYOUT)
+      applyLayout(EMPTY_LAYOUT, true)
       docsRef.current.clear()
       dirtyRef.current.clear()
       // A different vault's links are a different graph — keeping the old rows
@@ -2005,10 +2035,24 @@ export default function App(): React.JSX.Element {
    *  space) would get a rank written and then never appear, because the island
    *  it belongs to is its own space's — a gesture that visibly does nothing
    *  (stress test T12). Refused out loud instead. */
-  const addToIsland = (paths: string[], before: string | null): void => {
+  const addToIsland = (paths: string[], before: string | null, fromStrip = false): void => {
     const here = paths.filter((p) => belongsToSpace(p, space.folder))
     if (here.length < paths.length) flash(`Only notes in this space can go in ${islandName}`)
-    if (here.length) writeIsland(withAdded(islandPaths, here, before))
+    if (!here.length) return
+    writeIsland(withAdded(islandPaths, here, before))
+    // A tab pulled off the strip MOVES into the island. For an ordinary tab the
+    // strip already stops drawing it (`stripTabs`), but a column of a split
+    // stays drawn — the group shows what is on screen — so the drop landed and
+    // nothing visibly moved (Reuben, 2026-09-25: "you should be able to drag
+    // the 3rd tab into the island"). Its column closes instead. Only for a tab
+    // off the strip: adding a note on screen from the sidebar or the menu
+    // leaves the split alone.
+    // (A parked split's piece comes out of that split the same way.)
+    if (fromStrip) {
+      let l = layoutRef.current
+      for (const p of here) l = takeOutOfSplit(l, p)
+      applyLayout(l)
+    }
   }
 
   const removeFromIsland = (path: string): void => writeIsland(withRemoved(islandPaths, path))
@@ -2049,9 +2093,14 @@ export default function App(): React.JSX.Element {
     // one you were reading would have no home on the strip at all.
     if (!space.showIsland) return layout.tabs
     const kept = new Set(islandPaths)
-    const grouped = layout.panes.length > 1 ? new Set(layout.panes) : new Set<string>()
+    // Parked splits too: each is drawn as one joined tab, and a member missing
+    // from `tabs` would draw it short.
+    const grouped = new Set([
+      ...(layout.panes.length > 1 ? layout.panes : []),
+      ...(layout.parked ?? []).flatMap((g) => g.panes)
+    ])
     return layout.tabs.filter((t) => !kept.has(t) || grouped.has(t))
-  }, [layout.tabs, layout.panes, islandPaths, space.showIsland])
+  }, [layout.tabs, layout.panes, layout.parked, islandPaths, space.showIsland])
 
   // Taking the LAST note out folds the island (Reuben, 2026-09-19: "when there
   // is nothing in it don't keep it expanded"). On the change only, not while it
@@ -2245,6 +2294,7 @@ export default function App(): React.JSX.Element {
   const trash = (paths: string[]): void =>
     void run(async () => {
       if (!paths.length) return
+      markDeleted(paths)
       setWorkspace(await window.api.trashEntries(paths))
       await loadTree()
       forgetIfInside(paths)
@@ -2365,6 +2415,8 @@ export default function App(): React.JSX.Element {
       const items = ids.map((id) => workspace.trash.find((t) => t.id === id)).filter((t): t is TrashItem => !!t)
       const res = asRestoreResult(await window.api.restoreEntries(ids))
       if (!res) return void flash("Couldn't put that back — restart the app and try again")
+      // Back out of the bin is the reverse of going in: the rows grow back.
+      Object.values(res.landed).forEach(markCreated)
       setWorkspace(res.workspace)
       await loadTree()
       await afterRestore(items, res.landed)
@@ -2382,6 +2434,7 @@ export default function App(): React.JSX.Element {
         .filter((r): r is RecoveryItem => !!r)
       const res = asRestoreResult(await window.api.restoreRecoveryEntries(ids))
       if (!res) return void flash("Couldn't put that back — restart the app and try again")
+      Object.values(res.landed).forEach(markCreated)
       setWorkspace(res.workspace)
       await loadTree()
       await afterRestore(items, res.landed)
@@ -2427,6 +2480,7 @@ export default function App(): React.JSX.Element {
   const newNote = (dir: string): Promise<void> =>
     run(async () => {
       const rel = await window.api.createNote(inSpace(dir))
+      markCreated(rel)
       await placeAtBottom(rel)
       await loadTree()
       await openNote(rel)
@@ -2435,6 +2489,7 @@ export default function App(): React.JSX.Element {
   const newFolder = (dir: string): Promise<void> =>
     run(async () => {
       const rel = await window.api.createFolder(inSpace(dir))
+      markCreated(rel)
       await placeAtBottom(rel)
       await loadTree()
       // Auto-colour, if the space asks for it: a new folder comes out a colour
@@ -2984,15 +3039,21 @@ export default function App(): React.JSX.Element {
         <TabStrip
           tabs={stripTabs}
           panes={layout.panes}
+          parked={layout.parked}
           active={openPath}
-          onSelect={(p) => void openNote(p)}
+          // GO to the tab, which never closes another one — not `openNote`'s
+          // sidebar rule, which replaces (and closes) the note you were on.
+          onSelect={(p) => {
+            applyLayout(showTab(layoutRef.current, p))
+            if (p && !docsRef.current.has(p)) void loadDoc(p)
+          }}
           onClose={closeNote}
           onReorder={(p, before) => {
             // A note that is not open yet (dragged from the sidebar, a search
             // hit, or a chip) opens first, then lands at the gap it was dropped
             // in. `moveTab` alone refuses anything that isn't already a tab.
             const l = layoutRef.current
-            applyLayout(moveTab(l.tabs.includes(p) ? l : openTab(l, p), p, before))
+            applyLayout(moveTab(l.tabs.includes(p) ? l : addTab(l, p), p, before))
             leaveIsland(p)
           }}
           // A tab dropped on the MIDDLE of another tab. The strip only offers
@@ -3004,11 +3065,11 @@ export default function App(): React.JSX.Element {
           }}
           // Notes sharing the screen share one tab (tabs/model.ts's
           // `stripGroups`). These three are what you can do to that tab.
-          onMoveGroup={(before) => applyLayout(moveGroup(layoutRef.current, before))}
+          onMoveGroup={(before, members) => applyLayout(moveGroup(layoutRef.current, before, members))}
           onTakeOutOfSplit={(p) => applyLayout(takeOutOfSplit(layoutRef.current, p))}
-          onUngroup={() => applyLayout(ungroupPanes(layoutRef.current))}
+          onUngroup={(p) => applyLayout(ungroupPanes(layoutRef.current, p))}
           onDragTab={(path) => setDrag(path === null ? null : { kind: 'tab', path })}
-          onNewTab={() => applyLayout(openTab(layoutRef.current, BLANK))}
+          onNewTab={() => applyLayout(newBlankTab(layoutRef.current))}
           dragging={drag}
           // One island per space, and only once there is a vault to hold one —
           // during the splash and onboarding there is no space for it to belong
@@ -3079,7 +3140,7 @@ export default function App(): React.JSX.Element {
                   timezone={settings.timezone}
                   // A link resolves relative to the note it is written in, so
                   // each column gets the same vault with its own `path`.
-                  env={{ ...linkEnvBase, path: p }}
+                  env={{ ...linkEnvBase, blocks: linkBlocks, headings: linkHeadings, path: p }}
                   linkHandlers={linkHandlers}
                   linkIndex={linkIndex}
                   showLinks={space.showLinks}
@@ -3138,37 +3199,19 @@ export default function App(): React.JSX.Element {
                   // having moved focus there first.
                   onSplit={() => applyLayout(splitBlank({ ...layoutRef.current, focus: i }))}
                   canSplit={canSplit}
-                  onClosePane={() => applyLayout(closePane(layoutRef.current, i))}
+                  onClosePane={() => closeNote(p)}
                   // Leftmost column has nothing to trade with; every other one
                   // can walk left a step at a time. Same op the drag performs
                   // when a column is dropped on its neighbour's middle.
                   onSwapLeft={i > 0 ? () => applyLayout(swapPanes(layoutRef.current, i - 1, i)) : undefined}
+                  onReorder={(to) => applyLayout(movePane(layoutRef.current, i, to > i ? to + 1 : to))}
                   dragging={drag}
-                  onDragPane={() => setDrag({ kind: 'pane', path: p, from: i })}
-                  onDragEnd={() => setDrag(null)}
-                  edgeDrops={
-                    // A column being dragged is only ever rearranged, so the cap
-                    // doesn't apply to it; a tab may need a new column, which is
-                    // where it does.
-                    drag?.kind === 'pane' || canSplit || layout.panes.includes(drag?.path ?? '')
-                  }
+                  edgeDrops={canSplit || layout.panes.includes(drag?.path ?? '')}
                   onDropTab={(zone) => {
                     const d = drag
                     setDrag(null)
                     if (!d) return
                     const l = layoutRef.current
-                    if (d.kind === 'pane') {
-                      // Rearranging the split: nothing opens or closes. Onto the
-                      // middle of another column the two swap; onto an edge the
-                      // dragged column moves there.
-                      const from = d.from ?? l.panes.indexOf(d.path)
-                      applyLayout(
-                        zone === 'center'
-                          ? swapPanes(l, from, i)
-                          : movePane(l, from, zone === 'left' ? i : i + 1)
-                      )
-                      return
-                    }
                     applyLayout(
                       zone === 'center'
                         ? showInPane(l, d.path, i)

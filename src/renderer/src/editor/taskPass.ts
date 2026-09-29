@@ -1,10 +1,9 @@
 import { Decoration, EditorView, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
-import { overlapsSelection, type Pass } from './livePreview'
+import type { Pass } from './livePreview'
 
 // GFM task lists: `- [ ] thing` / `- [x] thing`. The `[ ]` is replaced by a real
-// checkbox you can click, and the raw brackets come back when the cursor is in
-// the line — the same reveal-to-edit contract as every other pass.
+// checkbox you can click. The raw brackets only show in Markdown pro.
 //
 // Node shape verified against the real @lezer/markdown tree (GFM is on):
 //   ListItem > ListMark "-" , Task > TaskMarker "[x]" , text
@@ -43,9 +42,9 @@ export const taskPass: Pass = (view, _active, push) => {
       to,
       enter: (node) => {
         if (node.name !== 'TaskMarker') return
-        // A task marker owns its line's opening, so an overlap check keeps the
-        // brackets editable while the cursor is in them.
-        if (overlapsSelection(view, node.from, node.to)) return
+        // Always a checkbox, cursor or not (2026-09-25): the brackets are
+        // formatting, and clicking the box is how you tick it. Markdown pro
+        // still shows `[ ]` — build() drops every widget in raw view.
         const checked = /x/i.test(doc.sliceString(node.from, node.to))
         push(node.from, node.to, Decoration.replace({ widget: new CheckboxWidget(checked) }), true)
       }
