@@ -25,6 +25,9 @@
 
 const START_HERE = `# Start here
 
+> **Make your first note**
+> Click **Note** at the top of the sidebar, or press ⌘N (Ctrl+N on Windows). It saves itself as you type.
+
 Everything in this space right now is a real, ordinary file - this note, the ones linked below, and the one you wrote a moment ago. Delete any of them. Nothing breaks.
 
 You can create a note and a subfolder to house different subtopics at the top of the sidebar.
