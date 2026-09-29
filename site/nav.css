@@ -304,22 +304,122 @@ body[class*="page-theme-"] .topbar { border-bottom: 2px solid var(--accent); }
 html.topbar-in .mark { opacity: 0; pointer-events: none; }
 .mark { transition: opacity .2s ease; }
 
-/* Below this width the three-up grid can't hold the centred links without
-   crushing them — drop to brand + links (socials move to the footer instead,
-   handled per page) and let the links scroll if they must. */
+/* The phone's one-circle stand-in for the social icons. nav.js builds the
+   button (so no page's markup changes); it only shows in the phone block below. */
+.social-toggle { display: none; }
+
+/* Phone (Reuben, 2026-09-29). Three page links + four icons need ~380px and a
+   phone gives ~328px, so the icons fold into one circle wearing the Instagram
+   logo; tapping it drops them down in a column and the circle becomes an ✕.
+   The three tracks stay, so the page links sit dead-centre exactly as on a
+   computer (the 32px minimum is the circle's width, so both sides stay equal).
+   The links still scroll as a last resort on a very narrow screen. */
 @media (max-width: 620px) {
-  .topbar { grid-template-columns: auto 1fr; }
+  .topbar {
+    grid-template-columns: minmax(32px, 1fr) auto minmax(32px, 1fr); gap: 8px;
+    /* The drop-down's motion is the app's tab strip: --spring is its softer
+       curve (tabs/tabStyles.ts BOUNCE_SOFT, a ~1.5% settle — Reuben asked for
+       smooth and premium, not bouncy), --settle is a calm ease with no
+       overshoot, used for everything closing. */
+    --spring: cubic-bezier(0.34, 1.217, 0.64, 1);
+    --settle: cubic-bezier(0.32, 0.72, 0, 1);
+  }
   .topbar-brand span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-  .topbar-links { justify-self: end; gap: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .topbar-links { gap: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .topbar-links a { font-size: 13.5px; }
   .topbar-links::-webkit-scrollbar { display: none; }
-  .topbar-social { display: none; }
   .topbar-links .tb-wide { display: none; }
   .topbar-links .tb-narrow { display: inline; }
+
+  .social-toggle {
+    grid-column: 3; justify-self: end;
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; padding: 0;
+    border: 1px solid var(--line-2); border-radius: 50%;
+    background: var(--bg); color: var(--soft);
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+    transition: color .14s ease, border-color .14s ease;
+  }
+  /* Invisible extra reach: the circle looks 32px but a thumb gets 44px. */
+  .social-toggle::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; }
+  .social-toggle:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .social-toggle svg {
+    position: absolute; width: 16px; height: 16px; display: block;
+    transition: opacity .16s ease, transform .26s var(--settle);
+  }
+  .social-toggle .st-ig { fill: currentColor; }
+  .social-toggle .st-x {
+    fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round;
+    opacity: 0; transform: rotate(-90deg) scale(0.6);
+  }
+  .topbar.social-open .social-toggle { color: var(--ink); border-color: var(--ink); }
+  .topbar.social-open .social-toggle .st-ig { opacity: 0; transform: rotate(90deg) scale(0.6); }
+  .topbar.social-open .social-toggle .st-x { opacity: 1; transform: none; }
+  /* The two glyphs never share the circle for long: the outgoing one is gone
+     in ~0.1s and the incoming one arrives just behind it, so the half-turn
+     doesn't show two symbols stacked on top of each other. */
+  .social-toggle .st-x { transition: opacity .1s ease, transform .26s var(--settle); }
+  .social-toggle .st-ig { transition: opacity .18s ease .06s, transform .26s var(--settle); }
+  .topbar.social-open .social-toggle .st-ig { transition: opacity .1s ease, transform .46s var(--spring); }
+  .topbar.social-open .social-toggle .st-x { transition: opacity .2s ease .07s, transform .46s var(--spring); }
+
+  /* The icons become a column that hangs just under the bar, on the same
+     vertical line as the circle. Shut = invisible AND out of the tab order.
+     Opening: the capsule grows down from about the circle's own size with the
+     spring while the icons drop into place one after another, top to bottom;
+     closing is quicker and calmer, everything at once. Only height, opacity
+     and transform move, so a tap mid-way just turns it round smoothly. */
+  .topbar-social {
+    --item: 36px; --gap: 2px; --pad: 4px; --n: 4; /* nav.js sets --n from the icon count */
+    position: absolute;
+    top: calc(100% + 8px);
+    right: calc(clamp(16px, 4vw, 28px) - 6px);
+    box-sizing: border-box; overflow: hidden;
+    display: flex; flex-direction: column; align-items: center; gap: var(--gap);
+    height: 44px;
+    padding: var(--pad);
+    background: var(--bg);
+    border: 1px solid var(--line-2); border-radius: 22px;
+    visibility: hidden; opacity: 0; transform: translateY(-6px); pointer-events: none;
+    transition: height .28s var(--settle), opacity .2s ease .04s, transform .28s var(--settle), visibility 0s linear .3s;
+  }
+  .topbar.social-open .topbar-social {
+    /* every icon + the gaps between + the padding + the 1px border each side */
+    height: calc(var(--n) * var(--item) + (var(--n) - 1) * var(--gap) + 2 * var(--pad) + 2px);
+    visibility: visible; opacity: 1; transform: none; pointer-events: auto;
+    transition: height .46s var(--spring), opacity .18s ease, transform .46s var(--spring), visibility 0s;
+  }
+  .topbar-social a {
+    flex: none; width: 36px; height: 36px; border-radius: 50%; color: var(--soft);
+    opacity: 0; transform: translateY(-10px) scale(0.7);
+    transition: color .14s ease, opacity .14s ease, transform .26s var(--settle);
+  }
+  .topbar.social-open .topbar-social a {
+    opacity: 1; transform: none;
+    transition: color .14s ease, opacity .3s ease var(--d, .2s), transform .46s var(--spring) var(--d, .2s);
+  }
+  .topbar.social-open .topbar-social a:nth-child(1) { --d: .05s; }
+  .topbar.social-open .topbar-social a:nth-child(2) { --d: .09s; }
+  .topbar.social-open .topbar-social a:nth-child(3) { --d: .13s; }
+  .topbar.social-open .topbar-social a:nth-child(4) { --d: .17s; }
+  .topbar-social a:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+}
+
+/* A very narrow phone (a 320px screen): a little less air so the links still fit. */
+@media (max-width: 360px) {
+  .topbar { gap: 6px; }
+  .topbar-links { gap: 12px; }
+  .topbar-links a { font-size: 13px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .topbar { transition: none; }
+  .social-toggle, .social-toggle svg, .topbar-social, .topbar-social a,
+  .social-toggle .st-ig, .social-toggle .st-x,
+  .topbar.social-open .social-toggle .st-ig, .topbar.social-open .social-toggle .st-x,
+  .topbar.social-open .topbar-social,
+  .topbar.social-open .topbar-social a { transition: none; }
 }
 
 /* ── "Explore" list on the home page (replaces the old blank .gap) ────── */

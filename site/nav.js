@@ -58,6 +58,61 @@
     }
   }
 
+  // Phone only (nav.css shows the button below 620px wide): the social icons
+  // fold into one circle wearing the Instagram logo. Built here rather than in
+  // each page's markup, so it can't be missed on a page — and the logo is
+  // copied from the Instagram link, so its path lives in one place. With no
+  // script the phone bar simply has no icons, as it did before.
+  var social = bar.querySelector('.topbar-social');
+  var ig = social && social.querySelector('a[href*="instagram.com"] svg');
+  if (social && ig) {
+    social.id = 'topbar-social';
+    // The drop-down's open height is worked out from this (nav.css), so a fifth
+    // icon later needs no CSS change.
+    social.style.setProperty('--n', String(social.children.length));
+    var toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'social-toggle';
+    toggle.setAttribute('aria-label', 'Notealise on social media');
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-controls', 'topbar-social');
+    var glyph = ig.cloneNode(true);
+    glyph.setAttribute('class', 'st-ig');
+    toggle.appendChild(glyph);
+    toggle.insertAdjacentHTML('beforeend',
+      '<svg class="st-x" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>');
+    // Before the icons, so the keyboard reaches the circle first, then the list.
+    bar.insertBefore(toggle, social);
+
+    var setOpen = function (open) {
+      bar.classList.toggle('social-open', open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    var isOpen = function () { return bar.classList.contains('social-open'); };
+
+    toggle.addEventListener('click', function () { setOpen(!isOpen()); });
+    // Choosing an icon closes the list (the link itself opens in a new tab).
+    social.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('a')) setOpen(false);
+    });
+    // A tap anywhere else closes it. pointerdown, not click: iOS Safari does
+    // not send a click to the document for a tap on plain page text.
+    document.addEventListener('pointerdown', function (e) {
+      if (isOpen() && !bar.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && isOpen()) { setOpen(false); toggle.focus(); }
+    });
+    // Turning the phone sideways past the phone width shows the icons in the
+    // bar again; don't carry an "open" state across.
+    if (window.matchMedia) {
+      var phone = window.matchMedia('(max-width: 620px)');
+      var onWidth = function () { if (!phone.matches) setOpen(false); };
+      if (phone.addEventListener) phone.addEventListener('change', onWidth);
+      else if (phone.addListener) phone.addListener(onWidth);
+    }
+  }
+
   var sentinel = document.querySelector('[data-topbar-reveal]');
   if (!sentinel) {
     bar.classList.add('is-visible');

@@ -1407,8 +1407,23 @@ grows. Reuben wants the right-hand slot for the Notealise socials ("like my pers
 before"). Currently a placeholder cluster — **GitHub is the real link**
 (`github.com/ReubenCullumHall/Notealise`), X and Bluesky are `href="#"` stubs pending Reuben
 confirming the actual set and URLs. Icon-only, 18px, `--muted` → `--ink` on hover, 32px hit
-target. Below 620px the grid drops to `auto 1fr` (brand + links only), the socials `display:none`
-(they belong in the footer at that size — not yet wired), and the links right-align and scroll.
+target. **Phones, below 620px (2026-09-29, Reuben's call):** the three tracks stay
+(`minmax(32px,1fr) auto minmax(32px,1fr)`), so the links stay dead-centre exactly as on a computer,
+and the socials fold into one 32px circle wearing the Instagram logo (`.social-toggle`, built by
+`nav.js` — it is not in any page's markup, so a new page gets it for free). Tapping it drops the four
+icons (Instagram, TikTok, YouTube, email) in a column just under the bar and the circle becomes an ✕;
+a tap elsewhere, Escape, or choosing an icon closes it, and it never stays open across a resize back
+above 620px. Why a circle: three page links plus four icons need ~380px and a phone leaves ~328px.
+Measured in Safari and Chromium engines, light and dark, 320–620px wide: links 0px off-centre (they
+were 53–74px off with the socials hidden), no sideways scroll, every icon 36px and hit-testable.
+The links still scroll as a last resort. Computers and the 621px+ layout are byte-for-byte unchanged.
+**Motion (2026-09-29, Reuben: "like the new tab animation… smooth so it's premium"):** opening uses the
+app's tab-strip curve in its softer form (`tabs/tabStyles.ts` `BOUNCE_SOFT`, `cubic-bezier(0.34,1.217,0.64,1)`,
+460ms): the capsule grows down from about the circle's size (44px → 160px, measured peak 161.7 — a ~1%
+settle) while the four icons drop in one after another, 40ms apart; the logo tilts out and the ✕ turns in
+without the two showing together. Closing is quicker (~280ms) with no overshoot, everything at once. Only
+height, opacity and transform move; tapping again mid-way turns it round smoothly. Reduced-motion
+visitors get no animation (0 running, measured).
 
 **Typeface: the nav uses the site's sans (Inter), unchanged from the wider system below.**
 Brand at 600/16px, links at 500/14.5px in `--muted` → `--ink` on hover, active link 600/`--ink`.
@@ -1472,8 +1487,8 @@ lede + back link + footer), no real content yet, in the website's founder voice
 one-person business; flagged to Reuben.
 
 **Not yet done / open:** real page content (Reuben's); final nav label set and order; real social
-URLs (X + Bluesky are `href="#"` stubs, GitHub is live); the mobile bar (socials drop out, links
-right-align and scroll — may want a proper menu); socials in the footer below 620px; re-theming
+URLs (X + Bluesky are `href="#"` stubs, GitHub is live); (the phone bar was
+finished 2026-09-29 — see "Layout" above); re-theming
 the two `install/` pages; deploy timing (all of this is uncommitted). Verified headlessly
 (Playwright, Chromium): hero clean on load + wordmark animation finishes with the webfonts in,
 bar slides in past the threshold and sticks, mark fades, reduced-motion snaps, links centre on
