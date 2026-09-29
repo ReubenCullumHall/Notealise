@@ -4,8 +4,8 @@ import { SpaceForm } from './SpaceForm'
 import { activeSpace, type AppSettings, type Space } from '../../../shared/settings'
 import type { FontLibrary } from './useInstalledFonts'
 
-// Settings → Customisation. How the app LOOKS and what it shows, set for every
-// space at once.
+// Settings → Look → Every space (the Customisation page until 2026-09-29).
+// How the app LOOKS and what it shows, set for every space at once.
 //
 // **Every customisation setting belongs to a space** — appearance, colour,
 // arranging, a note's own chrome, the format-bar buttons. That is the rule, not
@@ -56,49 +56,44 @@ export function Customisation({
 
   return (
     <>
-      <div className="rounded-xl bg-ink-300/10 px-3 py-2.5 ring-1 ring-ink-300/25">
-        <p className="flex items-center gap-2 text-[13px] font-medium text-brand-600">
+      {/* One line, where there were a card and a heading (Reuben, 2026-09-29:
+          debloat). The tab above already says "Every space"; this only has to
+          say what that means, and where the one-space version is. */}
+      <div className="flex items-center gap-3 rounded-xl bg-ink-300/10 px-3 py-2.5 ring-1 ring-ink-300/25">
+        <span className="shrink-0 text-brand-600">
           <Icon name="spaces" className="h-3.5 w-3.5" />
-          Everything here applies to all {spaces.length} {spaces.length === 1 ? 'space' : 'spaces'}
-        </p>
-        <p className="mt-1 flex items-start gap-1 text-[11.5px] leading-relaxed text-ink-500">
-          <span>Change a control here and all {spaces.length} take it.</span>
+        </span>
+        <p className="flex min-w-0 flex-1 items-center gap-1 text-[12px] leading-relaxed text-ink-500">
+          <span>
+            <span className="font-medium text-brand-600">
+              {spaces.length === 1
+                ? 'Changes here apply to your space.'
+                : `Changes here apply to all ${spaces.length} spaces.`}
+            </span>
+            {spaces.length > 1 && ' Where they disagree, it’s marked — changing it here settles it.'}
+          </span>
           <HelpTip
             text={`Every one of these settings really belongs to a space — how a set of notes looks is a property of that set, so a revision space can be dark and dense while a journal stays light and roomy. This page is just the shortcut for setting them all at once.`}
           />
         </p>
         <button
           onClick={onGoToSpaces}
-          className="mini mt-2"
+          className="mini shrink-0"
           data-tip="The same controls, scoped to one space"
         >
-          Set just one space instead →
+          Set one space instead →
         </button>
       </div>
 
-      <div>
-        <h3 className="accent-heading font-display text-[15px] font-semibold">Every space</h3>
-        {spaces.length > 1 && (
-          <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
-            Where your spaces disagree about something, it&rsquo;s marked — change it here to settle
-            it for everyone.
-          </p>
-        )}
-        {/* No `gap` and no wrapper styling: SpaceForm brings its own
-            DisclosureGroup, which is the single bordered container the whole
-            run of rows now lives in. */}
-        <div className="mt-3">
-          <SpaceForm
-            space={shown}
-            onChange={(patch) => onChange({ spaces: spaces.map((s) => ({ ...s, ...patch })) })}
-            differs={spaces.length > 1 ? differs : undefined}
-            onColorExisting={onColorExisting}
-            fontLibrary={fontLibrary}
-            collection={{ pageLooks: settings.pageLookLibrary, tints: settings.tintLibrary }}
-            openDisclosure={openDisclosure}
-          />
-        </div>
-      </div>
+      <SpaceForm
+        space={shown}
+        onChange={(patch) => onChange({ spaces: spaces.map((s) => ({ ...s, ...patch })) })}
+        differs={spaces.length > 1 ? differs : undefined}
+        onColorExisting={onColorExisting}
+        fontLibrary={fontLibrary}
+        collection={{ pageLooks: settings.pageLookLibrary, tints: settings.tintLibrary }}
+        openDisclosure={openDisclosure}
+      />
     </>
   )
 }

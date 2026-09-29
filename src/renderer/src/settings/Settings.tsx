@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom'
 import { STARTUPS, type AppSettings } from './model'
 import { Icon, type IconName } from '../icons'
-import { Select, SettingRow, ToggleRow } from './primitives'
+import { PageTabs, Select, SettingRow, ToggleRow } from './primitives'
 import { Spaces, type SpaceActions } from './Spaces'
 import { Collection } from './Collection'
 import { Explore, type ExploreTab } from './Explore'
@@ -20,7 +20,8 @@ import type { PresetActions } from './Presets'
 import type { SpacePreset } from '../../../shared/presets'
 import type { RecoveryItem } from '../../../shared/workspace'
 import { useInstalledFonts } from './useInstalledFonts'
-import { escapeClaimed } from './escapeClaims'
+import { claimEscape, escapeClaimed } from './escapeClaims'
+import { searchSettings, type SearchEntry } from './search'
 
 /** What a plain settings section needs. Kept free of `spaceActions` so General
  *  and Formatting don't have to carry a dependency only Spaces uses. */
@@ -65,253 +66,337 @@ export type SectionId =
   | 'reportBug'
   | 'requestFeature'
 
-// Legacy's SECTIONS + SECTION_ICON (legacy/src/settings.js:35, legacy/src/App.jsx:1042).
-// Appearance / Arranging / Shortcuts are NOT top-level entries: they belong to a
-// space, and are reached either through Customisation (all spaces) or Spaces
-// (one). Spaces, Your collection, Updates and Report a bug have no legacy
-// counterpart.
-//
-// **The split between the first two is the rule this window is built on:**
+// The left-hand list. SIX entries — it was twelve until 2026-09-29, one per
+// page, and Reuben asked for the window to be debloated and easier to find
+// your way round. Pages that belong together now share one entry and sit
+// behind a row of tabs at the top of it (`PageTabs`):
 //
 //   General        — one app launch, one locale. Startup, dates, numbers, the
 //                    clock. Nothing here is per-space and nothing ever will be.
-//   Customisation  — how the app LOOKS and what it shows. Every setting on that
-//                    page belongs to a SPACE; the page writes to all of them at
-//                    once, and links to Spaces for setting just one.
+//   Look           — how the app LOOKS and what it shows, for every space at
+//                    once (the tab that was the Customisation page), plus Your
+//                    collection: the fonts, page looks and tints you have.
+//   Spaces         — the same look settings, one space at a time.
+//   Data           — where your notes live and moving things in and out:
+//                    Source folder, Recovery, Import, Transfer data.
+//   Help           — Tutorials, Report a bug, Request a feature.
+//   Updates
 //
-// Keep them apart. They were one page ("Master settings") and it meant a user
-// looking for the date format scrolled past the entire appearance system, while
-// a user looking for the theme had no reason to think "master" was where it
-// lived.
-const SECTIONS: { id: SectionId; label: string; icon: IconName }[] = [
-  { id: 'general', label: 'General', icon: 'sliders' },
-  { id: 'customisation', label: 'Customisation', icon: 'sun' },
-  { id: 'spaces', label: 'Spaces', icon: 'spaces' },
-  { id: 'collection', label: 'Your collection', icon: 'library' },
-  { id: 'tutorials', label: 'Tutorials', icon: 'book' },
-  { id: 'sourceFolder', label: 'Source folder', icon: 'folder' },
-  { id: 'recovery', label: 'Recovery', icon: 'restore' },
-  // Import → Transfer data → Updates as one run: getting set up and staying
-  // current. Bring your notes in, bring the app's own settings across from
-  // another machine, then keep the app itself up to date. Transfer data sits
-  // with Import because that's the mental slot it lands in, not with Source
-  // folder.
-  { id: 'import', label: 'Import', icon: 'import' },
-  { id: 'transferData', label: 'Transfer data', icon: 'export' },
-  { id: 'updates', label: 'Updates', icon: 'restore' },
-  { id: 'reportBug', label: 'Report a bug', icon: 'flag' },
-  { id: 'requestFeature', label: 'Request a feature', icon: 'star' }
+// **The split between General and Look is the rule this window is built on.**
+// Every setting on Look belongs to a SPACE; the page writes to all of them at
+// once, and links to Spaces for setting just one. They were one page ("Master
+// settings") and it meant a user looking for the date format scrolled past the
+// entire appearance system, while a user looking for the theme had no reason
+// to think "master" was where it lived. Keep them apart.
+//
+// A PAGE (`SectionId`) is still the unit everything else routes to — search
+// results, the File menu's jumps ('import', 'updates'), goTo. A GROUP is only
+// how the pages are listed, so moving a page between groups never breaks a
+// route.
+type GroupId = 'general' | 'look' | 'spaces' | 'data' | 'help' | 'updates'
+
+interface Group {
+  id: GroupId
+  label: string
+  icon: IconName
+  /** the tabs, in order; the first is where the list entry lands */
+  pages: { id: SectionId; label: string }[]
+}
+
+const GROUPS: Group[] = [
+  { id: 'general', label: 'General', icon: 'sliders', pages: [{ id: 'general', label: 'General' }] },
+  {
+    id: 'look',
+    label: 'Look',
+    icon: 'sun',
+    pages: [
+      { id: 'customisation', label: 'Every space' },
+      { id: 'collection', label: 'Your collection' }
+    ]
+  },
+  { id: 'spaces', label: 'Spaces', icon: 'spaces', pages: [{ id: 'spaces', label: 'Spaces' }] },
+  {
+    id: 'data',
+    label: 'Data',
+    icon: 'folder',
+    // Source folder first: it is where the notes themselves are. Then the
+    // safety net, then the two ways things come in from elsewhere — Import
+    // for notes, Transfer data for the app's own settings.
+    pages: [
+      { id: 'sourceFolder', label: 'Source folder' },
+      { id: 'recovery', label: 'Recovery' },
+      { id: 'import', label: 'Import' },
+      { id: 'transferData', label: 'Transfer data' }
+    ]
+  },
+  {
+    id: 'help',
+    label: 'Help',
+    icon: 'book',
+    pages: [
+      { id: 'tutorials', label: 'Tutorials' },
+      { id: 'reportBug', label: 'Report a bug' },
+      { id: 'requestFeature', label: 'Request a feature' }
+    ]
+  },
+  { id: 'updates', label: 'Updates', icon: 'restore', pages: [{ id: 'updates', label: 'Updates' }] }
 ]
 
-const SECTION_LABEL: Record<SectionId, string> = Object.fromEntries(
-  SECTIONS.map((s) => [s.id, s.label])
+const GROUP_OF = Object.fromEntries(
+  GROUPS.flatMap((g) => g.pages.map((p) => [p.id, g]))
+) as Record<SectionId, Group>
+
+const PAGE_LABEL = Object.fromEntries(
+  GROUPS.flatMap((g) => g.pages.map((p) => [p.id, p.label]))
 ) as Record<SectionId, string>
 
-interface SearchEntry {
-  section: SectionId
-  /** For the four entries that live on Your collection's Explore page rather
-   *  than on the shelves: which tab to open. Searching "make a tint" and
-   *  landing on the collection page with the wheel two clicks away is a
-   *  search result that didn't finish the job. */
-  explore?: ExploreTab
-  /** For the customisation entries, which live inside a collapsed fold on
-   *  SpaceForm: which fold to open on arrival. Without it the search lands you
-   *  on the right page with the setting still hidden behind one of nine rows,
-   *  which is most of the way to not having found it. */
-  disclosure?: string
-  label: string
-  hint: string
-  /** Terms someone might type instead of the label above — synonyms, brand
-   *  names of things being replaced, related jargon. Never shown in the UI;
-   *  matched against same as label/hint. This is what makes "dark mode" find
-   *  "Theme": nothing about the algorithm knows that on its own, so it has to
-   *  be told. */
-  keywords: string
+/** Where a result lives, as the reader would click to it: "Look › Every
+ *  space › Page", "Data › Recovery", "General › More". */
+function whereIs(e: SearchEntry): string {
+  const g = GROUP_OF[e.section]
+  const parts = [g.label]
+  if (g.pages.length > 1) parts.push(PAGE_LABEL[e.section])
+  if (e.explore) parts.push('Explore')
+  if (e.disclosure) parts.push(e.disclosure)
+  return parts.join(' › ')
 }
 
-// Hand-maintained, not derived from the section components below — those are
-// free-form JSX, not a settings schema. Routes to the SECTION a setting lives
-// on, not to the control itself. Keep this in sync as settings move or get
-// added; nothing enforces that automatically.
-const SEARCH_INDEX: SearchEntry[] = [
-  { section: 'general', label: 'Start with nothing open', hint: 'Opens on the blank screen — your notes are all still in the sidebar.', keywords: 'blank new launch open empty start' },
-  { section: 'general', label: 'Reopen your tabs', hint: 'Come back to the notes you left open, split the way you left them.', keywords: 'resume restore session continue last open tabs' },
-  { section: 'general', label: 'Play startup animation', hint: 'A short wordmark animation while a vault opens.', keywords: 'splash screen logo boot launch intro' },
-  { section: 'general', label: 'Check before deleting', hint: 'Ask first when a photo or video is deleted from a note.', keywords: 'photo video image media delete remove confirm ask undo picture attachment' },
-  { section: 'general', label: 'Interface animations', hint: 'Opening settings, hovers, dropdowns and the like.', keywords: 'motion transitions effects reduce motion speed disable' },
-  { section: 'general', label: 'Date format', hint: 'Used for edit times and for the archive and bin.', keywords: 'day month year dd mm yyyy 12 hour 24 hour 12hr 24hr am pm dates language locale region british american' },
-  { section: 'general', label: 'Time zone', hint: 'Which clock times are shown in.', keywords: 'timezone clock utc gmt local time' },
-  { section: 'general', label: 'Number format', hint: 'Choose how numbers are formatted.', keywords: 'decimal comma thousand separator locale numbers language region' },
-  { section: 'general', label: 'Replay the first-run walkthrough', hint: 'Reopens the introduction you saw the first time.', keywords: 'onboarding tutorial first run walkthrough welcome intro replay redo again reset vault' },
-  { section: 'general', label: 'Reset to a blank test vault', hint: 'Switch to a disposable folder to try things out.', keywords: 'test vault wipe clean slate sandbox reset disposable experiment developer' },
-  { section: 'general', label: 'Open source licences', hint: 'Every third-party package the app ships, and its licence.', keywords: 'legal licenses license copyright open source third party attribution warranty' },
-  { section: 'customisation', disclosure: 'Appearance', label: 'Theme', hint: 'Light, dark or extra dark, applied to the whole app.', keywords: 'dark mode light mode night mode black extra dark appearance colour scheme white black background bright darker lighter' },
-  { section: 'customisation', disclosure: 'Appearance', label: 'Text colour', hint: 'How bright the writing sits on a dark background.', keywords: 'white grey text brightness dark theme readability contrast' },
-  { section: 'customisation', disclosure: 'Appearance', label: 'Accent colour', hint: 'Pick a colour, then choose how far it reaches.', keywords: 'accent color highlight brand colour tint hue' },
-  { section: 'customisation', disclosure: 'Appearance', label: 'Colour all UI text', hint: 'Let every label in the app take the accent, not just headings and titles.', keywords: 'accent ui text label everywhere hints sidebar tabs colour red heading title word count' },
-  { section: 'customisation', disclosure: 'Appearance', label: 'Stronger button edges', hint: 'How hard the edges of buttons and controls read against the page.', keywords: 'button outline border contrast ui buttons edges' },
-  { section: 'customisation', disclosure: 'Appearance', label: 'Density', hint: 'How tightly notes and folders pack in the sidebar.', keywords: 'compact spacing sidebar rows tight loose comfortable size cramped roomy bigger smaller' },
-  { section: 'customisation', disclosure: 'Appearance', label: 'Editor width', hint: 'How wide the writing area grows.', keywords: 'line length text width column wide narrow reading margins' },
-  { section: 'customisation', disclosure: 'Fonts', label: 'Fonts', hint: 'Interface font, notes font, and an easier-reading override.', keywords: 'font family typeface typography ui font' },
-  { section: 'customisation', disclosure: 'Fonts', label: 'Easier reading font', hint: 'A dyslexia-friendly override for a note’s body text.', keywords: 'dyslexia dyslexic accessibility opendyslexic readability reading difficulty easier' },
-  { section: 'customisation', disclosure: 'Colour', label: 'How a colour shows', hint: 'A coloured tag, a tinted row, or a solid row.', keywords: 'colour style tag dot tinted row solid display' },
-  { section: 'customisation', disclosure: 'Colour', label: 'Notes take their folder’s colour', hint: 'Colour inheritance for notes inside a coloured folder.', keywords: 'inherit colour folder notes propagate' },
-  { section: 'customisation', disclosure: 'Colour', label: 'Reduce opacity for nested colours', hint: 'Fades colour the deeper it’s nested.', keywords: 'opacity fade nested subfolder colour intensity' },
-  { section: 'customisation', disclosure: 'Colour', label: 'Your palette', hint: 'The colours offered when colouring a note or folder.', keywords: 'colour palette custom colours hex swatch picker' },
-  { section: 'customisation', disclosure: 'Colour', label: 'Colour new folders automatically', hint: 'Give a new folder a colour as soon as it’s made.', keywords: 'auto colour automatic random new folder' },
-  { section: 'customisation', disclosure: 'Arranging', label: 'Mix notes and folders freely', hint: 'One shared order instead of folders-then-notes.', keywords: 'sort order arrange alphabetical mixed together' },
-  { section: 'customisation', disclosure: 'Arranging', label: 'Nav buttons', hint: 'Icons only for the Note / Folder buttons above the sidebar list.', keywords: 'note folder buttons icons toolbar compact labels' },
-  { section: 'customisation', disclosure: 'Links', label: 'Show a note’s links', hint: 'A strip listing what a note points at and what points back at it.', keywords: 'backlinks links wiki links connections graph show hide' },
-  { section: 'customisation', disclosure: 'While scrolling', label: 'Keep links on screen', hint: 'The links strip stays put however far you scroll.', keywords: 'pin links sticky scroll fixed while scrolling' },
-  { section: 'customisation', disclosure: 'While scrolling', label: 'Keep the tab strip on screen', hint: 'The open-notes tab strip stays put however far you scroll.', keywords: 'pin tabs sticky scroll fixed while scrolling' },
-  { section: 'customisation', disclosure: 'While scrolling', label: 'Keep the file path bar on screen', hint: 'The Space › Folder › Note bar stays put however far you scroll.', keywords: 'pin path breadcrumb sticky scroll fixed while scrolling' },
-  { section: 'customisation', disclosure: 'While scrolling', label: "Keep the note's heading row on screen", hint: 'Bold, italic, the title, stats and split view stay put however far you scroll.', keywords: 'pin header heading row sticky scroll fixed while scrolling' },
-  { section: 'customisation', disclosure: 'Note extras', label: 'Show the file path', hint: 'A bar between the tabs and the format bar reading Space › Folder › Note.', keywords: 'breadcrumb path bar folder location show hide' },
-  { section: 'customisation', disclosure: 'Note extras', label: 'Show when it was last edited', hint: 'The edit time beside the word count.', keywords: 'edit time word count last modified timestamp' },
-  { section: 'customisation', disclosure: 'Note extras', label: 'Markdown pro', hint: 'A button that switches between the formatted view and raw Markdown.', keywords: 'raw markdown source view syntax show hide marks symbols asterisks hashes stars plain' },
-  { section: 'customisation', disclosure: 'Note extras', label: 'How the marks look in Markdown pro', hint: 'Faded, or highlighted like code.', keywords: 'raw markdown marks syntax faded dim grey highlighted monospace code source' },
-  { section: 'customisation', disclosure: 'Shortcuts', label: 'Custom buttons', hint: 'The four custom format-bar shortcut buttons.', keywords: 'format bar shortcuts toolbar bold italic custom' },
-  { section: 'spaces', label: 'Add a space', hint: 'A new set of notes with its own look and folder.', keywords: 'new space create workspace' },
-  { section: 'spaces', label: 'Space name', hint: 'What a space is called.', keywords: 'rename space title name' },
-  { section: 'spaces', label: 'Representational emoji', hint: 'Shown on the switcher and the tab above, so you can tell spaces apart.', keywords: 'emoji icon space icon avatar colour color accent monochrome mono' },
-  { section: 'spaces', label: 'Delete a space', hint: 'Remove a space and send its folder to your computer’s bin.', keywords: 'delete remove space folder rid' },
-  { section: 'spaces', label: 'Saved presets', hint: 'Reusable looks you can apply to any space.', keywords: 'preset template save look apply' },
-  { section: 'collection', label: 'Your collection', hint: 'The fonts, page looks and tints you have.', keywords: 'fonts page looks tints library collection installed owned' },
-  { section: 'collection', explore: 'fonts', label: 'Explore and install more', hint: 'Download fonts, add page looks, make a tint.', keywords: 'browse download install explore catalogue catalog get more add new' },
-  { section: 'collection', explore: 'fonts', label: 'Import your own font', hint: 'Bring in a .ttf, .otf, .woff or .woff2 from your machine.', keywords: 'custom font file ttf otf woff import own upload add' },
-  { section: 'collection', explore: 'tints', label: 'Make a tint', hint: 'Any hex colour, at a strength you set, washed under your words.', keywords: 'tint colour overlay wash hex opacity dyslexia visual stress irlen cream paper colour' },
-  { section: 'collection', explore: 'pageLooks', label: 'Request a page look', hint: 'Ask us to build the paper you want.', keywords: 'request page look paper suggest ask feedback' },
-  { section: 'customisation', disclosure: 'Page', label: 'Page look', hint: 'A pattern behind your writing — lined, grid, dots, graph, grain.', keywords: 'paper lined ruled grid squared dot graph texture background writing area notebook' },
-  { section: 'customisation', disclosure: 'Page', label: 'Tint', hint: 'A colour washed under the words, per space.', keywords: 'tint overlay colour wash page colour dyslexia visual stress reading' },
-  { section: 'tutorials', label: 'Tutorials', hint: 'Guides for using the app, including linking your notes.', keywords: 'help guide how to learn walkthrough' },
-  { section: 'sourceFolder', label: 'Source folder', hint: 'Where your vault lives on disk, and switching to a different one.', keywords: 'vault folder location switch change move disk path sync synced onedrive dropbox icloud google drive cloud saved stored' },
-  { section: 'recovery', label: 'Recovery', hint: 'A 7-day safety net for anything deleted — restore or purge it.', keywords: 'trash bin recycle bin deleted restore undo delete recover backup lost missing gone accidentally recover retrieve' },
-  { section: 'import', label: 'Import', hint: 'Bring notes in from Notion, Word, Google Keep, Apple Notes, HTML or Markdown.', keywords: 'notion word docx google keep apple notes html markdown migrate transfer evernote onenote obsidian' },
-  { section: 'transferData', label: 'Transfer data', hint: 'Move your presets, custom fonts and update setting to another computer.', keywords: 'transfer move migrate new mac new computer switch backup restore export import presets custom fonts app cleaner lost settings preferences device windows mac' },
-  { section: 'updates', label: 'Install updates automatically', hint: 'Downloads new versions quietly and applies them when you quit. Windows only — a Mac cannot replace a running app.', keywords: 'auto update background version download install upgrade newer latest' },
-  { section: 'updates', label: 'Check for updates', hint: 'Manually check for a new version.', keywords: 'check version update manual refresh' },
-  { section: 'reportBug', label: 'Report a bug', hint: 'Email us about something that went wrong.', keywords: 'bug crash issue problem broken feedback support email contact' },
-  { section: 'requestFeature', label: 'Request a feature', hint: 'Email us an idea for something new.', keywords: 'feature request suggest idea feedback contact' }
-]
+/** Interface animations on, and the computer not asking for less motion — the
+ *  same test as tabs/tabStyles.ts's `motionOn`, written out here so the
+ *  search's glow doesn't depend on that file (TabIsland.tsx does the same). */
+const glowAllowed = (): boolean =>
+  document.documentElement.dataset.motion !== 'off' &&
+  !window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-// --- Fuzzy search, so "dark mode" finds Theme and a typo like "recovry"
-// still finds Recovery, without pulling in a search library for 55 static
-// rows. Scoring is a weighted OR, not an AND: an entry needs at least ONE
-// query word to mean something in one of its fields, and `scoreEntry` then
-// scales its score by the fraction of words that landed. So "date format"
-// does still surface "Number format" — it just ranks well below "Date
-// format", which matched both words. That is deliberate, and the comment
-// here claimed the opposite (a strict AND) until 2026-09-02: degrading to
-// "here is the closest thing" beats an empty list when someone types a
-// sentence, and a sentence is what most people type. Results are ranked by
-// how well they matched, label counting for most, so a direct hit always
-// beats an incidental mention in a hint.
-// Dropped from every field, query included, before matching — otherwise a
-// hint like "A coloured tag, a tinted row" leaves stray one-letter tokens
-// ("a") sitting in the haystack, and `token.includes(w)` makes THAT match
-// almost any query that happens to contain the letter "a" (which is most of
-// them). Same failure mode for the leftover "s" a split on `note's` produces.
-const STOPWORDS = new Set([
-  'a', 'an', 'the', 'of', 'to', 'in', 'on', 'is', 'are', 'it', 'its', 'your',
-  'you', 'for', 'as', 'at', 'by', 'be', 'this', 'that', 'with', 'from', 'into', 'so', 'or', 'and',
-  // People type questions, not keywords — "how do i make the app dark",
-  // "where is the backup". Every one of these words used to be a real token
-  // hunting for a match, and the damage was worse than noise: `fieldScore`
-  // scores a 3-letter substring hit at 2, so "how" matched every entry
-  // containing "show" — "Show the file path", "Show a note's links", "How a
-  // colour shows" — and outranked the entry the person actually wanted.
-  // Dropped from the haystack too, which is why "How a colour shows" is still
-  // reachable: it indexes as "colour" + "shows".
-  'how', 'do', 'does', 'did', 'can', 'could', 'would', 'should', 'where', 'what',
-  'when', 'why', 'who', 'which', 'make', 'makes', 'change', 'changing', 'set',
-  'setting', 'settings', 'turn', 'get', 'my', 'me', 'i', 'want', 'need', 'please',
-  'app', 'option', 'options', 'there', 'here', 'have', 'has', 'was', 'were', 'am', 'if'
-])
-
-function tokenize(s: string): string[] {
-  return s
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((w) => w.length > 1 && !STOPWORDS.has(w))
+/** The first heading or label on the page whose own words are `text` — how a
+ *  search result finds the setting it named (see `landing`). Its OWN words
+ *  only, so a paragraph that merely mentions the name doesn't count. Never
+ *  the row of tabs at the top, which repeats page names, nor a fold's own
+ *  row: the Advanced fold's summary begins "Text colour on dark themes…",
+ *  and matching that parked the page on the closed fold instead of the Text
+ *  colour setting inside it. A heading or label may carry more after the name
+ *  ("Intensity — 50%"); anything else has to match exactly. */
+function findOnPage(root: HTMLElement | null, text: string): HTMLElement | null {
+  if (!root) return null
+  for (const el of root.querySelectorAll<HTMLElement>('h3, span, p, button, label')) {
+    if (el.closest('[role=tablist], [aria-expanded]')) continue
+    const own = Array.from(el.childNodes)
+      .filter((n) => n.nodeType === Node.TEXT_NODE)
+      .map((n) => n.textContent)
+      .join('')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (own === text) return el
+    if ((el.tagName === 'H3' || el.tagName === 'LABEL') && own.startsWith(text + ' ')) return el
+  }
+  return null
 }
 
-function levenshtein(a: string, b: string): number {
-  if (a === b) return 0
-  if (a.length === 0) return b.length
-  if (b.length === 0) return a.length
-  const dp = new Array<number>(b.length + 1)
-  for (let j = 0; j <= b.length; j++) dp[j] = j
-  for (let i = 1; i <= a.length; i++) {
-    let prev = dp[0]
-    dp[0] = i
-    for (let j = 1; j <= b.length; j++) {
-      const tmp = dp[j]
-      dp[j] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[j], dp[j - 1])
-      prev = tmp
+/** The search box, centred in the window's title bar, with its results in a
+ *  list that drops down beneath it. Arrow keys move through the results,
+ *  Enter takes the highlighted one (the best match until you move), and
+ *  Escape clears the search before it would close the window.
+ *
+ *  Focused when Settings opens, so you can open it and just type — the
+ *  quickest route to a setting you can't see (Reuben, 2026-09-29: "make sure
+ *  the settings are easy to find"). An empty box has no claim on Escape, so
+ *  Escape still closes the window the way it always has.
+ *
+ *  A search that finds nothing says so in the list and leaves the pages on
+ *  the left alone — it used to replace them, so a word this window doesn't
+ *  know ("spellcheck", "password") took away the only other way to browse. */
+function SettingsSearch({ onPick }: { onPick: (e: SearchEntry) => void }): React.JSX.Element {
+  const [query, setQuery] = useState('')
+  const [active, setActive] = useState(0)
+  // The list shows only while the box has focus. It used to show whenever
+  // there was text in the box, so typing, then clicking a page on the left,
+  // left the list lying over the page you'd just opened.
+  const [focused, setFocused] = useState(false)
+  const matches = useMemo(() => searchSettings(query), [query])
+  const open = focused && query.trim().length > 0
+  const input = useRef<HTMLInputElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    input.current?.focus({ preventScroll: true })
+  }, [])
+
+  // A new query starts at the best match again.
+  useEffect(() => setActive(0), [query])
+
+  // Keep the highlighted result in view as the arrow keys move it.
+  useEffect(() => {
+    list.current
+      ?.querySelector<HTMLElement>(`[data-result="${active}"]`)
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [active])
+
+  // Claimed only while there is a search to clear — see escapeClaims.ts for
+  // why the window's own close-on-Escape needs telling.
+  useEffect(() => {
+    if (!open) return
+    const release = claimEscape()
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        setQuery('')
+      }
     }
-  }
-  return dp[b.length]
-}
-
-// How many typo'd characters a query word may be from a field word before it
-// stops counting as a match. 0 below 4 letters — short words collide too
-// easily ("on" is one edit from "no") — rising slowly after that.
-function typoBudget(len: number): number {
-  if (len <= 3) return 0
-  if (len <= 6) return 1
-  return 2
-}
-
-/** Best match strength between one query word and one field's words: 3 exact,
- *  2 substring either direction (only once both words have some length —
- *  otherwise a 2-letter fragment matches almost anything), 1 within typo
- *  budget, 0 no match. */
-function fieldScore(token: string, fieldWords: string[]): number {
-  let best = 0
-  for (const w of fieldWords) {
-    if (w === token) return 3
-    if (token.length >= 3 && w.length >= 3 && (w.includes(token) || token.includes(w))) best = Math.max(best, 2)
-    else if (levenshtein(token, w) <= typoBudget(token.length)) best = Math.max(best, 1)
-  }
-  return best
-}
-
-// Partial credit, not strict AND: a query word that matches nothing costs
-// that word's share of the total rather than disqualifying the entry
-// outright. Without this, "12 hour clock" scored zero on Date format, because
-// "clock" (fair enough — that's Time zone's word) killed the other two words'
-// otherwise-solid match. matchedCount/queryTokens.length still means a full
-// match always outranks a partial one for the same raw score.
-function scoreEntry(queryTokens: string[], fields: [string[], string[], string[]]): number {
-  const [labelWords, keywordWords, hintWords] = fields
-  let matched = 0
-  let raw = 0
-  for (const t of queryTokens) {
-    const s = Math.max(
-      fieldScore(t, labelWords) * 3,
-      fieldScore(t, keywordWords) * 2,
-      fieldScore(t, hintWords) * 1
-    )
-    if (s > 0) {
-      matched++
-      raw += s
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      release()
+      window.removeEventListener('keydown', onKey, true)
     }
+  }, [open])
+
+  const pick = (m: SearchEntry): void => {
+    // An answer has nowhere to go — it was read in the list.
+    if (!m.answer) onPick(m)
+    setQuery('')
   }
-  if (matched === 0) return 0
-  return raw * (matched / queryTokens.length)
+
+  return (
+    <div className="relative w-[min(400px,38vw)]">
+      <div className="btn-edge flex items-center gap-1.5 rounded-full border border-ink-300/30 bg-surface/70 py-1.5 pl-3 pr-1.5 focus-within:border-brand-300 focus-within:ring-4 focus-within:ring-brand-100">
+        <span className="shrink-0 text-ink-300">
+          <Icon name="search" className="h-3.5 w-3.5" />
+        </span>
+        <input
+          ref={input}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown' && matches.length > 0) {
+              e.preventDefault()
+              setActive((a) => Math.min(a + 1, matches.length - 1))
+            } else if (e.key === 'ArrowUp' && matches.length > 0) {
+              e.preventDefault()
+              setActive((a) => Math.max(a - 1, 0))
+            } else if (e.key === 'Enter' && matches.length > 0) {
+              e.preventDefault()
+              pick(matches[Math.min(active, matches.length - 1)])
+            }
+          }}
+          placeholder="Search settings"
+          spellCheck={false}
+          role="combobox"
+          aria-label="Search settings"
+          aria-expanded={open}
+          aria-controls="settings-search-results"
+          aria-activedescendant={open && matches.length > 0 ? `settings-result-${active}` : undefined}
+          className="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink-900 outline-none placeholder:text-ink-300"
+        />
+        {query && (
+          <button
+            onClick={() => {
+              setQuery('')
+              input.current?.focus()
+            }}
+            data-tip="Clear"
+            aria-label="Clear search"
+            // `-my-1`: the button is taller than the line of text, and without
+            // it the box — and with it the whole window below the title bar —
+            // grew a few pixels the moment you typed the first letter.
+            className="-my-1 shrink-0 rounded-full border-none bg-transparent p-1 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
+          >
+            <Icon name="x" className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div
+          ref={list}
+          id="settings-search-results"
+          role="listbox"
+          aria-label="Matching settings"
+          className="fade-in absolute left-0 right-0 top-full z-50 mt-1.5 max-h-[min(420px,60vh)] overflow-y-auto rounded-xl border border-ink-300/25 bg-surface p-1 shadow-float"
+          // `.fade-in` holds its last frame, a 3D transform, for as long as the
+          // list is open — and a list of words resting on a 3D transform loses
+          // Windows' sharp text (CLAUDE.md). Held only before it starts, it
+          // comes to rest at no transform instead; the motion is the same.
+          style={{ animationFillMode: 'backwards' }}
+        >
+          {matches.length === 0 ? (
+            <p className="px-2.5 py-2 text-[12px] leading-relaxed text-ink-400">
+              Nothing matched &ldquo;{query.trim()}&rdquo;. Try another word, or pick a page on the
+              left.
+            </p>
+          ) : (
+            matches.map((m, i) => (
+              <button
+                key={m.section + m.label}
+                id={`settings-result-${i}`}
+                data-result={i}
+                role="option"
+                aria-selected={i === active}
+                tabIndex={-1}
+                // mousedown, not click: the input keeps focus, so the list
+                // doesn't blink shut between press and release.
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseMove={() => setActive(i)}
+                onClick={() => pick(m)}
+                className={
+                  'flex w-full flex-col items-start gap-0.5 rounded-lg border-none px-2.5 py-2 text-left outline-none transition-colors duration-150 ' +
+                  (i === active ? 'bg-ink-300/15' : 'bg-transparent')
+                }
+              >
+                <span className="text-[12.5px] font-medium text-ink-700">{m.label}</span>
+                {m.answer ? (
+                  <span className="text-[11px] text-ink-500">{m.answer}</span>
+                ) : (
+                  <span className="text-[11px] text-ink-400">{whereIs(m)}</span>
+                )}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
-const SEARCH_FIELDS = SEARCH_INDEX.map(
-  (e): [string[], string[], string[]] => [tokenize(e.label), tokenize(e.keywords), tokenize(e.hint)]
-)
-
-function searchSettings(query: string): SearchEntry[] {
-  const tokens = tokenize(query)
-  if (tokens.length === 0) return []
-  return SEARCH_INDEX.map((e, i) => ({ e, score: scoreEntry(tokens, SEARCH_FIELDS[i]) }))
-    .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .map((r) => r.e)
+/** General's small "More" fold, at the foot of the page. Styled as the quiet
+ *  "Open source licences ›" link above it rather than as one of the big
+ *  settings rows: what it holds is rarely wanted, and the fold shouldn't
+ *  compete with the page. `openSignal` works as Disclosure's does (Spaces.tsx)
+ *  — a changing number from a search result opens it, and the window's
+ *  `landing` then scrolls to the row that was asked for. */
+function MoreFold({
+  openSignal,
+  children
+}: {
+  openSignal?: number
+  children: React.ReactNode
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (openSignal !== undefined) setOpen(true)
+  }, [openSignal])
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="settings-more"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1 rounded-lg border-none bg-transparent px-2 py-1 text-[12px] text-ink-500 outline-none transition duration-150 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
+      >
+        More
+        <span className={'inline-flex transition-transform duration-200 ' + (open ? 'rotate-90' : '')}>
+          <Icon name="chevron" className="h-3.5 w-3.5" />
+        </span>
+      </button>
+      {open && (
+        // `backwards` for the same Windows reason as the search list above.
+        <div id="settings-more" className="fade-in mt-3" style={{ animationFillMode: 'backwards' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
 }
 
 /** The gear. It lives in the sidebar's bottom-left strip, beside the bin, the
@@ -341,7 +426,7 @@ export function SettingsButton({
   const [mounted, setMounted] = useState(false) // in the DOM, including while closing
   const [armed, setArmed] = useState(false) // laid out, safe to animate
   const [closing, setClosing] = useState(false)
-  const [initialSection, setInitialSection] = useState<SectionId>(SECTIONS[0].id)
+  const [initialSection, setInitialSection] = useState<SectionId>('general')
   const btn = useRef<HTMLButtonElement>(null)
   const win = useRef<HTMLDivElement>(null)
 
@@ -364,7 +449,7 @@ export function SettingsButton({
   // this prop, so resetting there would snap the page to General in front of
   // the user while it shrinks away.
   useEffect(() => {
-    if (!mounted) setInitialSection(SECTIONS[0].id)
+    if (!mounted) setInitialSection('general')
   }, [mounted])
 
   // Closing before the animation is armed (Escape hammered within a frame or two
@@ -563,7 +648,7 @@ function SettingsWindow({
 
   // General's "Open source licences" swaps the whole General page for the
   // licence list. Held here rather than inside General so the swap replaces
-  // every block at once (Startup, Vault reset, Formatting, Legal) instead of
+  // every block at once (Startup, Formatting, Legal, More) instead of
   // dropping the list in underneath them. Reset on any section change.
   const [showLicenses, setShowLicenses] = useState(false)
   useEffect(() => {
@@ -588,13 +673,13 @@ function SettingsWindow({
    *  the section AND its tab — clearing the tab it had just asked for, and
    *  landing "make a tint" on the shelves every time. Nothing jumps INTO the
    *  licence list, so the effect is still right for it. */
-  /** Which fold on Customisation a search result asked to open, and a counter
-   *  that makes each ask distinct. The counter is the whole point: search
-   *  "density" (Appearance opens), close it by hand, search "editor width" —
-   *  the fold is the same string, so on its own it would be `===` to last
-   *  time, Disclosure's effect would not re-run, and the second search would
-   *  land on a closed fold. Cleared by any ordinary navigation, so reaching
-   *  Customisation from the nav gives you the page as you left it. */
+  /** Which fold a search result asked to open — one of Look's, or General's
+   *  More — and a counter that makes each ask distinct. The counter is the
+   *  whole point: search "density" (Sidebar opens), close it by hand, search
+   *  "nav buttons" — the fold is the same string, so on its own it would be
+   *  `===` to last time, Disclosure's effect would not re-run, and the second
+   *  search would land on a closed fold. Cleared by any ordinary navigation,
+   *  so reaching a page from the list gives you it as you left it. */
   const [openDisclosure, setOpenDisclosure] = useState<{ fold: string; n: number } | null>(null)
   const askCount = useRef(0)
 
@@ -604,18 +689,79 @@ function SettingsWindow({
     setOpenDisclosure(fold ? { fold, n: ++askCount.current } : null)
   }
 
-  const [query, setQuery] = useState('')
-  const matches = useMemo(() => searchSettings(query), [query])
-  const jumpTo = (target: SearchEntry): void => {
-    goTo(target.section, target.explore ?? null, target.disclosure ?? null)
-    setQuery('')
-  }
+  /** The list entry the current page belongs to — which one is lit, and
+   *  which tabs show above the page. */
+  const group = GROUP_OF[section]
 
   // ONE instance, shared by Customisation/Spaces (the picker: only shows
   // what's installed) and Collection (the catalogue: preview, download,
   // import your own) — so a download made from any of the three shows up in
   // all of them without a refresh. See useInstalledFonts.ts.
   const fontLibrary = useInstalledFonts()
+
+  /** The page area — the one part of the window that scrolls. A search result
+   *  scrolls it to the setting (`landing`, below). */
+  const pageRef = useRef<HTMLDivElement>(null)
+
+  /** Where a search result goes: its page (and tab, and fold), and then the
+   *  setting itself. Landing on the right page wasn't enough — testing every
+   *  result on 2026-09-29 found eleven that opened the right page or fold
+   *  with the setting still below the bottom edge (Editor width at the foot
+   *  of Page, Delete a space at the foot of Spaces, Number format under
+   *  General's toggles). So the page is carried to the setting, centred, and
+   *  it glows for a moment so the eye finds it.
+   *
+   *  Found by the words shown on the page — the entry's `anchor`, or its
+   *  label when that is what's printed — because the pages are free-form, with
+   *  no ids to aim at. Looked for over the next few frames: a setting inside
+   *  a fold only exists once the fold has opened, which is a render later. */
+  const [landing, setLanding] = useState<{ text: string; n: number } | null>(null)
+  const landCount = useRef(0)
+  const jumpTo = (target: SearchEntry): void => {
+    // Back to the top first, so a result that can't be found on its page (the
+    // Mac has no automatic-updates switch to find) lands at the page's start
+    // rather than wherever the last one was scrolled to.
+    pageRef.current?.scrollTo({ top: 0 })
+    goTo(target.section, target.explore ?? null, target.disclosure ?? null)
+    setLanding({ text: target.anchor ?? target.label, n: ++landCount.current })
+  }
+  useEffect(() => {
+    if (!landing) return
+    let frame = 0
+    let tries = 0
+    const seek = (): void => {
+      const el = findOnPage(pageRef.current, landing.text)
+      if (!el) {
+        if (++tries < 30) frame = requestAnimationFrame(seek)
+        return
+      }
+      el.scrollIntoView({ block: 'center' })
+      if (!glowAllowed()) return
+      // A colour, not a movement: nothing that sits still may move (the
+      // motion rules in CLAUDE.md). The row it's on, not just its words.
+      // Rises, holds, then fades, over three seconds. It was a 1.6s flash
+      // that faded from its first frame, and Reuben found it too fast to
+      // catch (2026-09-29: "needs to be a slower glow").
+      const row = el.closest<HTMLElement>('button, section, [role=group]') ?? el.parentElement ?? el
+      const glow = 'rgb(var(--accent-500) / 0.18)'
+      const none = 'rgb(var(--accent-500) / 0)'
+      row.animate(
+        [
+          { backgroundColor: none, easing: 'ease-out' },
+          { backgroundColor: glow, offset: 0.12 },
+          { backgroundColor: glow, offset: 0.45, easing: 'ease-in-out' },
+          { backgroundColor: none }
+        ],
+        { duration: 3000 }
+      )
+    }
+    // Two frames in: the fold a result opens is drawn in the render after
+    // this one, and its own nearest-scroll runs first.
+    frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(seek)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [landing])
 
   return (
     <div
@@ -634,101 +780,68 @@ function SettingsWindow({
         (closing ? 'closing' : '')
       }
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-ink-300/20 px-4 py-3">
-        <span className="text-brand-500">
-          <Icon name="gear" className="h-4 w-4" />
-        </span>
-        <p className="flex-1 font-display text-[15px] font-semibold text-ink-900">Settings</p>
-        <button
-          onClick={onClose}
-          data-tip="Close (Esc)"
-          aria-label="Close"
-          className="rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
-        >
-          <Icon name="x" className="h-4 w-4" />
-        </button>
+      <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-ink-300/20 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="text-brand-500">
+            <Icon name="gear" className="h-4 w-4" />
+          </span>
+          <p className="font-display text-[15px] font-semibold text-ink-900">Settings</p>
+        </div>
+        {/* Centred in the title bar, and there on every page — the quickest way
+            to anything in here is to type what you're after (Reuben,
+            2026-09-29). It used to sit at the top of the left-hand list. */}
+        <SettingsSearch onPick={jumpTo} />
+        <div className="flex justify-end">
+          <button
+            onClick={onClose}
+            data-tip="Close (Esc)"
+            aria-label="Close"
+            className="rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
+          >
+            <Icon name="x" className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <nav className="flex w-52 shrink-0 flex-col border-r border-ink-300/20 p-2">
-          <div className="btn-edge mb-2 flex shrink-0 items-center gap-1.5 rounded-full border border-ink-300/30 bg-surface/70 py-1.5 pl-3 pr-1.5 focus-within:border-brand-300 focus-within:ring-4 focus-within:ring-brand-100">
-            <span className="shrink-0 text-ink-300">
-              <Icon name="search" className="h-3.5 w-3.5" />
-            </span>
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && matches.length > 0) jumpTo(matches[0])
-              }}
-              placeholder="Search settings"
-              spellCheck={false}
-              aria-label="Search settings"
-              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink-900 outline-none placeholder:text-ink-300"
-            />
-            {query && (
+        {/* `gap-2`: six entries in a tall column read as a cramped block at
+            the old 2px gap (Reuben, 2026-09-29: "space the icons out a bit
+            more"). */}
+        <nav aria-label="Settings pages" className="flex w-48 shrink-0 flex-col gap-2 border-r border-ink-300/20 p-2">
+          {GROUPS.map((g) => {
+            const on = group.id === g.id
+            return (
               <button
-                onClick={() => setQuery('')}
-                data-tip="Clear"
-                aria-label="Clear search"
-                className="shrink-0 rounded-full border-none bg-transparent p-1 text-ink-400 outline-none transition-colors hover:bg-transparent hover:text-ink-900"
+                key={g.id}
+                onClick={() => goTo(g.pages[0].id)}
+                aria-current={on}
+                className={
+                  'flex w-full items-center gap-2 rounded-xl border-none px-2.5 py-2 text-left text-[13px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+                  // The settings window's own sidebar takes the accent
+                  // alongside the section headings — the two are what give
+                  // this window its shape (Reuben, 2026-09-06). Everything
+                  // else in here stays ink unless "Colour all UI text" is on.
+                  (on
+                    ? 'bg-accent-500/15 text-accent-600'
+                    : 'bg-transparent text-accent-500 hover:bg-ink-300/15 hover:text-accent-600')
+                }
               >
-                <Icon name="x" className="h-3.5 w-3.5" />
+                <Icon name={g.icon} className="h-4 w-4" />
+                <span>{g.label}</span>
               </button>
-            )}
-          </div>
-
-          {/* A search that found nothing used to REPLACE the section list with
-              one sentence, so the moment you typed a word this window doesn't
-              know ("spellcheck", "password") you lost the only way to browse
-              and had to clear the box to get it back. The list stays. */}
-          {query.trim() && matches.length > 0 ? (
-            <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
-              {matches.map((m, i) => (
-                <button
-                  key={m.section + m.label + i}
-                  onClick={() => jumpTo(m)}
-                  className="flex w-full flex-col items-start gap-0.5 rounded-xl border-none px-2.5 py-2 text-left outline-none transition duration-200 hover:bg-ink-300/15 focus-visible:ring-2 focus-visible:ring-brand-300"
-                >
-                  <span className="text-[12.5px] font-medium text-ink-700">{m.label}</span>
-                  <span className="text-[11px] text-ink-400">{SECTION_LABEL[m.section]}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
-              {query.trim() && (
-                <p className="px-2.5 pb-1 pt-2 text-[12px] leading-relaxed text-ink-400">
-                  Nothing matched &ldquo;{query.trim()}&rdquo;. The pages themselves:
-                </p>
-              )}
-              {SECTIONS.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => goTo(s.id)}
-                  aria-current={section === s.id}
-                  className={
-                    'flex w-full items-center gap-2 rounded-xl border-none px-2.5 py-2 text-left text-[13px] font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
-                    // The settings window's own sidebar takes the accent
-                    // alongside the section headings — the two are what give
-                    // this window its shape (Reuben, 2026-09-06). Everything
-                    // else in here stays ink unless "Colour all UI text" is on.
-                    (section === s.id
-                      ? 'bg-accent-500/15 text-accent-600'
-                      : 'bg-transparent text-accent-500 hover:bg-ink-300/15 hover:text-accent-600')
-                  }
-                >
-                  <Icon name={s.icon} className="h-4 w-4" />
-                  <span>{s.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
+            )
+          })}
         </nav>
 
         {/* The scroll container. `min-h-0` on the row above is what lets it
             actually scroll instead of stretching the window past its height. */}
-        <div className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5">
+        <div ref={pageRef} className="flex min-w-0 flex-1 flex-col gap-6 overflow-y-auto px-6 py-5">
+          {/* The pages of a merged entry. Hidden while Explore is open: that
+              page has its own back button and its own row of tabs, and two
+              rows of tabs stacked is one too many. */}
+          {group.pages.length > 1 && !(section === 'collection' && explore) && (
+            <PageTabs tabs={group.pages} value={section} onPick={(id) => goTo(id)} label={group.label} />
+          )}
           {section === 'general' &&
             (showLicenses ? (
               <OssLicenses onBack={() => setShowLicenses(false)} />
@@ -742,22 +855,33 @@ function SettingsWindow({
                   <General settings={settings} onChange={onChange} />
                 </div>
                 <div>
-                  <VaultReset />
-                </div>
-                <div>
                   <Formatting settings={settings} onChange={onChange} />
                 </div>
                 <p className="rounded-xl bg-ink-300/10 px-3 py-2.5 text-[11.5px] leading-relaxed text-ink-500 ring-1 ring-ink-300/25">
                   <span className="font-medium text-brand-600">Looking for the theme, colours or
                   the sidebar?</span>{' '}
                   Those belong to a space, not to the app — see{' '}
-                  <span className="font-medium text-ink-600">Customisation</span> to set them
-                  everywhere at once, or <span className="font-medium text-ink-600">Spaces</span> to
-                  set one on its own.
+                  <button type="button" className={LEGAL_LINK} onClick={() => goTo('customisation')}>
+                    Look
+                  </button>{' '}
+                  to set them everywhere at once, or{' '}
+                  <button type="button" className={LEGAL_LINK} onClick={() => goTo('spaces')}>
+                    Spaces
+                  </button>{' '}
+                  to set one on its own.
                 </p>
                 <div>
                   <Legal onOpenLicences={() => setShowLicenses(true)} />
                 </div>
+                {/* Last, and folded: starting over is something you reach for
+                    rarely, so it shouldn't sit between the everyday settings
+                    (Reuben, 2026-09-29). Search still reaches it — both rows
+                    carry `disclosure: 'More'` and open this on arrival. */}
+                <MoreFold
+                  openSignal={openDisclosure?.fold === 'More' ? openDisclosure.n : undefined}
+                >
+                  <VaultReset />
+                </MoreFold>
               </>
             ))}
           {section === 'customisation' && (
@@ -964,7 +1088,7 @@ function VaultReset(): React.JSX.Element {
             </span>
             <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">
               Switches to a separate, disposable folder and wipes it clean, for trying things out
-              without affecting your real vault. Switch back any time from Source folder.
+              without affecting your real vault. Switch back any time from Data → Source folder.
             </span>
           </span>
           <button

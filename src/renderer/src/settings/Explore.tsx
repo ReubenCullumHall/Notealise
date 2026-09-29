@@ -109,7 +109,7 @@ function Fonts({ fontLibrary }: { fontLibrary: FontLibrary }): React.JSX.Element
         <h3>Download more</h3>
         <p className="hint">
           The preview shown is a snapshot — download a face to actually use it in the Fonts pickers
-          on Spaces or Customisation. Needs a connection; downloaded fonts work offline afterwards.
+          on Spaces or Look. Needs a connection; downloaded fonts work offline afterwards.
         </p>
         {SHELF_ORDER.map((cat) => (
           <div key={cat} className="mt-3 first:mt-0">

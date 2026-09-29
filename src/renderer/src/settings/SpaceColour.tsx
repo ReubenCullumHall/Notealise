@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { DEFAULT_PALETTE, PALETTE_MAX, inkOn, rgbChannels } from '../../../shared/color'
 import type { ColorStyle, Space } from '../../../shared/settings'
 import { Icon } from '../icons'
-import { ToggleRow } from './primitives'
+import { Tick, TickGroup, ToggleRow } from './primitives'
 import { ColorField, Swatch } from '../color/Picker'
 import type { SpaceProps } from './Spaces'
 
@@ -61,7 +61,7 @@ function Preview({ space }: { space: Space }): React.JSX.Element {
 
   const row = (name: string, sub: string, child: boolean): React.JSX.Element => (
     <div
-      className={`tree-row flex items-center pr-1.5 ${child && !space.colorInherit ? '' : tint}`}
+      className={`tree-row flex items-center pr-1.5 ${child && !space.colorInherit ? '' : tint}${child && space.colorFadeNested ? ' colorFade' : ''}`}
       style={{ ...vars, paddingLeft: child ? 22 : 8 }}
     >
       <span className="grip shrink-0 text-ink-300" style={{ opacity: 1 }}>
@@ -126,22 +126,29 @@ export function SpaceColour({ space, onChange, onColorExisting }: ColourProps): 
           <Preview space={space} />
         </div>
 
+        {/* Two switches until 2026-09-29, one under the other, both about
+            what a row inside a folder does with colour — so one frame, two
+            ticks. Still two independent answers underneath (colorInherit,
+            colorFadeNested): fading applies to a row coloured by hand too,
+            not only to one that took its folder's colour. */}
         <div className="mt-3">
-          <ToggleRow
-            on={space.colorInherit}
-            onClick={() => onChange({ colorInherit: !space.colorInherit })}
-            label="Notes take their folder’s colour"
-            hint="A note or subfolder with no colour of its own shows the nearest coloured folder above it, so a coloured folder reads as one group. Off, only what you colour directly is coloured."
-          />
-        </div>
-
-        <div className="mt-3">
-          <ToggleRow
-            on={space.colorFadeNested}
-            onClick={() => onChange({ colorFadeNested: !space.colorFadeNested })}
-            label="Reduce opacity for nested colours"
-            hint="A coloured note or folder is painted more quietly once it's inside a folder — same colour, just more of the sidebar showing through. Off, a coloured row looks the same whether it's nested or not."
-          />
+          <TickGroup
+            label="Notes and folders inside a folder"
+            hint="Anything without its own colour can show the nearest coloured folder above it, and a coloured row inside a folder can be painted more quietly."
+          >
+            <Tick
+              on={space.colorInherit}
+              onClick={() => onChange({ colorInherit: !space.colorInherit })}
+              label="Take their folder’s colour"
+              tip="Off, only what you colour directly is coloured."
+            />
+            <Tick
+              on={space.colorFadeNested}
+              onClick={() => onChange({ colorFadeNested: !space.colorFadeNested })}
+              label="Show colours fainter"
+              tip="Same colour, just more of the sidebar showing through. Off, a coloured row looks the same nested or not."
+            />
+          </TickGroup>
         </div>
       </section>
 

@@ -2,16 +2,17 @@ import { findFont, fontCssValue, FONTS, type FontFallback } from './fonts'
 import type { FontLibrary } from './useInstalledFonts'
 import type { Space } from '../../../shared/settings'
 import type { SpaceProps } from './Spaces'
+import { Differs } from './primitives'
 
-// Settings → Fonts. Rendered inside SpaceForm, so — like Colour and
-// Appearance beside it — it appears in both scopes with no second copy: in
-// Spaces → this space it sets that space's fonts, in Customisation it writes
-// to every space at once.
+// The three font pickers. Rendered inside SpaceForm, so — like Theme and
+// Colour beside it — they appear in both scopes with no second copy: in
+// Spaces → this space they set that space's fonts, in Look → Every space they
+// write to every space at once.
 //
 // Only shows fonts that are actually INSTALLED (bundled + whatever
 // `fontLibrary` has downloaded or the user has imported) — you can't select a
 // font you don't have. Everything else lives one page over, in Settings →
-// Your collection → Fonts (Collection.tsx), which is where "installed" grows.
+// Look → Your collection → Fonts (Collection.tsx), which is where "installed" grows.
 //
 // Three independent picks, not one grid:
 //  - `uiFont`, a whole-INTERFACE skin — sidebar, settings, buttons,
@@ -88,9 +89,14 @@ function SkinGrid({
 
 interface Props extends SpaceProps {
   fontLibrary: FontLibrary
+  /** whole-app scope: which of the three the spaces disagree about */
+  differs?: (key: keyof Space) => boolean
 }
 
-export function SpaceFonts({ space, onChange, fontLibrary }: Props): React.JSX.Element {
+// The third of the three basics on Look and Spaces (2026-09-29), shown open
+// rather than inside a Fonts fold — so each heading names its font outright,
+// and each hint is one line.
+export function SpaceFonts({ space, onChange, fontLibrary, differs }: Props): React.JSX.Element {
   const patch = (p: Partial<Space>): void => onChange(p)
 
   const bundled = FONTS.filter((f) => f.source === 'bundled')
@@ -113,29 +119,33 @@ export function SpaceFonts({ space, onChange, fontLibrary }: Props): React.JSX.E
   return (
     <>
       <section className="settings-group">
-        <h3>Interface</h3>
+        <h3>
+          Interface font
+          {differs?.('uiFont') && <Differs />}
+        </h3>
         <p className="hint">
-          A skin for the app around your notes — sidebar, settings, buttons. Leaves what you've
-          actually written untouched. More faces to pick from live in Your collection → Fonts.
+          The sidebar, settings and buttons — never your writing. More faces are in Look → Your
+          collection.
         </p>
         <SkinGrid fonts={skinFonts} value={space.uiFont} onPick={(id) => patch({ uiFont: id })} />
       </section>
 
       <section className="settings-group">
-        <h3>Notes</h3>
-        <p className="hint">
-          A skin for the writing itself — a note's body, its headings, its title — same face for
-          both. Kept separate from Interface above, so styling your notes doesn't also restyle the
-          settings they're picked from. Code blocks keep JetBrains Mono regardless.
-        </p>
+        <h3>
+          Notes font
+          {differs?.('font') && <Differs />}
+        </h3>
+        <p className="hint">A note’s body, headings and title. Code blocks keep JetBrains Mono.</p>
         <SkinGrid fonts={skinFonts} value={space.font} onPick={(id) => patch({ font: id })} />
       </section>
 
       <section className="settings-group">
-        <h3>Easier reading</h3>
+        <h3>
+          Easier reading font
+          {differs?.('dyslexiaFont') && <Differs />}
+        </h3>
         <p className="hint">
-          Swaps just a note's body text — never its headings or the interface — for a face chosen
-          for legibility, on top of whichever Notes font above is picked.
+          Swaps just a note’s body text for a face chosen for legibility, on top of the Notes font.
         </p>
         <SkinGrid fonts={dyslexiaFonts} value={space.dyslexiaFont} onPick={(id) => patch({ dyslexiaFont: id })} />
       </section>

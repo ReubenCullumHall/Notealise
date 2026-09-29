@@ -16,7 +16,7 @@ import {
 import { ACCENT_MODES, DENSITIES, EDITOR_WIDTHS, resolveTheme, TEXT_TONES, THEMES } from './model'
 import { AccentPicker } from './AccentPicker'
 import { Icon } from '../icons'
-import { SettingRow, ToggleRow } from './primitives'
+import { Differs, SettingRow, ToggleRow } from './primitives'
 import { useArmed } from './useArmed'
 import { ActionGrid, SlotFace } from '../editor/SlotPicker'
 import { SpaceForm } from './SpaceForm'
@@ -408,17 +408,17 @@ export function Spaces({
         </div>
       </section>
 
-      {/* The SAME form Customisation shows — one component, so "this space
-          only" and "every space" can never offer different options or lay them
-          out differently. Only where the change lands differs.
-          Theme is INSIDE it now (Appearance → Theme) rather than rendered
+      {/* The SAME form Look → Every space shows — one component, so "this
+          space only" and "every space" can never offer different options or
+          lay them out differently. Only where the change lands differs.
+          Theme is INSIDE it now (the first of its basics) rather than rendered
           separately just above, which is what made Customisation the one page
           with no theme control — see ThemeCards. */}
       <div>
-        <p className="mb-2 px-1 text-[11.5px] leading-relaxed text-ink-400">
+        <p className="mb-5 px-1 text-[11.5px] leading-relaxed text-ink-400">
           These belong to this space alone. The same list is in{' '}
-          <span className="font-medium text-ink-500">Customisation</span>, where changing one
-          answers it for every space at once.
+          <span className="font-medium text-ink-500">Look</span>, where changing one answers it for
+          every space at once.
         </p>
         <SpaceForm
           space={space}
@@ -935,6 +935,8 @@ export function Disclosure({
     if (openSignal === undefined) return
     setOpen(true)
     // The window has just switched page; the fold can be well down the list.
+    // (Settings.tsx then carries the page on to the setting itself, once the
+    // fold's rows exist — see `landing` there.)
     ref.current?.scrollIntoView({ block: 'nearest' })
   }, [openSignal])
   const id = `disclosure-${label.toLowerCase()}`
@@ -973,30 +975,31 @@ export function Disclosure({
   )
 }
 
-/** Theme, and Text colour riding along with it — it only means anything on a
- *  dark theme, so it belongs beside the choice that makes it relevant rather
- *  than three sections away.
+/** Theme — the first of the three basics SpaceForm shows before any fold
+ *  (theme, accent colour, fonts), because it is what most people open
+ *  Settings to change.
  *
- *  Rendered as the first thing inside `SpaceAppearance`, which means inside the
- *  **Appearance** disclosure, which means BOTH scopes get it. Until 2026-08-29
- *  this sat outside that disclosure and was used only by the space editor
- *  below — so Settings → Customisation, which renders the shared `SpaceForm`
- *  and nothing else, had no way to set the theme at all, while the disclosure
- *  it should have been in advertised "Theme, accent colour…" in its own hint
- *  and its "spaces differ" check already listed `theme`/`textTone` for controls
- *  that were not there. Reuben's call on where it goes: every customisation
- *  setting must exist in both scopes, and one shared component is the only
- *  thing that keeps them from drifting. It costs a click in the space editor,
- *  where theme used to be visible without one; that was the trade accepted. */
-function ThemeCards({ space, onChange }: SpaceProps): React.JSX.Element {
-  // Text tone only means anything on the two dark ramps (see TEXT_TONES'
-  // hint), so when the theme is 'system' this has to ask what it currently
-  // RESOLVES to, not the stored id — otherwise picking System on a light OS
-  // leaves the tone row enabled for a theme that isn't actually showing.
-  const resolvedLight = resolveTheme(space.theme) === 'light'
+ *  Lives in `SpaceForm`, which means BOTH scopes get it. Until 2026-08-29
+ *  this sat outside that form and was used only by the space editor — so
+ *  Settings → Customisation, which renders the shared `SpaceForm` and nothing
+ *  else, had no way to set the theme at all. Reuben's call: every
+ *  customisation setting must exist in both scopes, and one shared component
+ *  is the only thing that keeps them from drifting.
+ *
+ *  Text colour rode along inside this section until 2026-09-29, when it moved
+ *  to the Advanced fold (`TextToneSection` below): it only means anything on a
+ *  dark theme, and someone after the basics doesn't need it in front of them. */
+export function ThemeCards({
+  space,
+  onChange,
+  differs = false
+}: SpaceProps & { differs?: boolean }): React.JSX.Element {
   return (
     <section className="settings-group">
-      <h3>Theme</h3>
+      <h3>
+        Theme
+        {differs && <Differs />}
+      </h3>
       {/* Reads correctly in BOTH scopes now that this renders in both — the old
           "while you're in this space" was a sentence the Customisation page,
           which is answering for every space at once, could not say. */}
@@ -1031,175 +1034,208 @@ function ThemeCards({ space, onChange }: SpaceProps): React.JSX.Element {
           )
         })}
       </div>
+    </section>
+  )
+}
 
-      <div className="mt-5 border-t border-ink-300/15 pt-4">
-        <h3>Text colour</h3>
-        <p className="hint">
-          How bright the writing sits on a dark background.{' '}
-          {resolvedLight
-            ? 'The light theme always uses dark ink, so this applies to the two dark themes.'
-            : 'Grey is easier over a long session; white is sharpest against Extra dark.'}
-        </p>
-        <div className="mode-row">
-          {TEXT_TONES.map((t) => {
-            const on = space.textTone === t.id
-            return (
-              <button
-                key={t.id}
-                className={'mode-btn disabled:opacity-40 disabled:cursor-default' + (on ? ' on' : '')}
-                aria-pressed={on}
-                disabled={resolvedLight}
-                onClick={() => onChange({ textTone: t.id })}
-              >
-                <span className="t">
-                  <span
-                    aria-hidden="true"
-                    className="mr-2 inline-block h-2.5 w-2.5 rounded-full ring-1 ring-ink-300/40 align-[-1px]"
-                    style={{ background: t.swatch }}
-                  />
-                  {t.label}
-                </span>
-                <span className="s">{t.hint}</span>
-              </button>
-            )
-          })}
-        </div>
+/** Text colour — how bright the writing sits on a dark background. In the
+ *  Advanced fold since 2026-09-29 (it used to ride inside the Theme section):
+ *  it only means anything on the two dark themes. */
+export function TextToneSection({ space, onChange }: SpaceProps): React.JSX.Element {
+  // Text tone only means anything on the two dark ramps (see TEXT_TONES'
+  // hint), so when the theme is 'system' this has to ask what it currently
+  // RESOLVES to, not the stored id — otherwise picking System on a light OS
+  // leaves the tone row enabled for a theme that isn't actually showing.
+  const resolvedLight = resolveTheme(space.theme) === 'light'
+  return (
+    <section className="settings-group">
+      <h3>Text colour</h3>
+      <p className="hint">
+        How bright the writing sits on a dark background.{' '}
+        {resolvedLight
+          ? 'The light theme always uses dark ink, so this applies to the two dark themes.'
+          : 'Grey is easier over a long session; white is sharpest against Extra dark.'}
+      </p>
+      <div className="mode-row">
+        {TEXT_TONES.map((t) => {
+          const on = space.textTone === t.id
+          return (
+            <button
+              key={t.id}
+              className={'mode-btn disabled:opacity-40 disabled:cursor-default' + (on ? ' on' : '')}
+              aria-pressed={on}
+              disabled={resolvedLight}
+              onClick={() => onChange({ textTone: t.id })}
+            >
+              <span className="t">
+                <span
+                  aria-hidden="true"
+                  className="mr-2 inline-block h-2.5 w-2.5 rounded-full ring-1 ring-ink-300/40 align-[-1px]"
+                  style={{ background: t.swatch }}
+                />
+                {t.label}
+              </span>
+              <span className="s">{t.hint}</span>
+            </button>
+          )
+        })}
       </div>
     </section>
   )
 }
 
-export function SpaceAppearance({ space, onChange }: SpaceProps): React.JSX.Element {
+/** Accent colour — the second of the three basics. Just the colour: how far
+ *  it reaches is in the Advanced fold (`AccentReachSection`), and "Match your
+ *  page look to it", which used to sit here as a second copy of Page → Page
+ *  look's own switch, now lives only there (2026-09-29, the duplicates pass). */
+export function AccentSection({
+  space,
+  onChange,
+  differs = false
+}: SpaceProps & { differs?: boolean }): React.JSX.Element {
   return (
-    <>
-      {/* First, because it is the setting people open this fold for — and a
-          fragment child here is a flex item of the Disclosure's own
-          `flex flex-col gap-6`, so it spaces itself exactly like the sections
-          below it with no margin of its own. */}
-      <ThemeCards space={space} onChange={onChange} />
+    <section className="settings-group">
+      <h3>
+        Accent colour
+        {differs && <Differs />}
+      </h3>
+      <p className="hint">Headings, titles, switches and the settings list take it. Works with either theme.</p>
+      {/* The canonical ten, plus "Default", plus any colour at all — the
+          same component onboarding's Fonts step uses, so the two cannot drift
+          apart again (they had). `accent` stores a palette name, 'default',
+          or a literal `#rrggbb`; `accentHue` in model.ts resolves all three,
+          and the five legacy ids from before the palettes were unified. */}
+      <AccentPicker
+        accent={space.accent}
+        theme={resolveTheme(space.theme)}
+        onPick={(value) => onChange({ accent: value })}
+      />
+    </section>
+  )
+}
 
-      <section className="settings-group">
-        <h3>Accent</h3>
-        <p className="hint">Pick a colour, then choose how far it reaches. Works with either theme.</p>
-        {/* The canonical ten, plus "Default", plus any colour at all — the
-            same component onboarding's Fonts step uses, so the two cannot drift
-            apart again (they had). `accent` stores a palette name, 'default',
-            or a literal `#rrggbb`; `accentHue` in model.ts resolves all three,
-            and the five legacy ids from before the palettes were unified. */}
-        <AccentPicker
-          accent={space.accent}
-          theme={resolveTheme(space.theme)}
-          onPick={(value) => onChange({ accent: value })}
-        />
-        <div className="mode-row">
-          {ACCENT_MODES.map((m) => {
-            const on = space.accentMode === m.id
-            return (
-              <button
-                key={m.id}
-                className={'mode-btn' + (on ? ' on' : '')}
-                aria-pressed={on}
-                onClick={() => onChange({ accentMode: m.id })}
-              >
-                <span className="t">{m.label}</span>
-                <span className="s">{m.hint}</span>
-              </button>
-            )
-          })}
-        </div>
-        {/* Nested under Text, and only shown there: `tint` tints the ink ramp
-            lightly by design, so there is nothing here for it to add.
-            OFF by default. Note that neither state touches a note's own body —
-            see Space.accentUiText for why that is a rule and not an oversight. */}
-        {space.accentMode === 'text' && (
-          <div className="mt-3">
-            <ToggleRow
-              on={space.accentUiText}
-              onClick={() => onChange({ accentUiText: !space.accentUiText })}
-              label="Colour all UI text"
-              hint={
-                space.accentUiText
-                  ? 'On \u2014 every label in the app takes the colour: settings hints, sidebar previews, tabs, the path bar. What you write in a note is still yours to colour.'
-                  : 'Headings, note and folder titles, the settings list, the sidebar\u2019s buttons and a note\u2019s word count take the colour. Every other label stays your theme\u2019s own ink.'
-              }
-            />
-          </div>
-        )}
-        {/* Same field as Page \u2192 Page look's own switch \u2014 one setting, shown in
-            both places since this is where the accent itself lives. */}
+/** How far the accent reaches — Advanced. The mode, and "Colour all UI text"
+ *  nested under Text only. */
+export function AccentReachSection({ space, onChange }: SpaceProps): React.JSX.Element {
+  return (
+    <section className="settings-group">
+      <h3>How far the accent reaches</h3>
+      <p className="hint">Text only keeps it to the writing and titles. Tinted carries it into surfaces and controls too.</p>
+      <div className="mode-row">
+        {ACCENT_MODES.map((m) => {
+          const on = space.accentMode === m.id
+          return (
+            <button
+              key={m.id}
+              className={'mode-btn' + (on ? ' on' : '')}
+              aria-pressed={on}
+              onClick={() => onChange({ accentMode: m.id })}
+            >
+              <span className="t">{m.label}</span>
+              <span className="s">{m.hint}</span>
+            </button>
+          )
+        })}
+      </div>
+      {/* Nested under Text, and only shown there: `tint` tints the ink ramp
+          lightly by design, so there is nothing here for it to add.
+          OFF by default. Note that neither state touches a note's own body —
+          see Space.accentUiText for why that is a rule and not an oversight. */}
+      {space.accentMode === 'text' && (
         <div className="mt-3">
           <ToggleRow
-            on={space.pageLookAccent}
-            onClick={() => onChange({ pageLookAccent: !space.pageLookAccent })}
-            label="Match your page look to it"
-            hint={"Draws your page look's pattern \u2014 lines, dots, the grid \u2014 in this colour instead of your theme's ink. Also in Page \u2192 Page look."}
+            on={space.accentUiText}
+            onClick={() => onChange({ accentUiText: !space.accentUiText })}
+            label="Colour all UI text"
+            hint={
+              space.accentUiText
+                ? 'On — every label in the app takes the colour: settings hints, sidebar previews, tabs, the path bar. What you write in a note is still yours to colour.'
+                : 'Headings, note and folder titles, the settings list, the sidebar’s buttons and a note’s word count take the colour. Every other label stays your theme’s own ink.'
+            }
           />
         </div>
-      </section>
+      )}
+    </section>
+  )
+}
 
-      <section className="settings-group">
-        <h3>Button definition</h3>
-        <p className="hint">How hard the edges of buttons and controls read against the page.</p>
-        <ToggleRow
-          on={space.buttonDefinition}
-          onClick={() => onChange({ buttonDefinition: !space.buttonDefinition })}
-          label="Stronger button edges"
-          hint="Outlines every button, toggle and picker a step further off the background — lighter on Dark, light grey on Extra dark, a darker grey on Light. Buttons drawn without an edge in the first place (Note, Folder) stay as they are."
-        />
-      </section>
+/** Stronger button edges — Advanced. */
+export function ButtonEdgesSection({ space, onChange }: SpaceProps): React.JSX.Element {
+  return (
+    <section className="settings-group">
+      <h3>Button definition</h3>
+      <p className="hint">How hard the edges of buttons and controls read against the page.</p>
+      <ToggleRow
+        on={space.buttonDefinition}
+        onClick={() => onChange({ buttonDefinition: !space.buttonDefinition })}
+        label="Stronger button edges"
+        hint="Outlines every button, toggle and picker a step further off the background — lighter on Dark, light grey on Extra dark, a darker grey on Light. Buttons drawn without an edge in the first place (Note, Folder) stay as they are."
+      />
+    </section>
+  )
+}
 
-      <section className="settings-group">
-        <h3>Density</h3>
-        <p className="hint">How tightly notes and folders pack in the sidebar.</p>
-        <div className="density-list">
-          {DENSITIES.map((d) => {
-            const on = space.density === d.id
-            return (
-              <button
-                key={d.id}
-                className={'density-row' + (on ? ' on' : '')}
-                aria-pressed={on}
-                onClick={() => onChange({ density: d.id })}
-              >
-                <span className="density-bars" style={{ gap: d.bar.gap }} aria-hidden="true">
-                  {[0, 1, 2].map((i) => (
-                    <span key={i} style={{ height: d.bar.h }} />
-                  ))}
-                </span>
-                <span className="meta">
-                  <span className="t">{d.label}</span>
-                  <span className="s">{d.hint}</span>
-                </span>
-                {on ? <span aria-hidden="true">✓</span> : null}
-              </button>
-            )
-          })}
-        </div>
-      </section>
+/** Sidebar density — in the Sidebar fold, beside the sidebar's order and its
+ *  Note / Folder buttons (`SpaceArranging`). */
+export function DensitySection({ space, onChange }: SpaceProps): React.JSX.Element {
+  return (
+    <section className="settings-group">
+      <h3>Density</h3>
+      <p className="hint">How tightly notes and folders pack in the sidebar.</p>
+      <div className="density-list">
+        {DENSITIES.map((d) => {
+          const on = space.density === d.id
+          return (
+            <button
+              key={d.id}
+              className={'density-row' + (on ? ' on' : '')}
+              aria-pressed={on}
+              onClick={() => onChange({ density: d.id })}
+            >
+              <span className="density-bars" style={{ gap: d.bar.gap }} aria-hidden="true">
+                {[0, 1, 2].map((i) => (
+                  <span key={i} style={{ height: d.bar.h }} />
+                ))}
+              </span>
+              <span className="meta">
+                <span className="t">{d.label}</span>
+                <span className="s">{d.hint}</span>
+              </span>
+              {on ? <span aria-hidden="true">✓</span> : null}
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
 
-      <section className="settings-group">
-        <h3>Editor width</h3>
-        <p className="hint">
-          How wide the writing area grows. Only the text column — the sidebar keeps its own width.
-        </p>
-        <div className="mode-row">
-          {EDITOR_WIDTHS.map((w) => {
-            const on = space.editorWidth === w.id
-            return (
-              <button
-                key={w.id}
-                className={'mode-btn' + (on ? ' on' : '')}
-                aria-pressed={on}
-                onClick={() => onChange({ editorWidth: w.id })}
-              >
-                <span className="t">{w.label}</span>
-                <span className="s">{w.hint}</span>
-              </button>
-            )
-          })}
-        </div>
-      </section>
-    </>
+/** Editor width — in the Page fold, since it is how wide the page you write
+ *  on grows. */
+export function EditorWidthSection({ space, onChange }: SpaceProps): React.JSX.Element {
+  return (
+    <section className="settings-group">
+      <h3>Editor width</h3>
+      <p className="hint">
+        How wide the writing area grows. Only the text column — the sidebar keeps its own width.
+      </p>
+      <div className="mode-row">
+        {EDITOR_WIDTHS.map((w) => {
+          const on = space.editorWidth === w.id
+          return (
+            <button
+              key={w.id}
+              className={'mode-btn' + (on ? ' on' : '')}
+              aria-pressed={on}
+              onClick={() => onChange({ editorWidth: w.id })}
+            >
+              <span className="t">{w.label}</span>
+              <span className="s">{w.hint}</span>
+            </button>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 

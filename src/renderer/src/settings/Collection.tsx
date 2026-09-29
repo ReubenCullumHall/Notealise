@@ -9,7 +9,7 @@ import { activeSpace, type AppSettings } from '../../../shared/settings'
 import { IntensitySlider } from './IntensitySlider'
 import { ToggleRow } from './primitives'
 
-// Settings → **Your collection**. What you HAVE, and nothing else.
+// Settings → Look → **Your collection**. What you HAVE, and nothing else.
 //
 // That is the whole rule of this page, and it changed 2026-08-30. It used to
 // be both halves at once — your fonts, then the sixteen you could download,
@@ -210,12 +210,13 @@ export function Collection({
 
   return (
     <>
+      {/* No heading of its own: the tab above it already says "Your
+          collection" (Look's second tab since 2026-09-29). */}
       <section className="settings-group">
-        <h3>Your collection</h3>
         <p className="hint">
           Everything you have to make a space its own. <strong className="font-medium text-ink-600">
           Click a page look or a tint to put it on {spaceLabel}</strong> — the space you were last in.
-          For a different space, or for all of them at once, use Spaces or Customisation.
+          For a different space, or for all of them at once, use Spaces or the Every space tab.
         </p>
       </section>
 
@@ -336,7 +337,7 @@ export function Collection({
               on={here.pageLookAccent}
               onClick={() => setAccent(!here.pageLookAccent)}
               label="Match your accent colour"
-              hint="Draws the pattern in your accent colour instead of your theme’s ink. The same switch as Appearance → Accent."
+              hint="Draws the pattern in your accent colour instead of your theme’s ink. The same switch as Every space → Page."
             />
           </div>
         </div>

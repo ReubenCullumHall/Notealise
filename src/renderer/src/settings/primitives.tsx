@@ -205,6 +205,136 @@ export function Switch({ on }: { on: boolean }): React.JSX.Element {
   )
 }
 
+/** "Spaces differ" next to a control, on Look → Every space only: the spaces
+ *  disagree about it, so showing one space's answer as everyone's would be a
+ *  lie. Moved here from SpaceForm.tsx so the basics above the folds (Theme,
+ *  Accent colour, the fonts) can carry it in their own headings. `font-sans`
+ *  because a heading here is set in the serif. */
+export function Differs(): React.JSX.Element {
+  return (
+    <span
+      data-tip="Your spaces don’t agree on this. Changing it here settles it for all of them."
+      className="ml-2 inline-flex shrink-0 items-center gap-1 rounded-md bg-wash/[0.07] px-1.5 py-0.5 align-middle font-sans text-[10px] font-medium text-ink-400"
+    >
+      <Icon name="spaces" className="h-2.5 w-2.5" />
+      spaces differ
+    </span>
+  )
+}
+
+/** One setting that is really several yes/no answers about the same thing —
+ *  which bars stay on screen while you scroll, what a nested row does with its
+ *  folder's colour. It used to be one ToggleRow per answer, each with its own
+ *  frame and its own paragraph, which is how the settings pages grew long
+ *  enough to lose things in (Reuben, 2026-09-29: "debloat"). One frame, one
+ *  hint, a row of ticks. Same frame as ToggleRow, so the two sit together in a
+ *  list without looking like different kinds of thing. */
+export function TickGroup({
+  label,
+  hint,
+  aside,
+  children
+}: {
+  label: string
+  hint?: string
+  /** beside the label — the "spaces differ" marker */
+  aside?: React.ReactNode
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <div role="group" aria-label={label} className="btn-edge rounded-xl px-3 py-3 ring-1 ring-ink-300/20">
+      <span className="flex items-center text-[13px] font-medium text-ink-700">
+        {label}
+        {aside}
+      </span>
+      {hint && <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">{hint}</span>}
+      <div className="-mx-1.5 mt-1.5 flex flex-wrap items-center gap-1">{children}</div>
+    </div>
+  )
+}
+
+/** A tick box and its label as one button — the settings copy of App.tsx's
+ *  TickRow (same box, same accent-not-brand reasoning), plus `disabled` for an
+ *  answer that means nothing yet, with `tip` saying what would make it mean
+ *  something. `aria-disabled` rather than `disabled`, because a disabled
+ *  button gets no hover — and the hover is where the tip says why it's
+ *  greyed. `role="checkbox"` on a <button> so it shares every other control's
+ *  focus ring; the base `button` rule's border and fill are undone by
+ *  `border-none bg-transparent`. */
+export function Tick({
+  on,
+  onClick,
+  label,
+  disabled = false,
+  tip
+}: {
+  on: boolean
+  onClick: () => void
+  label: string
+  disabled?: boolean
+  tip?: string
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={on}
+      aria-disabled={disabled || undefined}
+      data-tip={tip}
+      onClick={disabled ? undefined : onClick}
+      className={
+        'flex items-center gap-2 rounded-lg border-none bg-transparent px-1.5 py-1.5 text-left text-[12.5px] outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+        // A greyed tick still has to beat the base `button:hover` fill in
+        // app.css, or it lights up as though it could be clicked.
+        (disabled ? 'cursor-default opacity-40 hover:bg-transparent ' : 'hover:bg-ink-300/15 hover:text-ink-700 ') +
+        (on ? 'text-ink-700' : 'text-ink-500')
+      }
+    >
+      <span
+        aria-hidden="true"
+        className={
+          'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ' +
+          (on ? 'border-accent-400 bg-accent-500/25 text-accent-600' : 'border-ink-300/50')
+        }
+      >
+        {on && <Icon name="check" className="h-3 w-3" />}
+      </span>
+      {label}
+    </button>
+  )
+}
+
+/** A segmented row of tabs above a settings page that holds more than one
+ *  page — Look, Data, Help. Explore's own `.explore-tabs` look, so a page with
+ *  tabs reads the same wherever it is. */
+export function PageTabs<T extends string>({
+  tabs,
+  value,
+  onPick,
+  label
+}: {
+  tabs: { id: T; label: string }[]
+  value: T
+  onPick: (id: T) => void
+  label: string
+}): React.JSX.Element {
+  return (
+    <div className="explore-tabs self-start" role="tablist" aria-label={label}>
+      {tabs.map((t) => (
+        <button
+          key={t.id}
+          role="tab"
+          aria-selected={value === t.id}
+          onClick={() => onPick(t.id)}
+          className={'explore-tab' + (value === t.id ? ' on' : '')}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function ToggleRow({
   on,
   onClick,

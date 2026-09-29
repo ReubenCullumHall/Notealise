@@ -33,7 +33,7 @@ Everything in this space right now is a real, ordinary file - this note, the one
 You can create a note and a subfolder to house different subtopics at the top of the sidebar.
 But for now, let's finish exploring...
 
-Below is what's called a linked note. There's a full guide in Settings → Tutorials; the basics are just below.
+Below is what's called a linked note. There's a full guide in Settings → Help; the basics are just below.
 
 - [[How this app is organised]]
 - [[Make it yours]]
@@ -100,7 +100,7 @@ const MAKE_IT_YOURS = `# Make it yours
 
 The font and colour you picked a moment ago aren't fixed - every space can have its own, and there's more choice than what onboarding offered.
 
-Settings → Customisation changes the whole app at once. Settings → Spaces changes just one.
+Settings → Look changes the whole app at once. Settings → Spaces changes just one.
 
 There are lots of features to choose from. Keep it simple and keep with the basics - the app can grow with you, not make you feel like you have to catch up.
 `

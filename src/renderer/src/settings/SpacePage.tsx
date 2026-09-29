@@ -212,7 +212,7 @@ export function SpacePage({ space, onChange, collection }: Props): React.JSX.Ele
               on={space.pageLookAccent}
               onClick={() => onChange({ pageLookAccent: !space.pageLookAccent })}
               label="Match your accent colour"
-              hint="Draws the pattern in your accent colour instead of your theme’s ink. The same switch as Appearance → Accent."
+              hint="Draws the pattern in your accent colour instead of your theme’s ink."
             />
           </div>
         </div>
