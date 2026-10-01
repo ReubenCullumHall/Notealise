@@ -375,39 +375,69 @@ button.icon:hover {
    in a row (doc, folder, chevron, grip) scales together */
 .tree-row svg { width: var(--row-icon); height: var(--row-icon); }
 
-/* Hover actions with nothing behind them.
-   ---------------------------------------
-   The buttons used to sit on a small `bg-surface/95` card with a shadow
-   (TreeView's ROW_ACTIONS_CLASS), which is what kept them legible over the
-   row's own name and preview. Testers read that card as a popup that had
-   opened rather than as part of the row, so it is gone (2026-09-05) — and the
-   text underneath is faded out instead of covered.
+/* Hover actions: one plate, in the row.
+   --------------------------------------
+   History: a floating card laid over the row (v0.3) → nothing behind the icons,
+   the row's text faded out under them (2026-09-05; testers read the card as a
+   popup) → this (2026-10-01; Reuben: faded text behind the icons "looks
+   terrible", and the fade was never the right width for a folder's three
+   buttons — it left a ghost of the name under the first one).
 
-   A MASK on the text, not a gradient overlay: an overlay would have to paint
-   the row's background to hide anything, which is the rectangle being removed,
-   and it would have to know which of the three colour styles (tag / row /
-   solid, and the selected and open variants) had painted it. A mask needs to
-   know none of that — it just stops drawing the glyphs.
+   The plate is IN the row, not laid over it, so the browser works out where the
+   name has to stop — for a note (two buttons), a folder (three), a nested row
+   (smaller icons) and every density — and there is no width written down here
+   to go stale. At rest it is invisible AND takes no room: zero wide, with its
+   padding gone and the row's gap cancelled, its buttons spilling out to the
+   left of the row's end where nobody can see or click them (`justify-content:
+   flex-end` is what sends the overflow that way). On hover it opens to its own
+   width and the name and preview shorten to make room, ending in "…".
 
-   96px is sized for the WIDEST action group, the folder row's four buttons at
-   `--row-icon` + `p-0.5` each plus `gap-0.5`, `px-1` and `right-1.5`. The note
-   row's is narrower and simply fades a little earlier than it needs to, which
-   is invisible. If a fifth button is ever added here, this number moves with
-   it — measure the group, don't guess.
+   No height either, on purpose. At ultra density a row is shorter than the
+   plate, and a plate that counted towards the row's height would make every row
+   grow under the pointer. The negative block margin takes it out of that sum;
+   it stays centred on the row because `align-items: center` centres the margin
+   box, and the margins are equal.
 
-   The folder's child count is hidden outright rather than masked: it sits IN
-   FLOW at the right-hand end, so a mask would leave a half-faded digit under
-   the first button rather than removing it. */
-.tree-row:hover .tree-title,
-.tree-row:hover .tree-sub,
-.tree-row:focus-within .tree-title,
-.tree-row:focus-within .tree-sub {
-  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 96px), rgb(0 0 0 / 0) calc(100% - 28px));
-  mask-image: linear-gradient(90deg, #000 calc(100% - 96px), rgb(0 0 0 / 0) calc(100% - 28px));
+   What steps aside while it is up: the folder's child count and a set pin's
+   star (`.row-rest`) both sit in flow at the row's right-hand end, and the
+   plate's own pin button takes the star's place. The condition is the plate's
+   own — hover, or a button inside it focused from the keyboard — and NOT the
+   row's `:focus-within`: clicking a folder leaves focus on its chevron, and the
+   old rule kept the row's name faded long after the pointer had gone, with no
+   plate on screen to explain why. A row with no plate (the archive's) just
+   fades its count on hover, as it always did.
+
+   The plate's ground is the theme's own `--surface`, OPAQUE, and it has NO
+   outline: the first version had a lighter 1px ring round it and Reuben found
+   that too defined (2026-10-01), so the box now shows by its own shade alone —
+   a shade off the row on a plain row, plainly different on a coloured one.
+   A see-through tint (`--wash` at 7%) looked right on a plain row but took its
+   colour from whatever row it sat on, and the icons are quiet by design. The
+   grey pin icon against its ground, read off real pixels (dark / light):
+   plain row 3.0 / 2.5 before; tinted row 2.4 / 1.9, and 2.0 / 1.6 on a
+   see-through plate; solid-coloured row 1.3 / 1.2. On this plate it is
+   2.9 / 2.5 whatever colour the row is. */
+.row-acts {
+  flex: 0 0 0;
+  width: 0;
+  justify-content: flex-end;
+  padding: 2px 0;
+  margin: -40px 0 -40px calc(var(--row-gap) * -1);
+  border-radius: var(--r-surface);
+  background: rgb(var(--surface));
 }
-.tree-row:hover .tree-count,
-.tree-row:focus-within .tree-count {
+.tree-row:hover .row-acts,
+.row-acts:focus-within {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 2px 4px;
+  margin-left: 2px;
+}
+.tree-row:hover .tree-count {
   opacity: 0;
+}
+.tree-row:has(> .row-acts):is(:hover, :has(.row-acts:focus-within)) > :is(.tree-count, .row-rest) {
+  display: none;
 }
 
 /* Rows inside an open folder run smaller than top-level rows, so a folder's

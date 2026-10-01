@@ -113,26 +113,28 @@ const padFor = (depth: number): string =>
 const marginFor = (depth: number): string | undefined =>
   depth > 0 ? `calc(${depth} * var(--row-indent))` : undefined
 
-/** Hover-only actions (new note, new folder, trash, unset pin/star…) float over
- *  the row instead of reserving flow width — `opacity-0` alone still occupies
- *  layout space, which is what was starving the name column and shoving the
- *  visible content to the left of the row even at rest. `always` actions (a
- *  set pin, restore in a shelf view) stay in flow beside them since they're
- *  meant to be visible without hovering. */
 /** The "Moved" divider's label — a small caps heading, same voice as
  *  Sidebar's own SECTION_TEXT but kept local since it's rendered mid-tree
  *  (possibly nested inside a folder), not as a page-level section. */
 const MOVED_LABEL_CLASS =
   'select-none pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider text-ink-300'
 
-/** No plate behind them since 2026-09-05 (tester feedback: the little card
- *  reads as a popup that has opened, not as buttons belonging to the row).
- *  What used to keep the icons legible was `bg-surface/95` + `shadow-card`;
- *  what does it now is `.tree-row.acts-open`'s mask in app.css, which fades
- *  the row's own text out under them instead of covering it. */
+/** The hover actions (new note, new folder, trash, pin) share ONE plate at the
+ *  row's right-hand end — a single surface, no box round each icon.
+ *
+ *  Hover-only, and it takes no width until then (app.css `.row-acts`: zero wide
+ *  at rest, so the name column is exactly as long as it would be with no actions
+ *  at all). On hover it takes its own width IN the row and the name and preview
+ *  shorten to make room, ending in "…" before it. Nothing runs underneath the
+ *  icons, so nothing has to be faded or covered to keep them legible.
+ *
+ *  Third version: a floating card (v0.3) → no plate, the text faded out under the
+ *  icons (2026-09-05, tester feedback: the card "reads as a popup") → this plate
+ *  (2026-10-01, Reuben: the faded text behind the icons looks terrible).
+ *  `always` actions (a set pin, restore in a shelf view) stay in flow beside it
+ *  since they're meant to be visible without hovering. */
 const ROW_ACTIONS_CLASS =
-  'absolute right-1.5 top-1/2 z-10 flex -translate-y-1/2 items-center gap-0.5 ' +
-  'px-1 py-0.5 opacity-0 pointer-events-none ' +
+  'row-acts flex items-center gap-0.5 opacity-0 pointer-events-none ' +
   'transition-opacity duration-150 group-hover:opacity-100 group-hover:pointer-events-auto ' +
   'focus-within:opacity-100 focus-within:pointer-events-auto'
 
@@ -163,7 +165,7 @@ function RowBtn({
       className={
         'inline-flex shrink-0 items-center justify-center rounded border-none bg-transparent p-0.5 outline-none transition-colors hover:bg-transparent ' +
         (always
-          ? 'opacity-100 ' + (hoverHide ? 'group-hover:opacity-0 group-hover:pointer-events-none ' : '')
+          ? 'opacity-100 ' + (hoverHide ? 'row-rest ' : '')
           : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 ') +
         (tone === 'brand' ? 'text-brand-500 hover:text-ink-900' : 'text-ink-300 hover:text-ink-900')
       }
@@ -577,7 +579,9 @@ export function TreeView({
             }}
             className="tree-title min-w-0 flex-1 truncate border-none bg-transparent p-0 text-left font-semibold text-ink-800 outline-none hover:bg-transparent"
           >
-            {node.name}
+            {/* `truncate` on a <button> clips but never draws the "…" — the text
+                has to sit in a box of its own for the ellipsis to show. */}
+            <span className="block truncate">{node.name}</span>
           </button>
           {/* `.tree-count` — app.css hides it while the hover actions are up,
               since it sits in flow right where they land. */}
