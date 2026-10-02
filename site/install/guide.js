@@ -1,4 +1,4 @@
-/* Shared by install/windows.html and install/mac.html.
+/* Shared by install/windows.html, install/mac.html and install/linux.html.
 
    The download is only started when the visitor arrived by clicking a Download
    button on the home page — those link here with ?dl. A direct visit (someone
@@ -18,8 +18,10 @@
 (function () {
   var REPO = "ReubenCullumHall/Notealise";
   var BASE = "https://github.com/" + REPO + "/releases/latest/download/";
-  var FILE = { windows: "Notealise-Setup.exe", mac: "Notealise.dmg" };
-  var OSNAME = { windows: "Windows", mac: "macOS" };
+  // The Linux name is fixed — electron-builder.yml builds it, release.yml checks
+  // it uploaded, and src/main/linuxDownloadName.test.ts checks this line.
+  var FILE = { windows: "Notealise-Setup.exe", mac: "Notealise.dmg", linux: "Notealise.AppImage" };
+  var OSNAME = { windows: "Windows", mac: "macOS", linux: "Linux" };
 
   var os = document.body.getAttribute("data-os");
   var name = FILE[os];
@@ -83,9 +85,37 @@
     }
   }
 
+  /* Linux: start only once the latest release is known to carry the file.
+     The site goes live on every push to main, but Notealise.AppImage exists
+     only from the first release built with it — before that the download is a
+     GitHub "Not Found" page. If GitHub cannot be asked (offline, rate limit, 4s
+     gone), download as the other pages do. */
+  function startIfReleased(file) {
+    if (!window.fetch) return start(file, false);
+    var settled = false;
+    function go() {
+      if (settled) return;
+      settled = true;
+      start(file, false);
+    }
+    setTimeout(go, 4000);
+    fetch("https://api.github.com/repos/" + REPO + "/releases/latest")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        var names = j && j.assets ? j.assets.map(function (a) { return a.name; }) : null;
+        if (settled || !names || names.indexOf(file) !== -1) return go();
+        settled = true;
+        if (msg) msg.textContent = "The Linux version is not available to download right now.";
+        if (link) link.hidden = true;
+      }, go);
+  }
+
   var Mac = window.NotealiseMacChip;
   if (os !== "mac" || !Mac) {
-    if (wantsDownload) start(name, false);
+    if (wantsDownload) {
+      if (os === "linux") startIfReleased(name);
+      else start(name, false);
+    }
     return;
   }
 

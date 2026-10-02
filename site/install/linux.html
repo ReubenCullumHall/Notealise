@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notealise — Opening it on Linux</title>
+  <meta name="description" content="How to open Notealise on Linux the first time." />
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+  <!-- The site's shared tokens, fonts and dark blocks (nav.css) load FIRST so
+       guide.css below can still override anything it needs. These pages carry
+       no .topbar and no .page class, so nav.css contributes only colours,
+       type and ::selection here — nothing structural. -->
+  <script>try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+  <link rel="stylesheet" href="../nav.css?v=20260916b" />
+  <link rel="stylesheet" href="guide.css?v=20261002a" />
+</head>
+<body data-os="linux">
+  <a href="../" aria-label="Notealise home"><img class="mark" src="../favicon.svg" alt="Notealise" width="34" height="34" /></a>
+
+  <main>
+    <p class="eyebrow">Linux</p>
+    <h1>Opening Notealise for the first time</h1>
+    <p class="lede">Notealise for Linux is a single file, <strong>Notealise.AppImage</strong>. There is nothing to install: you let the file run as a program, then open it.</p>
+    <p class="lede why">Linux asks this of every program downloaded as a single file, not just this one. The full source is <a href="https://github.com/ReubenCullumHall/Notealise" rel="noopener">on GitHub</a>.</p>
+
+    <p class="status">
+      <b class="status-msg">Ready to download Notealise for Linux.</b>
+      <a class="status-link" data-download href="https://github.com/ReubenCullumHall/Notealise/releases/latest/download/Notealise.AppImage" target="_blank" rel="noopener">Download it</a>
+    </p>
+
+    <ol class="steps">
+      <li>
+        <h2>Put it somewhere to keep</h2>
+        <p>Move <strong>Notealise.AppImage</strong> out of your Downloads folder into one you will not tidy away &mdash; a folder called <strong>Applications</strong> in your Home folder is a good place. Updates replace this file wherever it is. Your notes are never inside it.</p>
+      </li>
+
+      <li>
+        <h2>Let it run as a program</h2>
+        <p>Right-click <strong>Notealise.AppImage</strong> and choose <strong>Properties</strong>. Turn on <strong>Executable as Program</strong>. On some systems it is a tick box on the <strong>Permissions</strong> tab instead, called <em>Allow executing file as program</em> or <em>Is executable</em>.</p>
+        <figure class="mock" aria-label="Drawing of the file's Properties, with Executable as Program turned on">
+          <div class="mock-head">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4" /></svg>
+            <span class="mock-title">Notealise.AppImage &mdash; Properties</span>
+          </div>
+          <div class="mock-row">
+            <span>Executable as Program</span>
+            <span class="mock-switch" aria-hidden="true"></span>
+          </div>
+        </figure>
+      </li>
+
+      <li>
+        <h2>Open it</h2>
+        <p>Double-click <strong>Notealise.AppImage</strong>. Notealise opens. From now on, that same file is the app: double-click it whenever you want to write.</p>
+      </li>
+    </ol>
+
+    <details class="tshoot">
+      <summary>
+        <svg class="tshoot-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+        Not opening?
+      </summary>
+      <div class="tshoot-body">
+        <p>Some file managers will not start a program on a double-click. Open it from a Terminal instead:</p>
+        <ol>
+          <li>Right-click the folder Notealise.AppImage is in and choose <strong>Open in Terminal</strong>.</li>
+          <li>Type <strong>chmod +x Notealise.AppImage</strong> and press Enter. This does the same as step 2.</li>
+          <li>Type <strong>./Notealise.AppImage</strong> and press Enter.</li>
+        </ol>
+        <p>If the Terminal then mentions <strong>FUSE</strong>, your system is missing a small part Notealise needs to open. Install the package called <strong>fuse3</strong> from your software centre (on Ubuntu, type <strong>sudo apt install fuse3</strong>), then try again.</p>
+      </div>
+    </details>
+
+    <a class="back" href="../">&larr; Back to the download page</a>
+  </main>
+
+  <footer class="footer">
+    <span class="footer-brand">Notealise <span class="footer-est">est. 2026</span></span>
+    <span class="footer-legal">&copy; 2026 Notealise. All rights reserved.</span>
+  </footer>
+
+  <script src="../nav.js?v=20260916a"></script>
+  <script src="guide.js?v=20261002a"></script>
+</body>
+</html>

@@ -39,9 +39,11 @@ repo). Two things *do* exist and are relevant:
   What's new). This is the content that spacer was reserved for.
 - Scroll cue: a single small bobbing chevron linking to `#download`, plus
   `html { scroll-behavior: smooth }`. That's the whole "scrolling animation" — nothing more.
-- Download section: two buttons, icon + label only (`Download for Windows` /
-  `Download for macOS`). No `.exe`/`.dmg` mention, no "Windows 10/11", no release date/version
-  meta text. It's a plain download link, not a release-notes card.
+- Download section: ~~two buttons~~ **three since 2026-10-02** (Windows / macOS / Linux, in the
+  560px two used — see "Linux, 2026-10-02" at the end), icon + label only (`Download for
+  Windows` / `Download for macOS` / `Download for Linux`). No `.exe`/`.dmg`/`.AppImage` mention,
+  no "Windows 10/11", no release date/version meta text. It's a plain download link, not a
+  release-notes card.
 - The "unverified developer" first-launch help (previously a `<details>` block) is deliberately
   removed for now — Reuben wants it reintroduced later as a click-through sequence gated on
   which OS button was clicked, not as a static disclosure. Don't add it back as a `<details>`.
@@ -1659,3 +1661,36 @@ at the Mac's LAN address.
 **Unverified:** a tab opened in the background and looked at later. By design the ink can't redraw
 once the panel has settled, so the likely worst case is the finished page with no intro — but no
 real browser was tested that way.
+
+## Linux, 2026-10-02 — a third download button, a third branch, and `install/linux.html`
+
+Reuben: *"just another option underneath the tree of options (change on the website to the branch
+out to 3, and make them take up the same space, just make it 3 buttons)"*.
+
+- **Three buttons in the same 560px.** `.btns` is `repeat(3, 1fr)`. A third of 560px (179px) cannot
+  hold "Download for Windows" on one line, so every label is two lines: a small `.btn-pre`
+  ("Download for", 12px, 500, 72% opacity) over the system's name at the old 15px/600. The space
+  between the two spans stays in the markup so a screen reader still says "Download for Windows".
+- **Stacked below 560px, not 480.** Each button needs ~148px (measured); at a 481px window
+  "Download for" broke onto two lines and the three came out uneven widths. 560 leaves room for a
+  scrollbar that takes up space. The footer's own stacking stays at 480.
+- **The path forks three ways over the middle button.** `landing.js` puts the fork over macOS, so
+  that branch drops straight down and the other two ease out exactly as the two used to; every
+  join stays vertical. The belly is still `0.42 ×` the span between the outer buttons, which keeps
+  it 84% of the way out to the Windows button, where it sat with two. Stacked, it is still one line
+  down the left band, now landing on the Linux button. Measured at 9 widths (400–1440): every branch
+  ends within 0.1px of its button's top centre, every button is the element under its own centre.
+- **The Linux mark is Tux from Simple Icons (CC0)**, inline like the other two. It is drawn as an
+  outline, so it read lighter than the solid Windows and Apple marks; a 0.8 stroke of its own
+  (picked from 0 / 0.5 / 0.8 / 1.1, rendered side by side) brings it to their weight without
+  clogging the face.
+- **`install/linux.html`** follows the other two guides exactly — no signing warning to clear on
+  Linux, so the steps are: keep the file somewhere permanent (updates replace it in place), let it
+  run as a program (a drawn Properties row with its switch on: `.mock-row` / `.mock-switch` in
+  `guide.css`), open it; "Not opening?" covers the Terminal route and a missing FUSE. The words
+  are Claude's, drafted 2026-10-02 for Reuben to change.
+- **The Linux guide checks the release before downloading** (`startIfReleased`, `guide.js`): the
+  site goes live on push, `Notealise.AppImage` only exists from the first release built with it,
+  and before then the link is a GitHub "Not Found". If the latest release lacks the file it says
+  so instead; if GitHub can't be asked (offline, rate limit, 4s) it downloads as the others do.
+  Windows and macOS are untouched.

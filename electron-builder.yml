@@ -1,6 +1,6 @@
 # electron-builder — packages the electron-vite build (out/) into installers.
 # Windows -> NSIS .exe, macOS -> Apple silicon .dmg (release.yml also publishes
-# an Intel one — see its comment). Unsigned for the MVP (testers
+# an Intel one — see its comment), Linux -> .AppImage. Unsigned for the MVP (testers
 # click through the OS "unverified developer" warning). Artifact names are fixed
 # (no version) so the download page can link to a stable /releases/latest/download/ URL.
 appId: com.notealise.desktop
@@ -87,6 +87,36 @@ mac:
   identity: null
 dmg:
   writeUpdateInfo: false
+# Linux: one 64-bit AppImage — a single file that runs on most distributions
+# without installing anything (Reuben, 2026-10-02: Linux as a third download).
+# It updates itself the way Windows does: electron-updater reads the
+# latest-linux.yml this writes beside it and swaps the file in place. The name
+# is fixed like the others — release.yml's verify-release, site/install/guide.js
+# and src/main/linuxDownloadName.test.ts all spell it out.
+#
+# executableName must be set: left alone it is package.json's "notes-app".
+# syncDesktopName + package.json's `desktopName` give the window, the menu
+# entry and the dock one name ("notealise"); without them Electron names the
+# window after package.json's "notes-app" and a dock cannot match it to its icon.
+# Electron reads `desktopName` on Linux only.
+# No Linux machine has ever run this build — see docs/product-rulings.md.
+linux:
+  target:
+    - target: AppImage
+      arch: x64
+  category: Office
+  executableName: notealise
+  syncDesktopName: true
+  artifactName: ${productName}.${ext}
+  electronLanguages: [en-US, en-GB]
+# The newer AppImage runtime, not electron-builder's default. The default
+# (0.0.0) needs libfuse2, which Ubuntu stopped installing in 22.04 — there a
+# double-click on the file does nothing at all, with no message. The newer one
+# carries what it needs. Either way the launcher electron-builder writes inside
+# the file turns Chromium's sandbox off when the system blocks it (Ubuntu
+# 24.04's AppArmor rule), rather than crashing — see docs/security.md.
+toolsets:
+  appimage: '1.0.3'
 # The finished .dmg is re-compressed with LZMA (ULMO) by this hook before it is
 # uploaded — about a quarter smaller than the default, a few seconds slower to
 # open (Reuben, 2026-09-11). `dmg.format` cannot do it: the schema refuses ULMO.

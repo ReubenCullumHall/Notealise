@@ -1,4 +1,4 @@
-/* Shared by install/windows.html and install/mac.html.
+/* Shared by install/windows.html, install/mac.html and install/linux.html.
    Same visual language as site/index.html: flat, monochrome ink on paper, fixed
    top-left mark, hairline bottom bar. No accent colour, no gradients, no glow.
    See site/DESIGN.md before changing anything here.
@@ -170,6 +170,19 @@ ol.steps strong { color: var(--ink); font-weight: 600; }
   border: 1.5px solid var(--ink); color: var(--ink); background: transparent;
 }
 .mock-btn.key { background: var(--ink); color: var(--bg); }
+/* Linux: a setting with an on/off switch, drawn switched on. */
+.mock-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 13px;
+}
+.mock-switch {
+  flex: none; position: relative;
+  width: 34px; height: 20px; border-radius: 999px; background: var(--ink);
+}
+.mock-switch::after {
+  content: ""; position: absolute; top: 3px; right: 3px;
+  width: 14px; height: 14px; border-radius: 50%; background: var(--bg);
+}
 
 /* Drag-to-Applications stand-in. */
 .drag {

@@ -4,6 +4,7 @@
   "version": "1.4.0",
   "description": "A local-first Markdown editor \u2014 your notes stay as plain .md files on disk.",
   "author": "Notealise",
+  "desktopName": "notealise.desktop",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

@@ -1,5 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron'
-import { existsSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { accessSync, constants, existsSync } from 'node:fs'
 import path from 'node:path'
 import electronUpdater from 'electron-updater'
 import { CH } from '../shared/channels'
@@ -57,6 +58,24 @@ function unsupportedReason(): string | null {
     // this; the ones that genuinely cannot (electron-updater's own paths) still
     // get an honest reason.
     return 'Automatic updates need a signed macOS build. Download the new version instead.'
+  }
+  if (process.platform === 'linux' && app.isPackaged) {
+    // Linux updates by replacing the downloaded Notealise.AppImage where it
+    // sits, and the AppImage runtime is what says where that is ($APPIMAGE).
+    // Without it electron-updater does nothing at all — no event, no error —
+    // so the page would sit on its first state for ever. Said here instead.
+    const appImage = process.env.APPIMAGE
+    if (!appImage || !path.isAbsolute(appImage)) {
+      return 'This copy was not opened from Notealise.AppImage, so it cannot update itself. Download the new version instead.'
+    }
+    // Replacing the file means deleting it from its folder, which needs that
+    // folder to be writable. Saved somewhere only an administrator can change
+    // (/opt, say), every update would download and then fail on quit.
+    try {
+      accessSync(path.dirname(appImage), constants.W_OK)
+    } catch {
+      return 'Notealise cannot update itself in the folder it is saved in. Move Notealise.AppImage into your Home folder, or download the new version instead.'
+    }
   }
   // `npm run package:dir` (gate 1) produces a genuinely packaged app — isPackaged
   // is true — but electron-builder only writes app-update.yml when it builds an
@@ -339,9 +358,45 @@ export function installNow(): void {
     })
     return
   }
+  if (process.platform === 'linux') {
+    // Not quitAndInstall: see relaunchWhenGone. Quitting is enough to install —
+    // wire() keeps autoInstallOnAppQuit on, so electron-updater's quit handler
+    // swaps the new file in once the flush in index.ts has run.
+    const appImage = process.env.APPIMAGE
+    if (appImage && path.isAbsolute(appImage)) relaunchWhenGone(appImage)
+    app.quit()
+    return
+  }
   // isSilent=false so the NSIS installer shows its progress; isForceRunAfter=true
   // so the app comes back up on the new version.
   updater().quitAndInstall(false, true)
+}
+
+/** Linux only: open Notealise.AppImage again once this copy has fully exited.
+ *
+ *  electron-updater's own restart (`quitAndInstall(…, true)`) starts the new
+ *  file straight away, while this copy is still closing and still holds the
+ *  single-instance lock (index.ts). The new copy finds the lock taken and
+ *  quits, and the user is left with no window at all. Windows never meets this:
+ *  its installer waits for the app to close before starting it again.
+ *
+ *  So a small shell waits for this process to be gone (giving up after 30s),
+ *  then opens whatever sits at the AppImage's path — by then the new version,
+ *  swapped in by the quit handler. /bin/sh rather than app.relaunch(): the
+ *  relauncher Electron would use is this same binary, inside this AppImage's
+ *  mount, and that mount is taken down as this copy exits. */
+function relaunchWhenGone(appImage: string): void {
+  const env = { ...process.env }
+  // The new copy's runtime sets APPDIR afresh; one pointing at this copy's
+  // mount could only ever be wrong.
+  delete env.APPDIR
+  const script =
+    'i=0; while kill -0 "$1" 2>/dev/null && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done; exec "$2"'
+  spawn('/bin/sh', ['-c', script, 'notealise-restart', String(process.pid), appImage], {
+    detached: true,
+    stdio: 'ignore',
+    env
+  }).unref()
 }
 
 // Both setters read-modify-write the whole prefs object. Saving a single field

@@ -117,6 +117,17 @@ async function unzipTo(zipPath: string, destDir: string): Promise<void> {
       10 * 60_000,
       guard
     )
+  } else if (process.platform === 'linux') {
+    // Linux has no `ditto`. Info-ZIP's `unzip` comes with the common desktops
+    // and, unlike Apple's fork above, decodes UTF-8 names; python3's zipfile is
+    // the fallback where it is missing. `-o` so it never stops to ask about an
+    // overwrite — stdin is closed, so a question would hang (see `run`).
+    try {
+      await run('unzip', ['-q', '-o', zipPath, '-d', destDir], 10 * 60_000, guard)
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+      await run('python3', ['-m', 'zipfile', '-e', zipPath, destDir], 10 * 60_000, guard)
+    }
   } else {
     await run('ditto', ['-x', '-k', zipPath, destDir], 10 * 60_000, guard)
   }

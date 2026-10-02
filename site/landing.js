@@ -6,7 +6,7 @@
    2. The path out. The ink line under "Now it's time to walk the path" draws
       itself down the page as the reader scrolls into the ending. --draw (0 to
       100) on .walk is the scroll progress through that section; 0-55 inks the
-      single wave, 55-100 inks the two straightened halves into the buttons. It
+      single wave, 55-100 inks the three straightened branches into the buttons. It
       is tied to scroll position, not a clock, and never un-draws.
 
    Both are gated on prefers-reduced-motion: with it on, everything is simply in
@@ -147,15 +147,15 @@
 
   /* ── 2. The path out ───────────────────────────────────────────────────
      The ink line under "walk the path". Its shape is measured from the real
-     positions of the "h" in "path" and the two buttons, so it lands on them at
+     positions of the "h" in "path" and the three buttons, so it lands on them at
      any width; --draw (0..100) is how far the reader has scrolled into the
      section and is what inks the line in (see landing.css). */
   var walk = document.querySelector(".walk");
   var strand = walk && walk.querySelector(".walk-strand");
   if (!walk || !strand) return;
 
-  /* The two buttons below install a desktop app — on a phone or tablet
-     neither can do anything, and a reader arriving from an Instagram/TikTok
+  /* The buttons below install a desktop app — on a phone or tablet
+     none of them can do anything, and a reader arriving from an Instagram/TikTok
      link is exactly who hits this. Walking them into a download that can't
      work is worse than no line at all, so the whole ending swaps to a plain
      "not available" notice and the draw never runs. This is a DEVICE check,
@@ -173,9 +173,9 @@
     // No CTA here on purpose (Reuben, 2026-09-13): the app isn't coming to
     // phone any time soon, so two download buttons that can't do anything is
     // worse than just ending plainly. Copy CONFIRMED by Reuben 2026-09-16 —
-    // this line is the wording, not a placeholder.
+    // this line is the wording, not a placeholder. Linux added 2026-10-02 (Reuben).
     var walkLineEl = walk.querySelector(".walk-line");
-    if (walkLineEl) walkLineEl.textContent = "Built for Mac and Windows.";
+    if (walkLineEl) walkLineEl.textContent = "Built for Mac, Windows and Linux.";
     walk.classList.add("unavailable");
     return;
   }
@@ -185,10 +185,12 @@
   var walkLine = walk.querySelector(".walk-line");
   var trunk = strand.querySelector(".trunk");
   var forkL = strand.querySelector(".fork-l");
+  var forkM = strand.querySelector(".fork-m");
   var forkR = strand.querySelector(".fork-r");
   var winBtn = document.getElementById("winBtn");
   var macBtn = document.getElementById("macBtn");
-  if (!hSpan || !trunk || !forkL || !forkR || !winBtn || !macBtn) return;
+  var linuxBtn = document.getElementById("linuxBtn");
+  if (!hSpan || !trunk || !forkL || !forkM || !forkR || !winBtn || !macBtn || !linuxBtn) return;
 
   function r(n) { return Math.round(n * 10) / 10; }
   function cubic(x0, y0, c1x, c1y, c2x, c2y, x1, y1) {
@@ -210,30 +212,34 @@
     var sy = tip.bottom - box.top;
 
     var lb = winBtn.getBoundingClientRect();
-    var rb = macBtn.getBoundingClientRect();
+    var mb = macBtn.getBoundingClientRect();
+    var rb = linuxBtn.getBoundingClientRect();
     /* +1 so each end finishes ON the button edge rather than a hair above it —
        a gap there is what made the old ends look like they trailed off. */
     var lx = lb.left + lb.width / 2 - box.left, ly = lb.top - box.top + 1;
+    var mx = mb.left + mb.width / 2 - box.left, my = mb.top - box.top + 1;
     var rx = rb.left + rb.width / 2 - box.left, ry = rb.top - box.top + 1;
 
-    /* On a narrow screen the two buttons stack (.btns goes one column at 480px),
-       so there is nothing to fork out to — a fork just draws a second vertical
-       line straight through the top button. Stacked, it is ONE line instead:
-       the wave up top, then straight down and finishing at the lower (macOS)
+    /* On a narrow screen the buttons stack (.btns goes one column at 560px),
+       so there is nothing to fork out to — a fork just draws more vertical
+       lines straight through the top buttons. Stacked, it is ONE line instead:
+       the wave up top, then straight down and finishing at the lowest (Linux)
        button. The download buttons centre their icon+label, so their left
-       third is empty — the descent runs down THAT band, clear of every glyph,
-       rather than through the middle of the Windows label. */
+       edge is empty — the descent runs down THAT band, clear of every glyph,
+       rather than through the middle of the labels. */
     var stacked = rb.top - lb.top > lb.height * 0.6;
+    // Side by side, the fork sits over the middle (macOS) button, so that
+    // branch drops straight down and the other two ease out to either side.
     var colX = stacked
       ? lb.left - box.left + Math.min(lb.width * 0.12, 46)
-      : (lx + rx) / 2;
+      : mx;
 
     /* ── The shape ────────────────────────────────────────────────────────────
        ONE rule governs the whole thing: every join is vertical. The "h" ends
        with its right leg pointing straight down, so the ink leaves straight
        down. It arrives at the belly straight down, leaves it straight down,
-       and arrives at the fork straight down — and BOTH branches leave the fork
-       straight down too, then arrive at their button straight down.
+       and arrives at the fork straight down — and ALL THREE branches leave the
+       fork straight down too, then arrive at their button straight down.
 
        That is what makes it read as one smooth line rather than a folded one:
        matching tangents on both sides of every join means no cusp anywhere,
@@ -241,13 +247,15 @@
        meets the button edge square-on instead of grazing it. It also makes a
        crossing impossible — nothing ever doubles back past the fork. */
     var fx = colX;                                   // trunk foot: fork centre, or the stacked descent band
-    var top = Math.min(ly, ry);
+    var top = Math.min(ly, my, ry);
     var fy = sy + (top - sy) * 0.70;                 // fork, 70% of the way down
     var drop = fy - sy;
     var gap = rx - lx;
 
-    // belly, thrown left of the fork. Normally a fraction of the button gap;
-    // stacked, that gap is ~0, so use a fixed offset to keep the wave visible.
+    // belly, thrown left of the fork. Normally a fraction of the span from the
+    // left button to the right one — 0.42 of it puts the belly 84% of the way
+    // out to the Windows button, where it sat when there were two;
+    // stacked, that span is ~0, so use a fixed offset to keep the wave visible.
     var bx = fx - (stacked ? Math.min(box.width * 0.14, 64) : gap * 0.42);
     var by = sy + drop * 0.55;
     var t1 = drop * 0.30;                            // h → belly tangent
@@ -263,10 +271,11 @@
       " "   + r(fx) + " " + r(fy)
     );
 
-    /* Both branches leave the fork on the SAME vertical tangent the trunk
+    /* Every branch leaves the fork on the SAME vertical tangent the trunk
        arrived on, so for the first few pixels they lie on top of each other
-       and then ease apart — the line separating, rather than two lines meeting
-       at an angle. Each lands vertically on its button's top edge. */
+       and then ease apart — the line separating, rather than lines meeting
+       at an angle. Each lands vertically on its button's top edge; the middle
+       one, starting right above its button, is simply straight. */
     var h = top - fy;
     function branch(ex, ey) {
       return cubic(
@@ -277,9 +286,10 @@
       );
     }
     if (stacked) {
-      // One line: straight down the empty left band, past the Windows button,
-      // landing on the top edge of the macOS button in that same band.
+      // One line: straight down the empty left band, past the Windows and
+      // macOS buttons, landing on the top edge of the Linux button in that band.
       forkL.setAttribute("d", "");
+      forkM.setAttribute("d", "");
       forkR.setAttribute("d",
         "M " + r(colX) + " " + r(fy) +
         " C " + r(colX) + " " + r(fy + (ry - fy) * 0.5) +
@@ -288,6 +298,7 @@
       );
     } else {
       forkL.setAttribute("d", branch(lx, ly));
+      forkM.setAttribute("d", branch(mx, my));
       forkR.setAttribute("d", branch(rx, ry));
     }
   }

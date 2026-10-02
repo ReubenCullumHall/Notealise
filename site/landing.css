@@ -250,14 +250,14 @@
 }
 .landing a:hover { text-decoration-color: currentColor; }
 
-/* ── The ending: "Now it's time to walk the path" then the two buttons.
+/* ── The ending: "Now it's time to walk the path" then the three buttons.
    An ink line starts at the foot of the "h" in "path" and, as the reader
    scrolls down into this section, draws itself down the page: a gentle wave
-   for the first half, then it splits and the two halves straighten out into
-   the top of the Windows button (left) and the macOS button (right). The line
-   is not there until you scroll to it, and it stays once drawn.
+   for the first half, then it splits in three and the branches straighten out
+   into the top of the Windows (left), macOS (middle) and Linux (right) buttons.
+   The line is not there until you scroll to it, and it stays once drawn.
 
-   landing.js measures the real positions of the "h" and the two buttons and
+   landing.js measures the real positions of the "h" and the three buttons and
    writes the path shapes in; it also sets --draw from 0 to 100 as you descend.
    CSS below only turns --draw into how much of each line is inked. ────────── */
 .walk {
@@ -341,7 +341,7 @@
   stroke-linejoin: round;
 }
 /* pathLength is normalised to 1, so dashoffset 1->0 inks the line in. The
-   trunk fills over --draw 0..58 and the two halves over 54..100 — they OVERLAP
+   trunk fills over --draw 0..58 and the branches over 54..100 — they OVERLAP
    by four points on purpose: the branches leave the fork on the trunk's own
    tangent, so starting them a hair early means the split has already begun by
    the time the trunk's head arrives, and the tip never visibly stops. */
@@ -361,10 +361,10 @@
    FLAG for Reuben: this is the one spot page colour / a dark ground can appear,
    and it does so only off a choice the reader made.
 
-   What a chosen tint touches down here: the drawn line, and the BORDER of both
-   download buttons — so the line looks like it runs straight into them. It
-   does NOT fill either button, tint the labels, or touch the wordmark; those
-   stay ink. Both buttons are identical — the .primary OS hint no longer sets
+   What a chosen tint touches down here: the drawn line, and the BORDER of every
+   download button — so the line looks like it runs straight into them. It
+   does NOT fill any button, tint the labels, or touch the wordmark; those
+   stay ink. The buttons are identical — the .primary OS hint no longer sets
    one apart. --carry-accent is the exact colour of the tint swatch in the
    "Try it" controls (landing.js), so the line matches what the reader
    picked. ──────────────────────────────────────────────────────────────── */
