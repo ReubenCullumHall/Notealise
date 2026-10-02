@@ -3,7 +3,10 @@ import { SPACE_CAP } from '../../../../shared/settings'
 import type { OnboardingStepProps } from '../Onboarding'
 
 const PRESETS = ['School', 'Work', 'Journal', 'Projects', 'Ideas', 'Research', 'Personal', 'Reading']
-const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
+const NUMBER_WORDS = [
+  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven',
+  'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen'
+]
 
 // Someone who picks a single space still lands in an app with two, so the
 // sidebar shows it holds more than one section and "drag a note into another

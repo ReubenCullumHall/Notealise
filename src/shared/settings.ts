@@ -96,9 +96,10 @@ export type NumberFormatId = 'default' | 'comma' | 'dot'
 export const TOOLBAR_SLOTS = 4
 
 /** How many spaces a vault may have. Capped so the sidebar switcher stays
- *  glanceable — up to two rows of five emoji (see the switcher in Sidebar.tsx)
- *  rather than a crowded strip. */
-export const SPACE_CAP = 10
+ *  glanceable — a few short rows of emoji (seven to a row at the default
+ *  sidebar width, so 15 is three rows; see the switcher in Sidebar.tsx) rather
+ *  than a crowded strip. Raised from 10 to 15 on 2026-10-02 (Reuben). */
+export const SPACE_CAP = 15
 
 /** One space: a top-level vault folder, plus how the app looks while you're in
  *  it. */

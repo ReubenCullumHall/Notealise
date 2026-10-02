@@ -1032,7 +1032,7 @@ export function Sidebar({
         <UpdateBanner status={update} />
 
         {/* The space switcher, directly above "Switch folder": one row of
-            emoji, one per top-level folder (up to SPACE_CAP = 10), wrapping
+            emoji, one per top-level folder (up to SPACE_CAP = 15), wrapping
             once the sidebar isn't wide enough to fit them all on one line.
             Deliberately a horizontal strip *inside* the sidebar footer and not
             a vertical rail beside the tree — the rail is the shape that was

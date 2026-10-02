@@ -184,7 +184,7 @@ describe('normalizeSettings', () => {
   })
 
   it('caps at SPACE_CAP', () => {
-    const many = Array.from({ length: 12 }, (_, i) => ({ folder: `f${i}` }))
+    const many = Array.from({ length: SPACE_CAP + 2 }, (_, i) => ({ folder: `f${i}` }))
     expect(normalizeSettings({ spaces: many }).spaces).toHaveLength(SPACE_CAP)
   })
 
