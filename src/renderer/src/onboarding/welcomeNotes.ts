@@ -11,6 +11,8 @@
 // the Settings list and "# Our final word". It is the demo — the link
 // [[Start here#Our final word]] in "Things you can delete" jumps the reader
 // past that gap to the heading, which only reads as a jump if the gap is big.
+// No note opens with a `# Name` heading: the app already shows (and underlines)
+// the note's name above the page, so one here would print the name twice.
 //
 // Routed through createFolder/createNote/writeNote — the same IPC every other
 // onboarding artefact uses, never a bespoke fs write. Safe to call only once:
@@ -23,9 +25,7 @@
 // first, then Start here, then the rest) — a fresh space is otherwise
 // alphabetical and "Start here" would land third.
 
-const START_HERE = `# Start here
-
-> **Make your first note**
+const START_HERE = `> **Make your first note**
 > Click **Note** at the top of the sidebar, or press ⌘N (Ctrl+N on Windows). It saves itself as you type.
 
 Everything in this space right now is a real, ordinary file - this note, the ones linked below, and the one you wrote a moment ago. Delete any of them. Nothing breaks.
@@ -87,27 +87,21 @@ Thank you for being here!
 
 - Reuben Cullum-Hall (founder)`
 
-const HOW_ORGANISED = `# How this app is organised
-
-Notes live in spaces - folders on disk that the sidebar shows as sections of the app. Each one can look and work however you want: its own theme, its own font, its own accent.
+const HOW_ORGANISED = `Notes live in spaces - folders on disk that the sidebar shows as sections of the app. Each one can look and work however you want: its own theme, its own font, its own accent.
 
 Each one has its own purpose.
 
 Drag a note into a different space, or make a new one from the sidebar. Moving something here moves the actual file underneath it.
 `
 
-const MAKE_IT_YOURS = `# Make it yours
-
-The font and colour you picked a moment ago aren't fixed - every space can have its own, and there's more choice than what onboarding offered.
+const MAKE_IT_YOURS = `The font and colour you picked a moment ago aren't fixed - every space can have its own, and there's more choice than what onboarding offered.
 
 Settings → Look changes the whole app at once. Settings → Spaces changes just one.
 
 There are lots of features to choose from. Keep it simple and keep with the basics - the app can grow with you, not make you feel like you have to catch up.
 `
 
-const THINGS_YOU_CAN_DELETE = `# Things you can delete
-
-A small folder, kept around to prove a point.
+const THINGS_YOU_CAN_DELETE = `A small folder, kept around to prove a point.
 
 You can find it at the top of the page, with one note inside.
 
@@ -117,9 +111,7 @@ Or you can drag it into the bin with the dot grid as well.
 
 Return to [[Start here#Our final word]] to view our final word to you - before you are unleashed to make this app your own.`
 
-const SAFE_TO_BIN = `# This one's safe to bin
-
-Right-click this note, or the folder it's in, and delete it. Nothing else in the app depends on it.
+const SAFE_TO_BIN = `Right-click this note, or the folder it's in, and delete it. Nothing else in the app depends on it.
 `
 
 /** Seeds the curated welcome notes + demo folder into `spaceFolder`, and returns
