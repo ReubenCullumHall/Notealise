@@ -1561,13 +1561,26 @@ div.cm-math-editing {
   max-width: var(--editor-max-width, 46rem);
   margin: 0 auto;
   padding: calc(24px + var(--links-inset, 0px)) 28px 0;
+  /* Positioned only so it paints over the page look's sheet, which sits
+     behind it and is positioned itself (see "page looks" below). */
+  position: relative;
+}
+/* The note's name is always underlined (Reuben, 2026-10-02). It is the app's,
+   not the note's — nothing is written into the file — and it is what keeps the
+   name reading as the page's name now that the page look runs up behind it.
+   Same offset as every other underline the app draws (the link marks). The
+   placeholder gets it too, so a new note's "Untitled" sits where its name will. */
+.note-title-row input,
+.note-title-row input::placeholder {
+  text-decoration: underline;
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.18em;
 }
 /* With a title above it the scroller keeps only the gap between the title and
    the first line — the 24px that used to hold line 1 clear of the top now sits
-   on `.note-title-row` instead. The ruled-paper background stays in phase
-   automatically: it is `background-origin: content-box`, so rule 1 is drawn at
-   the top of the content box whatever this padding is, and line 1's baseline
-   lands on it exactly as before. */
+   on `.note-title-row` instead. The page look stays in phase automatically: its
+   sheet is laid from where the content box starts (--paper-origin, measured by
+   editor/pagePaper.ts), so rule 1 lands under line 1 whatever this padding is. */
 .edit-layer.has-title .cm-scroller {
   padding-top: 14px;
 }
@@ -1590,15 +1603,36 @@ div.cm-math-editing {
    reads those. Nothing here is a colour literal and nothing overrides a ramp
    token — the lines are --wash, so a look drawn once works on all four themes.
 
-   WHERE IT IS PAINTED, and why it is not `.pane-body`. The obvious place is
-   the pane itself, and it is wrong for exactly one reason: a pane background
-   does not scroll. Rules that stay put while the words slide past them are
-   worse than no rules at all — the text drifts off the lines on the first
-   flick of the wheel. So the paint goes on the SCROLLER, with
-   `background-attachment: local`, which is the one declaration that makes a
-   background travel with the content it sits behind.
+   WHERE IT IS PAINTED. On a sheet of its own behind the note — NotePane's
+   `.page-paper` — and not on the pane or the editor. Not the pane, because a
+   pane background does not scroll: rules that stay put while the words slide
+   past them are worse than no rules at all. Not the editor's scroller (where
+   it lived until 2026-10-02, with `background-attachment: local`), because
+   anything that fades the scroller's edges fades the words with it, and the
+   scroller starts BELOW the note's name, so the pattern stopped in a hard line
+   under it and another at the sidebar — Reuben: "too harsh". The sheet is
+   neither: it scrolls with the text (the `--note-scroll` timeline, below) and
+   it can be faded freely, because nothing on it is text.
 
-   One scroller, because there is only one: this app renders Markdown live in
+   THE RULES EVERY LOOK FOLLOWS, today's and any added later — they live on
+   the sheet, not on a look, so a new look gets them by setting
+   --page-look-image and nothing else (Reuben, 2026-10-02):
+   1. It runs up behind the note's name, to just under the links strip. Lined
+      is the one exception: its rules belong to lines of text, so it still
+      starts where the text does (`--paper-cut`, below).
+   2. It fades out at every edge of every column — the sidebar side, a split
+      divider, the window edge, the top and the bottom. Never a hard edge.
+   3. A fade lives only where there are never words: the 28px gutter beside
+      the text (the line padding in editor/highlight.ts — it is the whole
+      margin at "Full" page width) and the 24px above the name
+      (`.note-title-row`'s top padding). The same width at every page width and
+      in any number of split columns, so the pattern is at full strength
+      everywhere the writing can be. The bottom is the one edge words scroll
+      past, so its fade is the sides' 28px and takes only the pattern — the
+      words go over it untouched (Reuben, 2026-10-02: "the same page look fade
+      at the bottom of the window too").
+
+   One editor, because there is only one: this app renders Markdown live in
    CodeMirror and has no separate reading pane (`.read-layer` above is
    vestigial, and `reader/ReadingView.tsx` is imported by nothing). Raw view
    and formatted view are the same editor, so both get the paper for free.
@@ -1682,11 +1716,21 @@ div.cm-math-editing {
   );
   --page-look-image: none;
   --page-look-size: auto;
-  /* How far a pattern of LINES stops short of a pane divider — and the width
-     of the note's scrollbar, so the two are one number (see the tiling block
-     below). --page-inset-l is overridden per pane, on the scroller itself. */
+  /* How far a look's pattern sits below where the text starts — 0 for all but
+     Lined, whose rules sit on the baseline (see its block below). */
+  --page-look-y: 0px;
+  /* The width of the note's scrollbar (the scrollbar rules, far below). Until
+     2026-10-02 it was also how far a pattern of lines stopped short of a split
+     divider; the fades below do that job for every look now. */
   --page-gap: 11px;
-  --page-inset-l: 0px;
+  /* The two fades every look gets (rule 3 above). Each is the width of a strip
+     that never holds words, so each is paired with what makes that strip:
+     --page-fade-x with the 28px line padding in editor/highlight.ts (and the
+     same 28px on .note-title-row), --page-fade-top with .note-title-row's 24px
+     top padding. Change one of a pair and change the other. */
+  --page-fade-x: 28px;
+  --page-fade-top: 24px;
+  --page-fade-bottom: var(--page-fade-x);
 }
 :root[data-page-look-accent='on'] {
   --page-look-rgb: var(--accent-500);
@@ -1698,19 +1742,107 @@ div.cm-math-editing {
   --page-accent-boost: 2;
 }
 
+/* THE TINT, under the text, exactly where it always was: from the top of the
+   editor down, edge to edge. It is not part of the fade (2026-10-02 was about
+   the patterns), so it stays as it was — but it moved off the scroller onto the
+   pane's own layer, because the sheet sits BEHIND the scroller now and a tint
+   painted there would wash over the pattern. --paper-scroller is measured
+   (editor/pagePaper.ts). */
+.edit-layer.has-title {
+  --page-tint: rgb(var(--page-tint-rgb) / calc(var(--page-tint-alpha) * var(--page-tint-boost)));
+  background-image: linear-gradient(var(--page-tint), var(--page-tint));
+  background-repeat: no-repeat;
+  background-position: 0 var(--paper-scroller, 0px);
+  background-size: 100% 100%;
+  /* lets the sheet below follow THIS pane's scroller, and only this one's */
+  timeline-scope: --note-scroll;
+}
 .edit-layer .cm-scroller {
-  background-color: rgb(var(--page-tint-rgb) / calc(var(--page-tint-alpha) * var(--page-tint-boost)));
+  scroll-timeline: --note-scroll block;
+}
+
+/* THE SHEET. `.page-paper` is the window it shows through: from just under the
+   links strip to the bottom of the pane, edge to edge, with the fades as a mask
+   — a mask takes out the pattern and leaves the colour behind it alone, so it
+   is right on every theme and tint with no colour of its own. Two masks,
+   multiplied: the top and bottom fades, and the two side fades (rules 1-3
+   above). */
+.page-paper {
+  position: absolute;
+  inset: 0;
+  top: var(--links-inset, 0px);
+  overflow: hidden;
+  pointer-events: none;
+  /* where the pattern starts showing, measured from the top of the window, and
+     how far it takes to fade in from there */
+  --paper-cut: 0px;
+  --paper-fade-top: var(--page-fade-top);
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent var(--paper-cut),
+      black calc(var(--paper-cut) + var(--paper-fade-top)),
+      black calc(100% - var(--page-fade-bottom)),
+      transparent
+    ),
+    linear-gradient(
+      to right,
+      transparent,
+      black var(--page-fade-x),
+      black calc(100% - var(--page-fade-x)),
+      transparent
+    );
+  mask-composite: intersect;
+}
+/* Lined's rules belong to lines of text, so it starts where the text does,
+   with no fade — the way it always started (rule 1's exception). */
+[data-page-look='lined'] .page-paper {
+  --paper-cut: calc(var(--paper-scroller, 0px) - var(--links-inset, 0px));
+  --paper-fade-top: 0px;
+}
+/* No look, no sheet — not even an empty one moving with the scroll. */
+[data-page-look='none'] .page-paper {
+  display: none;
+}
+/* The pattern itself, laid from where line 1 starts (--paper-origin) so the
+   rules and squares keep exactly the place under the text they had when they
+   were painted on the scroller — Lined's baseline offset included.
+
+   HOW IT SCROLLS: a scroll TIMELINE — the animation's progress is the
+   scroller's position — moving the sheet by transform, which the compositor
+   runs in step with the scroll itself. So no script runs while you scroll and
+   a rule can never trail its line. The range is written in pixels, not as the
+   note's length: 0-10,000,000px of scroll is the same travel, one for one,
+   whatever the note's length, and no note outruns it. The sheet is as tall as
+   the window plus however far the note scrolls (--paper-range, measured by
+   editor/pagePaper.ts), plus slack.
+   Measured 2026-10-02 in a real build on the MacBook's own screen: rules sharp
+   and exactly on the text at every scroll position, down to 90,000px into a
+   long note. (A headless browser FAKING a Retina screen draws this sheet at
+   half resolution — blurred lines that a real screen never shows. Check it in
+   a real window, not in an emulated one.)
+   Two ways that were tried and are worse: moving background-position (runs on
+   the main thread, so it can trail a fast scroll by a frame), and a sheet one
+   repeat tall that jumps back each repeat (the compositor's arithmetic put
+   rules up to 1px off after a scroll).
+   Interface animations off (`data-motion`, far below) shortens every
+   animation's duration, which changes nothing here: on a scroll timeline a
+   duration is only a share of the scroll, and this one takes all of it. */
+.page-paper-sheet {
+  position: absolute;
+  inset: 0 0 auto;
+  height: calc(100% + var(--paper-range, 0px) + 1000px);
   background-image: var(--page-look-image);
   background-size: var(--page-look-size);
-  background-attachment: local;
-  /* The scroller's padding-top is what holds the first line clear of the links
-     strip; the rules have to start after it, or the note's first line sits
-     between two of them instead of on one. Measured 2026-08-30: with this,
-     line 1's baseline lands exactly on rule 1. A HEADING then knocks the rest
-     out of phase, because its line box is 35.4px against the body's 27.2 —
-     which is what real ruled paper does with a big title too, and the
-     alternative is forcing every line to one height and losing headings. */
-  background-origin: content-box;
+  background-position: 0 calc(var(--paper-origin, 0px) - var(--links-inset, 0px) + var(--page-look-y));
+  animation: paper-scroll linear both;
+  animation-timeline: --note-scroll;
+  animation-range: 0px 10000000px;
+}
+@keyframes paper-scroll {
+  to {
+    transform: translateY(-10000000px);
+  }
 }
 
 /* Every look starts at weight 1 and the heavy ones below turn it down. Needed
@@ -1774,9 +1906,11 @@ div.cm-math-editing {
    bottom pixel of every letter (the second look), and 22 — chosen to "leave
    descenders room", which moving the rule UP cannot do — put it 3px into the
    letters (Reuben, third look: "slightly into it"). Re-measure the baseline if
-   the base font size or --page-rule change. */
-[data-page-look='lined'] .edit-layer .cm-scroller {
-  background-position-y: 26px;
+   the base font size or --page-rule change. (Read by the sheet's
+   background-position, measured from where line 1 starts — the same zero the
+   scroller's content box gave it before 2026-10-02.) */
+[data-page-look='lined'] {
+  --page-look-y: 26px;
 }
 [data-page-look='grid'],
 [data-page-look='grid-fine'] {
@@ -1816,30 +1950,26 @@ div.cm-math-editing {
    the tile is five cells and not one) — so the pattern is identical however tall
    the note or the window is. `repeat-y` because the gradients already repeat
    across the width themselves. Dots and grain keep their own explicit sizes.
+   (On the sheet since 2026-10-02, where the box is the sheet's height instead
+   of the note's — the same problem, the same fix.)
 
-   THE DIVIDER GAP. In a split the left pane's lines stopped 11px short of the
-   divider — that was its scrollbar, and only while the note was long enough to
-   scroll — while the right pane's ran right up to it. Both sides now stop the
-   same 11px away. `--page-inset-l` moves the right-hand pane's pattern in;
-   `scrollbar-gutter: stable` keeps the left-hand pane's own 11px there whether
-   or not its note scrolls. Both apply only to a pane that HAS a divider on that
-   side, so a single pane still runs edge to edge. The variable is set on the
-   scroller and read on the scroller: set on <html> it would be resolved there
-   and the per-pane override would never arrive. */
+   THE DIVIDER GAP (2026-09-27 → 2026-10-02). In a split the left pane's lines
+   used to stop 11px short of the divider — its scrollbar — while the right
+   pane's ran up to it, so both were made to stop 11px away. The edge fades do
+   that job for every look now: each column's pattern fades out to nothing at
+   the divider, on both sides of it, so the per-pane inset is gone.
+   `scrollbar-gutter: stable` on a left-hand pane stays only because it also
+   stops the text column shifting 11px the moment a note grows long enough to
+   scroll; it no longer has anything to do with the pattern. */
 :is(
     [data-page-look='lined'],
     [data-page-look='grid'],
     [data-page-look='grid-fine'],
     [data-page-look='graph']
   )
-  .edit-layer
-  .cm-scroller {
-  background-size: calc(100% - var(--page-inset-l)) var(--page-tile);
+  .page-paper-sheet {
+  background-size: 100% var(--page-tile);
   background-repeat: repeat-y;
-  background-position-x: var(--page-inset-l);
-}
-.pane-divider + .pane-col .edit-layer .cm-scroller {
-  --page-inset-l: var(--page-gap);
 }
 :is(
     [data-page-look='lined'],

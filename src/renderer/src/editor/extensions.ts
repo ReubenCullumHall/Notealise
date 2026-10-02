@@ -17,6 +17,7 @@ import { webLinkGestures } from './webLinkPass'
 import { taskClick } from './taskPass'
 import { blockMath } from './blockMath'
 import { ruleSnap } from './ruleSnap'
+import { pagePaper } from './pagePaper'
 import { mathEditor } from './mathEditor'
 import { blockTable } from './blockTable'
 import { toggleList } from './toggleList'
@@ -146,6 +147,9 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // Measures each formula on its own line so the Lined look can round it up
     // to whole rules (ruleSnap.ts, app.css).
     ruleSnap,
+    // Tells the page look's sheet, behind the editor, where the text starts and
+    // how far the note scrolls (pagePaper.ts, app.css).
+    pagePaper,
     // The maths box: insert or click a formula and edit it in a box under the
     // line while it redraws as you type (mathEditor.ts).
     mathEditor,

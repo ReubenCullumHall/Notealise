@@ -535,6 +535,15 @@ export function NotePane({
             // reaching into it from React is how these two stop agreeing.
             style={{ '--links-inset': floatingTop ? `${LINKS_BLOCK_HEIGHT}px` : '0px' } as React.CSSProperties}
           >
+            {/* The page look (grid, grain, Lined…), on a sheet of its own behind
+                the name and the text rather than painted on the editor — so it
+                can run up behind the name and fade out at every edge without
+                fading a word. First in the layer so everything else sits on it.
+                The sheet inside is what scrolls with the note. app.css,
+                "page looks"; editor/pagePaper.ts measures it. */}
+            <div className="page-paper" aria-hidden="true">
+              <div className="page-paper-sheet" />
+            </div>
             {/* The note's title, in the note's own column.
                 It sat in the command row above until 2026-09-04, where it was
                 `flex-1` from the pane's left edge while the body is a centred
