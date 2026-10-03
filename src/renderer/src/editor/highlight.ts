@@ -18,21 +18,42 @@ const c = (name: string, alpha?: number): string =>
 // accent picked the heading renders at exactly the value it always did.
 const HEADING = 'rgb(var(--ink-acc-900, var(--ink-900)))'
 
+// Settings → Colour → In your notes (2026-10-03): a colour per kind, written by
+// applySettings as `--fmt-KIND-tc` (the text) and `--fmt-KIND-hl` (behind it).
+// Unset, each is REMOVED from the page, never set to a default, and that is
+// what makes every rule below fall back to exactly what it painted before:
+//   • where there was a colour, `var()`'s fallback is that colour;
+//   • where there was none (bold, italic), a `var()` with no fallback is
+//     invalid and the property acts as if it were never written — the text
+//     inherits, as it always did, and the background stays clear.
+const fg = (kind: string, was?: string): string =>
+  was ? `var(--fmt-${kind}-tc, ${was})` : `var(--fmt-${kind}-tc)`
+const bg = (kind: string): string => `var(--fmt-${kind}-hl)`
+
 const mdHighlight = HighlightStyle.define([
-  { tag: t.heading1, fontSize: '1.7em', fontWeight: '700', lineHeight: '1.3', color: HEADING },
-  { tag: t.heading2, fontSize: '1.4em', fontWeight: '700', lineHeight: '1.3', color: HEADING },
-  { tag: t.heading3, fontSize: '1.2em', fontWeight: '600', color: HEADING },
-  { tag: [t.heading4, t.heading5, t.heading6], fontWeight: '600', color: HEADING },
-  { tag: t.strong, fontWeight: '700' },
-  { tag: t.emphasis, fontStyle: 'italic' },
-  { tag: t.strikethrough, textDecoration: 'line-through', color: 'var(--ed-muted)' },
+  { tag: t.heading1, fontSize: '1.7em', fontWeight: '700', lineHeight: '1.3', color: fg('h1', HEADING), background: bg('h1') },
+  { tag: t.heading2, fontSize: '1.4em', fontWeight: '700', lineHeight: '1.3', color: fg('h2', HEADING), background: bg('h2') },
+  { tag: t.heading3, fontSize: '1.2em', fontWeight: '600', color: fg('h3', HEADING), background: bg('h3') },
+  { tag: t.heading4, fontWeight: '600', color: fg('h4', HEADING), background: bg('h4') },
+  { tag: [t.heading5, t.heading6], fontWeight: '600', color: HEADING },
+  { tag: t.strong, fontWeight: '700', color: fg('bold'), background: bg('bold') },
+  { tag: t.emphasis, fontStyle: 'italic', color: fg('italic'), background: bg('italic') },
+  {
+    tag: t.strikethrough,
+    textDecoration: 'line-through',
+    color: fg('strike', 'var(--ed-muted)'),
+    background: bg('strike')
+  },
   {
     tag: t.monospace,
     fontFamily: 'var(--font-mono)',
     color: 'var(--ed-code)'
   },
   { tag: t.quote, color: 'var(--ed-muted)', fontStyle: 'italic' },
-  { tag: [t.link, t.url], color: 'var(--ed-link)', textDecoration: 'underline' }
+  // Only the colour here: `t.link` also lands inside a [[note link]] (which
+  // app.css hands back to the link's own colour), so the web link's
+  // BACKGROUND goes on `.cm-weblink` instead, where nothing else can wear it.
+  { tag: [t.link, t.url], color: fg('webLink', 'var(--ed-link)'), textDecoration: 'underline' }
 ])
 
 const editorTheme = EditorView.theme({

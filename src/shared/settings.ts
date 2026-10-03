@@ -28,7 +28,7 @@
 // than engineered around.
 
 import { isColorToken, type ColorToken } from './palette'
-import { DEFAULT_PALETTE, normalizePalette } from './color'
+import { DEFAULT_PALETTE, normalizeHex, normalizePalette } from './color'
 import {
   normalizePageLookIntensity,
   migratePageLook,
@@ -181,6 +181,12 @@ export interface Space {
    *  loosely, like `accent` and `toolbarSlots`: junk entries are dropped rather
    *  than failing the file. */
   colorPalette: string[]
+  /** A colour for each kind of formatting in a NOTE — headings, bold, links…
+   *  (Reuben, 2026-10-03: "heading 1 is a bright yellow so it stands out").
+   *  Every kind is always present; '' means "as it is now" (the heading's own
+   *  colour, the body text's for the rest). Painted through `--fmt-*` custom
+   *  properties by applySettings, never written into the note itself. */
+  formatColors: FormatColors
   // --- arranging ---
   /** off: folders sit above notes at each level; on: one shared drag order */
   freeArrange: boolean
@@ -340,6 +346,46 @@ export interface Space {
  *  and the notes in it are never part of the deal. */
 export type SpaceLook = Omit<Space, 'folder' | 'num'>
 
+/** The kinds of formatting a space can colour, in the order Settings lists
+ *  them. A storage format (they are keys in settings.json) — add freely, never
+ *  rename one. */
+export const FORMAT_KINDS = [
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'bold',
+  'italic',
+  'underline',
+  'strike',
+  'noteLink',
+  'webLink'
+] as const
+export type FormatKind = (typeof FORMAT_KINDS)[number]
+/** `tc` paints the text, `hl` behind it — the same two layers a selection's
+ *  colour has. Either, both or neither; '' is unset. */
+export interface FormatColor {
+  tc: string
+  hl: string
+}
+export type FormatColors = Record<FormatKind, FormatColor>
+
+export function emptyFormatColors(): FormatColors {
+  return Object.fromEntries(FORMAT_KINDS.map((k) => [k, { tc: '', hl: '' }])) as FormatColors
+}
+
+/** Junk in, every kind out, each colour a `#rrggbb` or ''. */
+export function normalizeFormatColors(raw: unknown): FormatColors {
+  const src = isPlainObject(raw) ? raw : {}
+  const out = emptyFormatColors()
+  for (const k of FORMAT_KINDS) {
+    const v = src[k]
+    if (!isPlainObject(v)) continue
+    out[k] = { tc: normalizeHex(v.tc) ?? '', hl: normalizeHex(v.hl) ?? '' }
+  }
+  return out
+}
+
 /** Split a space into "which folder" and "how it looks".
  *
  *  The arrays are copied, not handed over: guarantee 5 above ("never share a
@@ -349,7 +395,12 @@ export type SpaceLook = Omit<Space, 'folder' | 'num'>
  *  the type system could see. */
 export function spaceLook(s: Space): SpaceLook {
   const { folder: _folder, num: _num, ...look } = s
-  return { ...look, toolbarSlots: [...s.toolbarSlots], colorPalette: [...s.colorPalette] }
+  return {
+    ...look,
+    toolbarSlots: [...s.toolbarSlots],
+    colorPalette: [...s.colorPalette],
+    formatColors: normalizeFormatColors(s.formatColors)
+  }
 }
 
 /** Coerce arbitrary parsed JSON into a valid SpaceLook — a preset file read off
@@ -452,7 +503,22 @@ export interface AppSettings {
    *  `pageLookLibrary`: ours aren't stored, only the ones made with the
    *  wheel. */
   tintLibrary: string[]
+  // --- the colour picker's memory: app-wide, never per space -----------------
+  /** The last colours picked in ANY colour picker, newest first, at most
+   *  RECENT_COLORS_MAX. Reuben, 2026-10-03: the recent and starred colours
+   *  are "across the app and not space specific" — so they sit here with the
+   *  other vault-wide lists rather than on a Space. */
+  recentColors: string[]
+  /** Colours starred in a picker ("your palette" under the hex field), oldest
+   *  first, at most SAVED_COLORS_MAX. Not the same list as a space's
+   *  `colorPalette`, which is what the sidebar's row colours offer. */
+  savedColors: string[]
 }
+
+/** How many recent colours every picker shows. */
+export const RECENT_COLORS_MAX = 3
+/** How many colours can be starred. */
+export const SAVED_COLORS_MAX = 5
 
 export const DEFAULT_SPACE: Space = {
   folder: '',
@@ -480,6 +546,7 @@ export const DEFAULT_SPACE: Space = {
   colorInherit: true,
   colorFadeNested: false,
   colorPalette: [...DEFAULT_PALETTE],
+  formatColors: emptyFormatColors(),
   // On by default: a hand-arranged sidebar where notes and folders share one
   // order is the shape most people expect, and the onboarding welcome notes
   // rely on it (the demo folder is meant to sit above "Start here", which
@@ -534,7 +601,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   confirmMediaDelete: true,
   emojiStyle: 'colour',
   pageLookLibrary: [],
-  tintLibrary: []
+  tintLibrary: [],
+  recentColors: [],
+  savedColors: []
 }
 
 /** A brand-new space, defaults throughout. Every array on DEFAULT_SPACE is
@@ -547,6 +616,7 @@ export function freshSpace(folder: string): Space {
     ...DEFAULT_SPACE,
     toolbarSlots: [...DEFAULT_SPACE.toolbarSlots],
     colorPalette: [...DEFAULT_SPACE.colorPalette],
+    formatColors: emptyFormatColors(),
     folder
   }
 }
@@ -666,6 +736,7 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     colorPalette: Array.isArray(s.colorPalette)
       ? normalizePalette(s.colorPalette)
       : [...DEFAULT_SPACE.colorPalette],
+    formatColors: normalizeFormatColors(s.formatColors),
     freeArrange: typeof s.freeArrange === 'boolean' ? s.freeArrange : DEFAULT_SPACE.freeArrange,
     compactNav: typeof s.compactNav === 'boolean' ? s.compactNav : DEFAULT_SPACE.compactNav,
     showLinks: chrome(s.showLinks, legacy.showLinks, DEFAULT_SPACE.showLinks),
@@ -793,7 +864,9 @@ export function normalizeSettings(raw: unknown): AppSettings {
       ? (s.emojiStyle as EmojiStyle)
       : DEFAULT_SETTINGS.emojiStyle,
     pageLookLibrary: normalizePageLookLibrary(s.pageLookLibrary),
-    tintLibrary: normalizeTintLibrary(s.tintLibrary)
+    tintLibrary: normalizeTintLibrary(s.tintLibrary),
+    recentColors: normalizePalette(s.recentColors, RECENT_COLORS_MAX),
+    savedColors: normalizePalette(s.savedColors, SAVED_COLORS_MAX)
   }
 }
 

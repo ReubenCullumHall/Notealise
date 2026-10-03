@@ -715,3 +715,46 @@ describe('a space saved on the removed Narrow lined look', () => {
     expect(normalizeLook({ pageLook: 'lined-tight' }).pageLook).toBe('lined')
   })
 })
+
+describe('colour picker memory + note formatting colours (2026-10-03)', () => {
+  it('keeps recent and starred colours app-wide, cleaned and capped', async () => {
+    const { normalizeSettings, RECENT_COLORS_MAX, SAVED_COLORS_MAX } = await import('./settings')
+    const s = normalizeSettings({
+      recentColors: ['#ABC', 'junk', '#aabbcc', '#111111', '#222222', '#333333'],
+      savedColors: ['#010101', '#020202', '#030303', '#040404', '#050505', '#060606']
+    })
+    // '#ABC' and '#aabbcc' are one colour, so the duplicate goes
+    expect(s.recentColors).toEqual(['#aabbcc', '#111111', '#222222'])
+    expect(s.recentColors).toHaveLength(RECENT_COLORS_MAX)
+    expect(s.savedColors).toHaveLength(SAVED_COLORS_MAX)
+    // an old settings.json has neither, and that is an empty list, not an error
+    expect(normalizeSettings({}).recentColors).toEqual([])
+    expect(normalizeSettings({}).savedColors).toEqual([])
+  })
+
+  it('gives every space every formatting kind, unset by default', async () => {
+    const { normalizeSettings, FORMAT_KINDS } = await import('./settings')
+    const fc = normalizeSettings({}).spaces[0].formatColors
+    expect(Object.keys(fc)).toEqual([...FORMAT_KINDS])
+    for (const k of FORMAT_KINDS) expect(fc[k]).toEqual({ tc: '', hl: '' })
+  })
+
+  it('keeps a good colour beside a bad one, per kind and per layer', async () => {
+    const { normalizeSettings } = await import('./settings')
+    const fc = normalizeSettings({
+      spaces: [{ formatColors: { h1: { tc: '#FF0', hl: 'red' }, bold: 'yellow', nope: { tc: '#000000' } } }]
+    }).spaces[0].formatColors
+    expect(fc.h1).toEqual({ tc: '#ffff00', hl: '' })
+    expect(fc.bold).toEqual({ tc: '', hl: '' })
+    expect('nope' in fc).toBe(false)
+  })
+
+  it('copies formatting colours into a look rather than sharing them', async () => {
+    const { normalizeSettings, spaceLook } = await import('./settings')
+    const space = normalizeSettings({ spaces: [{ formatColors: { h1: { tc: '#ffff00' } } }] }).spaces[0]
+    const look = spaceLook(space)
+    expect(look.formatColors.h1.tc).toBe('#ffff00')
+    look.formatColors.h1.tc = '#000000'
+    expect(space.formatColors.h1.tc).toBe('#ffff00')
+  })
+})

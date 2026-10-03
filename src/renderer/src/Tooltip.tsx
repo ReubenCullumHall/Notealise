@@ -30,6 +30,8 @@ interface Tip {
   right: number
   top: number
   bottom: number
+  /** a "?" help mark's tip: drawn on a solid panel (see HelpTip) */
+  panel: boolean
   /** true when the anchor is in the right-hand third — the text is then aligned
    *  to its right edge, so a long tip doesn't shoot off the window */
   fromRight: boolean
@@ -43,6 +45,7 @@ export function HelpTip({ text }: { text: string }): React.JSX.Element {
   return (
     <span
       data-tip={text}
+      data-tip-panel=""
       aria-label={text}
       className="inline-flex h-3.5 w-3.5 shrink-0 select-none items-center justify-center rounded-full border border-ink-300/40 text-[9px] font-semibold leading-none text-ink-400"
     >
@@ -109,6 +112,7 @@ export function Tooltip(): React.JSX.Element | null {
         right: r.right,
         top: r.top,
         bottom: r.bottom,
+        panel: 'tipPanel' in el.dataset,
         fromRight: r.left > window.innerWidth * 0.62
       }
     }
@@ -175,7 +179,15 @@ export function Tooltip(): React.JSX.Element | null {
       // Text, not a panel: no border, no background, no shadow. The drop-shadow
       // is the only concession — it is what keeps a light tip legible where it
       // happens to fall over the note's own text.
-      className="pointer-events-none z-[90] text-[11.5px] font-medium leading-snug text-ink-600 [text-shadow:0_1px_0_rgb(var(--paper)),0_0_6px_rgb(var(--paper))]"
+      // The one exception is a "?" help mark (Reuben, 2026-10-03: easier to
+      // read on a solid background). Those tips are whole sentences, and bare
+      // text that long, laid over a settings row, was hard to read.
+      className={
+        'pointer-events-none z-[90] text-[11.5px] font-medium leading-snug ' +
+        (tip.panel
+          ? 'rounded-lg border border-ink-300/25 bg-surface px-2.5 py-1.5 text-ink-700 shadow-float'
+          : 'text-ink-600 [text-shadow:0_1px_0_rgb(var(--paper)),0_0_6px_rgb(var(--paper))]')
+      }
       role="tooltip"
     >
       {tip.text}

@@ -3,6 +3,9 @@ import { createPortal } from 'react-dom'
 import { hexToHsv, hsvToHex, inkOn, normalizeHex, rgbChannels, type Hsv } from '../../../shared/color'
 import { Icon } from '../icons'
 import { useDragTrack } from './dragTrack'
+import { rememberColor, starColor, unstarColor, useColorMemory } from './memory'
+import { SAVED_COLORS_MAX } from '../../../shared/settings'
+import { claimEscape } from '../settings/escapeClaims'
 
 // The colour picker: a saturation/value square, a hue slider and a hex field —
 // the three controls that between them reach every colour, rather than a fixed
@@ -65,15 +68,39 @@ export function ColorField({
 }): React.JSX.Element {
   const [hsv, setHsv] = useHsvDraft(value)
   const [typed, setTyped] = useState<string | null>(null)
+  const memory = useColorMemory()
+  const current = hsvToHex(hsv.h, hsv.s, hsv.v)
+  const starred = memory.saved.includes(current)
+  const full = memory.saved.length >= SAVED_COLORS_MAX
+  // The last colour a drag produced, for the let-go to record. A ref, because
+  // the pointerup listener was attached when the drag STARTED and would
+  // otherwise remember the colour from before the first move.
+  const last = useRef(value)
+  // While the hex box has focus, Escape belongs to it. Settings' own
+  // close-on-Escape fires first otherwise (escapeClaims.ts), so Escape mid-hex
+  // closed the whole Settings window (found 2026-10-03).
+  const escClaim = useRef<(() => void) | null>(null)
+  useEffect(() => () => escClaim.current?.(), [])
 
   const emit = (next: typeof hsv): void => {
     setHsv(next)
     setTyped(null)
-    onChange(hsvToHex(next.h, next.s, next.v))
+    last.current = hsvToHex(next.h, next.s, next.v)
+    onChange(last.current)
+  }
+  const settle = (): void => rememberColor(last.current)
+
+  /** A recent or starred colour clicked: the same as typing its hex. */
+  const pick = (hex: string): void => {
+    setHsv(hexToHsv(hex))
+    setTyped(null)
+    last.current = hex
+    onChange(hex)
+    rememberColor(hex)
   }
 
-  const sv = useDragTrack((x, y) => emit({ ...hsv, s: x * 100, v: (1 - y) * 100 }))
-  const hue = useDragTrack((x) => emit({ ...hsv, h: x * 360 }))
+  const sv = useDragTrack((x, y) => emit({ ...hsv, s: x * 100, v: (1 - y) * 100 }), settle)
+  const hue = useDragTrack((x) => emit({ ...hsv, h: x * 360 }), settle)
 
   /** Arrow keys nudge; Shift takes bigger steps. A colour picker that can only
    *  be dragged is one a keyboard cannot reach at all. */
@@ -106,6 +133,7 @@ export function ColorField({
         aria-label="Saturation and brightness"
         aria-valuetext={`${Math.round(hsv.s)}% saturation, ${Math.round(hsv.v)}% brightness`}
         onKeyDown={(e) => nudge(e, 'sv')}
+        onKeyUp={(e) => e.key.startsWith('Arrow') && settle()}
         className="color-sv"
         style={{ '--picker-hue': hsv.h } as React.CSSProperties}
       >
@@ -128,6 +156,7 @@ export function ColorField({
         aria-valuemax={360}
         aria-valuenow={Math.round(hsv.h)}
         onKeyDown={(e) => nudge(e, 'h')}
+        onKeyUp={(e) => e.key.startsWith('Arrow') && settle()}
         className="color-hue"
       >
         <span
@@ -138,6 +167,42 @@ export function ColorField({
             '--handle-rgb': rgbChannels(hsvToHex(hsv.h, 100, 100))
           } as React.CSSProperties}
         />
+      </div>
+
+      {/* Recent colours, a hairline, then the starred ones — Reuben,
+          2026-10-03. Both lists are app-wide (color/memory.ts), so this row is
+          the same in every picker. Empty slots are drawn rather than left out,
+          so the row never changes width and the five places for starred
+          colours say what they are for before anything is in them. */}
+      <div className="flex items-center gap-1">
+        {Array.from({ length: 3 }, (_, i) => memory.recent[i]).map((hex, i) =>
+          hex ? (
+            <MemorySwatch
+              key={'r' + i}
+              hex={hex}
+              on={hex === current}
+              tip={`Recent — ${hex}`}
+              onClick={() => pick(hex)}
+            />
+          ) : (
+            <EmptySlot key={'r' + i} tip="Colours you pick show up here" />
+          )
+        )}
+        <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-ink-300/30" />
+        {Array.from({ length: SAVED_COLORS_MAX }, (_, i) => memory.saved[i]).map((hex, i) =>
+          hex ? (
+            <MemorySwatch
+              key={'s' + i}
+              hex={hex}
+              on={hex === current}
+              tip={`Starred — ${hex}. Right-click to unstar`}
+              onClick={() => pick(hex)}
+              onContextMenu={() => unstarColor(hex)}
+            />
+          ) : (
+            <EmptySlot key={'s' + i} tip="Star a colour to keep it here" />
+          )
+        )}
       </div>
 
       <label className="flex items-center gap-2">
@@ -161,18 +226,108 @@ export function ColorField({
               onChange(hex)
             }
           }}
-          onBlur={() => setTyped(null)}
+          onFocus={() => {
+            escClaim.current?.()
+            escClaim.current = claimEscape()
+          }}
+          onBlur={() => {
+            escClaim.current?.()
+            escClaim.current = null
+            // A finished hex counts as picked; one abandoned half-typed doesn't.
+            if (typed !== null && normalizeHex(typed)) rememberColor(typed)
+            setTyped(null)
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
             else if (e.key === 'Escape') {
               e.stopPropagation() // don't close the popover behind it
               setTyped(null)
+              // Let go of the box, so the NEXT Escape closes what it normally would.
+              ;(e.target as HTMLInputElement).blur()
             }
           }}
           className="w-full rounded-lg bg-ink-300/10 px-2.5 py-1.5 font-mono text-[12px] lowercase text-ink-900 outline-none focus-visible:ring-2 focus-visible:ring-brand-300"
         />
+        {/* Outside the click-to-focus of the label would be tidier, but a
+            button inside a label is still its own target — clicking it never
+            focuses the field. */}
+        <button
+          type="button"
+          aria-pressed={starred}
+          aria-label={starred ? 'Unstar this colour' : 'Star this colour'}
+          data-tip={
+            starred
+              ? 'Unstar — take it out of your palette'
+              : full
+                ? `Your palette holds ${SAVED_COLORS_MAX} — right-click a starred colour to make room`
+                : 'Star — keep this colour in your palette'
+          }
+          onClick={(e) => {
+            e.preventDefault()
+            if (starred) unstarColor(current)
+            else if (starColor(current)) rememberColor(current)
+          }}
+          className={
+            'flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-none bg-transparent p-0 outline-none transition-colors duration-150 hover:bg-ink-300/15 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+            (starred ? 'text-accent-500' : full ? 'text-ink-300' : 'text-ink-400 hover:text-ink-900')
+          }
+        >
+          <Icon name={starred ? 'starFilled' : 'star'} className="h-4 w-4" />
+        </button>
       </label>
     </div>
+  )
+}
+
+/** One recent or starred colour under the picker. Smaller than a preset
+ *  `Swatch` so eight of them and the divider fit the 216px a popover leaves. */
+function MemorySwatch({
+  hex,
+  on,
+  tip,
+  onClick,
+  onContextMenu
+}: {
+  hex: string
+  on: boolean
+  tip: string
+  onClick: () => void
+  onContextMenu?: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      data-tip={tip}
+      aria-label={tip}
+      aria-pressed={on}
+      onClick={onClick}
+      onContextMenu={
+        onContextMenu &&
+        ((e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          onContextMenu()
+        })
+      }
+      className={
+        'h-5 w-5 shrink-0 rounded-md border-none p-0 outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-brand-300 ' +
+        (on
+          ? 'ring-2 ring-brand-500 ring-offset-1 ring-offset-surface'
+          : 'ring-1 ring-ink-300/30 hover:ring-ink-300/60')
+      }
+      style={{ background: `rgb(${rgbChannels(hex)})` }}
+    />
+  )
+}
+
+/** A place a colour will go. Dashed, so it reads as a slot and not as a
+ *  very pale colour. */
+function EmptySlot({ tip }: { tip: string }): React.JSX.Element {
+  return (
+    <span
+      data-tip={tip}
+      className="h-5 w-5 shrink-0 rounded-md border border-dashed border-ink-300/40"
+    />
   )
 }
 

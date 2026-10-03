@@ -5,6 +5,7 @@ import { Icon } from '../icons'
 import { Tick, TickGroup, ToggleRow } from './primitives'
 import { ColorField, Swatch } from '../color/Picker'
 import type { SpaceProps } from './Spaces'
+import { FormatColours } from './FormatColours'
 
 interface ColourProps extends SpaceProps {
   /** Colour the folders that already exist, in whichever spaces this form is
@@ -99,6 +100,8 @@ export function SpaceColour({ space, onChange, onColorExisting }: ColourProps): 
 
   return (
     <>
+      <FormatColours space={space} onChange={onChange} />
+
       <section className="settings-group">
         <h3>How a colour shows</h3>
         <p className="hint">

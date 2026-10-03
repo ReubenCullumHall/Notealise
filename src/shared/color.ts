@@ -54,13 +54,13 @@ export function normalizeHex(v: unknown): string | null {
 
 /** A list of hexes: junk dropped, duplicates dropped, capped. Never throws — a
  *  hand-edited settings.json must not stop the vault opening. */
-export function normalizePalette(raw: unknown): string[] {
+export function normalizePalette(raw: unknown, max = PALETTE_MAX): string[] {
   const list = Array.isArray(raw) ? raw : []
   const out: string[] = []
   for (const v of list) {
     const hex = normalizeHex(v)
     if (hex && !out.includes(hex)) out.push(hex)
-    if (out.length >= PALETTE_MAX) break
+    if (out.length >= max) break
   }
   return out
 }

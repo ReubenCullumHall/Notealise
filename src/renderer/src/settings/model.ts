@@ -6,7 +6,7 @@
 import { hexToHsv, normalizeHex, rgbChannels } from '../../../shared/color'
 import { findPageLook, parseTint, PAGE_LOOK_INTENSITY_DEFAULT } from '../../../shared/looks'
 import { PALETTE, paletteEntry, splitToken } from '../../../shared/palette'
-import { activeSpace, type AppSettings, type ResolvedThemeId, type Space } from '../../../shared/settings'
+import { activeSpace, FORMAT_KINDS, type AppSettings, type ResolvedThemeId, type Space } from '../../../shared/settings'
 import { findFont, fontCssValue, type FontFallback } from './fonts'
 import { ensureInstalledFontsLoaded, findInstalledFont } from './fontLoader'
 
@@ -487,4 +487,16 @@ export function applySettings(s: AppSettings): void {
     active: a.accent !== 'default'
   })
   applyFont(root, a.uiFont, a.font, a.dyslexiaFont)
+  // Heading / bold / link colours (Settings → Colour → In your notes). NEW
+  // custom properties, one pair per kind, read with a fallback by
+  // editor/highlight.ts and app.css — so an unset one is REMOVED, never set to
+  // a default, and the note paints exactly as it did before this existed.
+  for (const k of FORMAT_KINDS) {
+    const c = a.formatColors[k]
+    for (const layer of ['tc', 'hl'] as const) {
+      const name = `--fmt-${k}-${layer}`
+      if (c[layer]) root.style.setProperty(name, c[layer])
+      else root.style.removeProperty(name)
+    }
+  }
 }

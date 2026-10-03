@@ -9,7 +9,11 @@
  *  Returns 0–1 on each axis.
  *
  */
-export function useDragTrack(onMove: (x: number, y: number) => void): {
+export function useDragTrack(
+  onMove: (x: number, y: number) => void,
+  /** once, when the pointer lets go — where a picker records the colour as used */
+  onEnd?: () => void
+): {
   onPointerDown: (e: React.PointerEvent) => void
 } {
   return {
@@ -29,6 +33,7 @@ export function useDragTrack(onMove: (x: number, y: number) => void): {
         el.removeEventListener('pointermove', move)
         el.removeEventListener('pointerup', up)
         el.removeEventListener('pointercancel', up)
+        onEnd?.()
       }
       el.addEventListener('pointermove', move)
       el.addEventListener('pointerup', up)

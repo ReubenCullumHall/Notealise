@@ -166,7 +166,7 @@ const PART_KEYS: Record<LookPart, readonly (keyof SpaceLook)[]> = {
   // workspace.json (`EntryMeta.island`), so pouring a preset never moves a
   // single note.
   appearance: ['emoji', 'islandName', 'theme', 'textTone', 'buttonDefinition', 'density', 'editorWidth', 'accent', 'accentMode', 'accentUiText', 'pageLook', 'font', 'uiFont', 'dyslexiaFont', 'tint', 'pageLookIntensity', 'pageLookAccent'],
-  colour: ['colorStyle', 'colorAuto', 'colorInherit', 'colorFadeNested', 'colorPalette'],
+  colour: ['colorStyle', 'colorAuto', 'colorInherit', 'colorFadeNested', 'colorPalette', 'formatColors'],
   arranging: ['freeArrange', 'compactNav'],
   links: ['showLinks', 'linksPosition'],
   noteExtras: ['showPath', 'showIsland', 'showNoteInfo', 'markdownPro', 'rawMarkStyle', 'rawMarkTint'],
@@ -176,7 +176,7 @@ const PART_KEYS: Record<LookPart, readonly (keyof SpaceLook)[]> = {
 
 export const PART_LABELS: Record<LookPart, { label: string; hint: string }> = {
   appearance: { label: 'Appearance', hint: 'emoji, tab island name, theme, accent, density, button edges' },
-  colour: { label: 'Colour', hint: 'how entry colours paint, the palette, auto-colouring' },
+  colour: { label: 'Colour', hint: 'how entry colours paint, the palette, auto-colouring, heading and link colours' },
   arranging: { label: 'Arranging', hint: 'sidebar order and the nav buttons' },
   links: { label: 'Links', hint: "whether a note's links strip shows, and where it sits" },
   noteExtras: { label: 'Note extras', hint: 'the file path bar, the bookmark, last-edited time, and the raw-Markdown toggle' },

@@ -1146,8 +1146,10 @@ div.cm-math-editing {
    rendered HTML, these live in a wrapping editor line, and refusing to break a
    long note title would push the line out of the column. */
 .cm-wikilink {
-  color: rgb(var(--ink-800));
-  background: rgb(var(--wash) / 0.08);
+  /* --fmt-noteLink-*: Settings → Colour → In your notes; unset, the fallback
+     is the link's own look (editor/highlight.ts says how the pair works). */
+  color: var(--fmt-noteLink-tc, rgb(var(--ink-800)));
+  background: var(--fmt-noteLink-hl, rgb(var(--wash) / 0.08));
   padding: 0.05em 0.32em;
   cursor: pointer;
 }
@@ -3907,7 +3909,13 @@ body.table-col-resizing * {
 
 /* Inline HTML that markdown has no syntax for (inlineHtmlPass). The tags are
    hidden off the cursor; these style what's between them. */
-.cm-u { text-decoration: underline; }
+.cm-u {
+  text-decoration: underline;
+  /* Settings → Colour → In your notes. No fallback on purpose: unset, both are
+     ignored and the text inherits as before (editor/highlight.ts). */
+  color: var(--fmt-underline-tc);
+  background: var(--fmt-underline-hl);
+}
 .cm-sup { vertical-align: super; font-size: 0.75em; }
 .cm-sub { vertical-align: sub; font-size: 0.75em; }
 /* A <mark> with no palette class — colorPass owns the classed ones. */
@@ -3919,7 +3927,7 @@ body.table-col-resizing * {
 
 /* A clickable web link (webLinkPass). Colour/underline already come from the
    highlight style's t.link tag — this only says "you can click me". */
-.cm-weblink { cursor: pointer; }
+.cm-weblink { cursor: pointer; background: var(--fmt-webLink-hl); }
 .cm-weblink:hover { text-decoration-thickness: 2px; }
 
 /* Import preview warning ("you've imported this already"). Amber from the

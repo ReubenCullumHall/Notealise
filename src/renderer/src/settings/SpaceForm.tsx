@@ -150,9 +150,9 @@ export function SpaceForm({
         <Disclosure
           label="Colour"
           openSignal={opens('Colour')}
-          hint="Colouring notes and folders in the sidebar — how it shows, your palette, and colouring new folders automatically"
+          hint="Headings, bold and links in your notes, and colouring notes and folders in the sidebar"
         >
-          {foldDiffers(['colorStyle', 'colorAuto', 'colorInherit', 'colorFadeNested', 'colorPalette'])}
+          {foldDiffers(['formatColors', 'colorStyle', 'colorAuto', 'colorInherit', 'colorFadeNested', 'colorPalette'])}
           <SpaceColour space={space} onChange={onChange} onColorExisting={onColorExisting} />
         </Disclosure>
 

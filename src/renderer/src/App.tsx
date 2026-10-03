@@ -117,6 +117,7 @@ import {
   sortSiblings
 } from './organise/model'
 import { ColorPopover, type Anchor } from './color/Picker'
+import { bindColorMemory } from './color/memory'
 import { PALETTE_MAX, pickAutoColor } from '../../shared/color'
 
 // --- small path helpers (renderer works in vault-relative POSIX paths) ---
@@ -1632,6 +1633,17 @@ export default function App(): React.JSX.Element {
   // saved spaces re-sync whenever the tree does — not only at startup.
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+
+  // Every colour picker's recent and starred colours (color/memory.ts). The
+  // store holds them so the pickers deep in the editor need no props; settings
+  // is where they are saved, app-wide rather than per space.
+  useEffect(() => {
+    bindColorMemory({ recent: settings.recentColors, saved: settings.savedColors }, (m) => {
+      changeSettings({ recentColors: m.recent, savedColors: m.saved }).catch(() => {
+        // no vault open yet — the picker still remembers until the window closes
+      })
+    })
+  }, [settings.recentColors, settings.savedColors, changeSettings])
 
   // Any space left on 'system' (the default for a brand-new one — see
   // DEFAULT_SPACE) should re-skin live if the OS is switched while the app is
