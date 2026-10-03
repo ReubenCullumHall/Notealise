@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ContextMenu } from '../ContextMenu'
 import {
@@ -6,6 +6,7 @@ import {
   SPACE_CAP,
   withNewSpace,
   withoutSpace,
+  withSpaceMoved,
   withSpacePatch,
   withSpaceRenamed,
   type AppSettings,
@@ -27,6 +28,7 @@ import { ALL_PARTS, vaultName, type SpacePreset } from '../../../shared/presets'
 import { HelpTip } from '../Tooltip'
 import { claimEscape } from './escapeClaims'
 import { EMOJI_DATA } from './emojiData.generated'
+import { motionOn } from '../tabs/tabStyles'
 
 /** Shown next to the option to keep a space's auto-saved preset when the space
  *  itself is deleted — wherever that option appears (this page's own Delete
@@ -105,7 +107,8 @@ const THEME_PREVIEW: Record<Space['theme'], { side: string; main: string; line: 
   system: { side: '#161616', main: '#f7f7f6', line: '#a3a3a3' },
   dark: { side: '#161616', main: '#000000', line: '#8f8f8f' },
   black: { side: '#0a0a0a', main: '#000000', line: '#8f8f8f' },
-  light: { side: '#ffffff', main: '#f7f7f6', line: '#a3a3a3' }
+  light: { side: '#ffffff', main: '#f7f7f6', line: '#a3a3a3' },
+  slate: { side: '#40414a', main: '#37383f', line: '#94969f' }
 }
 
 // Every emoji up to Unicode 15.1 (1,897 of them, skin tones aside), grouped the way
@@ -132,6 +135,14 @@ const EMOJI: { group: string; items: { e: string; name: string; kw: string }[] }
  *  for the whole-vault space a folder-less vault falls back to. */
 const spaceLabel = (s: Space): string => s.folder || 'Whole vault'
 
+/** A space tab being dragged to a new place in the strip. Its own type, so the
+ *  tabs can tell it apart from a saved look being poured onto one. */
+const SPACE_DRAG = 'application/x-notes-space'
+/** How the other tabs slide aside to make room: a plain ease-out, no
+ *  overshoot — they're moving out of the way, not landing. */
+const SLIDE_MS = 240
+const SLIDE = 'cubic-bezier(0.2, 0, 0, 1)'
+
 // --- the page --------------------------------------------------------------
 
 export function Spaces({
@@ -149,6 +160,74 @@ export function Spaces({
   /** the folder a dragged preset is currently hovering, so the tab it would
    *  land on says so */
   const [over, setOver] = useState<string | null>(null)
+  /** Drag-to-reorder. `moving` is the tab in your hand. `order` is the strip's
+   *  order while you drag — the other tabs slide aside live to show where it
+   *  will land — and, after the drop, until the saved settings come back from
+   *  main (a round trip), so the strip never flicks back to the old order. */
+  const [moving, setMoving] = useState<string | null>(null)
+  /** the same, set the instant the drag starts — `moving` waits a tick (see
+   *  onDragStart), and the strip must not ignore the first moves meanwhile */
+  const held = useRef<string | null>(null)
+  const [order, setOrder] = useState<string[] | null>(null)
+  const dropped = useRef(false)
+  /** Where each tab sat when the drag began, plus the + button (= the end).
+   *  The pointer is matched against these and NOT the live positions: the tabs
+   *  differ in width, so matching live ones lets a tab that just slid under the
+   *  pointer push the dragged one straight back — a flicker between two spots. */
+  const slots = useRef<DOMRect[]>([])
+  const tabEls = useRef(new Map<string, HTMLElement>())
+  const addEl = useRef<HTMLButtonElement>(null)
+  /** each tab's spot on screen just before the order changed — where its slide
+   *  starts, mid-slide included, so a quick change of mind never jumps */
+  const from = useRef(new Map<string, DOMRect>())
+  const slides = useRef(new Map<string, Animation>())
+  const shown: Space[] = order
+    ? [
+        ...order.flatMap((f) => spaces.filter((x) => x.folder === f)),
+        ...spaces.filter((x) => !order.includes(x.folder))
+      ]
+    : spaces
+  const shownKey = shown.map((x) => x.folder).join('\n')
+  /** Save the order on screen, with `moving` where it now sits. */
+  const keep = (moving: string): void => {
+    const now = shown.map((x) => x.folder)
+    const move = withSpaceMoved(settings, moving, now[now.indexOf(moving) + 1] ?? null)
+    if (Object.keys(move).length) onChange(move)
+    else setOrder(null)
+    setMoving(null)
+  }
+  const strip = useRef<HTMLDivElement>(null)
+  const remember = (): void => {
+    from.current = new Map([...tabEls.current].map(([f, el]) => [f, el.getBoundingClientRect()]))
+  }
+  // The saved order arrived (or settings changed some other way): it is the
+  // truth again. Not mid-drag — that order is still yours.
+  useEffect(() => {
+    if (!moving) setOrder(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaces])
+  // Slide every tab whose place changed from where it was to where it now is.
+  useLayoutEffect(() => {
+    const was = from.current
+    from.current = new Map()
+    if (!was.size || !motionOn()) return
+    tabEls.current.forEach((el, f) => {
+      const a = was.get(f)
+      if (!a) return
+      slides.current.get(f)?.cancel()
+      const b = el.getBoundingClientRect()
+      const dx = a.left - b.left
+      const dy = a.top - b.top
+      if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return
+      slides.current.set(
+        f,
+        el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], {
+          duration: SLIDE_MS,
+          easing: SLIDE
+        })
+      )
+    })
+  }, [shownKey])
   // ONE place binds a space patch to a settings write; everything below just
   // patches the space and never has to know spaces exist.
   const patch = (p: Partial<Space>): void => onChange(withSpacePatch(settings, space.folder, p))
@@ -232,11 +311,48 @@ export function Spaces({
         <p className="hint">
           A space is a top-level folder in your vault, with its own look — theme, sidebar arranging
           and format-bar buttons. Everything you make in the sidebar lives inside the space you&apos;re
-          in. Pick one here and the app switches to it.
+          in. Pick one here and the app switches to it; drag one to change the order.
         </p>
 
-        <div className="space-tabs" role="tablist" aria-label="Spaces">
-          {spaces.map((s, i) => {
+        <div
+          ref={strip}
+          className="space-tabs"
+          role="tablist"
+          aria-label="Spaces"
+          // The whole strip takes the drag, so the gaps between tabs count too.
+          // Over a spot a tab sat in when the drag began, the dragged tab moves
+          // there and the rest slide aside; anywhere else, nothing changes.
+          onDragOver={(e) => {
+            const moving = held.current
+            if (!moving || !e.dataTransfer.types.includes(SPACE_DRAG)) return
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'move'
+            const near = (r: DOMRect): boolean =>
+              e.clientX >= r.left - 3 && e.clientX <= r.right + 3 && e.clientY >= r.top - 3 && e.clientY <= r.bottom + 3
+            const at = Math.min(slots.current.findIndex(near), shown.length - 1)
+            const now = shown.map((x) => x.folder)
+            if (at < 0 || now[at] === moving) return
+            const next = now.filter((f) => f !== moving)
+            next.splice(at, 0, moving)
+            remember()
+            setOrder(next)
+          }}
+          onDrop={(e) => {
+            const moving = held.current
+            if (!moving || !e.dataTransfer.types.includes(SPACE_DRAG)) return
+            e.preventDefault()
+            dropped.current = true
+            held.current = null
+            keep(moving)
+          }}
+        >
+          {/* The buttons stay in saved order in the page and `order` lays them
+              out in the dragged one. Moving the button you are holding to a
+              new place in the page mid-drag made the browser refuse the drop
+              unless the pointer moved again afterwards — let go while still,
+              and the space slid back. */}
+          {spaces.map((s) => {
+            const i = shown.indexOf(s)
             const on = s.folder === space.folder
             // Each tab is also where a saved look lands. Only a preset drag is
             // accepted (`PRESET_DRAG`), so a tab dragged from the editor's own
@@ -246,13 +362,57 @@ export function Spaces({
             return (
               <button
                 key={s.folder}
+                style={{ order: i }}
                 role="tab"
                 aria-selected={on}
                 data-tip={spaceLabel(s)}
                 className={
-                  'space-tab' + (on ? ' on' : '') + (over === s.folder ? ' drop' : '')
+                  'space-tab' +
+                  (on ? ' on' : '') +
+                  (over === s.folder ? ' drop' : '') +
+                  (moving === s.folder ? ' lifted' : '')
                 }
+                ref={(el) => {
+                  if (el) tabEls.current.set(s.folder, el)
+                  else tabEls.current.delete(s.folder)
+                }}
                 onClick={() => onChange({ activeSpaceFolder: s.folder })}
+                // The whole-vault space has no folder and stands alone, so
+                // there is nothing to put it in order with.
+                draggable={!!s.folder && spaces.length > 1}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(SPACE_DRAG, s.folder)
+                  e.dataTransfer.effectAllowed = 'move'
+                  dropped.current = false
+                  slots.current = [...shown.map((x) => tabEls.current.get(x.folder)), addEl.current]
+                    .filter((el): el is HTMLElement => !!el)
+                    .map((el) => el.getBoundingClientRect())
+                  // A tick later, so the picture that follows the pointer is
+                  // taken of the tab as it was, not of its faded stand-in.
+                  const f = s.folder
+                  held.current = f
+                  setTimeout(() => setMoving(held.current), 0)
+                }}
+                onDragEnd={(e) => {
+                  // No drop arrived. Let go outside the strip (or Escape):
+                  // everything slides back. But let go INSIDE it and the order
+                  // on screen is kept — the browser sometimes refuses a drop
+                  // when the last slide happened under a pointer that then
+                  // didn't move (one in four, measured), and a space jumping
+                  // back from where you clearly put it reads as broken.
+                  // `clientX/Y` here is where the button was released.
+                  const r = strip.current?.getBoundingClientRect()
+                  const inside =
+                    !!r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom
+                  if (!dropped.current && held.current && inside) keep(held.current)
+                  else if (!dropped.current) {
+                    remember()
+                    setOrder(null)
+                  }
+                  dropped.current = false
+                  held.current = null
+                  setMoving(null)
+                }}
                 onDragOver={(e) => {
                   if (!canDrop(e)) return
                   e.preventDefault()
@@ -281,12 +441,14 @@ export function Spaces({
                   setSpaceMenu({ x: e.clientX, y: e.clientY, space: s })
                 }}
               >
-                <span className={s.emoji ? 'em space-emoji' : 'em'}>{shownEmoji(s.emoji, settings.emojiStyle) || i + 1}</span>
+                <span className={s.emoji ? 'em space-emoji' : 'em'}>{shownEmoji(s.emoji, settings.emojiStyle) || s.num || i + 1}</span>
                 <span className="nm">{spaceLabel(s)}</span>
               </button>
             )
           })}
           <button
+            ref={addEl}
+            style={{ order: spaces.length }}
             className="space-add"
             disabled={busy || spaces.length >= SPACE_CAP}
             data-tip={
@@ -1040,9 +1202,9 @@ export function ThemeCards({
 
 /** Text colour — how bright the writing sits on a dark background. In the
  *  Advanced fold since 2026-09-29 (it used to ride inside the Theme section):
- *  it only means anything on the two dark themes. */
+ *  it only means anything on the dark themes. */
 export function TextToneSection({ space, onChange }: SpaceProps): React.JSX.Element {
-  // Text tone only means anything on the two dark ramps (see TEXT_TONES'
+  // Text tone only means anything on the dark ramps (see TEXT_TONES'
   // hint), so when the theme is 'system' this has to ask what it currently
   // RESOLVES to, not the stored id — otherwise picking System on a light OS
   // leaves the tone row enabled for a theme that isn't actually showing.
@@ -1053,7 +1215,7 @@ export function TextToneSection({ space, onChange }: SpaceProps): React.JSX.Elem
       <p className="hint">
         How bright the writing sits on a dark background.{' '}
         {resolvedLight
-          ? 'The light theme always uses dark ink, so this applies to the two dark themes.'
+          ? 'The light theme always uses dark ink, so this applies to the dark themes.'
           : 'Grey is easier over a long session; white is sharpest against Extra dark.'}
       </p>
       <div className="mode-row">

@@ -74,7 +74,7 @@ export const SEARCH_INDEX: SearchEntry[] = [
   // Look → Every space. The three basics sit above the folds, so they carry
   // no `disclosure`.
   { section: 'customisation', label: 'Look', anchor: 'Theme', hint: 'Theme, colours, fonts and the page, for every space at once.', keywords: 'customisation customization customise customize appearance personalise personalize style design look feel' },
-  { section: 'customisation', label: 'Theme', hint: 'Light, dark or extra dark, applied to the whole app.', keywords: 'dark mode light mode night mode black extra dark appearance colour scheme color scheme white background bright darker lighter system automatic oled amoled' },
+  { section: 'customisation', label: 'Theme', hint: 'Light, dark, extra dark or slate, applied to the whole app.', keywords: 'dark mode light mode night mode black extra dark slate grey gray blue grey blue gray navy grey mode gray mode appearance colour scheme color scheme white background grey background gray background bright darker lighter system automatic oled amoled' },
   { section: 'customisation', label: 'Accent colour', hint: 'The colour headings, titles and switches take.', keywords: 'accent color colour highlight brand main tint hue personalise personalize' },
   { section: 'customisation', label: 'Interface font', hint: 'The font for the sidebar, settings and buttons.', keywords: 'font fonts typeface typography ui interface menu sidebar serif sans' },
   { section: 'customisation', label: 'Notes font', hint: 'The font your notes are written in.', keywords: 'font fonts typeface typography writing note body text serif sans handwriting' },

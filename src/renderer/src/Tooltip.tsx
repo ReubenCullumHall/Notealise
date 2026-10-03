@@ -140,6 +140,10 @@ export function Tooltip(): React.JSX.Element | null {
     window.addEventListener('scroll', cancel, true)
     window.addEventListener('blur', cancel)
     document.addEventListener('keydown', cancel, true)
+    // Picking something up moves it away from its label, and no pointer
+    // events arrive mid-drag to clear it — so the label of the thing in your
+    // hand stayed pinned over whatever slid under it (Settings → Spaces).
+    document.addEventListener('dragstart', cancel, true)
     return () => {
       if (timer) clearTimeout(timer)
       document.removeEventListener('pointerover', over, true)
@@ -148,6 +152,7 @@ export function Tooltip(): React.JSX.Element | null {
       window.removeEventListener('scroll', cancel, true)
       window.removeEventListener('blur', cancel)
       document.removeEventListener('keydown', cancel, true)
+      document.removeEventListener('dragstart', cancel, true)
     }
   }, [])
 

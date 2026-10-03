@@ -23,7 +23,7 @@
           }
           // allow-list, not a pass-through: an unknown id would leave <html>
           // with no matching ramp at all, painting an unstyled white flash.
-          root.dataset.theme = t === 'light' || t === 'black' ? t : 'dark'
+          root.dataset.theme = t === 'light' || t === 'black' || t === 'slate' ? t : 'dark'
           root.dataset.density = c.density || 'cozy'
           root.dataset.textTone = c.textTone === 'white' ? 'white' : 'grey'
           root.dataset.buttonDef = c.buttonDefinition === true ? 'on' : 'off'

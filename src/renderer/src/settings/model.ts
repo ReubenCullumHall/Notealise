@@ -28,6 +28,7 @@ export const THEMES: { id: Space['theme']; label: string; hint: string }[] = [
   { id: 'system', label: 'System', hint: "Follows your computer's light or dark setting" },
   { id: 'dark', label: 'Dark', hint: 'Soft charcoal panels' },
   { id: 'black', label: 'Extra dark', hint: 'Pitch black, for OLED' },
+  { id: 'slate', label: 'Slate', hint: 'Dark grey, a touch of blue' },
   // NOT "paper" — page looks are their own feature later, and this is a plain
   // white page, not a warm one
   { id: 'light', label: 'Light', hint: 'Plain white' }
@@ -201,7 +202,22 @@ const BLACK_RAMP: Ramp = {
   '--brand-300': [24, 23], '--brand-400': [30, 31]
 }
 
-const RAMP: Record<ResolvedThemeId, Ramp> = { dark: DARK_RAMP, light: LIGHT_RAMP, black: BLACK_RAMP }
+// Slate is dark with the surfaces lifted to a blue-grey — the same kind of
+// override as BLACK_RAMP, matching theme.css's slate block, so a tinted accent
+// keeps the page at Slate's brightness instead of dropping it to near-black.
+const SLATE_RAMP: Ramp = {
+  ...DARK_RAMP,
+  '--paper': [8, 23], '--surface': [7, 27], '--code-bg': [8, 20],
+  '--brand-50': [8, 26], '--brand-100': [8, 30], '--brand-200': [7, 34],
+  '--brand-300': [6, 44], '--brand-400': [7, 53]
+}
+
+const RAMP: Record<ResolvedThemeId, Ramp> = {
+  dark: DARK_RAMP,
+  light: LIGHT_RAMP,
+  black: BLACK_RAMP,
+  slate: SLATE_RAMP
+}
 
 // Text mode recolours only the ink ramp, and properly — this *is* the text
 // colour, so it carries real saturation. Surfaces/controls are left alone.
@@ -210,15 +226,18 @@ const DARK_TEXT_RAMP: Ramp = {
   '--ink-600': [44, 62], '--ink-500': [40, 54], '--ink-400': [36, 46], '--ink-300': [32, 39]
 }
 
+const LIGHT_TEXT_RAMP: Ramp = {
+  '--ink-900': [62, 26], '--ink-800': [58, 31], '--ink-700': [52, 38],
+  '--ink-600': [46, 45], '--ink-500': [40, 52], '--ink-400': [34, 60], '--ink-300': [30, 68]
+}
+
 const TEXT_RAMP: Record<ResolvedThemeId, Ramp> = {
   dark: DARK_TEXT_RAMP,
   // the accent is a text colour, and text sits at the same brightness on both
   // dark themes — only the surfaces under it changed
   black: DARK_TEXT_RAMP,
-  light: {
-    '--ink-900': [62, 26], '--ink-800': [58, 31], '--ink-700': [52, 38],
-    '--ink-600': [46, 45], '--ink-500': [40, 52], '--ink-400': [34, 60], '--ink-300': [30, 68]
-  }
+  slate: DARK_TEXT_RAMP,
+  light: LIGHT_TEXT_RAMP
 }
 
 /** What the 'white' text tone adds to the accent's ink lightness. An accent

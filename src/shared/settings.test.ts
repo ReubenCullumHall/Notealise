@@ -5,12 +5,14 @@ import {
   DEFAULT_SPACE,
   normalizeSettings,
   normalizeThemeCache,
+  numberSpaces,
   reconcileSpaces,
   settingsFromThemeCache,
   shownEmoji,
   SPACE_CAP,
   withNewSpace,
   withoutSpace,
+  withSpaceMoved,
   withSpacePatch,
   withSpaceRenamed,
   type AppSettings
@@ -575,6 +577,58 @@ describe('withSpacePatch / withSpaceRenamed / withNewSpace / withoutSpace', () =
 
   it('ignores an unknown folder', () => {
     expect(withoutSpace(three(), 'nope')).toEqual({})
+  })
+
+  // Settings → Spaces drag-to-reorder. The sidebar switcher reads this same
+  // list, so the order set here is the order shown everywhere.
+  it('moves a space before another, keeping its settings and the open space', () => {
+    const s = withSpacePatch(three(), 'C', { theme: 'light' })
+    const next = withSpaceMoved({ ...three(), ...s }, 'C', 'A')
+    expect(next.spaces?.map((x) => x.folder)).toEqual(['C', 'A', 'B'])
+    expect(next.spaces?.[0].theme).toBe('light')
+    expect(next.activeSpaceFolder).toBeUndefined()
+  })
+
+  it('moves a space to the end when dropped after the last one', () => {
+    expect(withSpaceMoved(three(), 'A', null).spaces?.map((x) => x.folder)).toEqual(['B', 'C', 'A'])
+  })
+
+  it('moves a space rightwards to sit before the target', () => {
+    expect(withSpaceMoved(three(), 'A', 'C').spaces?.map((x) => x.folder)).toEqual(['B', 'A', 'C'])
+  })
+
+  it('does nothing for a drop that would not change the order', () => {
+    // dropping on itself, or just before its own right-hand neighbour, is a
+    // no-op — an empty patch means no pointless settings.json write
+    expect(withSpaceMoved(three(), 'B', 'B')).toEqual({})
+    expect(withSpaceMoved(three(), 'A', 'B')).toEqual({})
+    expect(withSpaceMoved(three(), 'C', null)).toEqual({})
+  })
+
+  // Reuben, 2026-10-03: "the numbers shouldn't change, it prompts them to add
+  // a name and a logo" — a number belongs to its space, not to a position.
+  it('keeps each space its own number when the order changes', () => {
+    const moved = withSpaceMoved(three(), 'C', 'A')
+    expect(moved.spaces?.map((x) => [x.folder, x.num])).toEqual([['C', 3], ['A', 1], ['B', 2]])
+  })
+
+  it('numbers a file from before numbers by position, then leaves them alone', () => {
+    expect(three().spaces.map((x) => x.num)).toEqual([1, 2, 3])
+    const reordered = normalizeSettings({ spaces: [{ folder: 'C', num: 3 }, { folder: 'A', num: 1 }] })
+    expect(reordered.spaces.map((x) => x.num)).toEqual([3, 1])
+  })
+
+  it('gives a new space the lowest number free, and fixes a repeat', () => {
+    const s = normalizeSettings({ spaces: [{ folder: 'A', num: 1 }, { folder: 'C', num: 3 }], activeSpaceFolder: 'A' })
+    expect(withNewSpace(s, 'D').spaces?.map((x) => x.num)).toEqual([1, 3, 2])
+    const twice = [{ ...s.spaces[0] }, { ...s.spaces[1], num: 1 }]
+    expect(numberSpaces(twice).map((x) => x.num)).toEqual([1, 2])
+    expect(numberSpaces(s.spaces)).toBe(s.spaces) // unchanged list, same reference
+  })
+
+  it('ignores an unknown folder or target', () => {
+    expect(withSpaceMoved(three(), 'nope', 'A')).toEqual({})
+    expect(withSpaceMoved(three(), 'A', 'nope')).toEqual({})
   })
 })
 

@@ -1117,7 +1117,7 @@ export function Sidebar({
                   {s.emoji ? (
                     <span className="space-emoji pointer-events-none">{shownEmoji(s.emoji, settings.emojiStyle)}</span>
                   ) : (
-                    <span className="pointer-events-none text-[12px] font-semibold">{i + 1}</span>
+                    <span className="pointer-events-none text-[12px] font-semibold">{s.num || i + 1}</span>
                   )}
                 </button>
               )

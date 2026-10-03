@@ -40,7 +40,10 @@ import {
 /** 'black' is Extra dark: the dark ramp with every surface taken to (near)
  *  pitch black, for OLED panels and dim rooms. It is a VARIANT of dark, not a
  *  third independent palette — theme.css only overrides what differs. */
-export type ResolvedThemeId = 'dark' | 'light' | 'black'
+/** 'slate' is Slate (2026-10-03, Reuben asked for a grey theme and picked
+ *  #303446, a dark blue-grey): another VARIANT of dark, like 'black' — light
+ *  ink on a blue-grey page. */
+export type ResolvedThemeId = 'dark' | 'light' | 'black' | 'slate'
 /** 'system' follows the OS light/dark setting rather than naming a ramp
  *  directly — theme.css has no rule for it, so anything that paints from a
  *  theme (applySettings, the pre-paint script in index.html) must resolve it
@@ -108,6 +111,14 @@ export interface Space {
    *  name (renaming a space renames the folder). '' is the whole vault, used
    *  when there are no top-level folders yet. */
   folder: string
+  /** The number a space shows until it is given an emoji (Settings → Spaces
+   *  and the sidebar's switcher). Handed out once — the lowest one free — and
+   *  then it stays with the space: dragging spaces into a new order does NOT
+   *  renumber them (Reuben, 2026-10-03: the number is a nudge to give the space
+   *  a name and an emoji, not a position). 0 = not numbered yet; every list
+   *  that leaves this file has been through `numberSpaces`. Not part of a look
+   *  (`SpaceLook`), so a preset never carries one to another space. */
+  num: number
   emoji: string
   // --- appearance ---
   theme: ThemeId
@@ -327,7 +338,7 @@ export interface Space {
  *  field of `Space` except its identity. This is what a preset carries
  *  (`shared/presets.ts`), and what pouring one onto a space writes: the folder
  *  and the notes in it are never part of the deal. */
-export type SpaceLook = Omit<Space, 'folder'>
+export type SpaceLook = Omit<Space, 'folder' | 'num'>
 
 /** Split a space into "which folder" and "how it looks".
  *
@@ -337,7 +348,7 @@ export type SpaceLook = Omit<Space, 'folder'>
  *  the space it was taken from was edited afterwards would be a bug nothing in
  *  the type system could see. */
 export function spaceLook(s: Space): SpaceLook {
-  const { folder: _folder, ...look } = s
+  const { folder: _folder, num: _num, ...look } = s
   return { ...look, toolbarSlots: [...s.toolbarSlots], colorPalette: [...s.colorPalette] }
 }
 
@@ -445,6 +456,9 @@ export interface AppSettings {
 
 export const DEFAULT_SPACE: Space = {
   folder: '',
+  // the first space's number; a space added after it gets the lowest one
+  // free from `numberSpaces`, which always lets the earlier holder keep it
+  num: 1,
   emoji: '',
   // 'system' rather than a fixed ramp: a brand-new space — the first one most
   // of all — shouldn't hand someone on a dark OS a white flash, or the other
@@ -537,7 +551,7 @@ export function freshSpace(folder: string): Space {
   }
 }
 
-const THEMES: readonly ThemeId[] = ['system', 'dark', 'light', 'black']
+const THEMES: readonly ThemeId[] = ['system', 'dark', 'light', 'black', 'slate']
 const TEXT_TONES: readonly TextToneId[] = ['grey', 'white']
 const DENSITIES: readonly DensityId[] = ['large', 'cozy', 'compact', 'ultra']
 const EDITOR_WIDTHS: readonly EditorWidthId[] = ['normal', 'wide', 'full']
@@ -617,6 +631,7 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     typeof own === 'boolean' ? own : typeof was === 'boolean' ? was : fallback
   return {
     folder: normalizeFolder(s.folder),
+    num: typeof s.num === 'number' && Number.isInteger(s.num) && s.num > 0 && s.num <= 99 ? s.num : 0,
     emoji: typeof s.emoji === 'string' ? s.emoji.slice(0, EMOJI_MAX) : DEFAULT_SPACE.emoji,
     theme: THEMES.includes(s.theme as ThemeId) ? (s.theme as ThemeId) : DEFAULT_SPACE.theme,
     textTone: TEXT_TONES.includes(s.textTone as TextToneId)
@@ -683,6 +698,31 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
   }
 }
 
+/** Give every space a number of its own: one it already has is kept, and a
+ *  missing or repeated one gets the lowest number free, in list order. So a
+ *  settings.json from before numbers existed numbers its spaces by position —
+ *  exactly what they showed before — and from then on they stay put. Returns
+ *  the SAME array when nothing changed, so `reconcileSpaces`' "did anything
+ *  change" check still holds. */
+export function numberSpaces(spaces: Space[]): Space[] {
+  const taken = new Set<number>()
+  const keep = spaces.map((sp) => {
+    if (sp.num > 0 && !taken.has(sp.num)) {
+      taken.add(sp.num)
+      return true
+    }
+    return false
+  })
+  if (keep.every(Boolean)) return spaces
+  let free = 1
+  return spaces.map((sp, i) => {
+    if (keep[i]) return sp
+    while (taken.has(free)) free++
+    taken.add(free)
+    return { ...sp, num: free }
+  })
+}
+
 /** Drop spaces that name the same folder twice; the first wins. Unbound spaces
  *  ('') are kept — `reconcileSpaces` binds them to real folders. */
 function dedupeFolders(spaces: Space[]): Space[] {
@@ -724,7 +764,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
   // resetting to the default. Idempotent: once a space has its own value that
   // value wins, and the top-level keys are not written back out.
   const legacy: LegacyChrome = { showLinks: s.showLinks, pinLinks: s.pinLinks, showPath: s.showPath }
-  const spaces = dedupeFolders(src.map((raw) => normalizeSpace(raw, legacy)))
+  const spaces = numberSpaces(dedupeFolders(src.map((raw) => normalizeSpace(raw, legacy))))
   const wanted = normalizeFolder(s.activeSpaceFolder)
   return {
     spaces,
@@ -857,7 +897,7 @@ export function reconcileSpaces(s: AppSettings, folders: readonly string[]): Par
     const first = s.spaces[0]
     next.push(first.folder === '' ? first : { ...first, folder: '' })
   }
-  const spaces = next.slice(0, SPACE_CAP)
+  const spaces = numberSpaces(next.slice(0, SPACE_CAP))
 
   const activeSpaceFolder = spaces.some((x) => x.folder === s.activeSpaceFolder)
     ? s.activeSpaceFolder
@@ -910,7 +950,21 @@ export function withNewSpace(s: AppSettings, folder: string): Partial<AppSetting
   }
   if (s.spaces.length >= SPACE_CAP) return {}
   const space: Space = freshSpace(folder)
-  return { spaces: [...s.spaces, space], activeSpaceFolder: folder }
+  return { spaces: numberSpaces([...s.spaces, space]), activeSpaceFolder: folder }
+}
+
+/** Move a space to sit before `before` (or last, when `before` is null) — the
+ *  drag-to-reorder in Settings → Spaces. Order is all it changes: the sidebar's
+ *  switcher reads the same list, so it follows, and the open space stays open.
+ *  An unknown folder, or a drop onto itself, is a no-op. */
+export function withSpaceMoved(s: AppSettings, folder: string, before: string | null): Partial<AppSettings> {
+  const moving = s.spaces.find((x) => x.folder === folder)
+  if (!moving || !folder || folder === before) return {}
+  const rest = s.spaces.filter((x) => x !== moving)
+  const at = before === null ? rest.length : rest.findIndex((x) => x.folder === before)
+  if (at === -1) return {}
+  const spaces = [...rest.slice(0, at), moving, ...rest.slice(at)]
+  return spaces.every((x, i) => x === s.spaces[i]) ? {} : { spaces }
 }
 
 /** Forget a space, after its folder has gone to the bin. Selects the LEFT

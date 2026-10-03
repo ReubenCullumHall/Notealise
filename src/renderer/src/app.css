@@ -15,7 +15,8 @@
 /* The sidebar header logo mark ships as two pre-rendered SVGs (light-on-dark /
    dark-on-light background) rather than one recoloured via CSS, so it stays an
    attribute swap keyed off the same [data-theme] the rest of the app reads —
-   'black' is a dark variant (see theme.css), so it gets the dark mark too. */
+   'black' and 'slate' are dark variants (see theme.css), so they get the dark
+   mark too. */
 .app-logo-mark-light { display: none; }
 :root[data-theme='light'] .app-logo-mark-light { display: block; }
 :root[data-theme='light'] .app-logo-mark-dark { display: none; }
@@ -1737,7 +1738,8 @@ div.cm-math-editing {
   --page-look-boost: var(--page-accent-boost);
 }
 :root[data-theme='dark'],
-:root[data-theme='black'] {
+:root[data-theme='black'],
+:root[data-theme='slate'] {
   --page-tint-boost: 1.4;
   --page-accent-boost: 2;
 }
@@ -3240,6 +3242,7 @@ button.look-card:hover {
   gap: 6px;
 }
 .space-tab {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -3317,6 +3320,12 @@ button.look-card:hover {
   border-color: rgb(var(--brand-400));
   background: rgb(var(--brand-500) / 0.14);
   color: rgb(var(--brand-600));
+}
+
+/* Drag-to-reorder: the tab in your hand leaves a faded stand-in in the strip,
+   and the other tabs slide aside around it (Spaces.tsx). */
+.space-tab.lifted {
+  opacity: 0.35;
 }
 
 /* --- the space-preset library (Settings → Spaces → Saved looks) ---

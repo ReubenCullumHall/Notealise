@@ -206,6 +206,33 @@
   --btn-edge: 152 152 152;
 }
 
+/* ---- slate --------------------------------------------------------------
+   Another VARIANT of dark, like extra dark above: everything not listed — the
+   ink, --wash, the hl/tc palette, the syntax colours — is dark's. Only the
+   surfaces move, up to a grey with a little blue in it (Reuben, 2026-10-03:
+   #303446, then "slightly less blue and more grey").
+   --surface sits a step above the page, as on Dark, so menus and the settings
+   window still read as lifted. Keep in step with SLATE_RAMP in
+   settings/model.ts. */
+:root[data-theme='slate'] {
+  --paper: 55 56 63;
+  --surface: 63 65 73;
+  --brand-50: 62 64 72;
+  --brand-100: 70 71 80;
+  --brand-200: 80 82 91;
+  --brand-300: 107 110 120;
+  --brand-400: 130 133 143;
+  --accent-50: 62 64 72;
+  --accent-100: 70 71 80;
+  --accent-200: 80 82 91;
+  --accent-300: 107 110 120;
+  --accent-400: 130 133 143;
+  /* dividers and borders: lifted with the page so they still show on it */
+  --ink-300: 120 122 132;
+  --code-bg: 47 48 54;
+  --btn-edge: 148 150 160;
+}
+
 :root[data-theme='light'] {
   --paper: 247 247 246;
   --surface: 255 255 255;
@@ -273,7 +300,8 @@
    beat any selector here. settings/model.ts therefore folds the tone into the
    accent ramp itself, so the two compose instead of one cancelling the other. */
 :root[data-theme='dark'][data-text-tone='white'],
-:root[data-theme='black'][data-text-tone='white'] {
+:root[data-theme='black'][data-text-tone='white'],
+:root[data-theme='slate'][data-text-tone='white'] {
   --ink-900: 255 255 255;
   --ink-800: 242 242 242;
   --ink-700: 224 224 224;
