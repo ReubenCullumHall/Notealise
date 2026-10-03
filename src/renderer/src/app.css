@@ -989,7 +989,7 @@ button.icon:hover {
    whole rules and splits the difference above and below, so the formula sits
    centred in its rules. `flow-root` and KaTeX's own margin at 0 keep that
    measurement from depending on the padding it produces. */
-[data-page-look='lined'] .cm-math-display {
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-math-display {
   display: flow-root;
   margin-top: 0;
   margin-bottom: 0;
@@ -997,7 +997,7 @@ button.icon:hover {
   padding-top: var(--snap-pad);
   padding-bottom: var(--snap-pad);
 }
-[data-page-look='lined'] .cm-math-display .katex-display {
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-math-display .katex-display {
   margin: 0;
 }
 /* A formula on its own line sits on the page's colour too, so Lined, Grid,
@@ -1620,15 +1620,18 @@ div.cm-math-editing {
    THE RULES EVERY LOOK FOLLOWS, today's and any added later — they live on
    the sheet, not on a look, so a new look gets them by setting
    --page-look-image and nothing else (Reuben, 2026-10-02):
-   1. It runs up behind the note's name, to just under the links strip. Lined
-      is the one exception: its rules belong to lines of text, so it still
-      starts where the text does (`--paper-cut`, below).
+   1. It runs up behind the note's name, to just under the links strip, and
+      fades in slowly over the whole of the name's row — nothing at the links
+      strip, full strength where line 1 starts, eased so it is mostly gone
+      behind the name. Every look, Lined and Worn page included (they started
+      hard at line 1 until 2026-10-03; Reuben: "no harsh cutoff … for all
+      tints or possibilities up to the linked note area"). The tint does the
+      same.
    2. It fades out at every edge of every column — the sidebar side, a split
       divider, the window edge, the top and the bottom. Never a hard edge.
-   3. A fade lives only where there are never words: the 28px gutter beside
-      the text (the line padding in editor/highlight.ts — it is the whole
-      margin at "Full" page width) and the 24px above the name
-      (`.note-title-row`'s top padding). The same width at every page width and
+   3. A side fade lives only where there are never words: the 28px gutter
+      beside the text (the line padding in editor/highlight.ts — it is the
+      whole margin at "Full" page width). The same width at every page width and
       in any number of split columns, so the pattern is at full strength
       everywhere the writing can be. The bottom is the one edge words scroll
       past, so its fade is the sides' 28px and takes only the pattern — the
@@ -1726,13 +1729,12 @@ div.cm-math-editing {
      2026-10-02 it was also how far a pattern of lines stopped short of a split
      divider; the fades below do that job for every look now. */
   --page-gap: 11px;
-  /* The two fades every look gets (rule 3 above). Each is the width of a strip
-     that never holds words, so each is paired with what makes that strip:
-     --page-fade-x with the 28px line padding in editor/highlight.ts (and the
-     same 28px on .note-title-row), --page-fade-top with .note-title-row's 24px
-     top padding. Change one of a pair and change the other. */
+  /* The side fade every look gets (rule 3 above): the width of the strip that
+     never holds words, paired with the 28px line padding in
+     editor/highlight.ts (and the same 28px on .note-title-row). Change one and
+     change the other. The top fade is measured, not fixed — it spans the
+     name's row (`.page-paper`, below). */
   --page-fade-x: 28px;
-  --page-fade-top: 24px;
   --page-fade-bottom: var(--page-fade-x);
 }
 :root[data-page-look-accent='on'] {
@@ -1754,9 +1756,23 @@ div.cm-math-editing {
    (editor/pagePaper.ts). */
 .edit-layer.has-title {
   --page-tint: rgb(var(--page-tint-rgb) / calc(var(--page-tint-alpha) * var(--page-tint-boost)));
-  background-image: linear-gradient(var(--page-tint), var(--page-tint));
+  --page-tint-mid: rgb(var(--page-tint-rgb) / calc(var(--page-tint-alpha) * var(--page-tint-boost) * 0.5));
+  --page-tint-low: rgb(var(--page-tint-rgb) / calc(var(--page-tint-alpha) * var(--page-tint-boost) * 0.12));
+  /* Nothing at the links strip, full strength where line 1 starts, eased in
+     between (the same curve as the pattern's top fade, below) — so the tint
+     melts into the chrome above instead of stopping in a hard line under the
+     name (Reuben, 2026-10-03). */
+  --tint-from: var(--links-inset, 0px);
+  --tint-span: calc(var(--paper-origin, 0px) - var(--links-inset, 0px));
+  background-image: linear-gradient(
+    to bottom,
+    transparent var(--tint-from),
+    var(--page-tint-low) calc(var(--tint-from) + var(--tint-span) * 0.35),
+    var(--page-tint-mid) calc(var(--tint-from) + var(--tint-span) * 0.7),
+    var(--page-tint) calc(var(--tint-from) + var(--tint-span))
+  );
   background-repeat: no-repeat;
-  background-position: 0 var(--paper-scroller, 0px);
+  background-position: 0 0;
   background-size: 100% 100%;
   /* lets the sheet below follow THIS pane's scroller, and only this one's */
   timeline-scope: --note-scroll;
@@ -1780,11 +1796,13 @@ div.cm-math-editing {
   /* where the pattern starts showing, measured from the top of the window, and
      how far it takes to fade in from there */
   --paper-cut: 0px;
-  --paper-fade-top: var(--page-fade-top);
+  --paper-fade-top: calc(var(--paper-origin, 0px) - var(--links-inset, 0px));
   mask-image:
     linear-gradient(
       to bottom,
       transparent var(--paper-cut),
+      rgb(0 0 0 / 0.12) calc(var(--paper-cut) + var(--paper-fade-top) * 0.35),
+      rgb(0 0 0 / 0.5) calc(var(--paper-cut) + var(--paper-fade-top) * 0.7),
       black calc(var(--paper-cut) + var(--paper-fade-top)),
       black calc(100% - var(--page-fade-bottom)),
       transparent
@@ -1797,12 +1815,6 @@ div.cm-math-editing {
       transparent
     );
   mask-composite: intersect;
-}
-/* Lined's rules belong to lines of text, so it starts where the text does,
-   with no fade — the way it always started (rule 1's exception). */
-[data-page-look='lined'] .page-paper {
-  --paper-cut: calc(var(--paper-scroller, 0px) - var(--links-inset, 0px));
-  --paper-fade-top: 0px;
 }
 /* No look, no sheet — not even an empty one moving with the scroll. */
 [data-page-look='none'] .page-paper {
@@ -1878,11 +1890,11 @@ div.cm-math-editing {
    (font unchanged, so ~1.7em → a ~38px line); `.cm-line` and its spans are
    pinned to that height so a smaller line can't be shorter. Reversal of the
    ruling in docs/feature-tabs-spaces.md — that doc carries the before/after. */
-[data-page-look='lined'] {
+:is([data-page-look='lined'], [data-page-look='worn']) {
   --page-rule: 38px;
   --page-tile: var(--page-rule);
 }
-[data-page-look='lined'] .cm-editor .cm-line {
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-editor .cm-line {
   line-height: var(--page-rule);
 }
 /* the spans inside a line drop their own leading (a heading's 1.3, the base
@@ -1890,7 +1902,7 @@ div.cm-math-editing {
    taller intrinsic line box adds ~3px and walks the text off the rules after
    every heading. The strut is --page-rule and no glyph at these sizes exceeds
    it, so every line lands on exactly one rule. */
-[data-page-look='lined'] .cm-editor .cm-line * {
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-editor .cm-line * {
   line-height: 1;
 }
 /* The rule mark is drawn at the BOTTOM of each --page-rule band (see the
@@ -1913,7 +1925,7 @@ div.cm-math-editing {
    the base font size or --page-rule change. (Read by the sheet's
    background-position, measured from where line 1 starts — the same zero the
    scroller's content box gave it before 2026-10-02.) */
-[data-page-look='lined'] {
+:is([data-page-look='lined'], [data-page-look='worn']) {
   --page-look-y: 26px;
 }
 [data-page-look='grid'],
@@ -1979,7 +1991,8 @@ div.cm-math-editing {
     [data-page-look='lined'],
     [data-page-look='grid'],
     [data-page-look='grid-fine'],
-    [data-page-look='graph']
+    [data-page-look='graph'],
+    [data-page-look='worn']
   )
   .pane-col:has(+ .pane-divider)
   .edit-layer
@@ -2032,6 +2045,87 @@ div.cm-math-editing {
     radial-gradient(circle at 28% 91%, var(--grain-coarse) 0 1px, transparent 1.2px),
     radial-gradient(circle at 77% 37%, var(--grain-coarse) 0 1px, transparent 1.2px);
   --page-look-size: 13px 11px, 17px 19px, 11px 23px, 19px 13px, 53px 61px, 67px 47px;
+}
+
+/* WORN PAGE — Lined, on a page that has been read a few times (Reuben,
+   2026-10-03). For the writing it IS Lined: every `[data-page-look='lined']`
+   rule above (the 38px baseline grid, the rule offset, starting at line 1,
+   formulas and tables kept on whole rules) is written
+   `:is(lined, worn)`, so a note lands on exactly the same rules in both.
+   Only the picture differs. Painted top first:
+   - the outer edges a touch darker, like a page handled at its sides;
+   - a faint grain (lighter than Soft grain — this is a texture, not the look);
+   - a few foxing specks and soft, irregular marks;
+   - patches of the page's own colour (the tint over the paper)
+     laid over the rules only, so a rule fades out in places as if worn;
+   - the rules themselves, Lined's.
+   Every mark is --page-look-rgb (mixed toward the tint, if there is one), so
+   it is ink-coloured on light themes and lighter-than-paper on dark ones, follows "Match your accent colour", and
+   scales with the strength slider. Tiles are on unrelated (prime-ish) sizes
+   so the marks never fall into a visible repeat. The colours are declared
+   here, on the look, so a settings tile resolves them from its own strength
+   (the same reason Grain declares its own). */
+[data-page-look='worn'] {
+  --worn-k: calc(var(--page-look-intensity) * var(--page-look-weight) * var(--page-look-boost));
+  /* The marks take on the space's tint, so whatever colour someone washes the
+     page with, the wear is the same colour, aged — brown-ish on a cream page,
+     grey-blue on a blue one — rather than plain grey ink sitting on top of it
+     (Reuben, 2026-10-03: the tint should "match with that well"). Without a
+     tint (alpha 0) the mix is 0% and the marks are exactly the ink they were. */
+  --worn-ink: color-mix(
+    in oklab,
+    rgb(var(--page-look-rgb)),
+    rgb(var(--page-tint-rgb)) calc(min(1, var(--page-tint-alpha) * 100) * 40%)
+  );
+  --worn-rule: color-mix(in srgb, var(--worn-ink) calc(13% * var(--worn-k)), transparent);
+  --worn-grain: color-mix(in srgb, var(--worn-ink) calc(7% * var(--worn-k)), transparent);
+  --worn-grain-coarse: color-mix(in srgb, var(--worn-ink) calc(5% * var(--worn-k)), transparent);
+  --worn-fox: color-mix(in srgb, var(--worn-ink) calc(16% * var(--worn-k)), transparent);
+  --worn-mark: color-mix(in srgb, var(--worn-ink) calc(7.5% * var(--worn-k)), transparent);
+  --worn-edge: color-mix(in srgb, var(--worn-ink) calc(7% * var(--worn-k)), transparent);
+  /* The page's own colour, worked out HERE from the tint in scope rather than
+     read from :root's --page-solid, so a settings tile with a different tint
+     from the open space still wears its rules away in its own colour. */
+  --worn-page: color-mix(
+    in srgb,
+    rgb(var(--page-tint-rgb)) calc(var(--page-tint-alpha) * var(--page-tint-boost) * 100%),
+    rgb(var(--paper))
+  );
+  --worn-wear: color-mix(in srgb, var(--worn-page) calc(min(1, var(--page-look-intensity)) * 100%), transparent);
+  --page-look-image:
+    linear-gradient(
+      to right,
+      var(--worn-edge),
+      transparent 180px,
+      transparent calc(100% - 180px),
+      var(--worn-edge)
+    ),
+    radial-gradient(circle at 17% 29%, var(--worn-grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 63% 11%, var(--worn-grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 41% 73%, var(--worn-grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 89% 57%, var(--worn-grain) 0 0.6px, transparent 0.7px),
+    radial-gradient(circle at 28% 91%, var(--worn-grain-coarse) 0 1px, transparent 1.2px),
+    radial-gradient(circle at 77% 37%, var(--worn-grain-coarse) 0 1px, transparent 1.2px),
+    radial-gradient(circle 1.6px at 23% 61%, var(--worn-fox), transparent),
+    radial-gradient(circle 2.4px at 71% 18%, var(--worn-fox), transparent),
+    radial-gradient(circle 1.2px at 47% 83%, var(--worn-fox), transparent),
+    radial-gradient(120px 80px at 34% 42%, var(--worn-mark), transparent),
+    radial-gradient(200px 130px at 72% 66%, var(--worn-mark), transparent),
+    radial-gradient(70px 96px at 15% 20%, var(--worn-mark), transparent),
+    radial-gradient(240px 12px at 40% 50%, var(--worn-wear), transparent),
+    radial-gradient(170px 10px at 60% 30%, var(--worn-wear), transparent),
+    radial-gradient(300px 14px at 25% 80%, var(--worn-wear), transparent),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(var(--page-rule) - 1px),
+      var(--worn-rule) calc(var(--page-rule) - 1px),
+      var(--worn-rule) var(--page-rule)
+    );
+  --page-look-size:
+    100% 100%, 23px 17px, 29px 37px, 19px 31px, 41px 23px, 97px 113px, 127px 89px, 263px 331px, 409px 293px,
+    173px 239px, 1013px 1187px, 1291px 1063px, 887px 1409px, 761px 547px, 643px 829px, 1117px 971px,
+    100% var(--page-tile);
 }
 
 /* The miniature used by every picker and card in Settings: the same two axes,
@@ -3642,15 +3736,15 @@ button.look-card:hover {
    no room, instead of borders, which do. The table's own space above and below
    goes too (the margin cancels the chrome padding exactly), so a table takes a
    whole number of rules and the page below it stays in step. */
-[data-page-look='lined'] .cm-table {
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-table {
   margin-top: -20px;
   margin-bottom: -20px;
 }
-[data-page-look='lined'] .cm-table table {
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-table table {
   box-shadow: inset 1px 1px 0 rgb(var(--ink-300) / 0.35);
 }
-[data-page-look='lined'] .cm-table th,
-[data-page-look='lined'] .cm-table td {
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-table th,
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-table td {
   border: 0;
   box-shadow: inset -1px -1px 0 rgb(var(--ink-300) / 0.35);
   padding-top: 0;

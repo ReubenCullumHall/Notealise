@@ -83,6 +83,15 @@ export const PAGE_LOOKS: PageLook[] = [
     name: 'Soft grain',
     blurb: 'No lines at all — just a faint speckle, like paper stock.',
     source: 'catalogue'
+  },
+  {
+    // Lined in every way that matters to the writing — same rules, same
+    // baseline grid (app.css runs it through every Lined rule) — on a page
+    // that has been read a few times.
+    id: 'worn',
+    name: 'Worn page',
+    blurb: 'Lined, on a page that’s been read a few times — faint grain, soft marks, rules fading in places.',
+    source: 'catalogue'
   }
 ]
 
