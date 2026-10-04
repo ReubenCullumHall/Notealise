@@ -15,6 +15,10 @@ import type { LinkEnv, LinkHandlers, OpenHow } from '../editor/linkEnv'
 import { dirName, titleOf, type LinkRow } from '../../../shared/links'
 import type { AppSettings, LinksPosition } from '../../../shared/settings'
 
+/** Windows moves the page look by `top`, not a transform, so the note's text
+ *  keeps its ClearType (app.css, `paper-scroll-flat`). */
+const FLAT_PAPER = /Windows/.test(navigator.userAgent)
+
 /** Where a dragged tab or column would land in this pane. */
 export type DropZone = 'left' | 'center' | 'right'
 
@@ -529,6 +533,7 @@ export function NotePane({
         ) : (
           <div
             className="edit-layer has-title"
+            data-paper-flat={FLAT_PAPER ? '' : undefined}
             // The editor's own top padding, so the first line starts below the
             // block rather than underneath it. A CSS variable rather than a
             // style on .cm-scroller: the scroller is CodeMirror's DOM, and

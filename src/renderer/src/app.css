@@ -1841,6 +1841,7 @@ div.cm-math-editing {
    the main thread, so it can trail a fast scroll by a frame), and a sheet one
    repeat tall that jumps back each repeat (the compositor's arithmetic put
    rules up to 1px off after a scroll).
+   Windows below 150% moves it by `top` instead — see the rule after this one.
    Interface animations off (`data-motion`, far below) shortens every
    animation's duration, which changes nothing here: on a scroll timeline a
    duration is only a share of the scroll, and this one takes all of it. */
@@ -1858,6 +1859,29 @@ div.cm-math-editing {
 @keyframes paper-scroll {
   to {
     transform: translateY(-10000000px);
+  }
+}
+/* WINDOWS, BELOW 150%: the same travel, by `top`. Windows only draws text with
+   ClearType's colour smoothing when the text is painted in the same layer as
+   the page under it, and an animated transform gives the sheet a layer of its
+   own — so with any look on, every word in the note went greyscale and lighter
+   (2026-10-04, real screen pixels: 0 colour-fringed pixels with a look, ~4,900
+   with none; v1.4.0 kept them). `top` isn't run by the compositor, so the sheet
+   stays in the page's layer and the text keeps its ClearType. The scroller
+   there scrolls on the main thread too, so the two still move in the same
+   frame: mid-scroll and after it, the rules sat on exactly the rows the
+   transform gives, at 100% and 125%, with no slower frames (Worn page
+   included). From 150% up Windows draws no ClearType anyway and the Mac never
+   does, so they keep the transform, which stays in step with a scroll the
+   compositor runs. `data-paper-flat` comes from NotePane.tsx. */
+@media (resolution < 1.5dppx) {
+  .edit-layer[data-paper-flat] .page-paper-sheet {
+    animation-name: paper-scroll-flat;
+  }
+}
+@keyframes paper-scroll-flat {
+  to {
+    top: -10000000px;
   }
 }
 
