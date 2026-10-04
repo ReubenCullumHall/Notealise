@@ -1,4 +1,4 @@
-import { Icon } from '../../icons'
+import { Card, Cards, Chip, Heading, Text } from './parts'
 
 // Settings → Tutorials → Linking your notes.
 //
@@ -7,122 +7,73 @@ import { Icon } from '../../icons'
 // space the picker offers you. None of it is discoverable from the editor, and a
 // feature nobody can find the shape of may as well not be there.
 
-/** One form of link: what you type, what you see, what it does. */
-function Form({
-  type,
-  reads,
-  title,
-  children
-}: {
-  type: string
-  reads: React.ReactNode
-  title: string
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <div className="rounded-xl px-3 py-3 ring-1 ring-ink-300/20">
-      <p className="text-[13px] font-medium text-ink-800">{title}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <code className="rounded-md bg-wash/[0.07] px-2 py-1 font-mono text-[12px] text-ink-700">
-          {type}
-        </code>
-        <span aria-hidden="true" className="text-ink-300">
-          →
-        </span>
-        <span className="text-[12.5px] text-ink-600">{reads}</span>
-      </div>
-      <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">{children}</p>
-    </div>
-  )
-}
-
-/** How the rendered link looks in the note, so the page shows the real thing. */
-function Chip({ children, dir = false }: { children: React.ReactNode; dir?: boolean }): React.JSX.Element {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-[5px] bg-wash/[0.08] px-1.5 py-0.5 text-ink-800">
-      <Icon name={dir ? 'folder' : 'doc'} className="h-3 w-3 opacity-60" />
-      {children}
-    </span>
-  )
-}
-
 export function LinkingGuide(): React.JSX.Element {
   return (
     <>
-      <h3 className="accent-heading font-display text-[15px] font-semibold">Linking notes</h3>
-      <p className="mt-0.5 text-[12px] leading-relaxed text-ink-500">
+      <Heading first>Linking notes</Heading>
+      <Text>
         Type <code className="font-mono text-ink-700">[[</code> anywhere in a note to connect it to
-        another one, and pick from the list. The <span className="font-medium">Link to a note</span>{' '}
-        command does the same thing — it&rsquo;s on <code className="font-mono text-ink-700">/link</code>{' '}
-        and can go on a format-bar button.
-      </p>
-      <p className="mt-2 text-[12px] leading-relaxed text-ink-500">
-        Links are plain text in your file, exactly as written below. Open the note anywhere else and
-        it still reads sensibly — nothing about this app is needed to make sense of it later.
-      </p>
+        another one, and pick from the list. You can also bring the list up with the slash command:
+        type <code className="font-mono text-ink-700">/link</code>.
+      </Text>
 
-      <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">The six forms</h3>
-      <div className="mt-3 flex flex-col gap-2">
-        <Form type="[[Waves]]" title="By name" reads={<Chip>Waves</Chip>}>
-          The everyday one. If two notes share a name, the nearest wins — the one in the same folder,
-          then the one closest to it — and the link is underlined with dots to say the choice
-          wasn&rsquo;t obvious.
-        </Form>
+      <Heading>The six forms</Heading>
+      <Cards>
+        <Card type="[[Waves]]" title="By name" shows={<Chip>Waves</Chip>}>
+          Pick a note from the list. This is the everyday one.
+        </Card>
 
-        <Form type="[[Term 3/Waves]]" title="By path" reads={<Chip>Waves</Chip>}>
-          When the name alone isn&rsquo;t enough, or you want to be exact. The folder is hidden when
-          the link is rendered, so it costs nothing to read.
-        </Form>
+        <Card type="[[Term 3/Waves]]" title="By path" shows={<Chip>Waves</Chip>}>
+          The list writes this for you when two notes share a name, or the note is in another space.
+          Only the name shows.
+        </Card>
 
-        <Form
+        <Card
           type="[[Waves|the waves chapter]]"
-          title="With your own words (an alias)"
-          reads={<Chip>the waves chapter</Chip>}
+          title="In your own words"
+          shows={<Chip>the waves chapter</Chip>}
         >
-          Everything after the <code className="font-mono">|</code> is what the sentence says; the
-          part before it is which note it goes to. This is the one to reach for when a link sits
-          inside a sentence — <span className="italic">&ldquo;see the waves chapter&rdquo;</span>{' '}
-          reads properly, <span className="italic">&ldquo;see Waves&rdquo;</span> doesn&rsquo;t.
-        </Form>
+          Pick the note, then type <code className="font-mono">|</code> and your words just before
+          the <code className="font-mono">]]</code>. Your words show; the link still opens Waves.
+        </Card>
 
-        <Form
+        <Card
           type="[[Waves#Interference]]"
           title="Straight to a heading"
-          reads={
+          shows={
             <Chip>
               Waves <span className="px-0.5 text-ink-300">›</span>{' '}
               <span className="text-ink-500">Interference</span>
             </Chip>
           }
         >
-          Opens the note scrolled to that heading. <code className="font-mono">[[#Interference]]</code>{' '}
-          on its own jumps within the note you&rsquo;re already in.
-        </Form>
+          In the list, press <span className="font-medium">→</span> on a note (or click its arrow),
+          then pick a heading. Type <code className="font-mono">[[#</code> for the headings in this
+          note.
+        </Card>
 
-        <Form
+        <Card
           type="[[Waves#^k3x9]]"
           title="Straight to a paragraph"
-          reads={
+          shows={
             <Chip>
               Waves <span className="px-0.5 text-ink-300">›</span>{' '}
               <span className="text-ink-500">A wave carries energy…</span>
             </Chip>
           }
         >
-          Opens the note at that paragraph, list item or quote, and lights it up for a moment. The
-          link reads as the paragraph&rsquo;s first words, as they are now. To make one, right-click
-          the six dots beside a line and choose <span className="font-medium">Copy link to block</span>,
-          then paste it into any note. The paragraph gets a short hidden tag at its end,{' '}
-          <code className="font-mono">^k3x9</code>, which is how the link finds it. Obsidian
-          understands these links too.
-        </Form>
+          Right-click the six dots beside a line, choose{' '}
+          <span className="font-medium">Copy link to block</span>, then paste it into any note. The
+          link shows the paragraph&rsquo;s first words.
+        </Card>
 
-        <Form type="[[Term 3]]" title="A folder" reads={<Chip dir>Term 3</Chip>}>
-          A folder has nothing to open, so clicking it <span className="font-medium">shows</span> it:
-          the sidebar opens that folder and closes the others. Folders carry a folder icon so you can
-          tell at a glance which kind of thing a link points at.
-        </Form>
-      </div>
+        <Card type="[[Term 3]]" title="A folder" shows={<Chip icon="folder">Term 3</Chip>}>
+          Pick a folder from the list. Clicking the link opens that folder in the sidebar.
+        </Card>
+      </Cards>
+      <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
+        To change where a link goes, right-click it and pick again. Your own words stay.
+      </p>
 
       <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">
         Links and your spaces

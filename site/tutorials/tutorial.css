@@ -1,0 +1,80 @@
+/* The Tutorials pages: the index (tutorials.html) and every guide under
+   tutorials/. Colour and type come from nav.css — read a token, never a literal.
+
+   Every guide is built from the same pieces as the app's own Settings → Help →
+   Tutorials, in the same order (docs/tutorials.md is the template):
+     title → one or two sentences → a heading → cards → a closing line.
+   A card is one thing to learn: what you type, what you see, how to make it. */
+
+/* ── Index: one row per guide ─────────────────────────────────────────── */
+.page-main .tut-list {
+  list-style: none;
+  margin: 36px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.page-main .tut-list li { margin: 0; }
+.page-main .tut-link {
+  display: block;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color .14s ease, background-color .14s ease;
+}
+.page-main .tut-link:hover { border-color: var(--line-2); background: var(--raised); }
+.tut-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tut-link-title {
+  display: block;
+  font-size: 17px; font-weight: 600; line-height: 1.35;
+}
+.tut-link-blurb {
+  display: block; margin-top: 4px;
+  font-size: 15px; line-height: 1.5; color: var(--soft);
+}
+
+/* ── A guide ──────────────────────────────────────────────────────────── */
+.tut-back {
+  display: inline-block; margin: 0 0 16px;
+  font-size: 14px; color: var(--muted); text-decoration: none;
+}
+.tut-back:hover { color: var(--ink); }
+
+.tut-cards {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 0 0 20px;
+}
+.tut-card {
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.page-main .tut-card h3 {
+  margin: 0;
+  font-family: var(--sans); font-size: 17px; font-weight: 600; line-height: 1.35;
+}
+.tut-card-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  margin: 12px 0;
+}
+.tut-arrow { color: var(--muted); }
+.page-main .tut-card p {
+  margin: 0;
+  font-size: 15.5px; line-height: 1.55; color: var(--soft);
+}
+
+/* The link as it really looks in a note — a screenshot from the app, one for
+   each theme, framed like a crop of the window. */
+.tut-shot {
+  display: block;
+  max-width: 100%; height: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.tut-shot.dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .tut-shot.light { display: none; }
+  :root:not([data-theme="light"]) .tut-shot.dark { display: block; }
+}
+:root[data-theme="dark"] .tut-shot.light { display: none; }
+:root[data-theme="dark"] .tut-shot.dark { display: block; }

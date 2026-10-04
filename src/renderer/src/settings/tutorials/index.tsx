@@ -21,7 +21,7 @@ const GUIDES: Guide[] = [
   {
     id: 'linking',
     title: 'Linking your notes',
-    blurb: 'Every form a [[link]] can take, what an alias is for, and how links reach across spaces.',
+    blurb: 'Every kind of [[link]], how to make each one, and how links reach across spaces.',
     icon: 'noteLink',
     body: LinkingGuide
   }
