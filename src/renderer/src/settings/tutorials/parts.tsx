@@ -13,6 +13,9 @@ import { Icon, type IconName } from '../../icons'
 //       How to make it, in a line or two.
 //     </Card>
 //   </Cards>
+//
+// A card that isn't a link draws what you see with `Sample` (FormatGuide.tsx),
+// and `Code` marks a key or some typing inside a paragraph.
 
 /** A tutorial's title, or one of its section headings. */
 export function Heading({ first = false, children }: { first?: boolean; children: React.ReactNode }): React.JSX.Element {
@@ -55,6 +58,23 @@ export function Card({
       </div>
       <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">{children}</p>
     </div>
+  )
+}
+
+/** A bit of typing or a key inside a paragraph. Takes the paragraph's colour
+ *  unless given one (`Text` paragraphs pass `text-ink-700`; card lines don't). */
+export function Code({ children, className = '' }: { children: React.ReactNode; className?: string }): React.JSX.Element {
+  return <code className={'font-mono ' + className}>{children}</code>
+}
+
+/** What a card shows when it isn't a link: the result drawn small, in the same
+ *  tinted box as `Chip`. Draw it from the app's own pieces — a command's glyph
+ *  from the registry, a palette token — never an invented look. */
+export function Sample({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-[5px] bg-wash/[0.08] px-2 py-1 text-ink-800">
+      {children}
+    </span>
   )
 }
 

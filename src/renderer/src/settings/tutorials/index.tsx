@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { Icon, type IconName } from '../../icons'
+import { BlocksGuide } from './BlocksGuide'
+import { ColoursGuide } from './ColoursGuide'
+import { FormatGuide } from './FormatGuide'
 import { LinkingGuide } from './LinkingGuide'
 
 // Settings → Tutorials. An index of guides, one click deep.
@@ -24,6 +27,27 @@ const GUIDES: Guide[] = [
     blurb: 'Every kind of [[link]], how to make each one, and how links reach across spaces.',
     icon: 'noteLink',
     body: LinkingGuide
+  },
+  {
+    id: 'format',
+    title: 'Format bar and / commands',
+    blurb: 'The bar above a note, its keys, and the / list of commands.',
+    icon: 'text',
+    body: FormatGuide
+  },
+  {
+    id: 'colours',
+    title: 'Colours',
+    blurb: 'Highlights, text colours, colours of your own, and a colour for every heading.',
+    icon: 'edit',
+    body: ColoursGuide
+  },
+  {
+    id: 'blocks',
+    title: 'Maths, tables and toggles',
+    blurb: 'Formulas, tables and toggle lists, and how to change each one.',
+    icon: 'table',
+    body: BlocksGuide
   }
 ]
 
@@ -84,8 +108,8 @@ export function Tutorials(): React.JSX.Element {
       <div className="mt-4 rounded-xl px-3 py-3 ring-1 ring-dashed ring-ink-300/25">
         <p className="text-[12px] font-medium text-ink-600">More on the way</p>
         <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-400">
-          Guides for spaces, the format bar and organising, plus one guide to the whole app you can
-          download and keep.
+          Guides for spaces and organising, plus one guide to the whole app you can download and
+          keep.
         </p>
       </div>
     </>
