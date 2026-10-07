@@ -1,6 +1,7 @@
 import { Icon } from '../../icons'
 import { PALETTE, paletteEntry, type ColorName } from '../../editor/palette'
 import { Card, Cards, Code, Heading, Sample, Text } from './parts'
+import { practiceText } from './tryIt'
 
 // Settings → Help → Tutorials → Colours.
 //
@@ -56,7 +57,16 @@ export function ColoursGuide(): React.JSX.Element {
 
       <Heading>Colouring words</Heading>
       <Cards>
-        <Card type="Select words" title="The bar over a selection" shows={<BarSample />}>
+        <Card
+          type="Select words"
+          title="The bar over a selection"
+          tryIt={practiceText(
+            'The bar over a selection',
+            'Select some of the words below. A bar of colours appears above them.',
+            'Revise the key terms before Friday, and highlight the ones you keep forgetting.'
+          )}
+          shows={<BarSample />}
+        >
           Press ▉ for a highlight or <span className="font-medium">A</span> for text colour, then pick one of the ten
           colours. The bar keeps to whichever of the two you used last.
         </Card>
@@ -64,6 +74,11 @@ export function ColoursGuide(): React.JSX.Element {
         <Card
           type="Ctrl/Cmd + Shift + H"
           title="Highlight in one go"
+          tryIt={practiceText(
+            'Highlight in one go',
+            'Select some words below and press Ctrl/Cmd + Shift + H.',
+            'Revise the key terms before Friday, and highlight the ones you keep forgetting.'
+          )}
           shows={
             <Sample>
               <span>
@@ -78,6 +93,11 @@ export function ColoursGuide(): React.JSX.Element {
         <Card
           type="+"
           title="Any colour"
+          tryIt={practiceText(
+            'Any colour',
+            'Select some words below, press the + at the end of the bar, and pick a colour of your own.',
+            'Revise the key terms before Friday, and highlight the ones you keep forgetting.'
+          )}
           shows={
             <Sample>
               <span className="h-3.5 w-3.5 rounded-control" style={{ background: coral }} />
@@ -92,6 +112,11 @@ export function ColoursGuide(): React.JSX.Element {
         <Card
           type="★"
           title="Colours you have used"
+          tryIt={practiceText(
+            'Colours you have used',
+            'Colour a few words in different colours, then star one with the star by the hex box.',
+            'Revise the key terms before Friday, and highlight the ones you keep forgetting.'
+          )}
           shows={
             <Sample>
               <Dot name="amber" />
@@ -114,6 +139,11 @@ export function ColoursGuide(): React.JSX.Element {
         <Card
           type="✕"
           title="Take it off"
+          tryIt={practiceText(
+            'Take it off',
+            'Select the highlighted words below and press ✕ in the bar.',
+            'Revise the <mark class="hl-amber">key terms</mark> before Friday.'
+          )}
           shows={
             <Sample>
               <Icon name="x" className="h-3.5 w-3.5 text-ink-500" />

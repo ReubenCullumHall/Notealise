@@ -1,4 +1,5 @@
 import { Card, Cards, Chip, Heading, Text } from './parts'
+import { practiceText } from './tryIt'
 
 // Settings → Tutorials → Linking your notes.
 //
@@ -19,7 +20,15 @@ export function LinkingGuide(): React.JSX.Element {
 
       <Heading>The six forms</Heading>
       <Cards>
-        <Card type="[[Waves]]" title="By name" shows={<Chip>Waves</Chip>}>
+        <Card
+          type="[[Waves]]"
+          title="By name"
+          tryIt={practiceText(
+            'By name',
+            'Type `[[` on the empty line below and pick a note from the list.'
+          )}
+          shows={<Chip>Waves</Chip>}
+        >
           Pick a note from the list. This is the everyday one.
         </Card>
 
@@ -31,6 +40,10 @@ export function LinkingGuide(): React.JSX.Element {
         <Card
           type="[[Waves|the waves chapter]]"
           title="In your own words"
+          tryIt={practiceText(
+            'In your own words',
+            'Type `[[`, pick a note, then type `|` and your own words just before the `]]`.'
+          )}
           shows={<Chip>the waves chapter</Chip>}
         >
           Pick the note, then type <code className="font-mono">|</code> and your words just before
@@ -40,6 +53,11 @@ export function LinkingGuide(): React.JSX.Element {
         <Card
           type="[[Waves#Interference]]"
           title="Straight to a heading"
+          tryIt={practiceText(
+            'Straight to a heading',
+            'Type `[[#` on the empty line below: the list shows this note\'s headings.',
+            '## First heading\n\nSome words.\n\n## Second heading\n\nSome more words.\n'
+          )}
           shows={
             <Chip>
               Waves <span className="px-0.5 text-ink-300">›</span>{' '}
@@ -55,6 +73,11 @@ export function LinkingGuide(): React.JSX.Element {
         <Card
           type="[[Waves#^k3x9]]"
           title="Straight to a paragraph"
+          tryIt={practiceText(
+            'Straight to a paragraph',
+            'Right-click the six dots beside the paragraph below, choose Copy link to block, then paste it on the empty line under it.',
+            'A wave carries energy from place to place.\n'
+          )}
           shows={
             <Chip>
               Waves <span className="px-0.5 text-ink-300">›</span>{' '}
@@ -67,7 +90,15 @@ export function LinkingGuide(): React.JSX.Element {
           link shows the paragraph&rsquo;s first words.
         </Card>
 
-        <Card type="[[Term 3]]" title="A folder" shows={<Chip icon="folder">Term 3</Chip>}>
+        <Card
+          type="[[Term 3]]"
+          title="A folder"
+          tryIt={practiceText(
+            'A folder',
+            'Type `[[` on the empty line below and pick a folder from the list.'
+          )}
+          shows={<Chip icon="folder">Term 3</Chip>}
+        >
           Pick a folder from the list. Clicking the link opens that folder in the sidebar.
         </Card>
       </Cards>

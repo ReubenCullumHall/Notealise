@@ -1,6 +1,7 @@
 import { findAction } from '../../editor/commands'
 import { Icon } from '../../icons'
 import { Card, Cards, Code, Heading, Sample, Text } from './parts'
+import { practiceText } from './tryIt'
 
 // Settings → Help → Tutorials → Format bar and / commands.
 //
@@ -89,6 +90,11 @@ export function FormatGuide(): React.JSX.Element {
         <Card
           type="B I U S"
           title="Style words"
+          tryIt={practiceText(
+            'Style words',
+            'Select a word and press a button on the bar above, or use the keys.',
+            'The quick brown fox jumps over the lazy dog.'
+          )}
           shows={
             <Sample>
               <span>
@@ -104,7 +110,16 @@ export function FormatGuide(): React.JSX.Element {
           strikethrough. Press again to take the style off.
         </Card>
 
-        <Card type="Click a dashed button" title="Your four buttons" shows={<BarSample />}>
+        <Card
+          type="Click a dashed button"
+          title="Your four buttons"
+          tryIt={practiceText(
+            'Your four buttons',
+            'Click a dashed button on the bar above and pick a command for it, then press it with the cursor on the line below.',
+            'A line to turn into a heading.'
+          )}
+          shows={<BarSample />}
+        >
           Pick a command for it. From then on the button runs that command. Change or clear the four in{' '}
           <span className="font-medium">Settings → Look → Shortcuts</span>.
         </Card>
@@ -112,7 +127,15 @@ export function FormatGuide(): React.JSX.Element {
 
       <Heading>The / menu</Heading>
       <Cards>
-        <Card type="/" title="Open the list" shows={<MenuSample />}>
+        <Card
+          type="/"
+          title="Open the list"
+          tryIt={practiceText(
+            'Open the list',
+            'Type `/` on the empty line below, then keep typing to narrow the list.'
+          )}
+          shows={<MenuSample />}
+        >
           Type it at the start of a line or after a space, keep typing to narrow the list, then press{' '}
           <Code>Enter</Code>. Most commands also answer to a short word, such as <Code>/ul</Code>, <Code>/todo</Code> or{' '}
           <Code>/h1</Code>.
@@ -121,6 +144,10 @@ export function FormatGuide(): React.JSX.Element {
         <Card
           type="/h1"
           title="Headings"
+          tryIt={practiceText(
+            'Headings',
+            'Type `/h1` on the empty line below, press Enter, then type a title.'
+          )}
           shows={
             <Sample>
               <span className="flex flex-col">
@@ -138,6 +165,10 @@ export function FormatGuide(): React.JSX.Element {
         <Card
           type="/todo"
           title="Lists"
+          tryIt={practiceText(
+            'Lists',
+            'Type `/todo` on the empty line below, press Enter, then write two things to do.'
+          )}
           shows={
             <Sample>
               <span className="flex flex-col gap-1">

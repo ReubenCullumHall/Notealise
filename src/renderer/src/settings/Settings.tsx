@@ -9,6 +9,7 @@ import { Explore, type ExploreTab } from './Explore'
 import { RequestForm } from './RequestForm'
 import { Customisation } from './Customisation'
 import { Tutorials } from './tutorials'
+import { TryItContext } from './tutorials/tryIt'
 import { OssLicenses } from './OssLicenses'
 import { SourceFolder } from './SourceFolder'
 import { TransferData } from './TransferData'
@@ -51,6 +52,9 @@ type ShellProps = Props & {
    *  that import changed behind its back (fonts are refreshed here, since the
    *  font library is created in SettingsWindow, not App) */
   onTransferChanged?: () => void
+  /** Tutorials → Try it: App opens a practice note holding the card's example.
+   *  Absent, the tutorial cards show no button. */
+  onTryIt?: (text: string) => void
 }
 
 export type SectionId =
@@ -416,6 +420,7 @@ export function SettingsButton({
   onPurgeRecovery,
   onRevealHeld,
   onTransferChanged,
+  onTryIt,
   jumpToSection,
   onJumpHandled
 }: ShellProps & {
@@ -593,6 +598,7 @@ export function SettingsButton({
               onPurgeRecovery={onPurgeRecovery}
               onRevealHeld={onRevealHeld}
               onTransferChanged={onTransferChanged}
+              onTryIt={onTryIt}
               initialSection={initialSection}
               onClose={close}
               armed={armed}
@@ -625,6 +631,7 @@ function SettingsWindow({
   onPurgeRecovery,
   onRevealHeld,
   onTransferChanged,
+  onTryIt,
   initialSection,
   onClose,
   armed,
@@ -974,7 +981,22 @@ function SettingsWindow({
               <ImportPanel onOpenSpace={spaceActions.onOpenSpace} onClose={onClose} variant="settings" />
             </>
           )}
-          {section === 'tutorials' && <Tutorials />}
+          {section === 'tutorials' && (
+            // Try it hands App the card's text and closes this window, so the practice
+            // note is there to type in rather than behind it.
+            <TryItContext.Provider
+              value={
+                onTryIt
+                  ? (text) => {
+                      onTryIt(text)
+                      onClose()
+                    }
+                  : null
+              }
+            >
+              <Tutorials />
+            </TryItContext.Provider>
+          )}
           {section === 'spaces' && (
             <Spaces
               settings={settings}

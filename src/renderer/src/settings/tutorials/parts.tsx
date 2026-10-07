@@ -1,4 +1,5 @@
 import { Icon, type IconName } from '../../icons'
+import { useTryIt } from './tryIt'
 
 // The pieces every tutorial is built from, so a new one reads like the last
 // (Reuben, 2026-10-04: a fixed layout to generate new tutorials from). The
@@ -13,6 +14,9 @@ import { Icon, type IconName } from '../../icons'
 //       How to make it, in a line or two.
 //     </Card>
 //   </Cards>
+//
+// A card you do in the note gets `tryIt={practiceText(...)}` (tryIt.ts): a Try it
+// button that opens a practice note with the example already in it.
 //
 // A card that isn't a link draws what you see with `Sample` (FormatGuide.tsx),
 // and `Code` marks a key or some typing inside a paragraph.
@@ -34,21 +38,38 @@ export function Cards({ children }: { children: React.ReactNode }): React.JSX.El
   return <div className="mt-3 flex flex-col gap-2">{children}</div>
 }
 
-/** One thing to learn: what you type, what you see, and how to make it. */
+/** One thing to learn: what you type, what you see, and how to make it. `tryIt` is
+ *  the practice note's starting text (see `practiceText`); a card done in Settings
+ *  rather than in a note leaves it out and gets no button. */
 export function Card({
   title,
   type,
   shows,
+  tryIt,
   children
 }: {
   title: string
   type: string
   shows: React.ReactNode
+  tryIt?: string
   children: React.ReactNode
 }): React.JSX.Element {
+  const open = useTryIt()
   return (
     <div className="rounded-xl px-3 py-3 ring-1 ring-ink-300/20">
-      <p className="text-[13px] font-medium text-ink-800">{title}</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[13px] font-medium text-ink-800">{title}</p>
+        {tryIt !== undefined && open && (
+          <button
+            type="button"
+            className="mini shrink-0"
+            data-tip="Opens a practice note with this ready to try"
+            onClick={() => open(tryIt)}
+          >
+            Try it
+          </button>
+        )}
+      </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <code className="rounded-md bg-wash/[0.07] px-2 py-1 font-mono text-[12px] text-ink-700">{type}</code>
         <span aria-hidden="true" className="text-ink-300">

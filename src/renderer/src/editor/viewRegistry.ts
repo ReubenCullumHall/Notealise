@@ -50,3 +50,21 @@ export function viewAtPoint(x: number, y: number): EditorView | null {
 export function notePathOf(view: EditorView): string {
   return view.state.field(linkEnv, false)?.path ?? ''
 }
+
+/** Put the cursor at the end of a note's text and focus it — for "Try it", which
+ *  opens a note for you to type in. Opening is asynchronous (the pane has to
+ *  appear, then take the new text), so this waits for an editor on `path` that
+ *  already holds `text`, and gives up after about two seconds. */
+export function focusNoteEnd(path: string, text: string): void {
+  let tries = 0
+  const timer = setInterval(() => {
+    for (const view of views) {
+      if (notePathOf(view) !== path || view.state.doc.toString() !== text) continue
+      clearInterval(timer)
+      view.dispatch({ selection: { anchor: view.state.doc.length }, scrollIntoView: true })
+      view.focus()
+      return
+    }
+    if (++tries > 40) clearInterval(timer)
+  }, 50)
+}

@@ -96,6 +96,9 @@ interface Props {
   /** run after a Settings → Transfer data import, so App re-reads the preset
    *  library (which that import changed outside App's knowledge) */
   onTransferChanged?: () => void
+  /** Settings → Help → Tutorials → Try it: App puts the card's starting text in the
+   *  practice note and opens it */
+  onTryIt?: (text: string) => void
   /** Handed a function that opens one folder and closes the rest. An imperative
    *  handle, the same idiom as the editor's `editorRef`: the path bar lives in
    *  App and the tree state lives here, and passing the state up instead would
@@ -259,6 +262,7 @@ export function Sidebar({
   onRestoreRecovery,
   onPurgeRecovery,
   onTransferChanged,
+  onTryIt,
   revealRef,
   collapseRef,
   actions
@@ -1206,6 +1210,7 @@ export function Sidebar({
             onPurgeRecovery={onPurgeRecovery}
             onRevealHeld={actions.onRevealHeld}
             onTransferChanged={onTransferChanged}
+            onTryIt={onTryIt}
             jumpToSection={settingsJumpToSection}
             onJumpHandled={onSettingsJumpHandled}
           />

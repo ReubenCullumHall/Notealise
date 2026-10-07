@@ -12,6 +12,8 @@ import { FormatToolbar } from './editor/FormatToolbar'
 import { NotePane, ROW_CLASS, type Drag } from './tabs/NotePane'
 import { PaneDivider } from './tabs/PaneDivider'
 import { markCreated, markDeleted } from './organise/arrivals'
+import { PRACTICE_HEAD, PRACTICE_TITLE } from './settings/tutorials/tryIt'
+import { focusNoteEnd } from './editor/viewRegistry'
 import { noteLayoutChange, notePaneChange } from './tabs/stripMotion'
 import { TabStrip } from './tabs/TabStrip'
 import { Island } from './tabs/TabIsland'
@@ -2611,6 +2613,46 @@ export default function App(): React.JSX.Element {
       await openNote(rel)
     })
 
+  /** Settings → Help → Tutorials → Try it. Puts a card's starting text in a note
+   *  called "Tutorial practice" in the space you're in, opens it in a new tab with
+   *  the cursor at the end, and leaves you to do the thing the card describes.
+   *
+   *  One note, started afresh each press — it says so at the top. It is only ever
+   *  reused while it still opens with its own heading (`PRACTICE_HEAD`): a note of
+   *  yours that merely has the name is never written over, the next free name
+   *  ("Tutorial practice 2") is taken instead. If it is already open its text is
+   *  replaced the way an outside change is (loaded copy + version bump), and the
+   *  autosave that would write the old text back is dropped first; a plain disk
+   *  write alone would leave the open note showing the old text, because the app's
+   *  own writes are not echoed back to it. */
+  const tryIt = (text: string): void => {
+    void run(async () => {
+      const dir = inSpace('')
+      const level = (t: TreeNode[]): TreeNode[] => (dir === '' ? t : (findNode(t, dir)?.children ?? []))
+      const taken = new Set(level(await loadTree()).map((n) => n.path.toLowerCase()))
+      let rel = ''
+      for (let n = 1; !rel && n < 50; n++) {
+        const name = n === 1 ? PRACTICE_TITLE : `${PRACTICE_TITLE} ${n}`
+        const at = dir === '' ? `${name}.md` : `${dir}/${name}.md`
+        if (!taken.has(at.toLowerCase())) {
+          rel = await window.api.createNote(dir, name)
+          markCreated(rel)
+        } else if ((await window.api.readNote(at)).startsWith(PRACTICE_HEAD)) {
+          rel = at
+        }
+      }
+      if (!rel) return
+      await window.api.writeNote(rel, text)
+      dirtyRef.current.delete(rel)
+      docsRef.current.set(rel, text)
+      setWordCounts((c) => ({ ...c, [rel]: countWords(text) }))
+      setVersions((v) => ({ ...v, [rel]: (v[rel] ?? 0) + 1 }))
+      await loadTree()
+      await openNote(rel, true)
+      focusNoteEnd(rel, text)
+    })
+  }
+
   const newFolder = (dir: string): Promise<void> =>
     run(async () => {
       const rel = await window.api.createFolder(inSpace(dir))
@@ -3137,6 +3179,7 @@ export default function App(): React.JSX.Element {
         onRestoreRecovery={restoreRecovery}
         onPurgeRecovery={purgeRecovery}
         onTransferChanged={() => void loadPresets()}
+        onTryIt={tryIt}
         actions={{
           onOpen: (p, newTab) => void openNote(p, newTab),
           onContext: openMenu,

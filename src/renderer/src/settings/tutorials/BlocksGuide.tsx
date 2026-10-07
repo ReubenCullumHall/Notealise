@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import katex from 'katex'
 import { Icon } from '../../icons'
 import { Card, Cards, Code, Heading, Sample, Text } from './parts'
+import { practiceText } from './tryIt'
 
 // Settings → Help → Tutorials → Maths, tables and toggles.
 //
@@ -88,6 +89,12 @@ export function BlocksGuide(): React.JSX.Element {
         <Card
           type="/inline"
           title="Inside a sentence"
+          tryIt={practiceText(
+            'Inside a sentence',
+            'Type `/inline` at the end of the line below, press Enter, then type `x^2`.',
+            'The area of the square is ',
+            true
+          )}
           shows={
             <Sample>
               <span>
@@ -103,6 +110,10 @@ export function BlocksGuide(): React.JSX.Element {
         <Card
           type="Ctrl/Cmd + Shift + L"
           title="On its own line"
+          tryIt={practiceText(
+            'On its own line',
+            'Press Ctrl/Cmd + Shift + L on the empty line below.'
+          )}
           shows={
             <Sample>
               <Formula tex={'\\int_0^1 x\\,dx = \\tfrac{1}{2}'} />
@@ -116,17 +127,43 @@ export function BlocksGuide(): React.JSX.Element {
 
       <Heading>Tables</Heading>
       <Cards>
-        <Card type="/table" title="A table" shows={<TableSample />}>
+        <Card
+          type="/table"
+          title="A table"
+          tryIt={practiceText(
+            'A table',
+            'Type `/table` on the empty line below, then click a cell and type.'
+          )}
+          shows={<TableSample />}
+        >
           Click a cell and type. <Code>Enter</Code> keeps what you typed, <Code>Tab</Code> moves to the next cell, and{' '}
           <Code>Shift + Enter</Code> starts a new line inside a cell.
         </Card>
 
-        <Card type="+" title="More rows and columns" shows={<TableSample plus />}>
+        <Card
+          type="+"
+          title="More rows and columns"
+          tryIt={practiceText(
+            'More rows and columns',
+            'Point at the right edge of the table below until a + bar shows, then click it.',
+            '| Wave | Speed |\n| --- | --- |\n| Sound | 343 m/s |\n'
+          )}
+          shows={<TableSample plus />}
+        >
           Point at the right edge or the bottom edge of the table and a + bar shows. Click it for one more, or drag it
           for several.
         </Card>
 
-        <Card type="Six dots above a column" title="Move, remove or resize a column" shows={<TableSample grip />}>
+        <Card
+          type="Six dots above a column"
+          title="Move, remove or resize a column"
+          tryIt={practiceText(
+            'Move, remove or resize a column',
+            'Point at a column heading below and drag the six dots, or drag the line between two columns.',
+            '| Wave | Speed | Note |\n| --- | --- | --- |\n| Sound | 343 m/s | In air |\n'
+          )}
+          shows={<TableSample grip />}
+        >
           Drag the six dots to move the column. Click them, then press <Code>Backspace</Code> to remove it. Drag the
           line between two columns to change their width.
         </Card>
@@ -134,11 +171,28 @@ export function BlocksGuide(): React.JSX.Element {
 
       <Heading>Toggle lists</Heading>
       <Cards>
-        <Card type="> then a space" title="A toggle" shows={<ToggleSample open />}>
+        <Card
+          type="> then a space"
+          title="A toggle"
+          tryIt={practiceText(
+            'A toggle',
+            'Type `>` and a space on the empty line below, then a title, press Enter and write something inside.'
+          )}
+          shows={<ToggleSample open />}
+        >
           Type the title, press <Code>Enter</Code>, and write what goes inside. <Code>/toggle</Code> does the same.
         </Card>
 
-        <Card type="Ctrl/Cmd + Enter" title="Open and shut" shows={<ToggleSample open={false} />}>
+        <Card
+          type="Ctrl/Cmd + Enter"
+          title="Open and shut"
+          tryIt={practiceText(
+            'Open and shut',
+            'Click the arrow beside the toggle below, or put the cursor on its title and press Ctrl/Cmd + Enter.',
+            '<details open><summary>Key formulas</summary>\n\nSpeed = distance / time\nFrequency = 1 / period\n\n</details>\n'
+          )}
+          shows={<ToggleSample open={false} />}
+        >
           With the cursor on the title — or click the arrow. Everything inside hides and comes back, headings, tables
           and formulas included. <Code>Enter</Code> on an empty line inside steps you out below the toggle.
         </Card>
