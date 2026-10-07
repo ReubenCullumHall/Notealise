@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react'
+import type { GuideId } from './guides'
 
 // "Try it" — the button on a tutorial card that opens a practice note with that
 // card's example already in it, so you do the thing in the real editor instead
@@ -7,13 +8,25 @@ import { createContext, useContext } from 'react'
 //
 // A card passes `tryIt={practiceText(...)}`; the button calls whatever App gave
 // Settings, and Settings closes itself so the note is there to type in. Held as
-// context so a guide never has to know how a note gets opened.
+// context so a guide never has to know how a note gets opened. Settings also keeps
+// where you were (`TutorialSpot`), so the next time it opens it comes back to it.
 
 /** What Try it does with a card's starting text. `null`: the app didn't offer it,
  *  so a card shows no button. */
 export const TryItContext = createContext<((text: string) => void) | null>(null)
 
 export const useTryIt = (): ((text: string) => void) | null => useContext(TryItContext)
+
+/** Where in the tutorials Try it was pressed: the guide, and how far down its page
+ *  was scrolled. `SettingsButton` keeps it for exactly ONE opening — the next —
+ *  which comes back to the guide, and the opening after that is the ordinary one
+ *  again (Reuben, 2026-10-07: "only when you trigger it with Try it … on reopen a
+ *  second time it shouldn't reopen to any page"). Closing Settings any other way
+ *  keeps nothing. */
+export interface TutorialSpot {
+  guide: GuideId
+  scrollTop: number
+}
 
 /** The note's name, and the line App checks before it ever overwrites one: a note
  *  of yours that merely has this name does not start with it, and is left alone. */

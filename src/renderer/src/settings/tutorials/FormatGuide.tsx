@@ -1,4 +1,5 @@
 import { findAction } from '../../editor/commands'
+import { SlotFace } from '../../editor/SlotPicker'
 import { Icon } from '../../icons'
 import { Card, Cards, Code, Heading, Sample, Text } from './parts'
 import { practiceText } from './tryIt'
@@ -9,21 +10,30 @@ import { practiceText } from './tryIt'
 // change one, change the other. What each card says was checked against the
 // running app — the keys, the / list and its short words, the four buttons.
 //
-// What a card "shows" is drawn from the app's own pieces: the bar's buttons use
-// each command's glyph from the registry (editor/commands.tsx), and the / list
-// reads its rows' words from it too, so the page can't drift from the app.
+// What a card "shows" is drawn from the app's own pieces: the bar's empty places
+// are the bar's own `SlotFace` (editor/SlotPicker.tsx), and the / list reads its
+// rows' words from the command registry (editor/commands.tsx), so the page can't
+// drift from the app.
 
 /** One hairline between groups of buttons, as on the bar itself. */
 const Divider = (): React.JSX.Element => <span aria-hidden="true" className="h-3.5 w-px bg-ink-300/40" />
 
-/** The bar as it looks once all four of your buttons have a command. */
+/** The bar as a new user first sees it: the four places for your own buttons are
+ *  still empty, drawn the way the bar draws them (`SlotFace` — a dashed outline,
+ *  quieter than a real button; Reuben, 2026-10-07: show it before). */
 function BarSample(): React.JSX.Element {
-  const face = (id: string): React.ReactNode => findAction(id)?.glyph
+  // `inline-flex` so the dashed square takes its size — the bar's own buttons are
+  // flex boxes, and a bare inline span ignores its width and height.
+  const empty = (
+    <span className="inline-flex text-ink-300">
+      <SlotFace id="" />
+    </span>
+  )
   return (
     <Sample>
       <span className="inline-flex items-center gap-2 text-ink-500">
-        {face('h1')}
-        {face('checklist')}
+        {empty}
+        {empty}
         <Divider />
         <span className="font-bold">B</span>
         <span className="font-display italic">I</span>
@@ -40,8 +50,8 @@ function BarSample(): React.JSX.Element {
           />
         </span>
         <Divider />
-        {face('table')}
-        {face('wikilink')}
+        {empty}
+        {empty}
       </span>
     </Sample>
   )
@@ -188,11 +198,6 @@ export function FormatGuide(): React.JSX.Element {
           <Code>1.</Code> then a space, or <Code>- [ ]</Code> then a space at the start of a line.
         </Card>
       </Cards>
-
-      <p className="mt-6 text-[11.5px] leading-relaxed text-ink-400">
-        On the bar, pressing a heading or list button a second time takes it off again. Typing a{' '}
-        <Code className="text-ink-500">/</Code> command always adds it.
-      </p>
     </>
   )
 }

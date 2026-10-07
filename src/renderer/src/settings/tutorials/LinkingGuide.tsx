@@ -14,8 +14,7 @@ export function LinkingGuide(): React.JSX.Element {
       <Heading first>Linking notes</Heading>
       <Text>
         Type <code className="font-mono text-ink-700">[[</code> anywhere in a note to connect it to
-        another one, and pick from the list. You can also bring the list up with the slash command:
-        type <code className="font-mono text-ink-700">/link</code>.
+        another one, and pick from the list.
       </Text>
 
       <Heading>The six forms</Heading>

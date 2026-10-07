@@ -198,11 +198,20 @@ export function BlocksGuide(): React.JSX.Element {
         </Card>
       </Cards>
 
-      <p className="mt-6 text-[11.5px] leading-relaxed text-ink-400">
-        To change one later: click a formula to open its box again, click a table cell to edit it, or press{' '}
-        <Code className="text-ink-500">Backspace</Code> at the start of a toggle title to turn it back into ordinary
-        lines. <Code className="text-ink-500">Backspace</Code> in an empty table row removes the row.
-      </p>
+      <div className="mt-6 text-[11.5px] leading-relaxed text-ink-400">
+        <p>To change one later:</p>
+        <div className="mt-1 flex flex-col gap-1">
+          <p>Click a formula to open its box again.</p>
+          <p>Click a table cell to edit it.</p>
+          <p>
+            <Code className="text-ink-500">Backspace</Code> in an empty table row removes the row.
+          </p>
+          <p>
+            <Code className="text-ink-500">Backspace</Code> at the start of a toggle title turns it back into
+            ordinary lines.
+          </p>
+        </div>
+      </div>
     </>
   )
 }

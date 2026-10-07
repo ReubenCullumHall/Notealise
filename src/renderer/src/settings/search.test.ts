@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SEARCH_INDEX, searchSettings } from './search'
+import { GUIDES } from './tutorials/guides'
 
 // What people actually type into the settings search, and the setting that
 // has to come FIRST for it. Built on 2026-09-29 from a 180-phrase pass over
@@ -101,6 +102,18 @@ const FIRST: [query: string, label: string][] = [
   ['help', 'Tutorials'],
   ['tutorial', 'Tutorials'],
   ['how to link', 'Linking your notes'],
+  // not sure where to look — the answer is a guide, not a setting
+  ['how do i make a table', 'Maths, tables and toggles'],
+  ['equation', 'Maths, tables and toggles'],
+  ['toggle', 'Maths, tables and toggles'],
+  ['collapse text', 'Maths, tables and toggles'],
+  ['delete a row', 'Maths, tables and toggles'],
+  ['format bar', 'Format bar and / commands'],
+  ['slash commands', 'Format bar and / commands'],
+  ['bullet list', 'Format bar and / commands'],
+  ['remove colour', 'Colours'],
+  ['custom colour', 'Colours'],
+  ['how do i link notes', 'Linking your notes'],
   ['crash', 'Report a bug'],
   ['feedback', 'Report a bug'],
   ['suggest', 'Request a feature'],
@@ -138,6 +151,19 @@ describe('settings search', () => {
   it.each(SEARCH_INDEX.map((e) => [e.label]))('"%s" finds itself', (label) => {
     const top = searchSettings(label).slice(0, 3).map((e) => e.label)
     expect(top).toContain(label)
+  })
+
+  // A guide's result opens the guide itself, not just the list of them (Settings
+  // → `openTutorial`). search.ts makes one per entry in tutorials/guides.ts, so
+  // this is the check that a new tutorial can be found.
+  it.each(GUIDES.map((g) => [g.title, g.id]))('"%s" opens its own guide', (title, id) => {
+    expect(searchSettings(title).find((e) => e.label === title)?.tutorial).toBe(id)
+  })
+
+  it('typing "tutorial" lists every guide, after the Tutorials page', () => {
+    const labels = searchSettings('tutorial').map((e) => e.label)
+    for (const g of GUIDES) expect(labels).toContain(g.title)
+    expect(labels.indexOf('Tutorials')).toBeLessThan(labels.indexOf(GUIDES[0].title))
   })
 
   // A result that asks for a fold that doesn't exist lands on a page with the

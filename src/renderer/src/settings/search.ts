@@ -11,6 +11,7 @@
 
 import type { SectionId } from './Settings'
 import type { ExploreTab } from './Explore'
+import { GUIDES, type GuideId } from './tutorials/guides'
 
 export interface SearchEntry {
   section: SectionId
@@ -19,6 +20,10 @@ export interface SearchEntry {
    *  landing on the collection page with the wheel two clicks away is a
    *  search result that didn't finish the job. */
   explore?: ExploreTab
+  /** For a guide in Help → Tutorials: which one, so picking the result opens the
+   *  guide itself rather than the list of them. Someone who types "how do I make
+   *  a table" isn't looking for a setting; the answer is a guide. */
+  tutorial?: GuideId
   /** For a setting that lives inside a collapsed fold — Look's Page, Sidebar,
    *  Colour, Note extras, Shortcuts and Advanced, or General's More: which
    *  fold to open on arrival. Without it the search lands you on the right
@@ -133,7 +138,9 @@ export const SEARCH_INDEX: SearchEntry[] = [
   { section: 'transferData', label: 'Transfer data', hint: 'Move your presets, custom fonts and update setting to another computer.', keywords: 'data transfer move migrate new mac new computer switch backup restore export import presets custom fonts app cleaner lost settings preferences device windows mac' },
 
   { section: 'tutorials', label: 'Tutorials', hint: 'Guides for using the app, including linking your notes.', keywords: 'help guide guides how to learn walkthrough tutorial tips manual' },
-  { section: 'tutorials', label: 'Linking your notes', hint: 'A guide to every kind of link, in Tutorials.', keywords: 'link links linking wiki backlinks connect connecting' },
+  // One result per guide, made from the guide list itself (tutorials/guides.ts)
+  // — a new tutorial is searchable the moment it is in that list.
+  ...GUIDES.map((g): SearchEntry => ({ section: 'tutorials', tutorial: g.id, label: g.title, hint: g.blurb, keywords: g.words })),
   { section: 'reportBug', label: 'Report a bug', hint: 'Email us about something that went wrong.', keywords: 'help bug crash issue problem broken feedback support email contact' },
   { section: 'requestFeature', label: 'Request a feature', hint: 'Email us an idea for something new.', keywords: 'help feature request suggest idea feedback contact' },
 

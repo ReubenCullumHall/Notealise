@@ -1,9 +1,11 @@
-import { useState } from 'react'
-import { Icon, type IconName } from '../../icons'
+import { useEffect, useState } from 'react'
+import { Icon } from '../../icons'
 import { BlocksGuide } from './BlocksGuide'
 import { ColoursGuide } from './ColoursGuide'
 import { FormatGuide } from './FormatGuide'
+import { GUIDES, AREAS, type GuideId } from './guides'
 import { LinkingGuide } from './LinkingGuide'
+import { TryItContext } from './tryIt'
 
 // Settings → Tutorials. An index of guides, one click deep.
 //
@@ -12,51 +14,36 @@ import { LinkingGuide } from './LinkingGuide'
 // pane nobody reads to the end of. One click in, one click back — the depth the
 // rest of the settings window already uses for the Spaces disclosures.
 
-interface Guide {
-  id: string
-  title: string
-  blurb: string
-  icon: IconName
-  body: () => React.JSX.Element
+// The list itself — titles, blurbs, which area each is under, and the words
+// Settings search finds it by — is plain data in guides.ts. This pairs each id
+// with the component that draws it; the type asks for one per id.
+const BODIES: Record<GuideId, () => React.JSX.Element> = {
+  linking: LinkingGuide,
+  format: FormatGuide,
+  colours: ColoursGuide,
+  blocks: BlocksGuide
 }
 
-const GUIDES: Guide[] = [
-  {
-    id: 'linking',
-    title: 'Linking your notes',
-    blurb: 'Every kind of [[link]], how to make each one, and how links reach across spaces.',
-    icon: 'noteLink',
-    body: LinkingGuide
-  },
-  {
-    id: 'format',
-    title: 'Format bar and / commands',
-    blurb: 'The bar above a note, its keys, and the / list of commands.',
-    icon: 'text',
-    body: FormatGuide
-  },
-  {
-    id: 'colours',
-    title: 'Colours',
-    blurb: 'Highlights, text colours, colours of your own, and a colour for every heading.',
-    icon: 'edit',
-    body: ColoursGuide
-  },
-  {
-    id: 'blocks',
-    title: 'Maths, tables and toggles',
-    blurb: 'Formulas, tables and toggle lists, and how to change each one.',
-    icon: 'table',
-    body: BlocksGuide
-  }
-]
-
-export function Tutorials(): React.JSX.Element {
-  const [openId, setOpenId] = useState<string | null>(null)
+/** `openGuide`: a Settings search result for a guide opens that guide itself.
+ *  `n` counts the asks, so searching the same guide twice (closed by hand in
+ *  between) is still a new ask. `onTryIt`: what a card's Try it button does, told
+ *  which guide it was pressed in (the guides themselves reach it through
+ *  `TryItContext` and never need to know). Absent, no card shows the button. */
+export function Tutorials({
+  openGuide = null,
+  onTryIt
+}: {
+  openGuide?: { id: GuideId; n: number } | null
+  onTryIt?: (text: string, guide: GuideId) => void
+}): React.JSX.Element {
+  const [openId, setOpenId] = useState<GuideId | null>(openGuide?.id ?? null)
+  useEffect(() => {
+    if (openGuide) setOpenId(openGuide.id)
+  }, [openGuide])
   const open = GUIDES.find((g) => g.id === openId)
 
   if (open) {
-    const Body = open.body
+    const Body = BODIES[open.id]
     return (
       <>
         <button
@@ -69,7 +56,9 @@ export function Tutorials(): React.JSX.Element {
           </span>
           All tutorials
         </button>
-        <Body />
+        <TryItContext.Provider value={onTryIt ? (text) => onTryIt(text, open.id) : null}>
+          <Body />
+        </TryItContext.Provider>
       </>
     )
   }
@@ -81,36 +70,39 @@ export function Tutorials(): React.JSX.Element {
         How the parts of the app that aren&rsquo;t obvious from looking at them actually work.
       </p>
 
-      <div className="mt-3 flex flex-col gap-2">
-        {GUIDES.map((g) => (
-          <button
-            key={g.id}
-            type="button"
-            onClick={() => setOpenId(g.id)}
-            className="btn-edge flex items-start gap-3 rounded-xl border-none px-3 py-3 text-left outline-none ring-1 ring-ink-300/20 transition duration-200 hover:bg-ink-300/15 focus-visible:ring-2 focus-visible:ring-brand-300"
-          >
-            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500/15 text-brand-600">
-              <Icon name={g.icon} className="h-4 w-4" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-medium text-ink-800">{g.title}</span>
-              <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">{g.blurb}</span>
-            </span>
-            <span aria-hidden="true" className="mt-1 shrink-0 text-ink-300">
-              <Icon name="chevron" className="h-3.5 w-3.5" />
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* Deliberately says what ISN'T here. An empty-looking page reads as a
-          broken one; a page that names what is coming reads as an early one. */}
-      <div className="mt-4 rounded-xl px-3 py-3 ring-1 ring-dashed ring-ink-300/25">
-        <p className="text-[12px] font-medium text-ink-600">More on the way</p>
-        <p className="mt-0.5 text-[11.5px] leading-relaxed text-ink-400">
-          Guides for spaces and organising, plus one guide to the whole app you can download and
-          keep.
-        </p>
+      <div className="mt-3 flex flex-col gap-4">
+        {AREAS.map((area) => {
+          const guides = GUIDES.filter((g) => g.area === area.id)
+          if (guides.length === 0) return null
+          return (
+            <section key={area.id}>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-400">
+                {area.label}
+              </p>
+              <div className="flex flex-col gap-2">
+                {guides.map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => setOpenId(g.id)}
+                    className="btn-edge flex items-start gap-3 rounded-xl border-none px-3 py-3 text-left outline-none ring-1 ring-ink-300/20 transition duration-200 hover:bg-ink-300/15 focus-visible:ring-2 focus-visible:ring-brand-300"
+                  >
+                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-brand-500/15 text-brand-600">
+                      <Icon name={g.icon} className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[13px] font-medium text-ink-800">{g.title}</span>
+                      <span className="mt-0.5 block text-[11.5px] leading-relaxed text-ink-400">{g.blurb}</span>
+                    </span>
+                    <span aria-hidden="true" className="mt-1 shrink-0 text-ink-300">
+                      <Icon name="chevron" className="h-3.5 w-3.5" />
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )
+        })}
       </div>
     </>
   )

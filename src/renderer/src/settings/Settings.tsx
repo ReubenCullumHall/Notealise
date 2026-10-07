@@ -9,7 +9,8 @@ import { Explore, type ExploreTab } from './Explore'
 import { RequestForm } from './RequestForm'
 import { Customisation } from './Customisation'
 import { Tutorials } from './tutorials'
-import { TryItContext } from './tutorials/tryIt'
+import type { GuideId } from './tutorials/guides'
+import type { TutorialSpot } from './tutorials/tryIt'
 import { OssLicenses } from './OssLicenses'
 import { SourceFolder } from './SourceFolder'
 import { TransferData } from './TransferData'
@@ -433,11 +434,19 @@ export function SettingsButton({
   const [armed, setArmed] = useState(false) // laid out, safe to animate
   const [closing, setClosing] = useState(false)
   const [initialSection, setInitialSection] = useState<SectionId>('general')
+  // Tutorials → Try it closes this window so the practice note is there to type in.
+  // Where you were is kept for the NEXT opening only: that one comes back to the
+  // guide, as far down as you had scrolled, and the one after is the ordinary one
+  // again (Reuben, 2026-10-07). `comeBack` waits for the next opening; `resume` is
+  // what the window that opening made starts from. Closing any other way keeps nothing.
+  const comeBack = useRef<TutorialSpot | null>(null)
+  const [resume, setResume] = useState<TutorialSpot | null>(null)
   const btn = useRef<HTMLButtonElement>(null)
   const win = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!jumpToSection) return
+    comeBack.current = null // a jump is its own opening, and spends the one that was waiting
     setInitialSection(jumpToSection)
     setClosing(false)
     setMounted(true)
@@ -455,7 +464,10 @@ export function SettingsButton({
   // this prop, so resetting there would snap the page to General in front of
   // the user while it shrinks away.
   useEffect(() => {
-    if (!mounted) setInitialSection('general')
+    if (!mounted) {
+      setInitialSection('general')
+      setResume(null)
+    }
   }, [mounted])
 
   // Closing before the animation is armed (Escape hammered within a frame or two
@@ -536,6 +548,18 @@ export function SettingsButton({
 
   const open = mounted && !closing
 
+  /** The gear's way in. Takes the spot Try it left, if there is one — once. */
+  const openFromGear = (): void => {
+    const spot = comeBack.current
+    comeBack.current = null
+    if (spot) {
+      setInitialSection('tutorials')
+      setResume(spot)
+    }
+    setClosing(false)
+    setMounted(true)
+  }
+
   return (
     <>
       <button
@@ -562,7 +586,7 @@ export function SettingsButton({
         data-tip="Settings"
         aria-label="Settings"
         aria-expanded={open}
-        onClick={() => (open ? close() : (setClosing(false), setMounted(true)))}
+        onClick={() => (open ? close() : openFromGear())}
       >
         <span
           className={'inline-flex transition-transform duration-500 ' + (open ? 'rotate-180 scale-90' : '')}
@@ -600,6 +624,10 @@ export function SettingsButton({
               onTransferChanged={onTransferChanged}
               onTryIt={onTryIt}
               initialSection={initialSection}
+              resume={resume}
+              onComeBack={(spot) => {
+                comeBack.current = spot
+              }}
               onClose={close}
               armed={armed}
               closing={closing}
@@ -633,6 +661,8 @@ function SettingsWindow({
   onTransferChanged,
   onTryIt,
   initialSection,
+  resume,
+  onComeBack,
   onClose,
   armed,
   closing,
@@ -640,6 +670,11 @@ function SettingsWindow({
 }: ShellProps & {
   winRef: React.RefObject<HTMLDivElement | null>
   initialSection: SectionId
+  /** Set when this opening is the one right after Try it: the guide to be in, and
+   *  how far down its page to be. */
+  resume: TutorialSpot | null
+  /** Try it was pressed: keep this spot for the next opening. */
+  onComeBack: (spot: TutorialSpot) => void
   onClose: () => void
   armed: boolean
   closing: boolean
@@ -690,11 +725,23 @@ function SettingsWindow({
    *  so reaching a page from the list gives you it as you left it. */
   const [openDisclosure, setOpenDisclosure] = useState<{ fold: string; n: number } | null>(null)
   const askCount = useRef(0)
+  /** The same idea for a tutorial a search result asked for — or, on the opening
+   *  right after Try it, the one you were in (`resume`): Tutorials opens it
+   *  rather than showing the list. Cleared by any ordinary navigation too. */
+  const [openTutorial, setOpenTutorial] = useState<{ id: GuideId; n: number } | null>(
+    resume ? { id: resume.guide, n: 0 } : null
+  )
 
-  const goTo = (target: SectionId, tab: ExploreTab | null = null, fold: string | null = null): void => {
+  const goTo = (
+    target: SectionId,
+    tab: ExploreTab | null = null,
+    fold: string | null = null,
+    guide: GuideId | null = null
+  ): void => {
     setSection(target)
     setExplore(tab)
     setOpenDisclosure(fold ? { fold, n: ++askCount.current } : null)
+    setOpenTutorial(guide ? { id: guide, n: ++askCount.current } : null)
   }
 
   /** The list entry the current page belongs to — which one is lit, and
@@ -710,6 +757,22 @@ function SettingsWindow({
   /** The page area — the one part of the window that scrolls. A search result
    *  scrolls it to the setting (`landing`, below). */
   const pageRef = useRef<HTMLDivElement>(null)
+
+  // Coming back from Try it: the guide is already open (`openTutorial`, above), so
+  // put the page back where it was left. A guide's formulas are drawn a moment
+  // after it first appears and change its height, so keep putting it back for a few
+  // frames — the page is still fading in then, so nobody is scrolling it yet.
+  useLayoutEffect(() => {
+    if (!resume) return
+    let frame = 0
+    let left = 8
+    const put = (): void => {
+      if (pageRef.current) pageRef.current.scrollTop = resume.scrollTop
+      if (--left > 0) frame = requestAnimationFrame(put)
+    }
+    put()
+    return () => cancelAnimationFrame(frame)
+  }, [resume])
 
   // The window flies out of the gear as a clean sheet, then fills: the nav
   // ripples in top to bottom, then the page (Reuben, 2026-09-25). Started the
@@ -767,8 +830,9 @@ function SettingsWindow({
     // Mac has no automatic-updates switch to find) lands at the page's start
     // rather than wherever the last one was scrolled to.
     pageRef.current?.scrollTo({ top: 0 })
-    goTo(target.section, target.explore ?? null, target.disclosure ?? null)
-    setLanding({ text: target.anchor ?? target.label, n: ++landCount.current })
+    goTo(target.section, target.explore ?? null, target.disclosure ?? null, target.tutorial ?? null)
+    // A guide opens at its top: there is no setting on the page to light up.
+    setLanding(target.tutorial ? null : { text: target.anchor ?? target.label, n: ++landCount.current })
   }
   useEffect(() => {
     if (!landing) return
@@ -982,20 +1046,21 @@ function SettingsWindow({
             </>
           )}
           {section === 'tutorials' && (
-            // Try it hands App the card's text and closes this window, so the practice
-            // note is there to type in rather than behind it.
-            <TryItContext.Provider
-              value={
+            <Tutorials
+              openGuide={openTutorial}
+              // Try it hands App the card's text and closes this window, so the
+              // practice note is there to type in rather than behind it — and keeps
+              // where you were for the next opening (`resume`, above).
+              onTryIt={
                 onTryIt
-                  ? (text) => {
+                  ? (text, guide) => {
+                      onComeBack({ guide, scrollTop: pageRef.current?.scrollTop ?? 0 })
                       onTryIt(text)
                       onClose()
                     }
-                  : null
+                  : undefined
               }
-            >
-              <Tutorials />
-            </TryItContext.Provider>
+            />
           )}
           {section === 'spaces' && (
             <Spaces

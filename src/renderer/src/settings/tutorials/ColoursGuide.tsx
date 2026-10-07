@@ -111,9 +111,9 @@ export function ColoursGuide(): React.JSX.Element {
 
         <Card
           type="★"
-          title="Colours you have used"
+          title="Recent and starred colours"
           tryIt={practiceText(
-            'Colours you have used',
+            'Recent and starred colours',
             'Colour a few words in different colours, then star one with the star by the hex box.',
             'Revise the key terms before Friday, and highlight the ones you keep forgetting.'
           )}
@@ -131,8 +131,8 @@ export function ColoursGuide(): React.JSX.Element {
             </Sample>
           }
         >
-          Under the square, the last three colours you picked sit beside up to five you have starred. Press the star by
-          the hex box to keep a colour, and right-click a starred colour to let it go. They are the same in every colour
+          Under the square, your three most recent colours sit beside up to five starred ones. Press the star by the hex
+          box to star a colour, and right-click a starred colour to unstar it. They are the same in every colour
           picker.
         </Card>
 

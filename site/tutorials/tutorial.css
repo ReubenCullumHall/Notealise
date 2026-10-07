@@ -6,7 +6,14 @@
      title → one or two sentences → a heading → cards → a closing line.
    A card is one thing to learn: what you type, what you see, how to make it. */
 
-/* ── Index: one row per guide ─────────────────────────────────────────── */
+/* ── Index: one row per guide, under a heading for the area of the app it is
+   about (the same areas, in the same order, as Settings → Help → Tutorials) ── */
+.page-main h2.tut-area {
+  margin: 36px 0 0;
+  font: var(--eyebrow); letter-spacing: var(--eyebrow-tracking); text-transform: uppercase;
+  color: var(--muted);
+}
+.page-main .tut-area + .tut-list { margin-top: 12px; }
 .page-main .tut-list {
   list-style: none;
   margin: 36px 0 0; padding: 0;
