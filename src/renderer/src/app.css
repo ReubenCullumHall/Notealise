@@ -3564,6 +3564,109 @@ button.look-card:hover {
   color: rgb(var(--ink-400));
 }
 
+/* --- a YouTube / Vimeo video card (editor/videoCard.ts) — same shape as .cm-video ---
+   The video's own picture, 16:9, with a play button; the player replaces it on a
+   click. Colours are tokens (rule 5). The button is the app's paper with ink on
+   it, so it reads over any thumbnail in either theme, and it changes colour on
+   hover and never size (the motion rule). */
+.cm-video-card {
+  position: relative; /* containing block for .cm-attach-grip */
+  display: inline-block;
+  width: min(100%, 520px);
+  max-width: 100%;
+  vertical-align: top;
+}
+.cm-vc-stage {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--r-surface);
+  background: rgb(var(--wash) / 0.08);
+  cursor: pointer;
+}
+.cm-vc-stage.cm-vc-playing {
+  cursor: default;
+}
+/* The stage is positioned and comes after the grip in the card, so it painted
+   OVER it: the six dots showed but could not be pressed (found 2026-10-05 with
+   elementFromPoint). A picture or a <video> is not positioned, so those never
+   needed this. */
+.cm-video-card .cm-attach-grip {
+  z-index: 3;
+}
+.cm-vc-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cm-vc-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.cm-vc-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  padding: 0 0 0 3px; /* a triangle's weight sits left of its box */
+  border-radius: var(--r-pill);
+  /* Ink for the disc, paper for the triangle AND a paper rim: whichever theme it
+     is, the picture behind can be any brightness, and a rim of the opposite tone
+     is what keeps the disc readable on a picture that matches it. (Paper on a
+     paper-dark picture — the first version, in the dark theme — vanished.) */
+  background: rgb(var(--ink-900) / 0.9);
+  color: rgb(var(--paper));
+  border: 2px solid rgb(var(--paper) / 0.85);
+  box-shadow: var(--shadow-float);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.cm-vc-stage:hover .cm-vc-play,
+.cm-vc-play:focus-visible {
+  background: rgb(var(--ink-900));
+}
+.cm-vc-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  font-family: var(--font-sans);
+  line-height: 1.35;
+}
+.cm-vc-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  color: rgb(var(--ink-800));
+}
+.cm-vc-open {
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 11.5px;
+  color: rgb(var(--ink-500));
+  cursor: pointer;
+}
+.cm-vc-open:hover {
+  color: rgb(var(--ink-900));
+  text-decoration: underline;
+}
+
 /* --- moving an image/video (attachMove.ts) — same six-dot handle as the
    table's column grip (.cm-table-col-handle above), reused via gripIcon().
    Unlike the table's chrome, this one CAN live as a plain descendant of the
@@ -3595,7 +3698,8 @@ button.look-card:hover {
   transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
 .cm-image:hover .cm-attach-grip,
-.cm-video:hover .cm-attach-grip {
+.cm-video:hover .cm-attach-grip,
+.cm-video-card:hover .cm-attach-grip {
   opacity: 1;
 }
 /* Same hover pair the table's own grip uses (.cm-table-col-handle above) —
@@ -4047,6 +4151,119 @@ body.table-col-resizing * {
    highlight style's t.link tag — this only says "you can click me". */
 .cm-weblink { cursor: pointer; background: var(--fmt-webLink-hl); }
 .cm-weblink:hover { text-decoration-thickness: 2px; }
+/* A link to a document beside the note (`[Slides.pdf](Slides.pdf)`) is drawn as a
+   file, not as a web page: the same pill a `[[note link]]` is, with a paperclip
+   where that has a page. Clicking it opens the document in its own app. Same
+   reasons, and the same two overrides, as `.cm-wikilink` above — the highlight's
+   blue underline paints on the text INSIDE the mark. */
+.cm-weblink.cm-filelink,
+.cm-weblink.cm-weblink-video {
+  color: rgb(var(--ink-800));
+  background: rgb(var(--wash) / 0.08);
+  padding: 0.05em 0.32em;
+  border-radius: var(--r-control); /* a thing you click — one of the three radii, never a number */
+}
+.cm-weblink.cm-filelink:hover,
+.cm-weblink.cm-weblink-video:hover {
+  background: rgb(var(--wash) / 0.16);
+  text-decoration: none;
+}
+.cm-weblink.cm-filelink span,
+.cm-weblink.cm-weblink-video span {
+  color: inherit;
+  text-decoration-line: none;
+}
+.cm-weblink.cm-filelink::before {
+  content: '';
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.3em;
+  vertical-align: -0.08em;
+  background-color: currentColor;
+  opacity: 0.65;
+  -webkit-mask: var(--icon-clip) no-repeat center / contain;
+  mask: var(--icon-clip) no-repeat center / contain;
+}
+
+/* A YouTube or Vimeo title is a MENTION: the same pill, with the site's logo in
+   front (Reuben, 2026-10-06: "the youtube logo"). The mark is a brand logo, so it
+   keeps the brand's own colours — an image, like the photos in a note, not one of
+   the theme's colours — and it is drawn from the address alone: nothing is fetched
+   for it. Ordinary pages get no logo (a favicon would be a request per link). */
+.cm-weblink.cm-weblink-video::before {
+  content: '';
+  display: inline-block;
+  width: 1.2em;
+  height: 0.85em;
+  margin-right: 0.35em;
+  vertical-align: -0.08em;
+  background: center / contain no-repeat;
+}
+.cm-weblink.cm-weblink-youtube::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 17'%3E%3Crect width='24' height='17' rx='4.6' fill='%23f00'/%3E%3Cpath d='M9.6 4.8v7.4l6.4-3.7z' fill='%23fff'/%3E%3C/svg%3E");
+}
+.cm-weblink.cm-weblink-vimeo::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 17'%3E%3Crect width='24' height='17' rx='4.6' fill='%231ab7ea'/%3E%3Cpath d='M9.6 4.8v7.4l6.4-3.7z' fill='%23fff'/%3E%3C/svg%3E");
+}
+
+/* The list a right-click on a web link opens (editor/pasteLink.ts): Mention /
+   Full link / Player view, in the note-link picker's own popup — same card, rows
+   and keys. Its three icons wear the picker's icon rule; the row it is now is
+   marked at the far end; and the quiet detail (the title, the site) sits against
+   the right edge like the picker's Space column. */
+.cm-completionIcon-mention::after,
+.cm-completionIcon-link::after,
+.cm-completionIcon-player::after {
+  content: '';
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  vertical-align: -0.12em;
+  background-color: currentColor;
+  opacity: 0.6;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+.cm-completionIcon-mention::after {
+  -webkit-mask-image: var(--icon-text);
+  mask-image: var(--icon-text);
+}
+.cm-completionIcon-link::after {
+  -webkit-mask-image: var(--icon-link);
+  mask-image: var(--icon-link);
+}
+.cm-completionIcon-player::after {
+  -webkit-mask-image: var(--icon-play);
+  mask-image: var(--icon-play);
+}
+.cm-tooltip.cm-tooltip-autocomplete.cm-paste-menu {
+  min-width: 230px;
+  max-width: 340px;
+}
+.cm-tooltip.cm-tooltip-autocomplete.cm-paste-menu > ul > li {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.cm-tooltip.cm-tooltip-autocomplete.cm-paste-menu .cm-completionDetail {
+  margin-left: auto;
+  padding-left: 1.25em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-style: normal;
+  color: rgb(var(--ink-400));
+}
+.cm-tooltip.cm-tooltip-autocomplete.cm-paste-menu li.cm-paste-current .cm-completionLabel::after {
+  content: '✓';
+  margin-left: 0.5em;
+  font-size: 11px;
+  color: rgb(var(--ink-400));
+}
 
 /* Import preview warning ("you've imported this already"). Amber from the
    palette token, not a Tailwind colour — `--hl-amber` isn't in tailwind.config,
@@ -4363,7 +4580,13 @@ body.pane-reordering .pane-divider {
 .cm-editor.cm-focused .cm-line-grip {
   opacity: 0.45;
 }
+/* On the line the POINTER is over — whether or not the editor has focus. Stronger
+   than the cursor line's faint mark: the pointer is looking for it. */
+.cm-line-grip.is-hover {
+  opacity: 0.7;
+}
 .cm-editor.cm-focused .cm-line-grip:hover,
+.cm-line-grip.is-hover:hover,
 .cm-line-grip:focus-visible {
   opacity: 1;
   background: rgb(var(--brand-500) / 0.12);
@@ -4442,4 +4665,19 @@ body.pane-reordering .pane-divider {
 }
 .cm-editor .cm-math-display.cm-in-toggle {
   margin-left: calc(var(--toggle-depth, 0) * var(--toggle-indent));
+}
+
+/* "Looking up…" under a pasted address that is taking its time — the same card as
+   the bar above, quieter (editor/pasteLink.ts). */
+.cm-editor .cm-tooltip.cm-paste-hint {
+  padding: 3px 10px;
+  background: rgb(var(--surface));
+  color: rgb(var(--ink-500));
+  border: 1px solid rgb(var(--wash) / 0.1);
+  border-radius: var(--r-surface);
+  box-shadow: var(--shadow-float);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 18px;
+  animation: fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

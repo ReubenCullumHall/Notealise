@@ -320,6 +320,14 @@ export function addTab(l: TabLayout, path: string): TabLayout {
   return { ...l, tabs: [...l.tabs, path] }
 }
 
+/** Open a note in a tab BEHIND the one you are on — Cmd/Ctrl+click on a link, as a
+ *  browser's background tab: you stay where you are, nothing closes, the new tab
+ *  just appears in the strip. A note that is already open anywhere is left alone. */
+export function addBackgroundTab(l: TabLayout, path: string): TabLayout {
+  if (l.panes.includes(path) || l.tabs.includes(path) || parkedIndex(l, path) !== -1) return l
+  return { ...l, tabs: [...l.tabs, path] }
+}
+
 /** The + button: a new blank tab, and you're on it — as a browser's + is. With
  *  a split on screen the split parks (see `showTab`) rather than giving up one
  *  of its columns to the blank. */

@@ -3,8 +3,9 @@ import { attachDragHandle, type DragSource } from './attachMove'
 import { blockRange, canMoveBlock } from './blockMove'
 import { openBlockLinkMenu } from './copyBlockLink'
 
-// The six-dot grip beside the line you are on, for moving a paragraph up or
-// down the note — the same handle a photo already has, and the same one the
+// The six-dot grip beside the line you are on — or, since 2026-10-06, the line
+// the POINTER is over (Reuben: "make sure there's a selector for every line") —
+// for moving a paragraph up or down the note — the same handle a photo already has, and the same one the
 // sidebar puts on a note or a folder row, so "grab it by the dots" means one
 // thing everywhere in this app.
 //
@@ -18,12 +19,18 @@ import { openBlockLinkMenu } from './copyBlockLink'
 // shifts a character of text — CLAUDE.md's rule that nothing in the editor
 // chrome may change layout by appearing.
 
+/** The line each editor's grip is on RIGHT NOW when it is following the pointer;
+ *  null when it is on the cursor's line. Read at the moment of a press, which is
+ *  why it is kept here rather than captured when the grip was placed. */
+const targets = new WeakMap<EditorView, number | null>()
+
 const LINE_SOURCE: DragSource = {
-  // The grip is always on the active line, so the live selection IS the answer
-  // — `blockRange` reads it directly and `pos` is not needed. That also means a
-  // selection made after the grip appeared is honoured, rather than whatever
-  // was true when it was placed.
-  rangeAt: (view) => (canMoveBlock(view.state) ? blockRange(view.state) : null),
+  // The line the grip is on, asked of `blockRange` at the moment of the press: the
+  // pointer's line while it is hovering one, else the cursor's — where the live
+  // selection is the answer, so a selection made after the grip appeared is
+  // honoured rather than whatever was true when it was placed.
+  rangeAt: (view) =>
+    canMoveBlock(view.state) ? blockRange(view.state, targets.get(view) ?? undefined) : null,
   // A press with no drag selects the block. It is the cheapest way to find out
   // what the grip thinks it is holding before committing to a drag, and it
   // matches the embed grip, where a click also selects what would move.
@@ -41,9 +48,22 @@ const LINE_SOURCE: DragSource = {
  *  line it acts on in a wide window. */
 const GUTTER_INSET = 4
 
+/** What the grip should look like, worked out from the layout (read phase) and
+ *  applied afterwards (write phase). */
+type Placement = { show: false } | { show: true; left: number; top: number; hover: boolean }
+
 class LineGrip implements PluginValue {
   private readonly btn: HTMLElement
   private readonly onScroll: () => void
+  private readonly onMove: (e: MouseEvent) => void
+  private readonly onLeave: () => void
+  /** where the pointer last was over the editor, or null when it is not over it */
+  private pointer: { x: number; y: number } | null = null
+  /** One object, so a burst of requests is one measurement. */
+  private readonly measurer = {
+    read: (): Placement => this.read(),
+    write: (p: Placement): void => this.write(p)
+  }
 
   constructor(private view: EditorView) {
     this.btn = attachDragHandle(view, LINE_SOURCE)
@@ -62,10 +82,24 @@ class LineGrip implements PluginValue {
     this.btn.addEventListener('contextmenu', (e) => {
       e.preventDefault()
       e.stopPropagation()
-      openBlockLinkMenu(view, e.clientX, e.clientY)
+      openBlockLinkMenu(view, e.clientX, e.clientY, targets.get(view) ?? undefined)
     })
     this.onScroll = () => this.place()
     view.scrollDOM.addEventListener('scroll', this.onScroll, { passive: true })
+    // Follow the pointer onto any line. A press moves nothing: while a button is
+    // down the pointer is selecting text or dragging this very grip, and a grip
+    // that jumped about under that would be wrong in both.
+    this.onMove = (e) => {
+      if (e.buttons) return
+      this.pointer = { x: e.clientX, y: e.clientY }
+      this.place()
+    }
+    this.onLeave = () => {
+      this.pointer = null
+      this.place()
+    }
+    view.dom.addEventListener('mousemove', this.onMove)
+    view.dom.addEventListener('mouseleave', this.onLeave)
     this.place()
   }
 
@@ -77,15 +111,41 @@ class LineGrip implements PluginValue {
     }
   }
 
+  /** Ask for the grip to be put where it belongs, once the layout is settled.
+   *
+   *  Never measured on the spot: CodeMirror refuses layout reads while it is
+   *  UPDATING ("Reading the editor layout isn't allowed during an update" — which
+   *  `update()` above is), and a plugin that throws is switched off for good. The
+   *  first version of the follow-the-pointer grip read the line under the pointer
+   *  right there, so typing with the pointer over the note killed the grip for the
+   *  rest of the session (found 2026-10-06). `requestMeasure` runs `read` after the
+   *  update and `write` after that, and batches however many requests came in. */
   private place(): void {
+    this.view.requestMeasure(this.measurer)
+  }
+
+  /** The start of the line under the pointer, or null when it is not over the
+   *  text. The gutter the grip sits in is INSIDE the content box, so crossing
+   *  from the words to the grip never leaves it. */
+  private hoverPos(): number | null {
+    const p = this.pointer
+    if (!p) return null
+    const content = this.view.contentDOM.getBoundingClientRect()
+    if (p.x < content.left - 8 || p.x > content.right) return null
+    const y = p.y - this.view.documentTop
+    if (y < 0 || y > this.view.contentHeight) return null
+    return this.view.lineBlockAtHeight(y).from
+  }
+
+  private read(): Placement {
     const view = this.view
-    // Hidden while unfocused, and in a note too short to have anywhere to move
-    // a block TO — a control that cannot do anything should not be offered.
-    if (!view.hasFocus || !canMoveBlock(view.state)) {
-      this.btn.style.display = 'none'
-      return
-    }
-    const range = blockRange(view.state)
+    const hover = this.hoverPos()
+    targets.set(view, hover)
+    // On the cursor's line only while the editor has focus; on the pointer's line
+    // always. Hidden in a note too short to have anywhere to move a block TO — a
+    // control that cannot do anything should not be offered.
+    if ((hover === null && !view.hasFocus) || !canMoveBlock(view.state)) return { show: false }
+    const range = blockRange(view.state, hover ?? undefined)
     const block = view.lineBlockAt(range.from)
     const top = block.top + view.documentTop
     const editor = view.dom.getBoundingClientRect()
@@ -94,22 +154,36 @@ class LineGrip implements PluginValue {
     // Off the top or bottom of what is on screen — scrolled away rather than
     // absent, so it is hidden rather than pinned to an edge, where it would
     // point at a line that is not there.
-    if (top < editor.top || top > editor.bottom) {
-      this.btn.style.display = 'none'
-      return
-    }
-    this.btn.style.display = ''
-    this.btn.style.left = `${content.left - editor.left + GUTTER_INSET}px`
+    if (top < editor.top || top > editor.bottom) return { show: false }
     // Centred on the FIRST line of the block, not on the block as a whole: a
     // four-line paragraph's midpoint is nowhere near the line the cursor is on,
     // and the grip is meant to read as belonging to where you are.
     const lineHeight = view.defaultLineHeight
     const gripHeight = this.btn.offsetHeight || 14
-    this.btn.style.top = `${top - editor.top + (lineHeight - gripHeight) / 2}px`
+    return {
+      show: true,
+      left: content.left - editor.left + GUTTER_INSET,
+      top: top - editor.top + (lineHeight - gripHeight) / 2,
+      hover: hover !== null
+    }
+  }
+
+  private write(p: Placement): void {
+    if (!p.show) {
+      this.btn.style.display = 'none'
+      return
+    }
+    this.btn.style.display = ''
+    this.btn.classList.toggle('is-hover', p.hover)
+    this.btn.style.left = `${p.left}px`
+    this.btn.style.top = `${p.top}px`
   }
 
   destroy(): void {
     this.view.scrollDOM.removeEventListener('scroll', this.onScroll)
+    this.view.dom.removeEventListener('mousemove', this.onMove)
+    this.view.dom.removeEventListener('mouseleave', this.onLeave)
+    targets.delete(this.view)
     this.btn.remove()
   }
 }

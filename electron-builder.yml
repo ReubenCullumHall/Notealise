@@ -48,7 +48,15 @@ electronFuses:
   # packaging it wrong first.
   resetAdHocDarwinSignature: true
   runAsNode: false
-  enableCookieEncryption: true
+  # OFF since 2026-10-05, Reuben's call. It was on, and moot: the app never used
+  # the cookie store. A video card's player (YouTube/Vimeo, on a click) is the first
+  # thing that does, and with this on macOS asks to use "Notealise Safe Storage" in
+  # the Keychain at that moment — every https frame stays blank until the question is
+  # answered, and the ad-hoc signature changes with each build so it can come back
+  # after every update. Measured on a packaged build: on, the player never loaded
+  # (30 s); the same build with it off played. What it stops encrypting is a few
+  # cookies the player sets for itself, on this machine's disk.
+  enableCookieEncryption: false
   enableNodeOptionsEnvironmentVariable: false
   enableNodeCliInspectArguments: false
   onlyLoadAppFromAsar: true

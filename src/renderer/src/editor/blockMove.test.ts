@@ -101,3 +101,38 @@ describe('what the line grip picks up', () => {
     expect(canMoveBlock(state('One\nTwo', 0))).toBe(true)
   })
 })
+
+describe('the line grip follows the pointer (a line other than the cursor\'s)', () => {
+  const doc = ['First', '', 'Second line one', 'second line two', '', '```', 'code', '', 'more code', '```', '', 'Last'].join('\n')
+  const at = (needle: string): number => doc.indexOf(needle) + 1
+  const hovered = (pos: number, anchor = 0, head = anchor): string => {
+    const s = state(doc, anchor, head)
+    const r = blockRange(s, pos)
+    return s.doc.sliceString(r.from, r.to)
+  }
+
+  it('picks up the paragraph under the pointer, whatever the cursor is doing', () => {
+    expect(hovered(at('second line two'))).toBe('Second line one\nsecond line two')
+    expect(hovered(at('Last'))).toBe('Last')
+  })
+
+  it('takes a blank line as its own block, and a code block whole', () => {
+    expect(hovered(doc.indexOf('\n\n') + 1)).toBe('')
+    expect(hovered(at('more code'))).toBe('```\ncode\n\nmore code\n```')
+  })
+
+  it('lets a selection win when the pointer is on one of its lines, and not otherwise', () => {
+    const from = doc.indexOf('Second')
+    const to = doc.indexOf('two') + 3
+    // pointer on a selected line → the selection
+    expect(hovered(at('second line two'), from, to)).toBe('Second line one\nsecond line two')
+    // pointer on another line → that line's paragraph, the selection is left alone
+    expect(hovered(at('Last'), from, to)).toBe('Last')
+  })
+
+  it('without a pointer position it is the cursor\'s line, as before', () => {
+    const s = state(doc, doc.indexOf('Last') + 2)
+    const r = blockRange(s)
+    expect(s.doc.sliceString(r.from, r.to)).toBe('Last')
+  })
+})

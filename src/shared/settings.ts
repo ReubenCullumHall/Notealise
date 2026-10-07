@@ -480,6 +480,13 @@ export interface AppSettings {
    *  the dialog's own "Never ask again" does — Settings -> General turns it
    *  back on, so that button is never a one-way door. */
   confirmMediaDelete: boolean
+  /** When a web address is pasted into a note, ask that website for its page
+   *  title (and a video's picture) and write the title in. Off, a pasted address
+   *  stays as it is. Global rather than per-space for the same reason
+   *  `confirmMediaDelete` is: it is about what this person lets the app do on the
+   *  network, not about how any set of notes looks. On by default (Reuben,
+   *  2026-10-05) — pasting is the ask. See main/linkPreview.ts. */
+  lookUpLinks: boolean
   /** Full-colour or accent-coloured space emoji. Global, against the settings
    *  rule (CLAUDE.md: every look setting belongs to a space) — Reuben's call,
    *  2026-09-28: the switcher shows every space's emoji side by side, and the
@@ -599,6 +606,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   playStartupAnimation: true,
   animationsEnabled: true,
   confirmMediaDelete: true,
+  lookUpLinks: true,
   emojiStyle: 'colour',
   pageLookLibrary: [],
   tintLibrary: [],
@@ -860,6 +868,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       typeof s.animationsEnabled === 'boolean' ? s.animationsEnabled : DEFAULT_SETTINGS.animationsEnabled,
     confirmMediaDelete:
       typeof s.confirmMediaDelete === 'boolean' ? s.confirmMediaDelete : DEFAULT_SETTINGS.confirmMediaDelete,
+    lookUpLinks: typeof s.lookUpLinks === 'boolean' ? s.lookUpLinks : DEFAULT_SETTINGS.lookUpLinks,
     emojiStyle: EMOJI_STYLES.includes(s.emojiStyle as EmojiStyle)
       ? (s.emojiStyle as EmojiStyle)
       : DEFAULT_SETTINGS.emojiStyle,

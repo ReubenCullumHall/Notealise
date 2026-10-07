@@ -2,6 +2,7 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { createHash } from 'node:crypto'
+import { PLAYER_HOSTS } from './src/shared/embeds'
 
 // The renderer's Content-Security-Policy, injected into index.html.
 //
@@ -54,7 +55,10 @@ function policy(dev: boolean, scriptHashes: string[]): string {
     // The shipped build talks to nothing at all.
     dev ? "connect-src 'self' ws: http://localhost:*" : "connect-src 'self'",
     "object-src 'none'",
-    "frame-src 'none'",
+    // Nothing may be framed except a video player, and only the two hosts a video
+    // card (editor/videoCard.ts) can point one at — on a click, never on draw. The
+    // list is shared/embeds.ts's, so the card and the policy cannot drift.
+    `frame-src ${PLAYER_HOSTS.map((h) => `https://${h}`).join(' ')}`,
     "base-uri 'none'",
     "form-action 'none'"
   ].join('; ')

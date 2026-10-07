@@ -54,6 +54,7 @@ const MAIN_STARTED_AT = Date.now()
 import { startWatching } from './watcher'
 import { sendBugReport, sendFeatureRequest } from './support'
 import { openAllowedExternal } from './externalLinks'
+import { lookUpLink, readLinkThumb } from './linkPreview'
 import {
   beginImport,
   getImporter,
@@ -74,6 +75,7 @@ import type { EntryMeta, MediaOrigin } from '../shared/workspace'
 import {
   IMAGE_EXTS,
   VIDEO_EXTS,
+  isDocFilename,
   kindForFilename,
   type AttachmentKind
 } from '../shared/attachments'
@@ -87,8 +89,10 @@ import {
   readAsset,
   readNote,
   renameEntry,
+  openVaultFile,
   revealInFolder,
   scanLinks,
+  notesMentioning,
   setVaultRoot,
   writeAssetUnique,
   writeNote
@@ -219,7 +223,7 @@ export function registerIpc(window: BrowserWindow): void {
   // extension by `path.parse`'s reading, so it would otherwise land in the
   // vault as a hidden, extensionless file nothing can open.
   ipcMain.handle(CH.writeAsset, (_e, dir: string, filename: string, data: Uint8Array) => {
-    if (!kindForFilename(filename)) throw new Error(`Not a photo or video: ${filename}`)
+    if (!kindForFilename(filename) && !isDocFilename(filename)) throw new Error(`Not a photo, video or document: ${filename}`)
     return writeAssetUnique(dir, filename, Buffer.from(data))
   })
   ipcMain.handle(CH.pickAttachment, async (_e, dir: string) => {
@@ -260,6 +264,12 @@ export function registerIpc(window: BrowserWindow): void {
   })
 
   ipcMain.handle(CH.scanLinks, (_e, paths?: string[]) => scanLinks(paths))
+  // Validated here: the renderer sends words to look for, a handful at most.
+  ipcMain.handle(CH.notesMentioning, (_e, needles: unknown) =>
+    Array.isArray(needles) && needles.length <= 8 && needles.every((n) => typeof n === 'string' && n.length <= 255)
+      ? notesMentioning(needles as string[])
+      : []
+  )
 
   ipcMain.handle(CH.getSettings, () => getSettings())
   ipcMain.handle(CH.setSettings, (_e, partial: Partial<AppSettings>) => setSettings(partial))
@@ -317,6 +327,12 @@ export function registerIpc(window: BrowserWindow): void {
     sendFeatureRequest(fromEmail, message)
   )
   ipcMain.handle(CH.openExternal, (_e, url: string) => openAllowedExternal(url))
+  // The Settings switch is checked HERE, in main, not trusted from the window: with
+  // it off, nothing is ever asked of a website, whatever the renderer sends.
+  ipcMain.handle(CH.lookUpLink, async (_e, url: string) =>
+    (await getSettings()).lookUpLinks ? lookUpLink(url) : { title: null, video: null }
+  )
+  ipcMain.handle(CH.linkThumb, (_e, url: string) => readLinkThumb(url))
   ipcMain.handle(CH.exportTransfer, () => exportTransfer(activeWindow()))
   ipcMain.handle(CH.importTransfer, (_e, text?: string) => importTransfer(activeWindow(), text))
   ipcMain.handle(CH.transferInventory, () => transferInventory())
@@ -344,6 +360,7 @@ export function registerIpc(window: BrowserWindow): void {
     return dir
   })
   ipcMain.handle(CH.revealInFolder, (_e, p: string) => revealInFolder(p))
+  ipcMain.handle(CH.openVaultFile, (_e, p: string) => openVaultFile(p))
   // MAIN_STARTED_AT is module-level, so it is the moment this process booted —
   // not the moment the window asked.
   ipcMain.handle(CH.bootInfo, () => ({ startedAt: MAIN_STARTED_AT, version: app.getVersion() }))

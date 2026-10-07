@@ -51,7 +51,7 @@ interface Props {
 // Same as an in-text link: following a connection opens a tab, so the note that
 // sent you there stays where it is.
 const howFrom = (e: React.MouseEvent): OpenHow =>
-  e.metaKey || e.ctrlKey ? 'replace' : e.altKey ? 'split' : 'tab'
+  e.metaKey || e.ctrlKey ? 'background' : e.altKey ? 'split' : 'tab'
 
 const CHIP =
   'group flex max-w-[14rem] shrink-0 cursor-pointer items-center gap-1 rounded-md border-none px-1.5 py-0.5 text-[11.5px] outline-none transition duration-150 focus-visible:ring-2 focus-visible:ring-brand-300 '

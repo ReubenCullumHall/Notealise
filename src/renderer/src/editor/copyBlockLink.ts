@@ -11,13 +11,14 @@ import { linkEnv, linkHandlersFacet, notifyUser } from './linkEnv'
 // same `[[Note#^k3x9]]` the `[[` picker writes, so pasting it into any note
 // gives the link and nothing more has to be built for pasting.
 
-/** Offer the menu for the line the cursor is on. Nothing is offered on a line
- *  there is nothing to link to (a blank line, or a table until stage 3). */
-export function openBlockLinkMenu(view: EditorView, x: number, y: number): void {
+/** Offer the menu for the line the cursor is on — or for the line at `pos`, when
+ *  the grip is following the pointer over some other line. Nothing is offered on
+ *  a line there is nothing to link to (a blank line, or a table until stage 3). */
+export function openBlockLinkMenu(view: EditorView, x: number, y: number, pos?: number): void {
   const handlers = view.state.facet(linkHandlersFacet)?.current
   const env = view.state.field(linkEnv, false)
   if (!handlers || !env?.path) return
-  const n = view.state.doc.lineAt(view.state.selection.main.head).number
+  const n = view.state.doc.lineAt(pos ?? view.state.selection.main.head).number
   const t = targetAtLine(view.state, n)
   if (!t) return
   handlers.menu(x, y, [

@@ -61,8 +61,12 @@ interface Props {
   onDragLink: (path: string | null) => void
   /** scroll to this heading once the note has loaded (`[[Note#Heading]]`) */
   revealHeading: string | null
+  /** the jump landed — App forgets the request */
+  onRevealedHeading?: () => void
   /** vault path of a photo/video to scroll to — the delete dialog's jump */
   revealEmbed: string | null
+  /** the picture jump landed — App forgets the request */
+  onRevealedEmbed?: () => void
   /** show the strip of this note's links at all (Settings → Links) */
   showLinks: boolean
   /** and keep it on screen while the note scrolls, instead of letting it go.
@@ -173,7 +177,9 @@ export function NotePane({
   onDragLink,
   onInspect,
   revealHeading,
+  onRevealedHeading,
   revealEmbed,
+  onRevealedEmbed,
   showLinks,
   pinLinks,
   linksPosition,
@@ -614,7 +620,9 @@ export function NotePane({
               env={env}
               linkHandlers={linkHandlers}
               revealHeading={revealHeading}
+              onRevealedHeading={onRevealedHeading}
               revealEmbed={revealEmbed}
+              onRevealedEmbed={onRevealedEmbed}
               raw={raw}
               mediaSource={mediaSource}
             />

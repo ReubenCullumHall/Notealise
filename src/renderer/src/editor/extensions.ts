@@ -11,6 +11,7 @@ import { livePreview } from './livePreview'
 import { linkEdges } from './linkEdges'
 import { imageClick } from './imagePass'
 import { attachInput } from './attachInput'
+import { pasteLink } from './pasteLink'
 import { attachDeleteKeys, embedSelectionAttr } from './attachSelect'
 import { scrollbarReveal } from './scrollbarReveal'
 import { webLinkGestures } from './webLinkPass'
@@ -138,6 +139,9 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     cursorSnap,
     imageClick,
     attachInput,
+    // A pasted web address becomes its title or a player, with a bar to pick
+    // the other (pasteLink.ts). After attachInput, which claims file pastes.
+    pasteLink,
     webLinkGestures,
     taskClick,
     // Toggle lists: the arrow, the indent and the hidden lines (toggleList.ts).

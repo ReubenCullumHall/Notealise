@@ -4,6 +4,7 @@ import { dirName } from '../../../shared/links'
 import {
   encodeTarget,
   extForMime,
+  isDocFilename,
   kindForMime,
   type AttachmentKind
 } from '../../../shared/attachments'
@@ -37,9 +38,20 @@ import { linkEnv, notifyError, notifyUser } from './linkEnv'
  *  basename — the asset lands beside the note, so nothing more is needed.
  *  `encodeTarget` is in shared/attachments.ts: App re-writes these on restore
  *  and the two must produce identical text. */
-function embedText(kind: AttachmentKind, name: string): string {
+function embedText(kind: AttachmentKind | 'file', name: string): string {
   const target = encodeTarget(name)
+  // A document is not an embed but a plain link to the file, labelled with its
+  // own name — every other editor shows it as a link, and here a click opens it
+  // in its own app (webLinkPass.ts).
+  if (kind === 'file') return `[${name.replace(/[[\]]/g, '')}](${target})`
   return kind === 'image' ? `![](${target})` : `<video controls src="${target}"></video>`
+}
+
+/** What a pasted or dropped file is to this editor: a photo, a video, a document
+ *  we can open — or nothing it takes. Documents are known by their name (a File's
+ *  MIME type is empty for a `.pages` or `.key`), photos and videos by their type. */
+function kindOfFile(name: string, mime: string): AttachmentKind | 'file' | null {
+  return kindForMime(mime) ?? (isDocFilename(name) ? 'file' : null)
 }
 
 /** A clipboard image paste usually names the file "image.png" itself; a
@@ -122,7 +134,7 @@ const attachTargets = StateField.define<Map<number, Target>>({
 function insertAtTarget(
   view: EditorView,
   id: number,
-  kind: AttachmentKind,
+  kind: AttachmentKind | 'file',
   name: string,
   notePath: string
 ): boolean {
@@ -163,9 +175,9 @@ async function insertFiles(
   view.dispatch({ effects: setTarget.of({ id, target: { from, to } }) })
   try {
     for (const file of files) {
-      const kind = kindForMime(file.type)
+      const kind = kindOfFile(file.name, file.type)
       if (!kind) continue
-      const filename = file.name || defaultName(kind, file.type)
+      const filename = file.name || defaultName(kind === 'file' ? 'image' : kind, file.type)
       try {
         const bytes = new Uint8Array(await file.arrayBuffer())
         const relPath = await window.api.writeAsset(dir, filename, bytes)
@@ -199,9 +211,9 @@ const attachHandlers = EditorView.domEventHandlers({
     if (!items) return false
     const files: File[] = []
     for (const item of items) {
-      if (item.kind !== 'file' || !kindForMime(item.type)) continue
+      if (item.kind !== 'file') continue
       const file = item.getAsFile()
-      if (file) files.push(file)
+      if (file && kindOfFile(file.name, file.type)) files.push(file)
     }
     if (!files.length) return false
     event.preventDefault()
@@ -230,7 +242,7 @@ const attachHandlers = EditorView.domEventHandlers({
   drop(event, view) {
     const list = event.dataTransfer?.files
     if (!list || list.length === 0) return false
-    const files = Array.from(list).filter((f) => kindForMime(f.type))
+    const files = Array.from(list).filter((f) => kindOfFile(f.name, f.type))
     if (!files.length) return false
     event.preventDefault()
     const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.from

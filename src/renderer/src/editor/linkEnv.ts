@@ -58,7 +58,7 @@ export const linkEnv = StateField.define<LinkEnv>({
 
 /** How a link asks to be opened. Mirrors the gestures the tab strip already
  *  uses, so a link behaves like every other way of opening a note. */
-export type OpenHow = 'replace' | 'tab' | 'split'
+export type OpenHow = 'replace' | 'tab' | 'split' | 'background'
 
 /** The App-side actions the editor can trigger. Held in a `{ current }` box
  *  captured once when the view is built — React-shaped, but React-free, so

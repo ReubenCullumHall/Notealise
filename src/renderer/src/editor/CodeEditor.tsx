@@ -34,9 +34,17 @@ interface Props {
   /** scroll to this heading once the document has landed, then forget it —
    *  what `[[Note#Heading]]` does after the note opens */
   revealHeading?: string | null
+  /** told once the jump above has landed, so the one who asked can let go of the
+   *  request. Without it the request outlived its jump and fired again every time
+   *  the note came back on screen. */
+  onRevealedHeading?: () => void
   /** vault path of a photo/video: scroll to the line embedding it. The
    *  delete dialog's "go and look at that note" jump. */
   revealEmbed?: string | null
+  /** told once that jump has landed, so the request can be let go (as
+   *  `onRevealedHeading` does for a heading) — left standing it fired again every
+   *  time the note came back on screen */
+  onRevealedEmbed?: () => void
   /** the eye button: print each photo/video's own source under it, leaving the
    *  rest of the note formatted. Independent of `raw` — see mediaSource.ts. */
   mediaSource?: boolean
@@ -101,7 +109,9 @@ export function CodeEditor({
   env,
   linkHandlers,
   revealHeading,
+  onRevealedHeading,
   revealEmbed,
+  onRevealedEmbed,
   raw,
   mediaSource
 }: Props): React.JSX.Element {
@@ -110,6 +120,10 @@ export function CodeEditor({
   const viewRef = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onDocChange)
   onChangeRef.current = onDocChange
+  const onRevealedRef = useRef(onRevealedHeading)
+  onRevealedRef.current = onRevealedHeading
+  const onRevealedEmbedRef = useRef(onRevealedEmbed)
+  onRevealedEmbedRef.current = onRevealedEmbed
   const docRef = useRef(doc)
   docRef.current = doc
   // Read once, at construction. The effect below owns every change after that.
@@ -395,6 +409,9 @@ export function CodeEditor({
     })
     flashLines(view, line.from, end.from)
     view.focus()
+    // Landed: the request has done its job. Only now — a heading not found yet may
+    // simply be a document that hasn't arrived (see the `version` key above).
+    onRevealedRef.current?.()
   }, [revealHeading, path, version])
 
   // "Show me where this picture is." Same shape as the heading jump above,
@@ -411,6 +428,8 @@ export function CodeEditor({
       effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 24 })
     })
     view.focus()
+    // Landed: the request has done its job.
+    onRevealedEmbedRef.current?.()
   }, [revealEmbed, path, version])
 
   // Escape dismisses the toolbar (selection stays; reselecting shows it again).

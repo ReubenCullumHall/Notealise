@@ -193,6 +193,8 @@ const api: VaultApi = {
     save()
     return path
   },
+  notesMentioning: async (needles) =>
+    Object.keys(store.files).filter((p) => needles.some((n) => n && store.files[p].includes(n))),
   scanLinks: async (paths) => {
     const list = paths ? paths.filter((p) => p in store.files) : Object.keys(store.files)
     return list.map((path) => ({
@@ -462,6 +464,10 @@ const api: VaultApi = {
   sendBugReport: async () => false,
   sendFeatureRequest: async () => false,
   openExternal: async () => false, // no shell access outside Electron
+  // No main process to ask a website anything: a paste stays a plain address.
+  lookUpLink: async () => ({ title: null, video: null }),
+  linkThumb: async () => null,
+  openVaultFile: async () => false, // no shell access outside Electron
   // Browser preview has no real folder picker or importer, so onboarding
   // (which needs both) is never worth showing here — always "already done".
   vaultEstablished: async () => false,

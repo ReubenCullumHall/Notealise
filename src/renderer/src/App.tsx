@@ -5,7 +5,7 @@ import type { EditorView } from '@codemirror/view'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { clearAssetCaches } from './editor/assetCache'
 import { checkMainIsCurrent } from './boot'
-import { encodeTarget } from '../../shared/attachments'
+import { encodeTarget, repointFileLinks } from '../../shared/attachments'
 import { mediaUsage, otherNotesUsing } from './media/usage'
 import type { SectionId } from './settings/Settings'
 import { FormatToolbar } from './editor/FormatToolbar'
@@ -53,6 +53,7 @@ import {
   ungroupPanes,
   moveGroup,
   addTab,
+  addBackgroundTab,
   showTab,
   newBlankTab,
   type TabLayout
@@ -801,6 +802,10 @@ export default function App(): React.JSX.Element {
    *  `onOpenSpace` in the object this feeds. */
   const openSpaceRef = useRef<(folder: string) => Promise<void>>(async () => {})
 
+  /** Kept pointing at the live `followMove` below, for the same reason: the space
+   *  rename is declared long before it. */
+  const followMoveRef = useRef<(from: string, to: string) => Promise<void>>(async () => {})
+
   const spaceActions: SpaceActions = useMemo(
     () => ({
       // Via a ref for the same reason onColorExistingFolders is: it needs
@@ -825,6 +830,9 @@ export default function App(): React.JSX.Element {
           // open note keeps its old path and the next autosave writes into a
           // folder that no longer exists. Same call the tree's own rename makes.
           remapOpen(from, actual)
+          // A space is a folder: notes in OTHER spaces that link to a photo or file
+          // inside it would be left aiming at its old name.
+          await followMoveRef.current(from, actual)
           // Main sanitises for cross-platform safety, so say so rather than
           // letting the name quietly come back different — same as tree rename.
           if (actual !== to) flash(`Renamed to "${actual}" (adjusted for cross-platform safety)`)
@@ -1108,12 +1116,18 @@ export default function App(): React.JSX.Element {
       // A note belongs to its space. Following a link into another one takes you
       // there rather than dragging the note across — otherwise the tab strip
       // would show a note the sidebar beside it can't.
+      // A background tab can't sit behind a note in another space — the strip
+      // only shows one space's tabs — so that link takes you there instead.
+      const behind = how === 'background' && spaceOf(p) === settingsRef.current.activeSpaceFolder
       await enterSpace(spaceOf(p))
       if (heading) requestHeading(p, heading)
       if (how === 'split') await openBeside(p)
-      else await openNote(p, how === 'tab')
+      else if (behind) {
+        applyLayout(addBackgroundTab(layoutRef.current, p))
+        if (!docsRef.current.has(p)) await loadDoc(p)
+      } else await openNote(p, how === 'tab' || how === 'background')
     },
-    [openBeside, openNote, enterSpace, requestHeading]
+    [openBeside, openNote, enterSpace, requestHeading, applyLayout, loadDoc]
   )
 
   /** Clicking a `[[link]]` to a note nobody has written yet: make it, beside the
@@ -1513,6 +1527,104 @@ export default function App(): React.JSX.Element {
     },
     [flush, onDocChange, flash, rescanLinks, loadTree]
   )
+
+  /**
+   * A note — or a folder — moved or was renamed: keep every link to a photo, video
+   * or document pointing at the file it meant.
+   *
+   * Those links are relative to the note, so they break from two directions:
+   *
+   *   - a note that MOVES to another folder is left aiming at where its files are
+   *     not; the files stay (a photo two notes share must not be pulled from under
+   *     the other) and the note's links are re-pointed — `pic.png` becomes
+   *     `../Physics/pic.png` (`repointFileLinks`). Reuben, 2026-10-05: files stay,
+   *     links follow. The same for every note inside a moved folder.
+   *   - a FOLDER that moves or is renamed takes its files with it, so a note
+   *     OUTSIDE it that linked to one of them is left aiming at the old place
+   *     (2026-10-06, Reuben: "fix those bugs"). Main names the notes that might
+   *     (`notesMentioning` — the folder's name has to appear in any path into it),
+   *     and each is re-pointed at where its file went.
+   *
+   * Same safety story as `followRename`, and for the same reasons: `flush()`
+   * first; an OPEN note is rewritten through `onDocChange` so autosave owns the
+   * write, a closed one is read and written directly; and a note that needs
+   * nothing is never rewritten. Call it AFTER `remapOpen`, which is what puts the
+   * open buffers under their new paths. A note renamed in place cannot break a
+   * relative link and returns at once.
+   */
+  const followMove = useCallback(
+    async (from: string, to: string): Promise<void> => {
+      if (from === to) return
+      // Never throws: by now the move itself has happened, and a failure here must not
+      // be reported as the move having failed.
+      try {
+        const parentChanged = parentOf(from) !== parentOf(to)
+        await flush()
+        const root = findNode(await window.api.listTree(), to)
+        if (!root) return
+        const isFolder = root.type === 'dir'
+        if (!parentChanged && !isFolder) return
+        // Where a FILE went: with the folder, if it was inside it.
+        const moved = (f: string): string =>
+          f === from ? to : f.startsWith(from + '/') ? to + f.slice(from.length) : f
+        const inside = (p: string): boolean => p === to || p.startsWith(to + '/')
+        // Each note to look at, under its NEW path, with where it lived BEFORE — the
+        // place its relative links were written from. A note that did not move is
+        // its own "before".
+        const todo = new Map<string, string>()
+        if (parentChanged) {
+          const walk = (n: TreeNode): void => {
+            if (n.type === 'dir') n.children?.forEach(walk)
+            else if (/\.md$/i.test(n.path)) todo.set(n.path, from + n.path.slice(to.length))
+          }
+          walk(root)
+        }
+        if (isFolder) {
+          const name = nameOf(from)
+          // `Photos/` — a path into a folder passes through its name AND the slash after
+          // it, and that keeps ordinary prose that merely says "Photos" from being read.
+          const needles = [...new Set([name, encodeURIComponent(name), encodeTarget(name)])].map((n) => n + '/')
+          for (const p of await window.api.notesMentioning(needles)) {
+            if (!todo.has(p)) todo.set(p, inside(p) ? from + p.slice(to.length) : p)
+          }
+        }
+        let changed = 0
+        for (const [path, was] of todo) {
+          const openText = docsRef.current.get(path)
+          let text: string
+          try {
+            text = openText ?? (await window.api.readNote(path))
+          } catch {
+            continue
+          }
+          const next = repointFileLinks(text, was, path, moved)
+          if (next === text) continue
+          changed++
+          if (openText !== undefined) {
+            docsRef.current.set(path, next)
+            setVersions((v) => ({ ...v, [path]: (v[path] ?? 0) + 1 }))
+            onDocChange(path, next)
+          } else {
+            try {
+              await window.api.writeNote(path, next)
+            } catch (e) {
+              flash(`Couldn't keep the photo and file links in ${titleOf(path)}: ${(e as Error).message}`)
+            }
+          }
+        }
+        if (changed) {
+          flash(`Kept the photo and file links working in ${changed} ${changed === 1 ? 'note' : 'notes'}`)
+          await flush()
+          void rescanLinks()
+        }
+      } catch (e) {
+        flash(`Couldn't check the photo and file links after that move: ${(e as Error).message}`)
+      }
+    },
+    [flush, onDocChange, flash, rescanLinks]
+  )
+  // Reachable from callbacks declared ABOVE this point (the space rename).
+  followMoveRef.current = followMove
 
   // Anything that puts a note in a pane — a drop, a keyboard cycle, a restored
   // layout — goes through here for its content, so no path has to remember to
@@ -2230,6 +2342,7 @@ export default function App(): React.JSX.Element {
         }
         const actual = await window.api.renameEntry(from, dest)
         remapOpen(from, actual)
+        await followMove(from, actual)
         landed.push(actual)
         if (crossed) arrived.push(actual)
       }
@@ -2585,9 +2698,11 @@ export default function App(): React.JSX.Element {
       await loadTree()
       await loadWorkspace()
       remapOpen(node.path, actualRel)
-      // Folders are skipped: a folder has no title for a link to name, and its
-      // notes keep theirs, so every link through it still resolves.
+      // A folder has no title for a `[[link]]` to name, and its notes keep theirs, so
+      // those still resolve — but the PHOTO and FILE links that pass through its name
+      // do not (`followMove`).
       if (isNote) await followRename(node.path, actualRel)
+      else await followMove(node.path, actualRel)
       const actualName = nameOf(actualRel)
       if (stripMd(actualName) !== stripMd(typed)) flash(nameChangedNotice(typed, actualName))
     })
@@ -3194,7 +3309,11 @@ export default function App(): React.JSX.Element {
                   onDragLink={(target) => setDrag(target ? { kind: 'tab', path: target } : null)}
                   onInspect={setInspect}
                   revealHeading={pendingHeading?.path === p ? pendingHeading.heading : null}
+                  onRevealedHeading={() =>
+                    setPendingHeading((cur) => (cur && cur.path === p ? null : cur))
+                  }
                   revealEmbed={pendingEmbed?.path === p ? pendingEmbed.file : null}
+                  onRevealedEmbed={() => setPendingEmbed((cur) => (cur && cur.path === p ? null : cur))}
                   focused={i === layout.focus}
                   split={layout.panes.length > 1}
                   slots={space.toolbarSlots}

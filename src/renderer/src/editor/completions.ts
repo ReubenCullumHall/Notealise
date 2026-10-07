@@ -16,6 +16,7 @@ import { baseName, resolveLink, titleOf } from '../../../shared/links'
 import { matchesQuery, SLASH_COMMANDS } from './commands'
 import { linkEnv, linkHandlersFacet, type LinkEnv, type LinkHandlers } from './linkEnv'
 import { headingAnchor, linkTargets, stateForText } from './blockIds'
+import { optionsOpen, pasteOptionsSource } from './pasteLink'
 import {
   backStep,
   canStepInto,
@@ -432,12 +433,23 @@ export function completionExtension(): Extension {
 
 function completionMenu(): Extension {
   return autocompletion({
-    override: [slashSource, wikiSource],
+    // The third is the list a right-click on a pasted web link opens (pasteLink.ts):
+    // Mention / Full link / Player view, drawn by this same popup.
+    override: [slashSource, wikiSource, pasteOptionsSource],
     addToOptions: [spaceColumn, stepArrow],
-    optionClass: (c) => [c.type === 'empty' ? 'cm-wiki-empty' : '', enterClass((c as WikiRow).enter ?? null)].join(' ').trim(),
+    optionClass: (c) =>
+      [
+        c.type === 'empty' ? 'cm-wiki-empty' : '',
+        enterClass((c as WikiRow).enter ?? null),
+        // the web link's list marks the one it is now
+        (c as { current?: boolean }).current ? 'cm-paste-current' : ''
+      ]
+        .join(' ')
+        .trim(),
     // Marks the popup as the note picker so it can wear the Content / Space
     // headings. The "/" menu is one column and needs neither.
     tooltipClass: (state) => {
+      if (optionsOpen(state)) return 'cm-paste-menu'
       const at = typedRange(state)
       if (!at) return ''
       // A folder's or a note's screen has its own header — its name and the way

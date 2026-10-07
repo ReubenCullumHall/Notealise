@@ -29,6 +29,7 @@ import {
   paneSizes,
   resizePanes,
   addTab,
+  addBackgroundTab,
   showTab,
   newBlankTab,
   type TabLayout
@@ -715,6 +716,24 @@ describe('a split is the user\'s arrangement (parked splits)', () => {
     expect(l.panes).toEqual(['b.md'])
     expect(l.tabs).toEqual(['a.md', 'b.md'])
     invariants(l)
+  })
+
+  it('a link opened behind (Cmd/Ctrl+click) leaves the screen exactly as it was', () => {
+    const one = addBackgroundTab(opened('a.md'), 'b.md')
+    expect(one.panes).toEqual(['a.md'])
+    expect(one.tabs).toEqual(['a.md', 'b.md'])
+    invariants(one)
+    const split = addBackgroundTab(twoCols(), 'c.md')
+    expect(split.panes).toEqual(['a.md', 'b.md'])
+    expect(split.tabs).toEqual(['a.md', 'b.md', 'c.md'])
+    invariants(split)
+  })
+
+  it('a link opened behind does nothing when the note is already open', () => {
+    const l = twoCols()
+    expect(addBackgroundTab(l, 'a.md')).toBe(l)
+    const behind = addBackgroundTab(l, 'c.md')
+    expect(addBackgroundTab(behind, 'c.md')).toBe(behind)
   })
 
   it('clicking a tab never closes the one you were on', () => {

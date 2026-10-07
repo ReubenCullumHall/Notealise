@@ -255,3 +255,106 @@ export function kindForFilename(name: string): AttachmentKind | null {
   if (dot <= 0) return null // no dot, or a leading dot with nothing before it
   return kindForExt(base.slice(dot + 1))
 }
+
+// --- documents -----------------------------------------------------------------
+//
+// A third kind of thing a note can hold: a file that is neither a picture nor a
+// video — a PDF, a Word or Excel file, slides. It is saved beside the note like
+// any attachment, written as an ordinary link (`[Slides.pdf](Slides.pdf)`, which
+// every other editor shows as a link too), and clicking it opens it in whatever
+// the computer opens that kind of file with.
+//
+// Opening is the dangerous half, so it is an ALLOW-list and a short one: a note
+// can arrive from someone else, and "open this file" on `run.sh`, `Setup.exe`,
+// `Thing.app` or a macro-enabled `.docm` is a program running. Everything here
+// is a document a viewer opens, and nothing a system runs. It is checked in main
+// (`openVaultFile`) as well as here — this list is the one place it is written.
+
+export const DOC_EXTS = [
+  'pdf',
+  'doc', 'docx', 'rtf', 'odt', 'pages',
+  'xls', 'xlsx', 'csv', 'ods', 'numbers',
+  'ppt', 'pptx', 'odp', 'key',
+  'txt', 'epub'
+]
+
+/** Is this a document we will save into a note and open on a click? Judged by the
+ *  extension alone, any case, same rule as `kindForFilename` for a bare dotted
+ *  name (`.pdf` has no extension). */
+export function isDocFilename(name: string): boolean {
+  const base = name.slice(Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\')) + 1)
+  const dot = base.lastIndexOf('.')
+  if (dot <= 0) return false
+  return DOC_EXTS.includes(base.slice(dot + 1).toLowerCase())
+}
+
+/** The vault path a link in a note points at, if it is a link to a document the
+ *  vault holds — and null for a web address, a path out of the vault, or any
+ *  other file. What decides whether a click opens a file or a browser. */
+export function docLinkTarget(href: string, notePath: string): string | null {
+  const rel = resolveVaultPath(href, notePath)
+  return rel && isDocFilename(rel) ? rel : null
+}
+
+// --- a note moves: its links to files follow ------------------------------------
+
+/** Rewrite a destination — `pic.png`, `<my pic.png>` or `pic.png "a title"` — by
+ *  handing its target to `fn`. `fn` returns the new target, or null to leave it. */
+function swapDestination(raw: string, fn: (target: string) => string | null): string {
+  const lead = /^\s*/.exec(raw)![0]
+  const body = raw.slice(lead.length)
+  if (body.startsWith('<')) {
+    const end = body.indexOf('>')
+    if (end === -1) return raw
+    const next = fn(body.slice(1, end))
+    return next === null ? raw : `${lead}<${next}>${body.slice(end + 1)}`
+  }
+  const token = body.split(/\s/)[0]
+  const next = token ? fn(token) : null
+  return next === null ? raw : `${lead}${next}${body.slice(token.length)}`
+}
+
+/** Make a note's links to photos, videos and documents still reach the same files
+ *  after the note has moved from `fromNote` to `toNote`.
+ *
+ *  The links are RELATIVE (`pic.png`, `../Shared/pic.png`), so a note that changes
+ *  folder keeps pointing at where the file was NOT: the file stays put, the link
+ *  breaks. This re-points each one — `pic.png` becomes `../Physics/pic.png` — and
+ *  leaves the files alone, so a photo two notes share is never pulled from under
+ *  the other. (Reuben, 2026-10-05: files stay, links follow.)
+ *
+ *  `moved` says where a FILE went if the move carried it too — a folder moved with
+ *  the notes and photos inside it. Without it, files are taken to have stayed.
+ *
+ *  Only a target that really is a vault file is touched, and only if it would no
+ *  longer resolve to that file — so a note that did not need it comes back
+ *  byte-for-byte unchanged, and so does every web address, `data:` URI and
+ *  ordinary link. Same shapes `indexEmbeds` reads, plus links to documents. */
+export function repointFileLinks(
+  text: string,
+  fromNote: string,
+  toNote: string,
+  moved: (file: string) => string = (f) => f
+): string {
+  const fix = (target: string, docsOnly: boolean): string | null => {
+    const file = resolveVaultPath(target, fromNote)
+    if (!file || (docsOnly && !isDocFilename(file))) return null
+    const now = moved(file)
+    if (resolveVaultPath(target, toNote) === now) return null // still reaches it
+    return relativeTarget(now, toNote)
+  }
+  return text
+    .replace(
+      /(!\[[^\]\n]*\]\()([^)\n]*)(\))|(<video\b[^>\n]*\bsrc=["'])([^"']*)(["'][^>\n]*>)/gi,
+      (whole, a1?: string, dest1?: string, z1?: string, a2?: string, dest2?: string, z2?: string) =>
+        dest1 !== undefined
+          ? a1 + swapDestination(dest1, (t) => fix(t, false)) + z1
+          : a2 !== undefined
+            ? a2 + (fix(dest2 as string, false) ?? (dest2 as string)) + z2
+            : whole
+    )
+    .replace(
+      /((?<!!)\[[^\]\n]*\]\()([^)\n]*)(\))/g,
+      (_whole, a: string, dest: string, z: string) => a + swapDestination(dest, (t) => fix(t, true)) + z
+    )
+}

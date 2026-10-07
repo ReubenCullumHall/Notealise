@@ -26,6 +26,7 @@ const api: VaultApi = {
   createFolder: (dir, name) => ipcRenderer.invoke(CH.createFolder, dir, name),
   renameEntry: (from, to) => ipcRenderer.invoke(CH.renameEntry, from, to),
   scanLinks: (paths) => ipcRenderer.invoke(CH.scanLinks, paths),
+  notesMentioning: (needles) => ipcRenderer.invoke(CH.notesMentioning, needles),
   getSettings: () => ipcRenderer.invoke(CH.getSettings),
   setSettings: (partial) => ipcRenderer.invoke(CH.setSettings, partial),
   listPresets: () => ipcRenderer.invoke(CH.listPresets),
@@ -62,6 +63,9 @@ const api: VaultApi = {
   sendFeatureRequest: (fromEmail, message) =>
     ipcRenderer.invoke(CH.sendFeatureRequest, fromEmail, message),
   openExternal: (url) => ipcRenderer.invoke(CH.openExternal, url),
+  lookUpLink: (url) => ipcRenderer.invoke(CH.lookUpLink, url),
+  linkThumb: (url) => ipcRenderer.invoke(CH.linkThumb, url),
+  openVaultFile: (path) => ipcRenderer.invoke(CH.openVaultFile, path),
   vaultEstablished: () => ipcRenderer.invoke(CH.vaultEstablished),
   getOnboarded: () => ipcRenderer.invoke(CH.getOnboarded),
   setOnboarded: (value) => ipcRenderer.invoke(CH.setOnboarded, value),

@@ -16,16 +16,16 @@ const IS_MAC = /Mac/.test(navigator.userAgent)
 // link is just another way of opening a note and should not need learning twice:
 //
 //   click            open it in a NEW TAB — the note you were reading stays open
-//   Cmd/Ctrl+click   open it here instead, replacing this column's note
+//   Cmd/Ctrl+click   open it in a tab BEHIND this one — you stay where you are
 //   Alt+click        open it beside this one, in a new column
 //   drag             drop it into any column (same protocol as dragging a tab)
 //
 // Plain click adds a tab rather than replacing, which is the opposite of the
 // sidebar. Following a link is reading ONWARD from what you have — losing the
 // note that sent you there is exactly the wrong thing — whereas clicking in the
-// sidebar is choosing what to work on. Cmd/Ctrl is the escape hatch for when you
-// really do mean "go there instead", inverted from the browser convention for
-// the same reason.
+// sidebar is choosing what to work on. Cmd/Ctrl+click is the browser's
+// background tab. (It used to replace this column's note — Reuben, 2026-10-05:
+// it closed the tab he was on.)
 //
 // A folder link has no document to open, so it is SHOWN: the sidebar opens it
 // and closes everything else, exactly as clicking it in the path bar does.
@@ -46,7 +46,7 @@ function linkAtPos(view: EditorView, pos: number): ResolvedLink | null {
 }
 
 const howFrom = (e: MouseEvent): OpenHow =>
-  e.metaKey || e.ctrlKey ? 'replace' : e.altKey ? 'split' : 'tab'
+  e.metaKey || e.ctrlKey ? 'background' : e.altKey ? 'split' : 'tab'
 
 /** Follow a link — the one place that decides what "open this" means, shared by
  *  the editor and (through App) the links block. */

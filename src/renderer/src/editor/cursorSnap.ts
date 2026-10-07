@@ -1,4 +1,5 @@
-import { Prec } from '@codemirror/state'
+import { Prec, type EditorState } from '@codemirror/state'
+import { syntaxTree } from '@codemirror/language'
 import { EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { hiddenRunEnd } from './livePreview'
 import { isRaw } from './rawView'
@@ -30,6 +31,15 @@ function textStart(lineText: string): number | null {
   const { indent, marker } = splitMarker(lineText)
   if (!marker || !/^[-*+] /.test(marker)) return null
   return indent.length + marker.length
+}
+
+/** Does a link or image END the line at `end`? */
+function linkEndsLine(state: EditorState, end: number): boolean {
+  for (let n = syntaxTree(state).resolveInner(end, -1); n; n = n.parent as typeof n) {
+    if ((n.name === 'Link' || n.name === 'Image') && n.to === end) return true
+    if (!n.parent) return false
+  }
+  return false
 }
 
 const snap = ViewPlugin.fromClass(
@@ -186,4 +196,29 @@ const tagJoins = Prec.high(
   ])
 )
 
-export const cursorSnap = [snap, enterPastMarks, lineStartKeys, tagJoins]
+/** End (and the Mac's Cmd+Right), with the cursor already at the end of a line that
+ *  finishes with a link: stay. CodeMirror takes "the end of the visible line" to be
+ *  a spot between the link's hidden marks — after the `(` — so the press moved the
+ *  cursor LEFT, into the address, which then opened to raw markdown around it, and
+ *  the Enter that followed split the address in two (`[x](⏎https://…)`). Found
+ *  2026-10-06 on a link pasted at the end of a note, which leaves the cursor
+ *  exactly there; a hand-written one at the very end of a note did the same. The
+ *  cursor is already where End goes, so End has nothing to do. Left-arrow is
+ *  untouched: it is what takes you INTO a link to edit it. */
+const stayAtLinkEnd = (view: EditorView): boolean => {
+  if (isRaw(view.state)) return false
+  const sel = view.state.selection
+  if (sel.ranges.length !== 1 || !sel.main.empty) return false
+  const line = view.state.doc.lineAt(sel.main.head)
+  const end = tagStartOf(view.state, line.from, line.text) ?? line.to
+  return sel.main.head === end && linkEndsLine(view.state, end)
+}
+
+const lineEndKeys = Prec.high(
+  keymap.of([
+    { key: 'End', run: stayAtLinkEnd },
+    { mac: 'Cmd-ArrowRight', run: stayAtLinkEnd }
+  ])
+)
+
+export const cursorSnap = [snap, enterPastMarks, lineStartKeys, lineEndKeys, tagJoins]

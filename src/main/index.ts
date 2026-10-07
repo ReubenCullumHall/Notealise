@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, session } from 'electron'
 import path from 'node:path'
 import { CH } from '../shared/channels'
 import { openAllowedExternal } from './externalLinks'
+import { installPlayerReferer } from './linkPreview'
 import {
   getHasOnboarded,
   getOnboardingStep,
@@ -110,6 +111,8 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) =>
     callback(false)
   )
+
+  installPlayerReferer(session.defaultSession)
 
   installMenu()
 

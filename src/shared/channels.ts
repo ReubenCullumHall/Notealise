@@ -19,6 +19,9 @@ export const CH = {
   pickAttachment: 'vault:pickAttachment',
   /** renderer -> main: the [[wiki links]] of every note (or just the given ones) */
   scanLinks: 'vault:scanLinks',
+  /** renderer -> main: which notes contain any of these strings (the first cut of
+   *  "who links into the folder that just moved") */
+  notesMentioning: 'vault:notesMentioning',
   /** renderer -> main: read/write appearance settings (.mdnotes/settings.json) */
   getSettings: 'settings:get',
   setSettings: 'settings:set',
@@ -102,6 +105,13 @@ export const CH = {
   sendFeatureRequest: 'app:sendFeatureRequest',
   /** renderer -> main: open a URL in the default browser (host-allowlisted) */
   openExternal: 'app:openExternal',
+  /** renderer -> main: ask a website for a pasted address's title (and a
+   *  video's picture). Only ever sent by a paste — see main/linkPreview.ts. */
+  lookUpLink: 'app:lookUpLink',
+  /** renderer -> main: the picture kept for a video, from disk only */
+  linkThumb: 'app:linkThumb',
+  /** renderer -> main: open a document the vault holds in its own app */
+  openVaultFile: 'vault:openVaultFile',
   /** renderer -> main: which import formats this build supports */
   importFormats: 'import:formats',
   /** renderer -> main: notes import — open a native picker scoped by format */

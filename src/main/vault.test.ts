@@ -21,6 +21,7 @@ import {
   createFolder,
   createNote,
   listTree,
+  notesMentioning,
   purgeRecoveryItem,
   readNote,
   setVaultRoot,
@@ -259,5 +260,32 @@ describe('the ordinary paths still work', () => {
     expect(type).toBe('file')
     expect(await exists(path.join(root, 'one.md'))).toBe(false)
     expect(await exists(path.join(root, '.mdnotes/trash', `${id}-one.md`))).toBe(true)
+  })
+})
+
+describe('which notes mention a folder (who might link into it)', () => {
+  it('finds notes by any of the strings, anywhere in the vault, and only those', async () => {
+    await createFolder('', 'Notes')
+    await createFolder('Notes', 'Photos')
+    await writeNote('Notes/A.md', '![](../Photos/pic.png)')
+    await writeNote('Notes/B.md', 'nothing relevant')
+    await writeNote('C.md', '[Slides](My%20Photos/s.pdf)')
+    await writeNote('Notes/Photos/Inside.md', 'a note inside it')
+    expect(await notesMentioning(['Photos'])).toEqual(['C.md', 'Notes/A.md'])
+    expect(await notesMentioning(['My%20Photos', 'nothing'])).toEqual(['C.md', 'Notes/B.md'])
+  })
+
+  it('returns nothing for no needles, an empty one, or a string that is nowhere', async () => {
+    await writeNote('A.md', 'text')
+    expect(await notesMentioning([])).toEqual([])
+    expect(await notesMentioning([''])).toEqual([])
+    expect(await notesMentioning(['zzz'])).toEqual([])
+  })
+
+  it('does not read the config folder or the bin', async () => {
+    await writeNote('A.md', 'Photos')
+    await fs.mkdir(path.join(root, '.mdnotes', 'trash'), { recursive: true })
+    await fs.writeFile(path.join(root, '.mdnotes', 'trash', 'old.md'), 'Photos', 'utf8')
+    expect(await notesMentioning(['Photos'])).toEqual(['A.md'])
   })
 })

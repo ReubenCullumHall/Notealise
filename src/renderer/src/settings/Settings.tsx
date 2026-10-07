@@ -1064,6 +1064,17 @@ function General({ settings, onChange }: Props): React.JSX.Element {
           hint="On, you're asked before it goes to the bin. Off, you get an Undo instead — the same choice the dialog's own Always ask / Never ask again buttons set."
         />
       </div>
+
+      <h3 className="mt-6 accent-heading font-display text-[15px] font-semibold">Web links</h3>
+      <p className="mt-0.5 text-[12px] text-ink-500">Pasting a web address into a note.</p>
+      <div className="mt-3">
+        <ToggleRow
+          on={settings.lookUpLinks}
+          onClick={() => onChange({ lookUpLinks: !settings.lookUpLinks })}
+          label="Look up titles when you paste an address"
+          hint="On, Notealise asks that website for its page title (and a video's picture) the moment you paste, and writes it into your note. It never asks when a note is opened. Off, a pasted address stays as you pasted it."
+        />
+      </div>
     </>
   )
 }

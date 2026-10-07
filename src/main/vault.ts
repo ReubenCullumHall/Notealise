@@ -6,7 +6,7 @@ import type { TreeNode } from '../shared/types'
 import { toPreviewLine } from '../shared/plainText'
 import { indexLinks, stripMd, type LinkRow } from '../shared/links'
 import { sanitizeFilename } from '../shared/filenames'
-import { indexEmbeds } from '../shared/attachments'
+import { indexEmbeds, isDocFilename } from '../shared/attachments'
 import { indexBlocks, indexHeadings } from '../shared/blocks'
 import { heldPath, RECOVERY_DIR, TRASH_DIR } from '../shared/workspace'
 
@@ -646,6 +646,34 @@ export async function renameEntry(fromPath: string, toPath: string): Promise<str
   return toRel(toAbs)
 }
 
+/** The notes whose text contains any of `needles` — which notes MIGHT point at
+ *  something, as a first cut, never an answer.
+ *
+ *  What a folder move needs: every note OUTSIDE the folder that links to a photo,
+ *  video or document inside it names the folder somewhere in that link (a relative
+ *  path to a file in a folder has to pass through the folder's name), so the folder's
+ *  name is a cheap, exact-enough net — the renderer then looks at each catch properly
+ *  (`repointFileLinks`). Reads the vault's own text and keeps nothing (rules 1 and
+ *  2); an unreadable file is skipped, as `scanLinks` does. */
+export async function notesMentioning(needles: string[]): Promise<string[]> {
+  const want = needles.filter((n) => typeof n === 'string' && n.length > 0)
+  if (want.length === 0) return []
+  const files: string[] = []
+  await listMarkdown(requireVault(), files)
+  const out: string[] = []
+  // A few at a time: a vault of thousands of notes is a read each, and one after
+  // another is needlessly slow.
+  for (let i = 0; i < files.length; i += 32) {
+    await Promise.all(
+      files.slice(i, i + 32).map(async (abs) => {
+        const text = await fs.readFile(abs, 'utf8').catch(() => null)
+        if (text !== null && want.some((n) => text.includes(n))) out.push(toRel(abs))
+      })
+    )
+  }
+  return out.sort()
+}
+
 // ---------------------------------------------------------------------------
 // The bin. Deleting moves an entry into <vault>/.mdnotes/trash/ rather than
 // handing it to the OS, so it stays recoverable in-app the way localhost's bin
@@ -765,6 +793,26 @@ export async function revealInFolder(relPath: string): Promise<void> {
   const abs = await resolveReal(relPath)
   const { shell } = await import('electron')
   shell.showItemInFolder(abs)
+}
+
+/** Open a document the vault holds (a PDF, a Word file…) in the program the
+ *  computer uses for it — what a click on a file link in a note does.
+ *
+ *  This hands a file to the operating system to OPEN, which for the wrong kind
+ *  of file is the same as running it, and a note can come from someone else. So
+ *  it is an allow-list of documents (`isDocFilename`, shared/attachments.ts) and
+ *  it is checked here, in main, not trusted from the renderer: first the name
+ *  asked for, then the file REALLY there after symlinks are followed — a link
+ *  called `Slides.pdf` that points at something else is refused — and it must be
+ *  inside the vault (rule 6) and a plain file. Returns whether the system took it. */
+export async function openVaultFile(relPath: string): Promise<boolean> {
+  if (typeof relPath !== 'string' || !isDocFilename(relPath)) return false
+  const abs = await resolveReal(relPath)
+  if (!isDocFilename(abs)) return false
+  const st = await fs.stat(abs).catch(() => null)
+  if (!st?.isFile()) return false
+  const { shell } = await import('electron')
+  return (await shell.openPath(abs)) === ''
 }
 
 // ---------------------------------------------------------------------------

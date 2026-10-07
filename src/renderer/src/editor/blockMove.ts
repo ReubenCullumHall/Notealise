@@ -58,30 +58,39 @@ function fenceAt(state: EditorState, pos: number): { from: number; to: number } 
  *     around to open up space rather than being silently glued to a neighbour.
  *
  *  A table needs no rule of its own: Markdown tables cannot contain a blank
- *  line, so rule 3 already takes one whole. */
-export function blockRange(state: EditorState): BlockRange {
+ *  line, so rule 3 already takes one whole.
+ *
+ *  `at` is a line the POINTER is over rather than the cursor (the grip follows
+ *  the pointer onto any line — Reuben, 2026-10-06: "a selector for every line").
+ *  The rules are the same with that line standing in for the cursor's, except
+ *  that a selection still wins when the pointer is on one of its lines: grab a
+ *  line inside what you selected and the whole selection moves. */
+export function blockRange(state: EditorState, at?: number): BlockRange {
   const doc = state.doc
   const sel = state.selection.main
+  const inSelection =
+    at === undefined || (!sel.empty && at >= doc.lineAt(sel.from).from && at <= doc.lineAt(sel.to).to)
 
-  if (!sel.empty) {
+  if (inSelection && !sel.empty) {
     const first = doc.lineAt(sel.from)
     const last = doc.lineAt(sel.to)
     return { from: first.from, to: last.to }
   }
+  const head = inSelection ? sel.head : Math.min(Math.max(at as number, 0), doc.length)
 
   // A toggle list moves whole — title, everything inside it, and its end —
   // when you grab its title, open or shut (Notion's rule).
-  const toggle = toggleAtTitle(findToggles(state), doc.lineAt(sel.head).number)
+  const toggle = toggleAtTitle(findToggles(state), doc.lineAt(head).number)
   if (toggle) return { from: toggle.from, to: doc.line(toggle.endLine).to }
 
-  const fence = fenceAt(state, sel.head)
+  const fence = fenceAt(state, head)
   if (fence) {
     // Out to whole lines: the node starts at the ``` and ends at the closing
     // fence, but what moves is always entire lines.
     return { from: doc.lineAt(fence.from).from, to: doc.lineAt(fence.to).to }
   }
 
-  const line = doc.lineAt(sel.head)
+  const line = doc.lineAt(head)
   if (isBlank(line.text)) return { from: line.from, to: line.to }
 
   let first = line.number

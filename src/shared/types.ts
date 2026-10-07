@@ -5,6 +5,7 @@ import type { AppSettings } from './settings'
 import type { PresetDraft, PresetImportResult, SpacePreset } from './presets'
 import type { EntryMeta, MediaOrigin, RestoreResult, Workspace } from './workspace'
 import type { LinkRow } from './links'
+import type { LinkInfo } from './embeds'
 import type { UpdatePrefs, UpdateStatus } from './update'
 import type {
   ImportFormat,
@@ -88,6 +89,10 @@ export interface VaultApi {
    *  block. Pass `paths` to rescan only those notes (what the watcher reports);
    *  omit it for the whole vault. Returns links only — never note contents. */
   scanLinks(paths?: string[]): Promise<LinkRow[]>
+  /** Vault paths of the notes whose text contains any of `needles`. A first cut
+   *  for "which notes link into the folder that just moved" — the caller still
+   *  has to look at each one. */
+  notesMentioning(needles: string[]): Promise<string[]>
   /** Appearance settings for the active vault (or cached defaults if none). */
   getSettings(): Promise<AppSettings>
   /** Merge a partial settings change; persists and returns the full result. */
@@ -250,6 +255,17 @@ export interface VaultApi {
   sendFeatureRequest(fromEmail: string, message: string): Promise<boolean>
   /** Open a URL in the default browser; false if its host isn't allowlisted. */
   openExternal(url: string): Promise<boolean>
+  /** Ask the website behind a pasted address for its title (and, for a video,
+   *  keep its picture). Resolves with nothing filled in rather than failing —
+   *  offline, a slow site and a private address all just mean "no title". */
+  lookUpLink(url: string): Promise<LinkInfo>
+  /** The picture kept for a video by `lookUpLink`; null if there isn't one.
+   *  Disk only — never asks the network. */
+  linkThumb(url: string): Promise<Uint8Array | null>
+  /** Open a document in the vault (PDF, Word, Excel…) in the program the
+   *  computer uses for it. False if it isn't a document we open, isn't there, or
+   *  the system couldn't. Main decides what counts — see `openVaultFile`. */
+  openVaultFile(path: string): Promise<boolean>
   /** Subscribe to update state changes; returns an unsubscribe function. */
   onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
 

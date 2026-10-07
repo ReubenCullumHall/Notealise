@@ -3,6 +3,8 @@ import { syntaxTree } from '@codemirror/language'
 import { linkEnv } from './linkEnv'
 import { cachedUrl, loadImage, resolveVaultPath } from './imageAssets'
 import { isInlineDataUrl } from '../../../shared/attachments'
+import { parseVideoUrl } from '../../../shared/embeds'
+import { VideoCardWidget } from './videoCard'
 import { type Pass } from './livePreview'
 import { insideEmbed, selectionCovers, selectionSwallows, embedSpanAt, remeasureWhenSized } from './attachSelect'
 import { attachDragHandle } from './attachMove'
@@ -150,6 +152,21 @@ export const imagePass: Pass = (view, _active, push) => {
         // Alt text is everything between "![" and the "]" that closes it.
         const raw = view.state.doc.sliceString(node.from, node.to)
         const alt = raw.slice(2, raw.indexOf(']', 2) === -1 ? 2 : raw.indexOf(']', 2))
+
+        // `![title](https://youtu.be/…)` is a video, not a picture: a card that
+        // plays on a click (videoCard.ts). The same line was "Image not found".
+        const video = parseVideoUrl(url)
+        if (video) {
+          push(
+            node.from,
+            node.to,
+            Decoration.replace({
+              widget: new VideoCardWidget(video, alt, picked, isMediaSource(view.state) ? raw : null)
+            }),
+            true
+          )
+          return
+        }
 
         const rel = resolveVaultPath(url, notePath)
         push(
