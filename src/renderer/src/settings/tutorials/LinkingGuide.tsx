@@ -141,7 +141,7 @@ export function LinkingGuide(): React.JSX.Element {
       <div className="mt-2 flex flex-col gap-1 text-[12px] text-ink-600">
         {[
           ['Click', 'Opens in a new tab — the note you were reading stays open'],
-          ['Cmd + click (Ctrl on Windows)', 'Opens it here instead, replacing this note'],
+          ['Cmd + click (Ctrl on Windows)', 'Opens it in a tab behind this one — you stay where you are'],
           ['Alt + click', 'Opens it beside this one, in a new column'],
           ['Drag it', 'Drop it into any column'],
           [

@@ -6,7 +6,7 @@ import { linksAt, type ResolvedLink } from './wikiPass'
 import { clickOrDrag } from './clickOrDrag'
 import { finish, relinkOpen, startRelink } from './relink'
 
-/** A Mac's Ctrl+click is its right-click, not the "open it here" of Windows. */
+/** A Mac's Ctrl+click is its right-click, not the "open it behind" of Windows. */
 const IS_MAC = /Mac/.test(navigator.userAgent)
 
 // Clicking and dragging a `[[link]]`. The editor had no DOM event handlers at all
