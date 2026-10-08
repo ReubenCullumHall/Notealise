@@ -101,9 +101,6 @@ export function LinkingGuide(): React.JSX.Element {
           Pick a folder from the list. Clicking the link opens that folder in the sidebar.
         </Card>
       </Cards>
-      <p className="mt-3 text-[12px] leading-relaxed text-ink-500">
-        To change where a link goes, right-click it and pick again. Your own words stay.
-      </p>
 
       <h3 className="mt-7 accent-heading font-display text-[15px] font-semibold">
         Links and your spaces
@@ -124,12 +121,6 @@ export function LinkingGuide(): React.JSX.Element {
           [[Physics/Wav<span className="ml-3 font-sans text-ink-400">— narrowed inside Physics</span>
         </div>
       </div>
-      <p className="mt-2 text-[12px] leading-relaxed text-ink-500">
-        Or step through it. Folders and notes in the list have an arrow at the end: press{' '}
-        <span className="font-medium">→</span> or click the arrow to go inside. Inside a note the
-        list is its headings, so you can link straight to one.{' '}
-        <span className="font-medium">←</span> or the name at the top goes back.
-      </p>
       <p className="mt-2 text-[11.5px] leading-relaxed text-ink-400">
         A link that already crosses spaces keeps working wherever you are — this only decides what
         the picker offers. Those links are drawn with a dotted leading edge, and hovering one names
@@ -145,7 +136,7 @@ export function LinkingGuide(): React.JSX.Element {
           ['Drag it', 'Drop it into any column'],
           [
             'Right-click it',
-            'Point it somewhere else. The list opens on that note’s headings, or on its folder if you right-click the note’s name. Esc leaves it as it was'
+            'Point it somewhere else — your own words stay. The list opens on that note’s headings, or on its folder if you right-click the note’s name. Esc leaves it as it was'
           ],
           ['A note that isn’t written yet', 'Shown dashed. Clicking makes it, next to this note']
         ].map(([k, v]) => (
