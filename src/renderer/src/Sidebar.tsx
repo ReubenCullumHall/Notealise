@@ -800,7 +800,7 @@ export function Sidebar({
       )}
 
       {/* ---- the list ---- */}
-      <div className={'relative min-h-0 flex-1 overflow-hidden ' + spaceSlideClass}>
+      <div className={'space-vt-side relative min-h-0 flex-1 overflow-hidden ' + spaceSlideClass}>
         <div
           ref={listRef}
           className={

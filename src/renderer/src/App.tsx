@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import type { EditorView } from '@codemirror/view'
@@ -119,8 +120,11 @@ import {
   siblingColors,
   sortSiblings
 } from './organise/model'
+import { motionOn } from './tabs/tabStyles'
 import { ColorPopover, type Anchor } from './color/Picker'
 import { bindColorMemory } from './color/memory'
+import { createSwipeDetector, scrollsSideways } from './spaceSwipe'
+import { nudgeSpaces, slideSpaces, spaceSlideAvailable } from './spaceTransition'
 import { PALETTE_MAX, pickAutoColor } from '../../shared/color'
 
 // --- small path helpers (renderer works in vault-relative POSIX paths) ---
@@ -928,7 +932,7 @@ export default function App(): React.JSX.Element {
    *
    *  Chrome that is not part of a space does not move — the search bar, the
    *  space switcher itself, the sidebar footer. You are still holding those. */
-  const switchSpace = useCallback(
+  const switchSpaceNow = useCallback(
     async (folder: string): Promise<void> => {
       const from = settingsRef.current.activeSpaceFolder
       if (from === folder) return
@@ -957,12 +961,57 @@ export default function App(): React.JSX.Element {
       const b = list.findIndex((sp) => sp.folder === folder)
       const dir: 1 | -1 = b >= 0 && a >= 0 && b < a ? -1 : 1
 
+      // The slide (spaceTransition.ts): the space you are leaving goes out one side as the
+      // next comes in from the other, together, and a swipe the same way while it runs just
+      // carries it on. Settings go to main FIRST, outside the transition, so the page isn't
+      // held on the old picture while it waits; what runs inside is only the React flush.
+      if (spaceSlideAvailable()) {
+        spaceTabs.current.set(from, layoutRef.current)
+        const next = await window.api.setSettings({ activeSpaceFolder: folder })
+        await slideSpaces(dir, () => {
+          flushSync(() => {
+            setIslandOpen(false)
+            setSettings(next)
+            applyLayout(spaceTabs.current.get(folder) ?? EMPTY_LAYOUT, true)
+          })
+          applySettings(next)
+        })
+        return
+      }
+
+      // No View Transitions (the browser preview): the older two-step slide.
       setSpaceSlide({ dir, phase: 'out', n: spaceSlideN.current++ })
       await new Promise((r) => setTimeout(r, SPACE_SLIDE_OUT_MS))
       await swap()
       setSpaceSlide({ dir, phase: 'in', n: spaceSlideN.current++ })
     },
     [changeSettings, applyLayout]
+  )
+
+  /** One switch at a time, in the order they were asked for. Each one reads the space it is
+   *  leaving when ITS turn comes, so two that overlap — quick swipes, a space button
+   *  clicked mid-slide, the archive button, a fast Shift+scroll — can't file the tabs of
+   *  the space you were in under the wrong name (the second used to read the old space,
+   *  pick the same target, and swap in the new space's empty tabs as the old one's).
+   *  `queuedTarget` is where the last request is heading until it arrives: what the next
+   *  swipe works out its step from. */
+  const switchChain = useRef<Promise<void>>(Promise.resolve())
+  const queuedTarget = useRef<string | null>(null)
+  const switchSpace = useCallback(
+    (folder: string): Promise<void> => {
+      queuedTarget.current = folder
+      const run = switchChain.current.then(() => switchSpaceNow(folder))
+      const settled = run.then(
+        () => undefined,
+        () => undefined
+      )
+      switchChain.current = settled
+      void settled.then(() => {
+        if (queuedTarget.current === folder) queuedTarget.current = null
+      })
+      return run
+    },
+    [switchSpaceNow]
   )
 
   // Clear the class once the entry animation is over, so the next switch gets a
@@ -1002,6 +1051,14 @@ export default function App(): React.JSX.Element {
     const IDLE_MS = 220
     let travel = 0
     let last = 0
+    /** After a flick has moved a space, the rest of its momentum — the same way, for about
+     *  another third of a second — is not a second flick. Switching used to take long enough
+     *  that the tail was over before the next switch could start, which hid this; a space
+     *  now arrives within a frame or two, and a fast flick would have run on through two or
+     *  three of them. */
+    const HOLD_MS = 400
+    let heldDir = 0
+    let heldUntil = 0
 
     const scrollsSideways = (start: EventTarget | null): boolean => {
       let el = start instanceof HTMLElement ? start : null
@@ -1030,7 +1087,7 @@ export default function App(): React.JSX.Element {
 
       const list = settingsRef.current.spaces
       if (list.length < 2) return
-      const i = list.findIndex((sp) => sp.folder === settingsRef.current.activeSpaceFolder)
+      const i = list.findIndex((sp) => sp.folder === (queuedTarget.current ?? settingsRef.current.activeSpaceFolder))
       if (i < 0) return
 
       // Chromium turns a mouse wheel's deltaY into deltaX while Shift is held,
@@ -1040,13 +1097,21 @@ export default function App(): React.JSX.Element {
       const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
       if (d === 0) return
       const now = e.timeStamp
+      if (Math.sign(d) === heldDir && now < heldUntil) {
+        last = now
+        travel = 0
+        return
+      }
       if (now - last > IDLE_MS || Math.sign(d) !== Math.sign(travel)) travel = 0
       last = now
       travel += d
       if (Math.abs(travel) < THRESHOLD) return
 
-      const next = i + (travel > 0 ? 1 : -1)
+      const dirNow = travel > 0 ? 1 : -1
+      const next = i + dirNow
       travel = 0
+      heldDir = dirNow
+      heldUntil = now + HOLD_MS
       if (next < 0 || next >= list.length) return // clamped, not wrapped
       void switchSpace(list[next].folder)
     }
@@ -1056,6 +1121,62 @@ export default function App(): React.JSX.Element {
     window.addEventListener('wheel', onWheel, { passive: true })
     return () => window.removeEventListener('wheel', onWheel)
   }, [switchSpace])
+
+  /**
+   * One space to the left (-1) or right (+1): the shortcut and the trackpad swipe both come
+   * here.
+   *
+   * Worked out from where the last request is HEADING (`queuedTarget`), not from where the
+   * app is now: swipes arrive faster than a switch completes, and the second of two quick
+   * ones has to go one further than the first, not the same space again. A step never waits
+   * and is never dropped — `switchSpace` takes them in turn.
+   *
+   * At either end of the row nothing moves, and the two regions give a little with the swipe
+   * (`nudgeSpaces`) so it still answers. In the archive, which is not in the row, nothing
+   * happens at all. Same walls as the Shift+wheel above otherwise: nothing while onboarding or
+   * an `aria-modal` window is up.
+   */
+  const stepSpace = useCallback(
+    (dir: 1 | -1): void => {
+      if (!hasOnboardedRef.current) return
+      if (document.querySelector('[aria-modal="true"]')) return
+      const { spaces, activeSpaceFolder } = settingsRef.current
+      const i = spaces.findIndex((sp) => sp.folder === (queuedTarget.current ?? activeSpaceFolder))
+      if (i < 0) return
+      const next = i + dir
+      if (next < 0 || next >= spaces.length) {
+        nudgeSpaces(dir, motionOn())
+        return
+      }
+      void switchSpace(spaces[next].folder)
+    },
+    [switchSpace]
+  )
+
+  /**
+   * A plain two-finger swipe sideways changes space — no Shift (Reuben's first ask,
+   * 2026-10-08, and the only trackpad gesture an app can see on his Mac: a three-finger
+   * swipe never reaches it). `spaceSwipe.ts` decides what counts as a swipe; this feeds
+   * it every wheel event and carries the answer out through `stepSpace`.
+   *
+   * Left alone: anything with Shift (the older gesture above), Ctrl (Chromium sends a
+   * pinch as ctrl+wheel), and anything over a box that scrolls sideways — and the rest of
+   * that movement, which the detector is told about. It lives in a ref so it survives this
+   * effect re-registering — a fresh one mid-flick would count the rest of the flick as a
+   * second swipe.
+   */
+  const swipeFeed = useRef(createSwipeDetector())
+  useEffect(() => {
+    const onWheel = (e: WheelEvent): void => {
+      if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return
+      const px = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1 // lines/pages → px
+      const step = swipeFeed.current(e.deltaX * px, e.deltaY * px, e.timeStamp, scrollsSideways(e.target))
+      if (step) void stepSpace(step)
+    }
+    // Passive, like the Shift+wheel above: nothing here may stop a scroll that isn't ours.
+    window.addEventListener('wheel', onWheel, { passive: true })
+    return () => window.removeEventListener('wheel', onWheel)
+  }, [stepSpace])
 
   /** switchSpace, but only for a folder `settings.spaces` has actually
    *  reconciled as a space. That check is not optional and is why this exists:
@@ -2845,7 +2966,11 @@ export default function App(): React.JSX.Element {
         return
       }
       if (!mod || e.repeat) return
-      if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+      if (e.altKey && e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        // The tab shortcut plus Shift = spaces instead of tabs.
+        e.preventDefault()
+        void stepSpace(e.key === 'ArrowRight' ? 1 : -1)
+      } else if (e.altKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
         e.preventDefault()
         applyLayout(cycle(layoutRef.current, e.key === 'ArrowRight' ? 1 : -1))
       } else if (e.key === 'w' || e.key === 'W') {
@@ -2860,7 +2985,7 @@ export default function App(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [closeNote, applyLayout])
+  }, [closeNote, applyLayout, stepSpace])
 
   // Dev only, and once: does the process behind this window understand it? See
   // boot.ts — this is the check that would have named the blank-window bug in
@@ -3201,7 +3326,7 @@ export default function App(): React.JSX.Element {
         }}
       />
 
-      <main className={'flex min-w-0 flex-1 flex-col overflow-hidden ' + spaceSlideClass}>
+      <main className={'space-vt-main flex min-w-0 flex-1 flex-col overflow-hidden ' + spaceSlideClass}>
         {/* The strip and the command row are ALWAYS on screen, empty or not.
             They're the app's fixed chrome: rows that appear when you open a
             second note would shove the text down mid-work, and the whole reason

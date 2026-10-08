@@ -4439,6 +4439,107 @@ body.pane-reordering .pane-divider {
   opacity: 0;
 }
 
+/* The slide between spaces: a View Transition (spaceTransition.ts).
+   ---------------------------------------------------------------------------
+   The note area and the sidebar's list are the only things that move. Each is NAMED for the
+   browser, and only while `html.space-vt` is on — a name that was always on would make any
+   other transition capture the two as separate pieces too. The picture of the space you are
+   leaving goes out one side while the new one comes in from the other, edge to edge and at one
+   speed, which is what a desktop switch looks like. `translateX` is in percent of the picture's
+   OWN width, so the sidebar's list travels its 288px and the editor its full width, and both
+   arrive together. The curve starts at once, picks up speed through the first fifth and settles
+   over the last third without springing (half the distance by 30% of the time, 95% by two thirds
+   — measured, because the app's usual ease-out covered 83% in the first 30% and read as a snap
+   with a long invisible tail). Quick swipes carry it on rather than restarting it (see
+   spaceTransition.ts), so the tail is never cut. Nothing else is named, so the
+   search bar, the space switcher and the sidebar's foot stay where they are, and the picture of
+   all the rest is simply the new page, at once, with no cross-fade. At rest nothing carries a
+   transform (the Windows sharp-text rule, above): the names and these rules exist for the 340ms.
+   Reduced motion keeps the change but drops the travel: a short cross-fade of the two regions. */
+html.space-vt {
+  --space-vt-ms: 340ms;
+  --space-vt-ease: cubic-bezier(0.4, 0.3, 0.2, 1);
+}
+html.space-vt .space-vt-main {
+  view-transition-name: space-main;
+}
+html.space-vt .space-vt-side {
+  view-transition-name: space-side;
+}
+html.space-vt::view-transition-group(space-main),
+html.space-vt::view-transition-group(space-side) {
+  animation-duration: var(--space-vt-ms);
+  overflow: clip;
+}
+html.space-vt::view-transition-old(space-main),
+html.space-vt::view-transition-new(space-main),
+html.space-vt::view-transition-old(space-side),
+html.space-vt::view-transition-new(space-side) {
+  animation-duration: var(--space-vt-ms);
+  animation-timing-function: var(--space-vt-ease);
+  animation-fill-mode: both;
+  mix-blend-mode: normal;
+}
+html.space-vt-next::view-transition-old(space-main),
+html.space-vt-next::view-transition-old(space-side) {
+  animation-name: space-vt-out-next;
+}
+html.space-vt-next::view-transition-new(space-main),
+html.space-vt-next::view-transition-new(space-side) {
+  animation-name: space-vt-in-next;
+}
+html.space-vt-prev::view-transition-old(space-main),
+html.space-vt-prev::view-transition-old(space-side) {
+  animation-name: space-vt-out-prev;
+}
+html.space-vt-prev::view-transition-new(space-main),
+html.space-vt-prev::view-transition-new(space-side) {
+  animation-name: space-vt-in-prev;
+}
+@keyframes space-vt-out-next {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+@keyframes space-vt-in-next {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes space-vt-out-prev {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+@keyframes space-vt-in-prev {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+html.space-vt::view-transition-old(root) {
+  animation: none;
+  opacity: 0;
+}
+html.space-vt::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+@keyframes space-vt-fade-out {
+  to { opacity: 0; }
+}
+@keyframes space-vt-fade-in {
+  from { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.space-vt {
+    --space-vt-ms: 160ms;
+  }
+  html.space-vt::view-transition-old(space-main),
+  html.space-vt::view-transition-old(space-side) {
+    animation-name: space-vt-fade-out !important;
+  }
+  html.space-vt::view-transition-new(space-main),
+  html.space-vt::view-transition-new(space-side) {
+    animation-name: space-vt-fade-in !important;
+  }
+}
+
 /* The space switch, macOS-Spaces style (App.tsx's `switchSpace`).
    ---------------------------------------------------------------------------
    Two phases on ONE element rather than a cross-fade of two: `out` pushes the
