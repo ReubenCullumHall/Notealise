@@ -17,8 +17,3 @@ export const cachedVideoUrl = cache.cached
 /** Read a video's bytes and mint a blob: URL for it (null if the read fails). */
 export const loadVideo = cache.load
 
-/** Drop the video blobs specifically. A vault switch should call
- *  `clearAssetCaches()` instead — it covers images too, and this cache being
- *  cleared separately (or, as it was, not at all) is exactly the bug that
- *  played the previous vault's video after a switch. */
-export const clearVideoCache = cache.clear

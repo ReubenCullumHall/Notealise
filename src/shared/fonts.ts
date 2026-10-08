@@ -103,8 +103,6 @@ export function fontCssValue(f: { family: string; fallback: FontFallback }): str
   return `'${f.family}', ${f.fallback}`
 }
 
-export const SKIN_FONTS = FONTS.filter((f) => f.category !== 'dyslexia')
-export const DYSLEXIA_FONTS = FONTS.filter((f) => f.category === 'dyslexia')
 export const DOWNLOADABLE_FONTS = FONTS.filter((f) => f.source === 'downloadable')
 
 export const CATEGORY_LABELS: Record<Exclude<FontCategory, 'dyslexia'>, string> = {

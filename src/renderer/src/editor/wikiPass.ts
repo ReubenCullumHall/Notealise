@@ -1,7 +1,7 @@
 import { Decoration, WidgetType } from '@codemirror/view'
 import { blockIdOf, headingShown } from '../../../shared/blocks'
 import { syntaxTree } from '@codemirror/language'
-import { dirName, resolveLink, scanLinks, type WikiLink } from '../../../shared/links'
+import { resolveLink, scanLinks, type WikiLink } from '../../../shared/links'
 import { hideDeco, type Pass } from './livePreview'
 import { inCode } from './mathPass'
 import { linkEnv, type LinkEnv } from './linkEnv'
@@ -275,6 +275,3 @@ export const wikiPass: Pass = (view, _active, push) => {
   }
 }
 
-/** The folder a new note should be created in when an unresolved link is
- *  clicked: beside the note that mentioned it. */
-export const folderForNew = (suggestedPath: string): string => dirName(suggestedPath)

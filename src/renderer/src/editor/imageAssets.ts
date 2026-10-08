@@ -20,11 +20,6 @@ export const cachedUrl = cache.cached
 /** Read an image's bytes and mint a blob: URL for it (null if the read fails). */
 export const loadImage = cache.load
 
-/** Drop the image blobs specifically. Prefer `clearAssetCaches()` for a vault
- *  switch, which covers video too — this is here for a caller that genuinely
- *  only wants the images gone. */
-export const clearImageCache = cache.clear
-
 // `resolveVaultPath` now lives in shared/attachments.ts, beside the
 // `encodeTarget` it is the inverse of — the index of which notes hold which
 // photos needs it too, and that is not an image-loading concern.
