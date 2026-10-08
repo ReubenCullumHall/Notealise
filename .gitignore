@@ -25,11 +25,6 @@ release [0-9]*
 .impeccable/config.local.json
 .impeccable/hook.cache.json
 
-# per-machine vault path for dev:legacy
-legacy/.env
-legacy/.env.*
-!legacy/.env.example
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -41,10 +36,6 @@ legacy/.env.*
 *.sln
 *.sw?
 
-# build_centerlines.py keeps the previous centerlines beside the new ones;
-# git history already has them, so the copy is local convenience only.
-tools/wordmark/*.bak
-
 # Behind-the-scenes promo exports (ProRes masters, frame sequences, webm/webp). Reuben's
 # working material for marketing videos, not project files - nothing here ships with the
 # app or the site. Regenerate with tools/wordmark/render_promo.py.
@@ -52,7 +43,7 @@ tools/wordmark/*.bak
 # src/renderer/src/assets/promo/, the bundled copy StartupSplash.tsx actually ships.
 /promo/
 
-# Python bytecode from the wordmark tooling
+# Python bytecode from the tools/ scripts
 __pycache__/
 *.pyc
 
