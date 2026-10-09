@@ -12,25 +12,34 @@ import type { AppSettings, Space } from '../../../shared/settings'
 // to remove something in use, trades that for a dead button and a hunt for
 // which space is holding it.
 
+// The archive has a look of its own like a space (AppSettings.archive), so it
+// wears these too and is cleared and counted with the spaces — otherwise it is
+// the one place left pointing at something the collection no longer has.
+const everyLook = (settings: AppSettings): Space[] => [...settings.spaces, settings.archive]
+
 export function withoutPageLook(settings: AppSettings, id: string): Partial<AppSettings> {
+  const clear = (s: Space): Space => (s.pageLook === id ? { ...s, pageLook: '' } : s)
   return {
     pageLookLibrary: settings.pageLookLibrary.filter((x) => x !== id),
-    spaces: settings.spaces.map((s) => (s.pageLook === id ? { ...s, pageLook: '' } : s))
+    spaces: settings.spaces.map(clear),
+    archive: clear(settings.archive)
   }
 }
 
 export function withoutTint(settings: AppSettings, token: string): Partial<AppSettings> {
+  const clear = (s: Space): Space => (s.tint === token ? { ...s, tint: '' } : s)
   return {
     tintLibrary: settings.tintLibrary.filter((x) => x !== token),
-    spaces: settings.spaces.map((s) => (s.tint === token ? { ...s, tint: '' } : s))
+    spaces: settings.spaces.map(clear),
+    archive: clear(settings.archive)
   }
 }
 
 /** How many spaces are currently wearing it — for the "this will also…" tip on
  *  the Remove button, so the consequence is stated before it happens rather
- *  than discovered afterwards. */
+ *  than discovered afterwards. The archive counts as one. */
 export function spacesWearing(settings: AppSettings, key: 'pageLook' | 'tint', value: string): number {
-  return settings.spaces.filter((s) => s[key] === value).length
+  return everyLook(settings).filter((s) => s[key] === value).length
 }
 
 /** A font is the third collectable, and removing one has the same obligation
@@ -48,11 +57,12 @@ export function withoutFont(settings: AppSettings, id: string): Partial<AppSetti
     uiFont: s.uiFont === id ? '' : s.uiFont,
     dyslexiaFont: s.dyslexiaFont === id ? '' : s.dyslexiaFont
   })
-  return { spaces: settings.spaces.map(clear) }
+  return { spaces: settings.spaces.map(clear), archive: clear(settings.archive) }
 }
 
 /** Spaces using this font in any of its three roles. Counted once per space,
- *  not once per role — the warning is about spaces, not fields. */
+ *  not once per role — the warning is about spaces, not fields. The archive
+ *  counts as one. */
 export function spacesWearingFont(settings: AppSettings, id: string): number {
-  return settings.spaces.filter((s) => s.font === id || s.uiFont === id || s.dyslexiaFont === id).length
+  return everyLook(settings).filter((s) => s.font === id || s.uiFont === id || s.dyslexiaFont === id).length
 }

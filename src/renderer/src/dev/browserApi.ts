@@ -241,6 +241,34 @@ const api: VaultApi = {
     // been seen to go wrong through them yet.
     return dest
   },
+  // main's moveEntryInto: the folder is made if missing, a taken name suffixed.
+  // No announce, for the same reason renameEntry has none.
+  moveEntryInto: async (from, toDir) => {
+    if (parentOf(from) === toDir) return from
+    for (let d = toDir; d && !store.dirs.includes(d); d = parentOf(d)) store.dirs.push(d)
+    const dest = unique(toDir, nameOf(from))
+    if (store.dirs.includes(from)) {
+      store.dirs = store.dirs.map((d) => remapPath(d, from, dest))
+      for (const p of Object.keys(store.files)) {
+        const next = remapPath(p, from, dest)
+        if (next === p) continue
+        store.files[next] = store.files[p]
+        delete store.files[p]
+      }
+    } else {
+      store.files[dest] = store.files[from] ?? ''
+      delete store.files[from]
+    }
+    const entries: Record<string, EntryMeta> = {}
+    for (const [p, meta] of Object.entries(store.workspace.entries)) {
+      const was = meta.archivedFrom
+      const now = was === undefined ? undefined : remapPath(was, from, dest)
+      entries[remapPath(p, from, dest)] = now === was ? meta : { ...meta, archivedFrom: now }
+    }
+    store.workspace = { ...store.workspace, entries }
+    save()
+    return dest
+  },
 
   getSettings: async () => normalizeSettings(store.settings),
   setSettings: async (partial) => {

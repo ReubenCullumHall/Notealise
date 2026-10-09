@@ -1,7 +1,7 @@
 import { Icon } from '../icons'
 import { HelpTip } from '../Tooltip'
 import { SpaceForm } from './SpaceForm'
-import { activeSpace, type AppSettings, type Space } from '../../../shared/settings'
+import { activeOrFirstSpace, type AppSettings, type Space } from '../../../shared/settings'
 import type { FontLibrary } from './useInstalledFonts'
 
 // Settings → Look → Every space (the Customisation page until 2026-09-29).
@@ -47,7 +47,8 @@ export function Customisation({
   const spaces = settings.spaces
   // Shown as the starting point. The active space rather than the first, so the
   // controls open on what you were just looking at.
-  const shown = activeSpace(settings)
+  // Never the archive's: it isn't one of the spaces this page writes to.
+  const shown = activeOrFirstSpace(settings)
 
   /** Do the spaces disagree about this one? Whole-app scope shows a marker where
    *  they do — presenting one space's answer as everyone's would be a lie. */

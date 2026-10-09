@@ -88,6 +88,8 @@ import {
 import {
   activeSpace,
   DEFAULT_SETTINGS,
+  inArchive as isInArchive,
+  isArchiveName,
   reconcileSpaces,
   shownEmoji,
   SPACE_CAP,
@@ -113,6 +115,7 @@ import { MAC_INSTALL_GUIDE_URL, type UpdateStatus } from '../../shared/update'
 import { UpdateToast } from './update/UpdateToast'
 import { Icon } from './icons'
 import {
+  archivedRoots,
   autoColorPlan,
   colorOf,
   findNode,
@@ -120,6 +123,7 @@ import {
   siblingColors,
   sortSiblings
 } from './organise/model'
+import { prepare, searchableText, searchArchive, type ArchiveDoc, type ArchiveHit } from './organise/archiveSearch'
 import { motionOn } from './tabs/tabStyles'
 import { ColorPopover, type Anchor } from './color/Picker'
 import { bindColorMemory } from './color/memory'
@@ -371,7 +375,7 @@ export default function App(): React.JSX.Element {
   const loadingRef = useRef<Set<string>>(new Set())
   const [versions, setVersions] = useState<Record<string, number>>({})
   const [wordCounts, setWordCounts] = useState<Record<string, number>>({})
-  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[]; heading?: string } | null>(null)
   // Which rows the colour picker is open for, and where it points. One popover
   // for the whole window, like the context menu and the hover card — the
   // sidebar renders four TreeViews and a per-instance picker could put two on
@@ -382,6 +386,16 @@ export default function App(): React.JSX.Element {
   // active space; the rest of `settings` is global. Derived rather than stored,
   // so the two can never disagree — a find over at most SPACE_CAP items.
   const space = activeSpace(settings)
+  // The archive is one more top-level folder with a look of its own, kept apart
+  // from the spaces (shared/settings.ts, AppSettings.archive). Being in it is
+  // being in a space whose folder is the archive's, so `space` above already
+  // IS the archive while you're there — these two say so by name.
+  const archiveFolder = settings.archive.folder
+  const inArchive = isInArchive(settings)
+  // The archive's own search, separate from the sidebar's: its own words, kept
+  // while you go in and out, and always over everything in the archive — names,
+  // folders and what the notes say (organise/archiveSearch.ts).
+  const [archiveQuery, setArchiveQuery] = useState('')
   // The saved-preset library (shared/presets.ts). App owns it rather than the
   // settings window, because the mirror below has to keep running whether or not
   // that window is open. There is nothing here about WHERE it lives: it lives in
@@ -432,6 +446,17 @@ export default function App(): React.JSX.Element {
   // In memory only: `settings.session` remembers the space you were IN, which is
   // the one you come back to.
   const spaceTabs = useRef<Map<string, TabLayout>>(new Map())
+  /** The space you were in when you went into the archive — where leaving it
+   *  takes you back to. In memory only: after a restart in the archive, leaving
+   *  goes to the first space. */
+  const spaceBeforeArchive = useRef('')
+  /** The one-time move of an older build's archive flags (see
+   *  `adoptOldArchiveRef.current` beside the archive actions). Through a ref
+   *  because the boot effect calls it and is declared long before it. */
+  const adoptOldArchiveRef = useRef<() => Promise<void>>(async () => {})
+  const adoptingRef = useRef(false)
+  /** Set while a trip into or out of the archive is under way. */
+  const archiveTrip = useRef(false)
   // The one hover card, for every link anywhere: a chip in a note's links strip
   // or a [[link]] in the text. Held here rather than by whatever raised it so
   // there is only ever one on screen, and so it can be portalled clear of the
@@ -746,9 +771,16 @@ export default function App(): React.JSX.Element {
   }, [tree, space.folder])
   // Notes sitting loose at the vault root, outside every space. Shown in their
   // own group rather than moved — nothing on disk shifts without being asked.
+  // Not in the archive: it holds what was put there, and loose notes weren't.
   const looseNotes = useMemo(
-    () => (settings.spaces.length ? tree.filter((n) => n.type === 'file') : []),
-    [tree, settings.spaces.length]
+    () => (settings.spaces.length && !inArchive ? tree.filter((n) => n.type === 'file') : []),
+    [tree, settings.spaces.length, inArchive]
+  )
+  // What is in the archive, wherever you are — its button's count and the
+  // main search's "also in the archive" line both need it from a space.
+  const archiveTree = useMemo<TreeNode[]>(
+    () => tree.find((n) => n.type === 'dir' && n.path === archiveFolder)?.children ?? [],
+    [tree, archiveFolder]
   )
 
   // Folders on disk are the source of truth, so every tree load re-syncs the
@@ -807,6 +839,10 @@ export default function App(): React.JSX.Element {
   /** Kept pointing at the live `openImportedSpace` below — see the note on
    *  `onOpenSpace` in the object this feeds. */
   const openSpaceRef = useRef<(folder: string) => Promise<void>>(async () => {})
+
+  /** Kept pointing at the live `openArchive` below, for the same reason as the
+   *  two above: Settings → Archive's "Open the archive" is wired up here. */
+  const openArchiveRef = useRef<() => Promise<void>>(async () => {})
 
   /** Kept pointing at the live `followMove` below, for the same reason: the space
    *  rename is declared long before it. */
@@ -890,7 +926,8 @@ export default function App(): React.JSX.Element {
       // helpers, which are declared further down this component — calling it
       // directly here would read a `const` before its initialiser has run. Same
       // idiom `menuHandler` uses below, and for the same reason.
-      onColorExistingFolders: (folders) => colorExistingRef.current(folders)
+      onColorExistingFolders: (folders) => colorExistingRef.current(folders),
+      onOpenArchive: () => openArchiveRef.current()
     }),
     [loadTree, loadWorkspace, flash, remapOpen, forgetIfInside, vault]
   )
@@ -936,6 +973,9 @@ export default function App(): React.JSX.Element {
     async (folder: string): Promise<void> => {
       const from = settingsRef.current.activeSpaceFolder
       if (from === folder) return
+      const arch = settingsRef.current.archive.folder
+      // The space to go back to when you leave the archive (`leaveArchive`).
+      if (folder === arch && from !== arch) spaceBeforeArchive.current = from
 
       const swap = async (): Promise<void> => {
         spaceTabs.current.set(from, layoutRef.current)
@@ -948,6 +988,15 @@ export default function App(): React.JSX.Element {
       }
 
       if (!settingsRef.current.animationsEnabled) {
+        await swap()
+        return
+      }
+
+      // Into or out of the archive: no slide — the window switches at once and
+      // the archive button's own press is the motion (Sidebar.tsx). Reuben,
+      // 2026-10-08, after trying a genie here: "just forget that animation and
+      // make it a button that is clicked and has some bounce to it".
+      if (folder === arch || from === arch) {
         await swap()
         return
       }
@@ -1189,7 +1238,12 @@ export default function App(): React.JSX.Element {
   const enterSpace = useCallback(
     async (folder: string): Promise<void> => {
       if (!folder || folder === settingsRef.current.activeSpaceFolder) return
-      if (!settingsRef.current.spaces.some((sp) => sp.folder === folder)) return
+      // The archive counts: a link to a note in it, or its crumb in the path
+      // bar, takes you into the archive like any space.
+      const known =
+        folder === settingsRef.current.archive.folder ||
+        settingsRef.current.spaces.some((sp) => sp.folder === folder)
+      if (!known) return
       await switchSpace(folder)
     },
     [switchSpace]
@@ -1771,7 +1825,13 @@ export default function App(): React.JSX.Element {
         const home = s.activeSpaceFolder
         const mine = (p: string): boolean => {
           const owner = p.includes('/') ? p.slice(0, p.indexOf('/')) : ''
-          return !owner || owner === home || !s.spaces.some((sp) => sp.folder === owner)
+          // A loose note shows in every space but not in the archive (it isn't
+          // in its sidebar either). A note IN the archive belongs to the
+          // archive, not to "no space": without the archive check below it came
+          // back into whichever space you were in, as a tab the sidebar beside
+          // it doesn't show.
+          if (!owner) return home !== s.archive.folder
+          return owner === home || (owner !== s.archive.folder && !s.spaces.some((sp) => sp.folder === owner))
         }
         applyLayout(restoreLayout(s.session, (p) => mine(p) && !!findNode(t, p)), true)
       }
@@ -1834,6 +1894,8 @@ export default function App(): React.JSX.Element {
       if (v) restoreSession(loadedTree, s)
       if (v) await loadPresets()
       if (v) await rescanLinks() // one walk of the vault; incremental after this
+      // Last, once the tabs are back: it can move notes that are open.
+      if (v) await adoptOldArchiveRef.current()
     })()
   }, [loadTree, loadWorkspace, loadSettings, restoreSession, syncSpaces, rescanLinks, loadPresets])
 
@@ -2097,6 +2159,7 @@ export default function App(): React.JSX.Element {
       setLinkRows([])
       openTargetsRef.current.clear()
       spaceTabs.current.clear() // a different vault's spaces are different spaces
+      spaceBeforeArchive.current = ''
       // Image AND video blobs are keyed by vault-RELATIVE path, so the same
       // "Import/photo.png" names a different file in a different vault — a kept
       // cache would show the previous vault's picture. Also frees the blobs.
@@ -2122,6 +2185,7 @@ export default function App(): React.JSX.Element {
       // either folder. This re-read only exists so a preset written while
       // another vault was open shows up in the list straight away.
       await loadPresets()
+      await adoptOldArchiveRef.current()
     }
   }
 
@@ -2204,9 +2268,14 @@ export default function App(): React.JSX.Element {
    *  screen that hasn't introduced the per-space one yet. One write across all
    *  of them, not a loop: each setSettings is a full read-modify-write of
    *  settings.json (same reasoning as the preset ALL_SPACES path above). */
+  // The archive takes onboarding's picks too: they are the app's starting look,
+  // and an archive that opened in the stock font and colour would read as broken.
   const pickOnboardingFont = (id: string): void => {
     const current = settingsRef.current
-    void changeSettings({ spaces: current.spaces.map((sp) => ({ ...sp, font: id })) })
+    void changeSettings({
+      spaces: current.spaces.map((sp) => ({ ...sp, font: id })),
+      archive: { ...current.archive, font: id }
+    })
   }
 
   /** Same reasoning as pickOnboardingFont, for the accent swatch added to
@@ -2214,14 +2283,20 @@ export default function App(): React.JSX.Element {
    *  the active one. */
   const pickOnboardingAccent = (id: string): void => {
     const current = settingsRef.current
-    void changeSettings({ spaces: current.spaces.map((sp) => ({ ...sp, accent: id })) })
+    void changeSettings({
+      spaces: current.spaces.map((sp) => ({ ...sp, accent: id })),
+      archive: { ...current.archive, accent: id }
+    })
   }
 
   /** The Fonts step's "Colour the text / Tint the whole page" — the Space's
    *  own `accentMode`, on every space for the same reason as the two above. */
   const pickOnboardingAccentMode = (mode: AccentMode): void => {
     const current = settingsRef.current
-    void changeSettings({ spaces: current.spaces.map((sp) => ({ ...sp, accentMode: mode })) })
+    void changeSettings({
+      spaces: current.spaces.map((sp) => ({ ...sp, accentMode: mode })),
+      archive: { ...current.archive, accentMode: mode }
+    })
   }
 
   /** Every organise action goes through here — rename, move, delete, restore,
@@ -2444,7 +2519,10 @@ export default function App(): React.JSX.Element {
    *  clears the flag: that action IS "sorting it into what's next". */
   const move = (paths: string[], toDir: string, anchor: string | null, after: boolean): void =>
     void run(async () => {
-      const toSpace = spaceFolderOf(toDir, settings.spaces)
+      // The archive is a place of its own here: dragging something out of it
+      // onto a space's tab is a crossing like any other.
+      const places = [...settings.spaces, settings.archive]
+      const toSpace = spaceFolderOf(toDir, places)
 
       const landed: string[] = []
       // Which of the landed entries genuinely arrived from ANOTHER space,
@@ -2455,15 +2533,30 @@ export default function App(): React.JSX.Element {
       // turned up under the sidebar's "Moved" divider without having moved
       // anywhere.
       const arrived: string[] = []
+      // Dragged out of the place you're looking at — onto another space's tab,
+      // or out of the archive — its row shrinks away like Move to bin's
+      // (Reuben, 2026-10-09: "when anything enters or leaves the sidebar do
+      // that animation"). A move within the place is not a leaving.
+      markDeleted(
+        paths.filter(
+          (p) =>
+            !(toDir === p || toDir.startsWith(p + '/')) &&
+            joinPath(toDir, nameOf(p)) !== p &&
+            spaceFolderOf(p, places) !== toSpace
+        )
+      )
       for (const from of paths) {
         if (toDir === from || toDir.startsWith(from + '/')) continue // into self/descendant
-        const crossed = spaceFolderOf(from, settings.spaces) !== toSpace
+        const crossed = spaceFolderOf(from, places) !== toSpace
         const dest = joinPath(toDir, nameOf(from))
         if (dest === from) {
           landed.push(from) // already in this folder — a pure reorder, never crossed
           continue
         }
         const actual = await window.api.renameEntry(from, dest)
+        // ...and one arriving in the place you're looking at (a loose note
+        // dragged into a folder of this space) grows in.
+        if (crossed && toSpace === settingsRef.current.activeSpaceFolder) markCreated(actual)
         remapOpen(from, actual)
         await followMove(from, actual)
         landed.push(actual)
@@ -2508,6 +2601,10 @@ export default function App(): React.JSX.Element {
         (p) => !arrived.includes(p) && ws.entries[p]?.movedAt !== undefined
       )
       if (settled.length) nextWs = await window.api.updateEntries(settled, { movedAt: undefined })
+      // Dragged out of the archive (onto a space's tab): it is no longer
+      // archived, so it forgets where it was archived from.
+      const left = landed.filter((p) => !inArchiveFolder(p) && ws.entries[p]?.archivedFrom !== undefined)
+      if (left.length) nextWs = await window.api.updateEntries(left, { archivedFrom: undefined, archivedAt: undefined })
       setWorkspace(nextWs)
     })
 
@@ -2524,20 +2621,308 @@ export default function App(): React.JSX.Element {
       )
     )
 
-  const setArchived = (paths: string[], archived: boolean): void =>
-    void run(async () =>
-      setWorkspace(
-        await window.api.updateEntries(paths, {
-          archived,
-          archivedAt: archived ? Date.now() : undefined,
-          // Archiving is itself a decision about a just-arrived item — the
-          // same "sorted into what's next" signal an ordinary move clears
-          // (see `move`'s comment) — so it doesn't resurface under "Moved"
-          // with a stale timestamp the next time it's restored.
-          ...(archived ? { movedAt: undefined } : {})
+  // --- the archive -----------------------------------------------------------
+  // Since 2026-10-08 the archive is a real folder (`settings.archive.folder`,
+  // "Archive"), and archiving MOVES a note or folder into it — before, it was a
+  // flag and the file never moved. Where it came from is remembered on the
+  // entry (`EntryMeta.archivedFrom`) so Put back can take it home.
+
+  const inArchiveFolder = (p: string): boolean => {
+    const arch = settingsRef.current.archive.folder
+    return p === arch || p.startsWith(arch + '/')
+  }
+
+  /** "Revision › Physics" for "Revision/Physics"; the vault itself for ''. */
+  const placeName = (dir: string): string => (dir ? dir.split('/').join(' › ') : 'your vault')
+
+  /** Close the tabs of entries that have just left the place you're looking at
+   *  — here and in every other space's stashed tabs. A note put away in the
+   *  archive is not left open in the space it left (the same rule switching
+   *  space follows: the strip only shows notes the sidebar beside it can). Any
+   *  unsaved typing is written first, under the new path — `remapOpen` moved
+   *  the buffer, and `applyLayout` writes whatever leaves the strip. */
+  const closeTabsUnder = (roots: string[]): void => {
+    applyLayout(closeUnder(layoutRef.current, roots))
+    for (const [folder, stashed] of spaceTabs.current) spaceTabs.current.set(folder, closeUnder(stashed, roots))
+  }
+
+  /** Where Put back takes an entry: the folder it was archived from, when that
+   *  is known, isn't itself in the archive now, and its space still exists
+   *  (a missing folder INSIDE the space is made again, as the bin does). Anything
+   *  else — no record, an entry that only came along inside an archived folder,
+   *  a space that has gone — lands at the top of the space you came into the
+   *  archive from, and the message says where. Recreating a gone space would
+   *  quietly make a new space, so it is never done. */
+  const putBackDir = (path: string, entries: Workspace['entries']): { dir: string; known: boolean } => {
+    const s = settingsRef.current
+    const from = entries[path]?.archivedFrom
+    if (from && !inArchiveFolder(from)) {
+      const dir = parentOf(from)
+      if (dir === '') return { dir, known: true } // a loose note goes back to the vault's top
+      const top = dir.split('/')[0]
+      if (s.spaces.some((sp) => sp.folder === top)) return { dir, known: true }
+    }
+    const before = spaceBeforeArchive.current
+    const fallback = !!before && s.spaces.some((sp) => sp.folder === before)
+      ? before
+      : (s.spaces.find((sp) => sp.folder)?.folder ?? '')
+    return { dir: fallback, known: false }
+  }
+
+  /** Put entries in the archive. Each MOVES into the archive's folder (made if
+   *  it isn't there yet), keeping its name — " (2)" if the archive already has
+   *  one — and remembers where it came from. Newest go to the top of the
+   *  archive's own order. A folder carries everything inside it. */
+  const archiveEntries = (paths: string[], quiet = false): Promise<string[]> =>
+    new Promise((done) => {
+      const landed: { from: string; to: string }[] = []
+      void run(async () => {
+        const arch = settingsRef.current.archive.folder
+        // Already in the archive, or inside something else being archived: skip.
+        const tops = paths.filter(
+          (p) => p && !inArchiveFolder(p) && !paths.some((q) => q !== p && p.startsWith(q + '/'))
+        )
+        if (!tops.length) return
+        // Their rows shrink out of the sidebar like Move to bin's (Reuben,
+        // 2026-10-09: "when anything enters or leaves the sidebar do that
+        // animation"). Not the quiet move-in of old flags: those rows were
+        // never showing.
+        if (!quiet) markDeleted(tops)
+        const before = await window.api.getWorkspace()
+        for (const from of tops) {
+          const to = await window.api.moveEntryInto(from, arch)
+          remapOpen(from, to)
+          await followMove(from, to)
+          landed.push({ from, to })
+        }
+        closeTabsUnder(landed.map((l) => l.to))
+        const now = Date.now()
+        let ws = await window.api.getWorkspace()
+        for (const { from, to } of landed) {
+          ws = await window.api.updateEntry(to, {
+            // An entry archived by an older build keeps the date it went in.
+            archivedAt: quiet ? (before.entries[from]?.archivedAt ?? now) : now,
+            archivedFrom: from,
+            archived: undefined,
+            // Archiving is itself a decision about a just-arrived item — the
+            // same "sorted into what's next" signal an ordinary move clears
+            // (see `move`'s comment) — so it doesn't come back under "Moved".
+            movedAt: undefined
+          })
+        }
+        // Newest first in the archive's own order ("Your order"), the rest as
+        // they were.
+        const fresh = await window.api.listTree()
+        const kids = findNode(fresh, arch)?.children ?? []
+        const arrived = new Set(landed.map((l) => l.to))
+        const rest = sortSiblings(kids, ws, true)
+          .map((n) => n.path)
+          .filter((p) => !arrived.has(p))
+        ws = await window.api.reorderEntries([...landed.map((l) => l.to).reverse(), ...rest])
+        setWorkspace(ws)
+        setTree(fresh)
+        if (quiet) return
+        const one = landed.length === 1 ? landed[0] : null
+        showNotice({
+          text: one ? `Archived “${stripMd(nameOf(one.to))}”.` : `Archived ${landed.length} items.`,
+          // Undo puts each one back in its old place in its folder's list, too.
+          action: {
+            label: 'Undo',
+            run: () =>
+              void putBack(
+                landed.map((l) => l.to),
+                undefined,
+                new Map(landed.map((l) => [l.to, before.entries[l.from]?.order]))
+              )
+          }
         })
+      }).finally(() => done(landed.map((l) => l.to)))
+    })
+
+  /** Take entries back out of the archive, each to where it came from (see
+   *  `putBackDir`). The message says where they went and offers to go there.
+   *
+   *  `into` is a space picked from Put back's menu (`putBackMenu`) instead:
+   *  everything goes to the top of that space, at the BOTTOM of its list, to be
+   *  filed from there (Reuben, 2026-10-09: "put it back into any space, don't
+   *  worry about categorising subfolders and that, they can do that themselves
+   *  when they see it at the bottom of the sidebar in that space"). */
+  const putBack = (paths: string[], into?: string, wasOrder?: Map<string, number | undefined>): Promise<void> =>
+    run(async () => {
+      const tops = paths.filter(
+        (p) =>
+          inArchiveFolder(p) &&
+          p !== settingsRef.current.archive.folder &&
+          !paths.some((q) => q !== p && p.startsWith(q + '/'))
       )
-    )
+      if (!tops.length) return
+      const ws = await window.api.getWorkspace()
+      // Their rows shrink out of the list they leave and grow into the one they
+      // land in, like Move to bin and New note (Reuben, 2026-10-09: "when
+      // anything enters or leaves the sidebar do that animation").
+      markDeleted(tops)
+      const landed: string[] = []
+      const order: Array<[string, number]> = []
+      let guessed = 0
+      for (const p of tops) {
+        const home = into !== undefined ? { dir: into, known: true } : putBackDir(p, ws.entries)
+        const to = await window.api.moveEntryInto(p, home.dir)
+        markCreated(to)
+        remapOpen(p, to)
+        await followMove(p, to)
+        landed.push(to)
+        const was = wasOrder?.get(p)
+        if (was !== undefined) order.push([to, was])
+        if (!home.known) guessed++
+      }
+      // Seen from the archive, they have left; seen from a space (Undo, straight
+      // after archiving), their tabs were already closed on the way in.
+      if (isInArchive(settingsRef.current)) closeTabsUnder(landed)
+      // Its place in the archive's list means nothing where it lands: it goes
+      // back to the place it had (Undo knows it), or else takes its place by
+      // name, after anything arranged by hand. Without this, the archive's
+      // "newest first" number put it at the top of its old folder.
+      let next = await window.api.updateEntries(landed, {
+        archivedFrom: undefined,
+        archivedAt: undefined,
+        archived: undefined,
+        order: undefined
+      })
+      for (const [to, n] of order) next = await window.api.updateEntry(to, { order: n })
+      const fresh = await loadTree()
+      if (into !== undefined) {
+        const kids = into === '' ? fresh : (findNode(fresh, into)?.children ?? [])
+        const arrived = new Set(landed)
+        const rest = sortSiblings(kids, next, false)
+          .map((n) => n.path)
+          .filter((p) => !arrived.has(p))
+        next = await window.api.reorderEntries([...rest, ...landed])
+      }
+      setWorkspace(next)
+      const dirs = [...new Set(landed.map(parentOf))]
+      const where = dirs.length === 1 ? placeName(dirs[0]) : 'where they came from'
+      const what = landed.length === 1 ? `“${stripMd(nameOf(landed[0]))}”` : `${landed.length} items`
+      showNotice({
+        text:
+          guessed && landed.length === 1
+            ? `Put ${what} in ${where} — where it came from isn't known.`
+            : `Put back ${what} in ${where}.`,
+        // Only when it can say which folder: "Show" for two places would have
+        // to pick one, and the vault's own top has no folder to open.
+        action: dirs.length === 1 && dirs[0] ? { label: 'Show', run: () => void reveal(dirs[0]) } : undefined
+      })
+    })
+
+  /** Put back's own menu, opened where it was asked for (the row's Put back
+   *  button, or Put back… on the right-click menu): back where it came from,
+   *  or the top of any space (Reuben, 2026-10-09: "make sure it has a selector
+   *  so you can put it back into any space"). Undo after archiving doesn't ask
+   *  — it goes straight back. */
+  const putBackMenu = (paths: string[], x: number, y: number): void => {
+    const s = settingsRef.current
+    const tops = paths.filter((p) => inArchiveFolder(p) && p !== s.archive.folder)
+    if (!tops.length) return
+    const homes = tops.map((p) => putBackDir(p, workspace.entries))
+    const known = homes.every((h) => h.known)
+    const dirs = [...new Set(homes.map((h) => h.dir))]
+    const one = known && dirs.length === 1 ? dirs[0] : null
+    const cameFrom = tops.length === 1 ? 'where it came from' : 'where they came from'
+    const items: MenuItem[] = []
+    // A folder inside a space (or the vault's own top, for a loose note) gets
+    // its own line. A space's top is already in the list below, so it is
+    // marked there instead of appearing twice.
+    if (known && !(one !== null && s.spaces.some((sp) => sp.folder === one))) {
+      items.push(
+        one !== null
+          ? { label: placeName(one), hint: cameFrom, onClick: () => void putBack(tops) }
+          : { label: 'Each where it came from', onClick: () => void putBack(tops) }
+      )
+    }
+    for (const sp of s.spaces) {
+      const name = sp.folder || 'Your vault'
+      items.push({
+        label: sp.emoji ? `${shownEmoji(sp.emoji, s.emojiStyle)} ${name}` : name,
+        hint: sp.folder === one ? cameFrom : undefined,
+        onClick: () => void putBack(tops, sp.folder)
+      })
+    }
+    setMenu({ x, y, items, heading: tops.length === 1 ? 'Put back in' : `Put back ${tops.length} items in` })
+  }
+
+  /** MIGRATION (2026-10-08). The archive used to be a flag on an entry that
+   *  stayed where it was. Anything still flagged — archived before this build,
+   *  or by an older build on another computer sharing the vault — is moved into
+   *  the archive folder, quietly, keeping the date it was archived. Every flag
+   *  is then cleared, including on anything that couldn't be moved: a flag
+   *  HIDES its entry, and an entry that isn't in the archive must not stay
+   *  hidden. Runs once a vault has opened (boot and Switch folder). */
+  adoptOldArchiveRef.current = async () => {
+    if (adoptingRef.current) return
+    adoptingRef.current = true
+    try {
+      const flagged = archivedRoots(await window.api.getWorkspace())
+      if (!flagged.length) return
+      const t = await window.api.listTree()
+      const moved = await archiveEntries(
+        flagged.filter((p) => !!findNode(t, p)),
+        true
+      )
+      const left = Object.entries((await window.api.getWorkspace()).entries)
+        .filter(([, m]) => m.archived)
+        .map(([p]) => p)
+      if (left.length) setWorkspace(await window.api.updateEntries(left, { archived: undefined }))
+      if (moved.length) {
+        flash(`Moved ${moved.length} archived ${moved.length === 1 ? 'item' : 'items'} into the Archive folder.`)
+      }
+    } catch {
+      // Nothing here may stop a vault opening; the flags stay and it tries again
+      // next time.
+    } finally {
+      adoptingRef.current = false
+    }
+  }
+
+  /** Go into the archive. Its folder is made first if this vault has none yet,
+   *  so a note or folder made in there has somewhere to go. */
+  const openArchive = (): Promise<void> =>
+    run(async () => {
+      // One trip at a time: a second click while the first is still on its way
+      // would file the archive's tabs under the space being left.
+      if (archiveTrip.current) return
+      archiveTrip.current = true
+      try {
+        await goIntoArchive()
+      } finally {
+        archiveTrip.current = false
+      }
+    })
+  const goIntoArchive = async (): Promise<void> => {
+    const t = await window.api.listTree()
+    const has = t.some((n) => n.type === 'dir' && isArchiveName(n.name))
+    if (!has) await window.api.createFolder('', settingsRef.current.archive.folder)
+    // Reconcile against what is really there — it may be spelt "archive".
+    if (!has || !t.some((n) => n.type === 'dir' && n.path === settingsRef.current.archive.folder)) {
+      await syncSpaces(await loadTree(), settingsRef.current)
+    }
+    await switchSpace(settingsRef.current.archive.folder)
+  }
+
+  openArchiveRef.current = openArchive
+
+  /** Back to the space you went into the archive from (or the first space). */
+  const leaveArchive = (): Promise<void> =>
+    run(async () => {
+      if (archiveTrip.current) return
+      archiveTrip.current = true
+      try {
+        const s = settingsRef.current
+        const back = spaceBeforeArchive.current
+        const to = back && s.spaces.some((sp) => sp.folder === back) ? back : (s.spaces[0]?.folder ?? '')
+        await switchSpace(to)
+      } finally {
+        archiveTrip.current = false
+      }
+    })
 
   const trash = (paths: string[]): void =>
     void run(async () => {
@@ -2815,7 +3200,10 @@ export default function App(): React.JSX.Element {
       const fresh = await window.api.listTree()
       let ws = await window.api.getWorkspace()
       for (const folder of spaceFolders) {
-        const sp = settings.spaces.find((s) => s.folder === folder)
+        const sp =
+          folder && folder === settings.archive.folder
+            ? settings.archive
+            : settings.spaces.find((s) => s.folder === folder)
         if (!sp?.colorPalette.length) continue
         // '' is the whole-vault space, whose folders are the tree's own roots.
         const roots = folder === '' ? fresh : (findNode(fresh, folder)?.children ?? [])
@@ -2914,6 +3302,24 @@ export default function App(): React.JSX.Element {
                     }
               ]
             : []),
+          // The archive, from the same menu as the bin: put away from a space,
+          // put back from the archive. The whole selection when the row you
+          // clicked is part of one, like Colour above.
+          inArchive
+            ? {
+                label: targets && targets.length > 1 ? `Put back ${targets.length} items…` : 'Put back…',
+                // Its own menu, where you right-clicked (`putBackMenu`). Opened
+                // once this one has shut — choosing an item closes the menu it
+                // is in, which would close the new one too.
+                onClick: () => {
+                  const at = { x: e.clientX, y: e.clientY }
+                  setTimeout(() => putBackMenu(targets ?? [node.path], at.x, at.y), 0)
+                }
+              }
+            : {
+                label: targets && targets.length > 1 ? `Archive ${targets.length} items` : 'Move to archive',
+                onClick: () => void archiveEntries(targets ?? [node.path])
+              },
           { label: 'Move to bin', danger: true, onClick: () => trash([node.path]) }
         ]
       : [
@@ -3075,13 +3481,14 @@ export default function App(): React.JSX.Element {
       }
     }
     if (allSpaces) {
-      walk(tree)
+      // Every space — never the archive, which has its own search.
+      walk(tree.filter((n) => n.path !== archiveFolder))
     } else {
       walk(spaceTree)
       walk(looseNotes)
     }
     return out
-  }, [allSpaces, tree, spaceTree, looseNotes, workspace])
+  }, [allSpaces, tree, spaceTree, looseNotes, workspace, archiveFolder])
 
   // Deep search reads every note's contents once (lazily, cached), then bumps a
   // version so the hit list recomputes. Titles are always searched instantly.
@@ -3160,6 +3567,85 @@ export default function App(): React.JSX.Element {
   // Shown in the results header so the reordering isn't invisible — only when
   // it actually did something (an open note outside the space root).
   const searchContextLabel = openPath ? nameOf(parentOf(openPath)) || null : null
+
+  // --- the archive's search ------------------------------------------------
+  // Everything in the archive, notes and folders, with the folders each sits
+  // in and where it was archived from (organise/archiveSearch.ts). The text is
+  // read lazily into the same cache the main search uses, and only once there
+  // is something typed in the archive's box.
+  const archiveDocs = useMemo<ArchiveDoc[]>(() => {
+    const out: ArchiveDoc[] = []
+    const pathName = (dir: string): string =>
+      dir.slice(archiveFolder.length + 1).split('/').filter(Boolean).join(' › ')
+    const walk = (nodes: TreeNode[], from: string | undefined): void => {
+      for (const n of nodes) {
+        const meta = workspace.entries[n.path]
+        const own = meta?.archivedFrom
+        // what came in inside an archived folder says where THAT came from
+        const came = own ? placeName(parentOf(own)) : from
+        if (n.type === 'dir') {
+          out.push({ path: n.path, type: 'dir', title: n.name, where: pathName(parentOf(n.path)), from: came, archivedAt: meta?.archivedAt })
+          walk(n.children ?? [], came)
+        } else if (/\.md$/i.test(n.path)) {
+          const raw = contentCache.current.get(n.path)
+          out.push({
+            path: n.path,
+            type: 'file',
+            title: stripMd(n.name),
+            where: pathName(parentOf(n.path)),
+            from: came,
+            text: raw === undefined ? undefined : searchableText(raw),
+            archivedAt: meta?.archivedAt
+          })
+        }
+      }
+    }
+    walk(archiveTree, undefined)
+    return out
+    // `cacheVersion` re-reads the text once the lazy load below has filled it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [archiveTree, workspace, archiveFolder, cacheVersion])
+  const archivePrepared = useMemo(() => archiveDocs.map(prepare), [archiveDocs])
+
+  useEffect(() => {
+    if (!archiveQuery.trim()) return
+    let cancelled = false
+    void (async () => {
+      const missing = archiveDocs.filter((d) => d.type === 'file' && !contentCache.current.has(d.path))
+      if (missing.length === 0) return
+      await Promise.all(
+        missing.map(async (d) => {
+          try {
+            contentCache.current.set(d.path, await window.api.readNote(d.path))
+          } catch {
+            /* unreadable note — skip it */
+          }
+        })
+      )
+      if (!cancelled) setCacheVersion((v) => v + 1)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [archiveQuery, archiveDocs])
+
+  const archiveHits = useMemo<ArchiveHit[] | null>(
+    () => (archiveQuery.trim() ? searchArchive(archivePrepared, archiveQuery) : null),
+    [archiveQuery, archivePrepared]
+  )
+
+  // The sidebar's own search never shows what is in the archive, but it says
+  // when the archive has matches too, and one click carries the words across.
+  // Names and folders only — the archive's text isn't read for the main search.
+  const archiveNamesOnly = useMemo(
+    () => archiveDocs.map((d) => prepare({ ...d, text: undefined })),
+    [archiveDocs]
+  )
+  const archiveAlso = useMemo(() => {
+    const q = query.trim()
+    if (!q || inArchive) return 0
+    return searchArchive(archiveNamesOnly, q).length
+  }, [query, inArchive, archiveNamesOnly])
 
   // The new column arrives empty and asks what goes in it, so the only thing
   // that can stop it is the cap — no second note required.
@@ -3281,6 +3767,21 @@ export default function App(): React.JSX.Element {
         spaces={settings.spaces}
         activeSpaceFolder={space.folder}
         onSwitchSpace={(folder) => void switchSpace(folder)}
+        inArchive={inArchive}
+        archiveTop={archiveTree}
+        onToggleArchive={() => void (inArchive ? leaveArchive() : openArchive())}
+        archiveQuery={archiveQuery}
+        onArchiveQuery={setArchiveQuery}
+        archiveHits={archiveHits}
+        archiveAlso={archiveAlso}
+        onSearchArchive={(q) => {
+          // The words move across: the archive's box takes them and the
+          // sidebar's empties, so coming back out doesn't find a search
+          // still standing over your notes.
+          setArchiveQuery(q)
+          setQuery('')
+          void openArchive()
+        }}
         spaceActions={spaceActions}
         workspace={workspace}
         openPath={openPath}
@@ -3311,14 +3812,15 @@ export default function App(): React.JSX.Element {
           onMove: move,
           onTogglePin: togglePin,
           onTrash: trash,
-          onRestore: (paths) => setArchived(paths, false),
+          onRestore: (paths) => void putBack(paths),
           onNewNoteIn: (dir) => void newNote(dir),
           onNewFolderIn: (dir) => void newFolder(dir),
           onRename: (node) => void rename(node),
           onPickColor: pickColor,
           onNewNote: () => void newNote(''),
           onNewFolder: () => void newFolder(''),
-          onArchive: setArchived,
+          onArchive: (paths) => void archiveEntries(paths),
+          onPutBack: (paths, at) => (at ? putBackMenu(paths, at.x, at.y) : void putBack(paths)),
           onRestoreFromBin: restoreFromBin,
           onRevealHeld: askReveal,
           onPurge: purge,
@@ -3580,7 +4082,9 @@ export default function App(): React.JSX.Element {
           described. */}
       {inspect && <LinkInspector at={inspect} />}
 
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />}
+      {menu && (
+        <ContextMenu x={menu.x} y={menu.y} items={menu.items} heading={menu.heading} onClose={() => setMenu(null)} />
+      )}
 
       {/* The one colour picker, for whichever rows the sidebar asked about. It
           stays open while you drag in the square, so the sidebar recolours live

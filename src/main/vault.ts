@@ -646,6 +646,54 @@ export async function renameEntry(fromPath: string, toPath: string): Promise<str
   return toRel(toAbs)
 }
 
+/** Move an entry INTO the folder `toDir`, keeping its name — how a note or
+ *  folder goes into the archive, and how Put back brings it out again. Two
+ *  differences from `renameEntry`, both on purpose:
+ *  - the folder is made if it isn't there (the archive's folder doesn't exist
+ *    until the first thing goes in; the place a note is put back to may have
+ *    been emptied and removed since), and
+ *  - a name already taken there is suffixed (" (2)") rather than refused — an
+ *    archive collects from every space, and two notes called "Notes" must both
+ *    be able to go in. The same rule `restoreHeldEntry` uses for the bin.
+ *  Returns the vault-relative path it actually landed at. */
+export async function moveEntryInto(fromPath: string, toDir: string): Promise<string> {
+  if (typeof fromPath !== 'string' || typeof toDir !== 'string') throw new Error('Bad path')
+  const fromAbs = await resolveReal(fromPath)
+  if (isVaultRoot(fromAbs)) throw new Error('Cannot move the vault root')
+  const stat = await fs.stat(fromAbs)
+  // Resolved BEFORE anything is made, so a link on the way can't have the
+  // mkdir create folders outside the vault; then made, then resolved again.
+  const dirWanted = await resolveReal(toDir)
+  assertNotConfig(dirWanted)
+  // Into itself, or into something inside itself, would orphan the branch.
+  const inside = path.relative(fromAbs, dirWanted)
+  if (inside === '' || !escapesVault(inside)) {
+    throw new Error("A folder can't be moved inside itself")
+  }
+  if (key(path.dirname(fromAbs)) === key(dirWanted)) return toRel(fromAbs) // already there
+  markWrite(dirWanted)
+  await fs.mkdir(dirWanted, { recursive: true })
+  const dirAbs = await resolveReal(toDir)
+
+  const name = path.basename(fromAbs)
+  // A folder's name has no extension, whatever dots it holds ("Term 1.2").
+  const ext = stat.isDirectory() ? '' : path.extname(name)
+  const stem = ext ? name.slice(0, -ext.length) : name
+  const toAbs = path.join(dirAbs, await uniqueName(dirAbs, stem, ext))
+  assertInVault(toAbs)
+  assertPathLength(toAbs)
+  markWrite(fromAbs)
+  markWrite(toAbs)
+  await renameWithRetry(fromAbs, toAbs, stat.isDirectory() ? DIR_RENAME_ATTEMPTS : undefined)
+
+  const fk = key(fromAbs)
+  if (crlfByPath.has(fk)) {
+    crlfByPath.set(key(toAbs), crlfByPath.get(fk) as boolean)
+    crlfByPath.delete(fk)
+  }
+  return toRel(toAbs)
+}
+
 /** The notes whose text contains any of `needles` — which notes MIGHT point at
  *  something, as a first cut, never an answer.
  *

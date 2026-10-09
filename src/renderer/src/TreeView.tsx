@@ -89,11 +89,26 @@ interface Props extends TreeActions {
   onToggleExpand: (path: string) => void
   /** scroll this row into view once, after a reveal from the path bar */
   revealTarget?: string | null
+  /** The top level is shown in the order `nodes` arrives in — the archive's
+   *  sort (Recently archived, A–Z…) — so it can't be dragged into a new order
+   *  there; dropping INTO a folder still works, and so does everything below
+   *  the top. */
+  sortedTop?: boolean
+  /** Set while this tree is the archive's: what was archived says when and
+   *  from where on its second line, and carries a Put back button. */
+  archive?: { onPutBack: (paths: string[], at?: { x: number; y: number }) => void }
 }
 
 const parentOf = (p: string): string => {
   const i = p.lastIndexOf('/')
   return i === -1 ? '' : p.slice(0, i)
+}
+
+/** Where an archived entry came from, as the folders it sat in: "Revision ›
+ *  Physics" for "Revision/Physics/Waves.md", "your vault" for a loose note. */
+const placeOf = (archivedFrom: string): string => {
+  const dir = parentOf(archivedFrom)
+  return dir ? dir.split('/').join(' › ') : 'your vault'
 }
 
 /** Indentation is expressed in the density variables, so changing the density
@@ -192,6 +207,8 @@ export function TreeView({
   expanded,
   onToggleExpand,
   revealTarget,
+  sortedTop = false,
+  archive,
   onOpen,
   onContext,
   onMove,
@@ -275,9 +292,12 @@ export function TreeView({
     // A folder takes items *into* itself in the middle band; the outer thirds
     // reorder around it. A note only ever reorders.
     let next: Hint = null
+    // A sorted top level has no drag order to set, so a row there only ever
+    // takes things INTO itself (a folder) — never a line above or below it.
+    const fixedLevel = sortedTop && parentOf(node.path) === rootDir
     if (node.type === 'dir' && rel > 0.25 && rel < 0.75 && dropOk(node.path)) {
       next = { kind: 'into', path: node.path }
-    } else if (reorders && dropOk(parentOf(node.path))) {
+    } else if (reorders && !fixedLevel && dropOk(parentOf(node.path))) {
       next = { kind: 'sibling', path: node.path, after: rel >= 0.5 }
     } else if (node.type === 'dir' && dropOk(node.path)) {
       next = { kind: 'into', path: node.path }
@@ -399,8 +419,12 @@ export function TreeView({
 
   const noteRow = (node: TreeNode, depth: number): React.JSX.Element => {
     const open = openPath === node.path
-    const stamp = shelved ? onDate(metaOf(workspace, node.path).archivedAt) : null
-    const isPinned = metaOf(workspace, node.path).pinned === true
+    const meta = metaOf(workspace, node.path)
+    // In the archive, what was archived (not what came along inside a folder,
+    // nor a note made in there) says when it went in and where from.
+    const stamp = shelved || (archive && meta.archivedAt) ? onDate(meta.archivedAt) : null
+    const from = archive && meta.archivedFrom !== undefined ? placeOf(meta.archivedFrom) : null
+    const isPinned = meta.pinned === true
     const c = rowColor(node.path)
     return (
       <div
@@ -446,7 +470,7 @@ export function TreeView({
           <span className="tree-title truncate font-medium">{labelOf(node)}</span>
           {/* hidden entirely at ultra density — see --row-sub-display */}
           <span className="tree-sub truncate text-ink-500">
-            {stamp ? `Archived ${stamp}` : node.preview || 'Empty note'}
+            {stamp ? `Archived ${stamp}${from ? ` · from ${from}` : ''}` : node.preview || 'Empty note'}
           </span>
         </span>
 
@@ -478,6 +502,20 @@ export function TreeView({
               </RowBtn>
             )}
             <div className={ROW_ACTIONS_CLASS}>
+              {archive && meta.archivedFrom !== undefined && (
+                <RowBtn
+                  title="Put back…"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    // Opens Put back's menu just under the button: where it
+                    // came from, or any space.
+                    const r = e.currentTarget.getBoundingClientRect()
+                    archive.onPutBack([node.path], { x: r.left, y: r.bottom + 4 })
+                  }}
+                >
+                  <Icon name="restore" />
+                </RowBtn>
+              )}
               <RowBtn
                 title="Move to bin"
                 onClick={(e) => {
@@ -515,7 +553,8 @@ export function TreeView({
       : { moved: [] as TreeNode[], rest: sortSiblings(childNodes, workspace, freeArrange) }
     const count = childNodes.length
     const expandedNow = isOpen(node.path)
-    const isPinned = metaOf(workspace, node.path).pinned === true
+    const folderMeta = metaOf(workspace, node.path)
+    const isPinned = folderMeta.pinned === true
     const c = rowColor(node.path)
     return (
       <div key={node.path} data-row-box={node.path}>
@@ -619,6 +658,18 @@ export function TreeView({
                 </RowBtn>
               )}
               <div className={ROW_ACTIONS_CLASS}>
+                {archive && folderMeta.archivedFrom !== undefined && (
+                  <RowBtn
+                    title="Put back…"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const r = e.currentTarget.getBoundingClientRect()
+                      archive.onPutBack([node.path], { x: r.left, y: r.bottom + 4 })
+                    }}
+                  >
+                    <Icon name="restore" />
+                  </RowBtn>
+                )}
                 <RowBtn
                   title="New note in folder"
                   onClick={(e) => {
@@ -725,7 +776,8 @@ export function TreeView({
   const box = useRef<HTMLDivElement | null>(null)
   useLayoutEffect(() => {
     // The tree and the Pinned list — the lists a note is made or binned in
-    // front of. The Archive list is a shelf, and nothing is created there.
+    // front of, archived out of or put back into (the archive is this same
+    // tree when you're in it).
     if (!(mode === 'tree' || mode === 'pinned') || !box.current) return
     for (const path of pendingCreated()) {
       const row = box.current.querySelector<HTMLElement>(`[data-row-path="${CSS.escape(path)}"]`)
@@ -953,9 +1005,11 @@ export function TreeView({
     }
   })
 
-  const { moved: movedTop, rest: restTop } = reorders
-    ? splitMoved(nodes, workspace, freeArrange)
-    : { moved: [] as TreeNode[], rest: sortSiblings(nodes, workspace, freeArrange) }
+  const { moved: movedTop, rest: restTop } = sortedTop
+    ? { moved: [] as TreeNode[], rest: nodes }
+    : reorders
+      ? splitMoved(nodes, workspace, freeArrange)
+      : { moved: [] as TreeNode[], rest: sortSiblings(nodes, workspace, freeArrange) }
 
   return (
     <div

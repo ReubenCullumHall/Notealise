@@ -31,9 +31,18 @@ export interface EntryMeta {
    *  here — `migrateKey` and `trashEntries` already carry this entry with them,
    *  exactly as they do the pin and the colour. */
   island?: number
+  /** The OLD archive: a flag on an entry that stayed where it was. Since
+   *  2026-10-08 archiving MOVES the entry into the archive folder instead (see
+   *  `archivedFrom`); a flag still found here is from an older build, and the
+   *  app moves that entry into the archive the next time the vault opens. */
   archived?: boolean
   /** epoch ms, set when archived; used by the archive's "recently archived" sort. */
   archivedAt?: number
+  /** Where an archived entry lived before it went into the archive — its whole
+   *  vault-relative path at the time — so Put back can return it there. Only on
+   *  the entry that was archived, not on everything inside it. Losable like the
+   *  rest of this file: without it, Put back lands in the space you're in. */
+  archivedFrom?: string
   /** epoch ms, set when this entry lands here via a cross-space drag-drop (see
    *  organise/model.ts `splitMoved`). Hoists it into a "Moved" group at the top
    *  of its new parent's list instead of wherever alphabetical/free-arrange
@@ -439,6 +448,8 @@ export function normalizeEntry(raw: unknown): EntryMeta {
   if (archived !== undefined) meta.archived = archived
   const archivedAt = num(v.archivedAt)
   if (archivedAt !== undefined) meta.archivedAt = archivedAt
+  const archivedFrom = str(v.archivedFrom)
+  if (archivedFrom !== undefined) meta.archivedFrom = archivedFrom
   const movedAt = num(v.movedAt)
   if (movedAt !== undefined) meta.movedAt = movedAt
   const collapsed = bool(v.collapsed)

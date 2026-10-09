@@ -85,6 +85,11 @@ export interface VaultApi {
   /** Rename/move; target segment sanitised. Migrates the entry's workspace.json
    *  key (and its descendants'). Returns the actual new rel path. */
   renameEntry(from: string, to: string): Promise<string>
+  /** Move an entry into the folder `toDir`, keeping its name — the archive's
+   *  way in and Put back's way out. The folder is made if it isn't there, and a
+   *  name already taken in it is suffixed (" (2)") rather than refused. Migrates
+   *  the workspace.json key like `renameEntry`. Returns the actual new rel path. */
+  moveEntryInto(from: string, toDir: string): Promise<string>
   /** Every note's outgoing [[wiki links]], for the backlink half of the links
    *  block. Pass `paths` to rescan only those notes (what the watcher reports);
    *  omit it for the whole vault. Returns links only — never note contents. */

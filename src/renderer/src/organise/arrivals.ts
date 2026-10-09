@@ -7,7 +7,13 @@
 // and the four ways of making a note (the sidebar buttons, a folder's hover
 // buttons, the right-click menu, Ctrl+N) all meet in those two App functions,
 // so marking there covers every one — while a note that appears for any OTHER
-// reason (a rename, a move, the file watcher) is never marked and never grows.
+// reason (a rename, a move inside the place you're in, the file watcher) is
+// never marked and never grows.
+//
+// Since 2026-10-09 anything that ENTERS the sidebar you're looking at grows in
+// the same way — Reuben: "when anything enters or leaves the sidebar do that
+// animation". Restoring from the bin already did; now Put back and Undo after
+// archiving do too, and a note dragged into this place from outside it.
 //
 // Marks lapse after a few seconds, like the bin's below. A note made inside a
 // folder that is shut has no row to grow, and its mark used to wait — so the
@@ -30,9 +36,11 @@ export const takeCreated = (path: string): void => {
 
 // The same for leaving: paths just sent to the bin, so their rows can shrink
 // shut instead of vanishing. Marked by App's `trash` (every Move to bin route
-// goes through it); a row that leaves for any other reason — a move, a rename —
-// is not marked and just goes. Marks lapse after a few seconds, so a trash that
-// failed can't make some later, unrelated disappearance play as a delete.
+// goes through it), and since 2026-10-09 by everything else that takes a row
+// out of the sidebar you're looking at: archiving, Put back, and a drag onto
+// another space's tab. A move within the place or a rename is not marked and
+// just goes. Marks lapse after a few seconds, so a trash that failed can't
+// make some later, unrelated disappearance play as a delete.
 const leaving = new Map<string, number>()
 
 export const markDeleted = (paths: string[]): void => {

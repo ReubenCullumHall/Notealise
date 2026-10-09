@@ -161,7 +161,12 @@ export async function migrateKey(from: string, to: string): Promise<Workspace> {
   if (from === to) return ws
   const entries: Record<string, EntryMeta> = {}
   for (const [key, meta] of Object.entries(ws.entries)) {
-    entries[remapPath(key, from, to)] = meta
+    // Where an archived entry came from is a path too: rename the space it came
+    // out of ("Year 12" → "Year 13") and Put back still finds its way home
+    // instead of making a "Year 12" folder that would become a new space.
+    const was = meta.archivedFrom
+    const now = was === undefined ? undefined : remapPath(was, from, to)
+    entries[remapPath(key, from, to)] = now === was ? meta : { ...meta, archivedFrom: now }
   }
   return commit({ ...ws, entries })
 }

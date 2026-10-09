@@ -42,6 +42,21 @@ describe('normalizeWorkspace', () => {
     expect(ws.entries['b.md']).toEqual({})
   })
 
+  it('keeps where an archived entry came from, and drops a blank or non-text one', () => {
+    // Put back reads it as a folder path — main checks the path again before it
+    // moves anything, so this only has to keep junk out.
+    const ws = normalizeWorkspace({
+      entries: {
+        'Archive/a.md': { archivedFrom: 'Revision/Physics/a.md', archivedAt: 5 },
+        'Archive/b.md': { archivedFrom: '   ' },
+        'Archive/c.md': { archivedFrom: 42 }
+      }
+    })
+    expect(ws.entries['Archive/a.md']).toEqual({ archivedFrom: 'Revision/Physics/a.md', archivedAt: 5 })
+    expect(ws.entries['Archive/b.md']).toEqual({})
+    expect(ws.entries['Archive/c.md']).toEqual({})
+  })
+
   it('canonicalises a colour and drops one that is not a colour', () => {
     // `color` is interpolated into a CSS custom property on the row, so a value
     // that reaches the DOM unvalidated is the one field in this file that could

@@ -1,7 +1,11 @@
+import { useLayoutEffect, useRef, useState } from 'react'
+
 export interface MenuItem {
   label: string
   onClick: () => void
   danger?: boolean
+  /** a quieter word after the label — "where it came from" */
+  hint?: string
 }
 
 interface Props {
@@ -9,10 +13,26 @@ interface Props {
   y: number
   items: MenuItem[]
   onClose: () => void
+  /** a caption above the items, for a menu that is a choice ("Put back in") */
+  heading?: string
 }
 
 // A renderer-drawn menu (not Electron's native Menu) so prompt 5 can restyle it.
-export function ContextMenu({ x, y, items, onClose }: Props): React.JSX.Element {
+export function ContextMenu({ x, y, items, onClose, heading }: Props): React.JSX.Element {
+  // Kept inside the window: opened low down (a row near the foot of the
+  // sidebar), a menu used to run off the bottom with its last items unreachable.
+  const ref = useRef<HTMLUListElement>(null)
+  const [at, setAt] = useState({ left: x, top: y })
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const M = 8
+    setAt({
+      left: Math.max(M, Math.min(x, window.innerWidth - r.width - M)),
+      top: Math.max(M, Math.min(y, window.innerHeight - r.height - M))
+    })
+  }, [x, y, items.length])
   return (
     <div
       className="menu-backdrop"
@@ -22,7 +42,12 @@ export function ContextMenu({ x, y, items, onClose }: Props): React.JSX.Element 
         onClose()
       }}
     >
-      <ul className="menu" style={{ left: x, top: y }} onClick={(e) => e.stopPropagation()}>
+      <ul ref={ref} className="menu" style={at} onClick={(e) => e.stopPropagation()}>
+        {heading && (
+          <li className="menu-heading" aria-hidden="true">
+            {heading}
+          </li>
+        )}
         {items.map((it) => (
           <li
             key={it.label}
@@ -33,6 +58,7 @@ export function ContextMenu({ x, y, items, onClose }: Props): React.JSX.Element 
             }}
           >
             {it.label}
+            {it.hint && <span className="menu-hint">{it.hint}</span>}
           </li>
         ))}
       </ul>

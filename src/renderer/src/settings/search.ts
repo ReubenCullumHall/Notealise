@@ -132,6 +132,9 @@ export const SEARCH_INDEX: SearchEntry[] = [
   { section: 'spaces', label: 'Delete a space', anchor: 'Delete space', hint: 'Remove a space and send its folder to your computer’s bin.', keywords: 'delete remove space folder rid' },
   { section: 'spaces', label: 'Saved presets', hint: 'Reusable looks you can apply to any space.', keywords: 'preset presets template save look apply' },
 
+  { section: 'archive', label: 'Archive', hint: 'The archive’s own look — theme, colours, sidebar — apart from your spaces.', keywords: 'archive archived old notes put away storage long term shelf look theme colour customise' },
+  { section: 'archive', label: 'Archive folder', anchor: 'Folder', hint: 'Where archived notes live in your vault.', keywords: 'archive folder rename location where finder' },
+
   { section: 'sourceFolder', label: 'Source folder', hint: 'Where your vault lives on disk, and switching to a different one.', keywords: 'data vault folder location switch change move disk path sync synced onedrive dropbox icloud google drive cloud saved stored' },
   { section: 'recovery', label: 'Recovery', hint: 'A 7-day safety net for anything deleted — restore or purge it.', keywords: 'data trash bin recycle bin deleted restore undo delete recover backup lost missing gone accidentally retrieve' },
   { section: 'import', label: 'Import', anchor: 'Import data', hint: 'Bring notes in from Notion, Word, Google Keep, Apple Notes, HTML or Markdown.', keywords: 'data notion word docx google keep apple notes html markdown migrate transfer evernote onenote obsidian bring in' },

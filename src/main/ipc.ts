@@ -89,6 +89,7 @@ import {
   readAsset,
   readNote,
   renameEntry,
+  moveEntryInto,
   openVaultFile,
   revealInFolder,
   scanLinks,
@@ -259,6 +260,13 @@ export function registerIpc(window: BrowserWindow): void {
   // that can fail), then the sidecar follows it so pins and order survive a move.
   ipcMain.handle(CH.renameEntry, async (_e, from: string, to: string) => {
     const actual = await renameEntry(from, to)
+    await migrateKey(from, actual)
+    return actual
+  })
+  // The archive's way in and Put back's way out. Same pairing as rename: the
+  // move first (the part that can fail), then the sidecar follows it.
+  ipcMain.handle(CH.moveEntryInto, async (_e, from: string, toDir: string) => {
+    const actual = await moveEntryInto(from, toDir)
     await migrateKey(from, actual)
     return actual
   })

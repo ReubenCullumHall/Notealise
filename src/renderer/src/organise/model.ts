@@ -243,14 +243,17 @@ export function findNode(nodes: TreeNode[], path: string): TreeNode | null {
 }
 
 /** The archive's sort is a *view*, never a rewrite of stored order — sorting A–Z
- *  must not change where things land when restored. */
-export type ArchiveSort = 'recent' | 'oldest' | 'az' | 'za'
+ *  must not change where things land when restored. 'custom' hands the top of
+ *  the archive back to the drag order every space has (2026-10-08, when the
+ *  archive became a place you can arrange like a space). */
+export type ArchiveSort = 'recent' | 'oldest' | 'az' | 'za' | 'custom'
 
 export const ARCHIVE_SORTS: { id: ArchiveSort; label: string; short: string }[] = [
   { id: 'recent', label: 'Recently archived', short: 'Recent' },
   { id: 'oldest', label: 'Oldest first', short: 'Oldest' },
   { id: 'az', label: 'Title A–Z', short: 'A–Z' },
-  { id: 'za', label: 'Title Z–A', short: 'Z–A' }
+  { id: 'za', label: 'Title Z–A', short: 'Z–A' },
+  { id: 'custom', label: 'Custom order (drag to arrange)', short: 'Custom' }
 ]
 
 const stripMd = (s: string): string => (s.toLowerCase().endsWith('.md') ? s.slice(0, -3) : s)
@@ -271,10 +274,17 @@ export function onDate(ms: number | undefined): string | null {
   )
   if (days <= 0) return 'today'
   if (days === 1) return 'yesterday'
-  return d.toLocaleDateString(userLocale, { day: 'numeric', month: 'short' })
+  // The year once it isn't this one: the archive is long-term storage, and
+  // "29 Sept" on something put away two years ago reads as last month.
+  return d.toLocaleDateString(userLocale, {
+    day: 'numeric',
+    month: 'short',
+    ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {})
+  })
 }
 
 export function sortArchived(nodes: TreeNode[], ws: Workspace, sort: ArchiveSort): TreeNode[] {
+  if (sort === 'custom') return nodes
   const at = (n: TreeNode): number => metaOf(ws, n.path).archivedAt ?? 0
   return [...nodes].sort((a, b) => {
     if (sort === 'recent') return at(b) - at(a)

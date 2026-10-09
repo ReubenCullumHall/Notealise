@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ContextMenu } from '../ContextMenu'
 import {
-  activeSpace,
+  activeOrFirstSpace,
+  inArchive,
   SPACE_CAP,
   withNewSpace,
   withoutSpace,
@@ -10,6 +11,7 @@ import {
   withSpacePatch,
   withSpaceRenamed,
   type AppSettings,
+  isArchiveName,
   shownEmoji,
   type EmojiStyle,
   type Space
@@ -74,6 +76,10 @@ export interface SpaceActions {
    *  Lives here rather than in the settings component because it needs the file
    *  tree and the workspace, both of which App owns. */
   onColorExistingFolders: (spaceFolders: string[]) => void
+  /** Go into the archive, making its folder first if the vault has none —
+   *  Settings → Archive's "Open the archive", so its look can be changed while
+   *  you watch. In App, beside the rest of the archive. */
+  onOpenArchive: () => Promise<void>
 }
 
 interface Props {
@@ -155,7 +161,10 @@ export function Spaces({
   fontLibrary
 }: Props): React.JSX.Element {
   const spaces = settings.spaces
-  const space = activeSpace(settings)
+  // Never the archive: it has its own page (ArchiveSettings.tsx), and here it
+  // would turn up with a Name box and a Delete button it must not have.
+  const space = activeOrFirstSpace(settings)
+  const inTheArchive = inArchive(settings)
   const [busy, setBusy] = useState(false)
   /** the folder a dragged preset is currently hovering, so the tab it would
    *  land on says so */
@@ -245,8 +254,18 @@ export function Spaces({
       setBusy(false)
     }
   }
+  const [nameNote, setNameNote] = useState('')
+  /** bumped to put the Name box back to the real name after a refused rename */
+  const [nameResets, setNameResets] = useState(0)
   const renameSpace = async (to: string): Promise<void> => {
     if (!space.folder || !to || to === space.folder) return
+    // That name is the archive's — a space called it would stop being a space.
+    if (isArchiveName(to.trim())) {
+      setNameNote(`“${to.trim()}” is the archive’s folder, so a space can’t use it.`)
+      setNameResets((n) => n + 1)
+      return
+    }
+    setNameNote('')
     setBusy(true)
     try {
       const actual = await actions.onRenameSpace(space.folder, to)
@@ -313,6 +332,12 @@ export function Spaces({
           and format-bar buttons. Everything you make in the sidebar lives inside the space you&apos;re
           in. Pick one here and the app switches to it; drag one to change the order.
         </p>
+        {inTheArchive && (
+          <p className="hint">
+            You&apos;re in the archive at the moment — its own look is under Archive, in the list on the
+            left.
+          </p>
+        )}
 
         <div
           ref={strip}
@@ -528,12 +553,13 @@ export function Spaces({
         >
           {/* keyed on the folder so switching tabs reseeds the draft */}
           <NameField
-            key={space.folder}
+            key={space.folder + ':' + nameResets}
             value={space.folder}
             disabled={!space.folder || busy}
             onCommit={(to) => void renameSpace(to)}
           />
         </SettingRow>
+        {nameNote && <p className="-mt-2 pb-3 text-[11.5px] leading-relaxed text-ink-500">{nameNote}</p>}
         <div className="border-t border-ink-300/15" />
 
         <SettingRow

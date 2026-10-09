@@ -5,7 +5,7 @@ import { findFont, FONTS, fontCssValue } from './fonts'
 import type { ExploreTab } from './Explore'
 import type { FontLibrary } from './useInstalledFonts'
 import { CATALOGUE_PAGE_LOOKS, findPageLook, parseTint, PAGE_LOOKS, tintName } from '../../../shared/looks'
-import { activeSpace, type AppSettings } from '../../../shared/settings'
+import { activeSpace, withSpacePatch, type AppSettings } from '../../../shared/settings'
 import { IntensitySlider } from './IntensitySlider'
 import { ToggleRow } from './primitives'
 
@@ -195,18 +195,13 @@ export function Collection({
   // the header says so.
   const here = activeSpace(settings)
   const spaceLabel = here.folder || 'this vault'
-  const setLook = (id: string): void =>
-    onChange({ spaces: settings.spaces.map((sp) => (sp.folder === here.folder ? { ...sp, pageLook: id } : sp)) })
-  const setTint = (token: string): void =>
-    onChange({ spaces: settings.spaces.map((sp) => (sp.folder === here.folder ? { ...sp, tint: token } : sp)) })
-  const setIntensity = (n: number): void =>
-    onChange({
-      spaces: settings.spaces.map((sp) => (sp.folder === here.folder ? { ...sp, pageLookIntensity: n } : sp))
-    })
-  const setAccent = (on: boolean): void =>
-    onChange({
-      spaces: settings.spaces.map((sp) => (sp.folder === here.folder ? { ...sp, pageLookAccent: on } : sp))
-    })
+  // Through withSpacePatch, which also knows the archive — while you're in it,
+  // "the space you were last in" IS the archive, and a write aimed only at the
+  // spaces list would do nothing at all.
+  const setLook = (id: string): void => onChange(withSpacePatch(settings, here.folder, { pageLook: id }))
+  const setTint = (token: string): void => onChange(withSpacePatch(settings, here.folder, { tint: token }))
+  const setIntensity = (n: number): void => onChange(withSpacePatch(settings, here.folder, { pageLookIntensity: n }))
+  const setAccent = (on: boolean): void => onChange(withSpacePatch(settings, here.folder, { pageLookAccent: on }))
 
   return (
     <>

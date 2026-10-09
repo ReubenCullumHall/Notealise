@@ -21,6 +21,7 @@ import {
   createFolder,
   createNote,
   listTree,
+  moveEntryInto,
   notesMentioning,
   purgeRecoveryItem,
   readNote,
@@ -287,5 +288,64 @@ describe('which notes mention a folder (who might link into it)', () => {
     await fs.mkdir(path.join(root, '.mdnotes', 'trash'), { recursive: true })
     await fs.writeFile(path.join(root, '.mdnotes', 'trash', 'old.md'), 'Photos', 'utf8')
     expect(await notesMentioning(['Photos'])).toEqual(['A.md'])
+  })
+})
+
+// The archive's way in, and Put back's way out (2026-10-08). Against the real
+// disk for the same reason as the rest of this file: "the folder is made",
+// "a taken name gets (2)" and "a folder can't go inside itself" are things the
+// file system decides, not the code.
+describe('moveEntryInto', () => {
+  it('makes the folder it moves into when that folder is not there yet', async () => {
+    await fs.mkdir(path.join(root, 'Revision/Physics'), { recursive: true })
+    await fs.writeFile(path.join(root, 'Revision/Physics/Waves.md'), 'waves', 'utf8')
+    expect(await moveEntryInto('Revision/Physics/Waves.md', 'Archive')).toBe('Archive/Waves.md')
+    expect(await read('Archive/Waves.md')).toBe('waves')
+    expect(await exists(path.join(root, 'Revision/Physics/Waves.md'))).toBe(false)
+  })
+
+  it('gives a name already taken there a (2), rather than refusing or overwriting', async () => {
+    await fs.mkdir(path.join(root, 'A'))
+    await fs.mkdir(path.join(root, 'Archive'))
+    await fs.writeFile(path.join(root, 'A/Notes.md'), 'new', 'utf8')
+    await fs.writeFile(path.join(root, 'Archive/Notes.md'), 'old', 'utf8')
+    expect(await moveEntryInto('A/Notes.md', 'Archive')).toBe('Archive/Notes (2).md')
+    expect(await read('Archive/Notes.md')).toBe('old')
+    expect(await read('Archive/Notes (2).md')).toBe('new')
+  })
+
+  it('moves a whole folder, and treats the dots in a folder name as part of the name', async () => {
+    await fs.mkdir(path.join(root, 'A/Term 1.2'), { recursive: true })
+    await fs.mkdir(path.join(root, 'Archive/Term 1.2'), { recursive: true })
+    await fs.writeFile(path.join(root, 'A/Term 1.2/x.md'), 'x', 'utf8')
+    expect(await moveEntryInto('A/Term 1.2', 'Archive')).toBe('Archive/Term 1.2 (2)')
+    expect(await read('Archive/Term 1.2 (2)/x.md')).toBe('x')
+  })
+
+  it('puts back into a folder that has since gone, making it again', async () => {
+    await fs.mkdir(path.join(root, 'Archive'))
+    await fs.writeFile(path.join(root, 'Archive/Waves.md'), 'w', 'utf8')
+    expect(await moveEntryInto('Archive/Waves.md', 'Revision/Physics')).toBe('Revision/Physics/Waves.md')
+  })
+
+  it('leaves an entry where it is when it is already in that folder', async () => {
+    await fs.mkdir(path.join(root, 'Archive'))
+    await fs.writeFile(path.join(root, 'Archive/Waves.md'), 'w', 'utf8')
+    expect(await moveEntryInto('Archive/Waves.md', 'Archive')).toBe('Archive/Waves.md')
+  })
+
+  it('refuses to move a folder inside itself', async () => {
+    await fs.mkdir(path.join(root, 'A/B'), { recursive: true })
+    await expect(moveEntryInto('A', 'A/B')).rejects.toThrow()
+    await expect(moveEntryInto('A', 'A')).rejects.toThrow()
+    expect(await exists(path.join(root, 'A/B'))).toBe(true)
+  })
+
+  it('refuses the vault itself, the config folder, and anywhere outside the vault', async () => {
+    await fs.writeFile(path.join(root, 'n.md'), 'n', 'utf8')
+    await expect(moveEntryInto('', 'Archive')).rejects.toThrow()
+    await expect(moveEntryInto('n.md', '.mdnotes')).rejects.toThrow()
+    await expect(moveEntryInto('n.md', '../outside')).rejects.toThrow()
+    expect(await read('n.md')).toBe('n')
   })
 })

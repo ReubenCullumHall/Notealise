@@ -504,9 +504,11 @@ describe('withSpacePatch / withSpaceRenamed / withNewSpace / withoutSpace', () =
   })
 
   it('re-keys a renamed space, following the active one', () => {
-    const next = withSpaceRenamed(three(), 'A', 'Archive')
-    expect(next.spaces?.map((x) => x.folder)).toEqual(['Archive', 'B', 'C'])
-    expect(next.activeSpaceFolder).toBe('Archive')
+    // (This used to rename to "Archive" — since 2026-10-08 that name belongs
+    // to the archive and is refused; see the archive block below.)
+    const next = withSpaceRenamed(three(), 'A', 'Atlas')
+    expect(next.spaces?.map((x) => x.folder)).toEqual(['Atlas', 'B', 'C'])
+    expect(next.activeSpaceFolder).toBe('Atlas')
   })
 
   it('leaves the active space alone when renaming a different one', () => {
@@ -756,5 +758,93 @@ describe('colour picker memory + note formatting colours (2026-10-03)', () => {
     expect(look.formatColors.h1.tc).toBe('#ffff00')
     look.formatColors.h1.tc = '#000000'
     expect(space.formatColors.h1.tc).toBe('#ffff00')
+  })
+})
+
+// THE ARCHIVE (2026-10-08). One more top-level folder with a look of its own,
+// kept OUT of the spaces list (Reuben: "make sure it's separate from main space
+// customisation"). These pin the separation — the bugs it guards against are
+// the archive turning up as a space, or a space's look silently resetting.
+describe('the archive', () => {
+  it('starts as a fresh look on a folder called Archive, outside the spaces', () => {
+    const s = normalizeSettings({ spaces: [{ folder: 'A' }] })
+    expect(s.archive.folder).toBe('Archive')
+    expect(s.spaces.map((x) => x.folder)).toEqual(['A'])
+  })
+
+  it('takes over a space that was already called Archive, keeping its look', () => {
+    const s = normalizeSettings({
+      spaces: [{ folder: 'Work' }, { folder: 'archive', theme: 'light', emoji: '📦' }],
+      activeSpaceFolder: 'Work'
+    })
+    expect(s.spaces.map((x) => x.folder)).toEqual(['Work'])
+    expect(s.archive).toMatchObject({ folder: 'archive', theme: 'light', emoji: '📦' })
+  })
+
+  it('leaves a whole-vault space with the same look when the archive was the only space', () => {
+    const s = normalizeSettings({ spaces: [{ folder: 'Archive', theme: 'light' }] })
+    expect(s.spaces).toHaveLength(1)
+    expect(s.spaces[0]).toMatchObject({ folder: '', theme: 'light' })
+  })
+
+  it('keeps being in the archive across a save', () => {
+    const s = normalizeSettings({ spaces: [{ folder: 'A' }], activeSpaceFolder: 'Archive' })
+    expect(s.activeSpaceFolder).toBe('Archive')
+    expect(activeSpace(s)).toBe(s.archive)
+  })
+
+  it('round-trips: normalising its own output changes nothing', () => {
+    const once = normalizeSettings({
+      spaces: [{ folder: 'A' }, { folder: 'Archive', density: 'compact' }],
+      activeSpaceFolder: 'Archive'
+    })
+    expect(normalizeSettings(JSON.parse(JSON.stringify(once)))).toEqual(once)
+  })
+
+  it('is never adopted as a space by a reconcile, whatever its spelling', () => {
+    const s = normalizeSettings({ spaces: [{ folder: 'A' }] })
+    const next = reconcileSpaces(s, ['A', 'ARCHIVE', 'B'])
+    expect(next?.spaces?.map((x) => x.folder)).toEqual(['A', 'B'])
+    // and the archive's recorded name follows what is on disk
+    expect(next?.archive?.folder).toBe('ARCHIVE')
+  })
+
+  it('keeps you in the archive through a reconcile, even before its folder exists', () => {
+    const s = normalizeSettings({ spaces: [{ folder: 'A' }], activeSpaceFolder: 'Archive' })
+    expect(reconcileSpaces(s, ['A'])).toBeNull()
+  })
+
+  it('takes the same patches as a space, on its own', () => {
+    const s = normalizeSettings({ spaces: [{ folder: 'A' }] })
+    const next = withSpacePatch(s, 'Archive', { theme: 'light' })
+    expect(next.archive?.theme).toBe('light')
+    expect(next.archive?.folder).toBe('Archive')
+    expect(next.spaces).toBeUndefined()
+  })
+
+  it('cannot be taken by renaming a space, or made into a second one', () => {
+    const s = normalizeSettings({ spaces: [{ folder: 'A' }] })
+    expect(withSpaceRenamed(s, 'A', 'Archive')).toEqual({})
+    expect(withSpaceRenamed(s, 'A', 'archive')).toEqual({})
+    expect(withNewSpace(s, 'Archive')).toEqual({})
+  })
+
+  it('cannot be deleted or reordered as a space', () => {
+    const s = normalizeSettings({ spaces: [{ folder: 'A' }, { folder: 'B' }] })
+    expect(withoutSpace(s, 'Archive')).toEqual({})
+    expect(withSpaceMoved(s, 'Archive', 'A')).toEqual({})
+  })
+
+  it('does not count against the space cap', () => {
+    const full = normalizeSettings({
+      spaces: [...Array.from({ length: SPACE_CAP }, (_, i) => ({ folder: `f${i}` })), { folder: 'Archive' }]
+    })
+    expect(full.spaces).toHaveLength(SPACE_CAP)
+    expect(full.archive.folder).toBe('Archive')
+  })
+
+  it('has a look on the pre-paint fallback too', () => {
+    expect(settingsFromThemeCache(normalizeThemeCache({})).archive.folder).toBe('Archive')
+    expect(DEFAULT_SETTINGS.archive.folder).toBe('Archive')
   })
 })

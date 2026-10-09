@@ -445,7 +445,18 @@ export interface AppSettings {
    *  `withSpacePatch` matches on `folder`, so with no space there is nothing to
    *  patch and the theme controls silently do nothing. */
   spaces: Space[]
-  /** the `folder` of the active space */
+  /** The ARCHIVE — one more top-level folder (`archive.folder`, "Archive" unless
+   *  the vault already had one spelt differently), with a look of its own like
+   *  any space. Kept OUT of `spaces` on purpose (Reuben, 2026-10-08: "make sure
+   *  it's separate from main space customisation"): it is not on the switcher,
+   *  not counted against SPACE_CAP, not written by Look → Every space, not
+   *  mirrored into the preset library, and it cannot be renamed or deleted from
+   *  Settings. It has its own page, Settings → Archive. Being IN the archive is
+   *  `activeSpaceFolder === archive.folder`, so everything that already follows
+   *  the active space — the look, the sidebar's scope, where a new note lands,
+   *  the tabs kept per space — follows it there too. See `activeSpace`. */
+  archive: Space
+  /** the `folder` of the active space — or of the archive, while you're in it */
   activeSpaceFolder: string
   // --- global: one app launch, one locale. Deliberately NOT per-space. ---
   /** what to show when a vault opens */
@@ -592,8 +603,19 @@ export const DEFAULT_SPACE: Space = {
   pageLookAccent: false
 }
 
+/** The archive's folder name when the vault doesn't already have one. */
+export const ARCHIVE_FOLDER = 'Archive'
+
+/** Is this top-level folder name the archive's? Any capitalisation — a vault
+ *  made elsewhere may already hold an "archive" or an "ARCHIVE", and that is
+ *  the user's archive, not a second space beside it. */
+export function isArchiveName(name: string): boolean {
+  return name.toLowerCase() === ARCHIVE_FOLDER.toLowerCase()
+}
+
 export const DEFAULT_SETTINGS: AppSettings = {
   spaces: [DEFAULT_SPACE],
+  archive: freshArchive(ARCHIVE_FOLDER),
   activeSpaceFolder: '',
   // Reopening what you had open is the default, as in every comparable editor:
   // with tabs, "start empty" throws away a whole arrangement rather than one
@@ -627,6 +649,12 @@ export function freshSpace(folder: string): Space {
     formatColors: emptyFormatColors(),
     folder
   }
+}
+
+/** A brand-new archive look. `num` 0: the archive is never on the switcher, so
+ *  it never shows a number, and `numberSpaces` never sees it. */
+export function freshArchive(folder: string): Space {
+  return { ...freshSpace(folder), num: 0 }
 }
 
 const THEMES: readonly ThemeId[] = ['system', 'dark', 'light', 'black', 'slate']
@@ -836,18 +864,47 @@ export function normalizeSettings(raw: unknown): AppSettings {
   // unbound (folder ''), and reconcileSpaces then binds it to the vault's first
   // top-level folder, which is what carries an existing user's theme and
   // density forward instead of resetting them.
-  const src: unknown[] = list.length ? list.slice(0, SPACE_CAP) : [s]
+  // Not capped yet: the archive comes out of this list first (below), so a
+  // vault at the cap that also had an "Archive" space keeps that space's look.
+  const src: unknown[] = list.length ? list : [s]
   // MIGRATION. `showPath` / `pinLinks` were app-wide before 2026-08-02 and now
   // belong to a space. Handed to every space as a fall-back, so a file written
   // by the older build carries the user's choice into each of them instead of
   // resetting to the default. Idempotent: once a space has its own value that
   // value wins, and the top-level keys are not written back out.
   const legacy: LegacyChrome = { showLinks: s.showLinks, pinLinks: s.pinLinks, showPath: s.showPath }
-  const spaces = numberSpaces(dedupeFolders(src.map((raw) => normalizeSpace(raw, legacy))))
+  const all = dedupeFolders(src.map((raw) => normalizeSpace(raw, legacy)))
+  // THE ARCHIVE is not a space in the list (see AppSettings.archive). Which
+  // folder it is: the one this file already recorded, else a space that is
+  // spelt "Archive" in any case — a vault that had an Archive folder before the
+  // archive became one keeps that folder's look for it (MIGRATION, 2026-10-08).
+  // Exactly ONE folder is taken out of the list: on a case-sensitive disk an
+  // "archive" beside an "Archive" stays an ordinary space rather than vanishing.
+  const rawArchive = isPlainObject(s.archive) ? s.archive : null
+  const recorded = rawArchive ? normalizeFolder(rawArchive.folder) : ''
+  const archiveFolder =
+    recorded && isArchiveName(recorded)
+      ? recorded
+      : (all.find((x) => x.folder && isArchiveName(x.folder))?.folder ?? ARCHIVE_FOLDER)
+  const was = all.find((x) => x.folder === archiveFolder)
+  const rest = all.filter((x) => x.folder !== archiveFolder).slice(0, SPACE_CAP)
+  const archive: Space = rawArchive
+    ? { ...normalizeSpace(rawArchive), folder: archiveFolder, num: 0 }
+    : was
+      ? { ...was, num: 0 }
+      : freshArchive(archiveFolder)
+  // Never empty (guarantee 1). If the archive was the only space, the
+  // whole-vault space that stands in carries the same look rather than the
+  // defaults — taking a folder out of the list must not reset anyone's theme.
+  const spaces = numberSpaces(rest.length ? rest : [{ ...(was ?? freshSpace('')), folder: '', num: 1 }])
   const wanted = normalizeFolder(s.activeSpaceFolder)
   return {
     spaces,
-    activeSpaceFolder: spaces.some((x) => x.folder === wanted) ? wanted : (spaces[0]?.folder ?? ''),
+    archive,
+    activeSpaceFolder:
+      spaces.some((x) => x.folder === wanted) || (!!wanted && wanted === archive.folder)
+        ? wanted
+        : (spaces[0]?.folder ?? ''),
     startup: STARTUPS.includes(s.startup as StartupId) ? (s.startup as StartupId) : DEFAULT_SETTINGS.startup,
     // MIGRATION, same rule as the spaces one above: a pre-tabs file's single
     // `lastNotePath` IS a one-tab session, so it goes through the same
@@ -931,6 +988,19 @@ function normalizeSlots(raw: unknown): string[] {
  *  IPC round-trip) this is the whole-vault space, so the app still paints and
  *  the sidebar still shows the vault. */
 export function activeSpace(s: AppSettings): Space {
+  if (inArchive(s)) return s.archive
+  return s.spaces.find((x) => x.folder === s.activeSpaceFolder) ?? s.spaces[0] ?? DEFAULT_SPACE
+}
+
+/** Is the archive the space you're in? */
+export function inArchive(s: AppSettings): boolean {
+  return !!s.archive && !!s.activeSpaceFolder && s.activeSpaceFolder === s.archive.folder
+}
+
+/** The space you're in, or — while you're in the archive — the first space.
+ *  What a page about SPACES shows (Settings → Spaces, Look → Every space): the
+ *  archive is edited on its own page, so it must never turn up as one of them. */
+export function activeOrFirstSpace(s: AppSettings): Space {
   return s.spaces.find((x) => x.folder === s.activeSpaceFolder) ?? s.spaces[0] ?? DEFAULT_SPACE
 }
 
@@ -949,7 +1019,17 @@ export function activeSpace(s: AppSettings): Space {
  *
  * Returns null when nothing changed, so the caller can skip a pointless write.
  */
-export function reconcileSpaces(s: AppSettings, folders: readonly string[]): Partial<AppSettings> | null {
+export function reconcileSpaces(s: AppSettings, all: readonly string[]): Partial<AppSettings> | null {
+  // The archive's folder is never a space. Which one it is: the folder already
+  // recorded, else any spelling of "Archive" — a vault made elsewhere may hold
+  // an "archive", and on a case-insensitive disk that IS the same folder, so
+  // the recorded name follows what is really there.
+  const archiveFolder = all.includes(s.archive.folder)
+    ? s.archive.folder
+    : (all.find((f) => isArchiveName(f)) ?? s.archive.folder)
+  const folders = all.filter((f) => f !== archiveFolder)
+  const archive = archiveFolder === s.archive.folder ? s.archive : { ...s.archive, folder: archiveFolder }
+
   const present = new Set(folders)
   const claimed = new Set<string>()
 
@@ -981,15 +1061,22 @@ export function reconcileSpaces(s: AppSettings, folders: readonly string[]): Par
   }
   const spaces = numberSpaces(next.slice(0, SPACE_CAP))
 
-  const activeSpaceFolder = spaces.some((x) => x.folder === s.activeSpaceFolder)
-    ? s.activeSpaceFolder
-    : (spaces[0]?.folder ?? '')
+  // Being in the archive survives a reconcile even before its folder exists —
+  // it is made on the way in, or by the first thing archived.
+  const wasInArchive = !!s.activeSpaceFolder && s.activeSpaceFolder === s.archive.folder
+  const activeSpaceFolder = wasInArchive
+    ? archive.folder
+    : spaces.some((x) => x.folder === s.activeSpaceFolder)
+      ? s.activeSpaceFolder
+      : (spaces[0]?.folder ?? '')
 
   const same =
     activeSpaceFolder === s.activeSpaceFolder &&
+    archive === s.archive &&
     spaces.length === s.spaces.length &&
     spaces.every((sp, i) => sp === s.spaces[i])
-  return same ? null : { spaces, activeSpaceFolder }
+  if (same) return null
+  return archive === s.archive ? { spaces, activeSpaceFolder } : { spaces, archive, activeSpaceFolder }
 }
 
 // --- edits, as pure functions ---------------------------------------------
@@ -1002,6 +1089,11 @@ export function reconcileSpaces(s: AppSettings, folders: readonly string[]): Par
  *  space. `folder` is re-pinned last: it's the identity, and only
  *  `withSpaceRenamed` may change it (it has to move the folder on disk too). */
 export function withSpacePatch(s: AppSettings, folder: string, patch: Partial<Space>): Partial<AppSettings> {
+  // The archive takes the same patches as any space — its page renders the
+  // same form — but it lives outside the list, so it is written on its own.
+  if (folder && folder === s.archive.folder) {
+    return { archive: { ...s.archive, ...patch, folder: s.archive.folder, num: s.archive.num } }
+  }
   return {
     spaces: s.spaces.map((sp) => (sp.folder === folder ? { ...sp, ...patch, folder: sp.folder } : sp))
   }
@@ -1011,7 +1103,10 @@ export function withSpacePatch(s: AppSettings, folder: string, patch: Partial<Sp
  *  path main actually used — it sanitises names and de-duplicates, so the name
  *  you asked for is not always the name you got. */
 export function withSpaceRenamed(s: AppSettings, from: string, to: string): Partial<AppSettings> {
-  if (from === to || !s.spaces.some((x) => x.folder === from)) return {}
+  // A space may not take the archive's name — it would stop being a space and
+  // its notes would turn up in the archive. Settings → Spaces says so before
+  // it gets here; this is the backstop.
+  if (from === to || !s.spaces.some((x) => x.folder === from) || isArchiveName(to)) return {}
   return {
     spaces: s.spaces.map((sp) => (sp.folder === from ? { ...sp, folder: to } : sp)),
     activeSpaceFolder: s.activeSpaceFolder === from ? to : s.activeSpaceFolder
@@ -1021,7 +1116,7 @@ export function withSpaceRenamed(s: AppSettings, from: string, to: string): Part
 /** Register a space for a folder main has just created, and switch to it — you
  *  made it, you want to be in it. */
 export function withNewSpace(s: AppSettings, folder: string): Partial<AppSettings> {
-  if (!folder || s.spaces.some((x) => x.folder === folder)) return {}
+  if (!folder || s.spaces.some((x) => x.folder === folder) || folder === s.archive.folder) return {}
   // A lone unbound space stands for "no folders yet" (see AppSettings) — once a
   // real folder exists it must be REBOUND, not appended beside. Appending left a
   // ghost entry in the switcher whose folder is '': indistinguishable from a
@@ -1117,6 +1212,7 @@ export function settingsFromThemeCache(c: ThemeCache): AppSettings {
     // collection" ends up mutating the defaults for the rest of the session.
     pageLookLibrary: [...DEFAULT_SETTINGS.pageLookLibrary],
     tintLibrary: [...DEFAULT_SETTINGS.tintLibrary],
+    archive: freshArchive(ARCHIVE_FOLDER),
     spaces: [
       {
         ...freshSpace(DEFAULT_SPACE.folder),

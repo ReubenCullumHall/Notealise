@@ -19,12 +19,13 @@ import type { SpacePreset } from '../../shared/presets'
 import { ancestorsOf } from './links/model'
 import { ContextMenu } from './ContextMenu'
 import { SearchBar, SearchResults, type SearchHit } from './Search'
+import { ArchiveResults, ArchiveSearchBar } from './ArchiveSearch'
+import { archRowId, type ArchiveHit } from './organise/archiveSearch'
+import { createPress } from './organise/archivePress'
 import { TreeView, type Selection, type TreeActions } from './TreeView'
 import { motionOn } from './tabs/tabStyles'
 import {
   ARCHIVE_SORTS,
-  archivedRoots,
-  findNode,
   onDate,
   pinnedPathSet,
   pinnedRoots,
@@ -78,6 +79,23 @@ interface Props {
   /** notes sitting at the vault root, outside every space */
   looseNotes: TreeNode[]
 
+  // --- the archive: a folder with a look of its own, gone INTO like a space
+  //     (shared/settings.ts, AppSettings.archive). While you're in it, `tree`
+  //     is the archive's contents and `activeSpaceFolder` is its folder. ---
+  inArchive: boolean
+  /** what sits at the top of the archive — the button's count */
+  archiveTop: TreeNode[]
+  /** go in, or come back out */
+  onToggleArchive: () => void
+  archiveQuery: string
+  onArchiveQuery: (q: string) => void
+  archiveHits: ArchiveHit[] | null
+  /** how many names in the archive match the sidebar search, for the line
+   *  under its results that offers to look there */
+  archiveAlso: number
+  /** go into the archive and search it for these words */
+  onSearchArchive: (q: string) => void
+
   query: string
   onQuery: (q: string) => void
   deep: boolean
@@ -113,7 +131,10 @@ interface Props {
   actions: TreeActions & {
     onNewNote: () => void
     onNewFolder: () => void
-    onArchive: (paths: string[], archived: boolean) => void
+    /** move these into the archive */
+    onArchive: (paths: string[]) => void
+    /** take these out of the archive, back to where they came from */
+    onPutBack: (paths: string[], at?: { x: number; y: number }) => void
     onRestoreFromBin: (ids: string[]) => void
     /** held file path, and the note it came out of (null if it wasn't in one) */
     onRevealHeld: (path: string, note: string | null) => void
@@ -122,7 +143,9 @@ interface Props {
   }
 }
 
-type View = 'notes' | 'archive' | 'bin'
+/** The bin is a view over the list. The archive is not — it is a place you go
+ *  into, like a space (the `inArchive` prop). */
+type View = 'notes' | 'bin'
 
 /** A nav-bar button (legacy's `TB`). */
 function TB({
@@ -249,6 +272,14 @@ export function Sidebar({
   activeSpaceFolder,
   onSwitchSpace,
   looseNotes,
+  inArchive,
+  archiveTop,
+  onToggleArchive,
+  archiveQuery,
+  onArchiveQuery,
+  archiveHits,
+  archiveAlso,
+  onSearchArchive,
   query,
   onQuery,
   deep,
@@ -569,9 +600,10 @@ export function Sidebar({
     [sidebarWidth]
   )
 
-  const inArchive = view === 'archive'
   const inBin = view === 'bin'
-  const searching = searchHits !== null
+  // Each place has its own search: the archive's box while you're in it, the
+  // sidebar's everywhere else.
+  const searching = inArchive ? archiveHits !== null : searchHits !== null
   const selCount = selection.paths.size
   const clearSel = useCallback((): void => setSelection({ paths: new Set() }), [])
 
@@ -581,7 +613,7 @@ export function Sidebar({
   // own scroller rather than wrapping the tree in a new element, so the
   // right-click on empty space and every drop target keep the same boxes.
   // WAAPI with no fill, so nothing is left holding a transform afterwards.
-  const onTree = !searching && !inBin && !inArchive
+  const onTree = !searching && !inBin
   const wasOnTree = useRef(onTree)
   useLayoutEffect(() => {
     const back = onTree && !wasOnTree.current
@@ -624,6 +656,7 @@ export function Sidebar({
     setTimeout(() => setArchiveLidClick(false), 420)
   }
   const archiveLidOpen = archiveLidClick || dropZone === 'archive'
+  const archivePress = useMemo(() => createPress(), [])
 
   // Live tree = everything not archived; pinned entries are hoisted out of it
   // into their own section so they can't appear twice.
@@ -632,14 +665,35 @@ export function Sidebar({
   const pinned = useMemo(() => pinnedRoots(live, workspace), [live, workspace])
   const mainTree = useMemo(() => withoutPinned(live, hoisted), [live, hoisted])
 
-  // The archive lists only the tops of archived branches — everything beneath
-  // came along for the ride and goes back with it.
-  const archivedNodes = useMemo(() => {
-    const roots = archivedRoots(workspace)
-      .map((p) => findNode(tree, p))
-      .filter((n): n is TreeNode => n !== null)
-    return sortArchived(roots, workspace, archiveSort)
-  }, [tree, workspace, archiveSort])
+  // In the archive, the top level follows the sort picked beside its heading
+  // (most recently archived first, unless you choose otherwise); "Custom
+  // order" hands it back to the drag order every space has. Below the top,
+  // folders keep their own order as they do anywhere.
+  const archiveSorted = inArchive && archiveSort !== 'custom'
+  const shownTree = useMemo(
+    () => (archiveSorted ? sortArchived(mainTree, workspace, archiveSort) : mainTree),
+    [archiveSorted, mainTree, workspace, archiveSort]
+  )
+
+  // The archive search's keyboard cursor: which result ↓/↑ are on. Back to none
+  // whenever the words change, so Enter opens the best match for what is
+  // typed, not a row that has since moved.
+  const [archCursor, setArchCursor] = useState(-1)
+  useEffect(() => setArchCursor(-1), [archiveQuery])
+  const archiveInput = useRef<HTMLInputElement | null>(null)
+  const openArchiveHit = (i: number, newTab: boolean): void => {
+    const h = archiveHits?.[i]
+    if (!h) return
+    if (h.doc.type === 'dir') revealInArchive(h.doc.path)
+    else actions.onOpen(h.doc.path, newTab)
+  }
+  /** A folder found by the archive's search: clear the search and open the
+   *  folder in the archive's tree, scrolled into view. */
+  const revealInArchive = (path: string): void => {
+    onArchiveQuery('')
+    setExpanded(ancestorsOf(path))
+    setRevealTarget(path)
+  }
 
   // Sidebar owns the selection, so it is the only place that can answer "is the
   // row you right-clicked part of a set?" — App builds the menu and TreeView
@@ -670,6 +724,10 @@ export function Sidebar({
     onSelectionChange: setSelection,
     dragging,
     onDragging: setDragging,
+    // A drop in the gaps between rows (under an open folder, beside the "Moved"
+    // divider) lands at the top of the space you're in — or of the archive —
+    // not at the top of the whole vault, outside every space.
+    rootDir: activeSpaceFolder,
     ...treeActions
   }
 
@@ -726,19 +784,39 @@ export function Sidebar({
         </button>
       </div>
 
-      <SearchBar
-        query={query}
-        onQuery={onQuery}
-        deep={deep}
-        onToggleDeep={onToggleDeep}
-        allSpaces={allSpaces}
-        onToggleAllSpaces={onToggleAllSpaces}
-      />
+      {/* Each place its own search: the archive's box while you're in it.
+          Keyed, so the swap fades in rather than snapping. */}
+      {inArchive ? (
+        <div key="arch-search" className="fade-in">
+          <ArchiveSearchBar
+            query={archiveQuery}
+            onQuery={onArchiveQuery}
+            inputRef={archiveInput}
+            activeId={archiveHits && archCursor >= 0 && archiveHits[archCursor] ? archRowId(archiveHits[archCursor].doc.path) : undefined}
+            onStep={(by) => {
+              const n = archiveHits?.length ?? 0
+              if (!n) return
+              setArchCursor((c) => (c < 0 ? (by > 0 ? 0 : n - 1) : Math.min(n - 1, Math.max(0, c + by))))
+            }}
+            onEnter={(newTab) => openArchiveHit(archCursor >= 0 ? archCursor : 0, newTab)}
+          />
+        </div>
+      ) : (
+        <SearchBar
+          query={query}
+          onQuery={onQuery}
+          deep={deep}
+          onToggleDeep={onToggleDeep}
+          allSpaces={allSpaces}
+          onToggleAllSpaces={onToggleAllSpaces}
+        />
+      )}
 
-      {/* hidden in the shelf views: nothing here applies to them */}
+      {/* Hidden in the bin: nothing here applies to it. The archive keeps it —
+          it is a place like a space, and you can make notes and folders in it. */}
       <div
         className={
-          'flex items-center justify-center gap-1 px-3 pb-1.5 ' + (inArchive || inBin ? 'hidden' : '')
+          'flex items-center justify-center gap-1 px-3 pb-1.5 ' + (inBin ? 'hidden' : '')
         }
       >
         <TB onClick={actions.onNewNote} title="New note (Ctrl+N)">
@@ -824,30 +902,58 @@ export function Sidebar({
           // when nothing more specific did — i.e. genuinely empty space. Drops
           // land in the active space's root, same as dragging above the first row.
           onDragOver={(e) => {
-            if (inArchive || inBin || searching || !dragging) return
+            if (inBin || searching || !dragging) return
             if (dragging.some((p) => activeSpaceFolder === p || activeSpaceFolder.startsWith(p + '/')))
               return
             e.preventDefault()
             e.dataTransfer.dropEffect = 'move'
           }}
           onDrop={(e) => {
-            if (inArchive || inBin || searching || !dragging) return
+            if (inBin || searching || !dragging) return
             e.preventDefault()
             actions.onMove(dragging, activeSpaceFolder, null, false)
             setDragging(null)
             clearSel()
           }}
         >
-          {/* a search always searches everywhere, so it outranks the shelf views */}
-          {searching ? (
-            <SearchResults
-              hits={searchHits}
+          {/* a search outranks the bin view: it is what you're doing right now */}
+          {searching && inArchive && archiveHits ? (
+            <ArchiveResults
+              hits={archiveHits}
+              cursor={archCursor}
               activePath={openPath}
-              onOpen={onOpenSearchHit}
-              deep={deep}
-              archivedCount={searchHits.filter((h) => h.archived).length}
-              contextLabel={searchContextLabel}
+              onOpen={(path, newTab) => actions.onOpen(path, newTab)}
+              onReveal={revealInArchive}
+              onPoint={setArchCursor}
             />
+          ) : searching && searchHits ? (
+            <>
+              <SearchResults
+                hits={searchHits}
+                activePath={openPath}
+                onOpen={onOpenSearchHit}
+                deep={deep}
+                archivedCount={searchHits.filter((h) => h.archived).length}
+                contextLabel={searchContextLabel}
+              />
+              {/* The sidebar search leaves the archive out — it has its own —
+                  but says when the archive has matches too, and one click
+                  carries the words across. */}
+              {archiveAlso > 0 && (
+                <button
+                  onClick={() => onSearchArchive(query)}
+                  className="fade-in mx-1 mt-2 flex w-[calc(100%-0.5rem)] items-center gap-2 rounded-lg border-none bg-transparent px-2 py-1.5 text-left text-[12px] text-ink-500 outline-none transition-colors hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300"
+                >
+                  <span className="shrink-0 text-accent-500">
+                    <ArchiveIcon className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {archiveAlso} {searchHits.length ? 'more ' : ''}in the archive
+                  </span>
+                  <Icon name="chevron" className="h-3.5 w-3.5 shrink-0 text-ink-300" />
+                </button>
+              )}
+            </>
           ) : inBin ? (
             workspace.trash.length ? (
               <div className="fade-in">
@@ -922,31 +1028,30 @@ export function Sidebar({
                 </p>
               </div>
             )
-          ) : inArchive ? (
-            archivedNodes.length ? (
-              <div className="fade-in">
+          ) : inArchive && tree.length === 0 ? (
+            <div className="fade-in px-4 py-10 text-center">
+              <p className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-surface/70 text-ink-400">
+                <ArchiveIcon className="h-4 w-4" />
+              </p>
+              <p className="text-sm text-ink-500">Your archive is empty.</p>
+              <p className="mt-1 text-xs leading-relaxed text-ink-300">
+                Drag a note or folder onto the archive button below, or right-click it and choose Move
+                to archive. It goes into the Archive folder in your vault, and Put back returns it to
+                where it came from.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* The archive's heading: what it holds, and how the top of it is
+                  sorted. Only in the archive — a space has no heading here. */}
+              {inArchive && (
                 <div className="flex items-center gap-1 px-3 pb-1 pt-1">
                   <p className={'min-w-0 flex-1 ' + SECTION_TEXT}>
-                    Archived · {archivedNodes.length} item{archivedNodes.length === 1 ? '' : 's'}
+                    Archive · {tree.length} item{tree.length === 1 ? '' : 's'}
                   </p>
                   <SortMenu value={archiveSort} onChange={setArchiveSort} />
                 </div>
-                <TreeView {...commonTreeProps} nodes={archivedNodes} mode="archive" />
-              </div>
-            ) : (
-              <div className="fade-in px-4 py-10 text-center">
-                <p className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-surface/70 text-ink-400">
-                  <Icon name="archive" className="h-4 w-4" />
-                </p>
-                <p className="text-sm text-ink-500">Nothing archived yet.</p>
-                <p className="mt-1 text-xs leading-relaxed text-ink-300">
-                  Drag notes or folders into the sidebar — a drop zone appears at the top. A folder
-                  brings everything inside it along, and nothing leaves your disk.
-                </p>
-              </div>
-            )
-          ) : (
-            <>
+              )}
               {pinned.length > 0 && (
                 <div className="mb-2">
                   <p className={'flex items-center gap-1.5 ' + SECTION_HEAD}>
@@ -961,11 +1066,17 @@ export function Sidebar({
               )}
 
               {mainTree.length > 0 && pinned.length > 0 && <p className={SECTION_HEAD}>Notes</p>}
-              <TreeView {...commonTreeProps} nodes={mainTree} mode="tree" />
+              <TreeView
+                {...commonTreeProps}
+                nodes={shownTree}
+                mode="tree"
+                sortedTop={archiveSorted}
+                archive={inArchive ? { onPutBack: actions.onPutBack } : undefined}
+              />
 
               {mainTree.length === 0 && pinned.length === 0 && looseNotes.length === 0 && (
                 <p className="px-3 py-6 text-center text-sm text-ink-300">
-                  {archivedNodes.length ? 'Everything is archived.' : 'No notes yet.'}
+                  No notes yet.
                 </p>
               )}
 
@@ -979,7 +1090,7 @@ export function Sidebar({
                   <p className={SECTION_HEAD} data-tip="Notes in your vault that aren't inside a space">
                     Not in a space
                   </p>
-                  <TreeView {...commonTreeProps} nodes={looseNotes} mode="tree" />
+                  <TreeView {...commonTreeProps} nodes={looseNotes} mode="tree" rootDir="" />
                 </>
               )}
             </>
@@ -1276,13 +1387,26 @@ export function Sidebar({
           {workspace.trash.length > 0 && <span>{workspace.trash.length}</span>}
         </button>
         <button
-          onClick={() => {
-            setView((v) => (v === 'archive' ? 'notes' : 'archive'))
-            onQuery('')
+          onClick={(e) => {
+            // Into the archive, or back out — it is a place now, not a view of
+            // the list, so the bin view (if it was up) gives way to it.
+            setView('notes')
+            onToggleArchive()
             flipArchiveLid()
+            if (e.detail === 0) archivePress.key(e.currentTarget) // Enter / Space
           }}
+          // The press and its bounce (organise/archivePress.ts) are the whole
+          // of the motion going in and out — the window itself just switches.
+          onPointerDown={(e) => {
+            if (e.button === 0) archivePress.down(e.currentTarget, e.clientX, e.clientY)
+          }}
+          onPointerUp={(e) => archivePress.up(e.currentTarget)}
+          onPointerLeave={(e) => archivePress.up(e.currentTarget)}
+          onPointerCancel={(e) => archivePress.up(e.currentTarget)}
           onDragOver={(e) => {
-            if (!dragging) return
+            // From inside the archive there is nothing to drop here: it is
+            // already in.
+            if (!dragging || inArchive) return
             e.preventDefault()
             setDropZone('archive')
           }}
@@ -1292,15 +1416,15 @@ export function Sidebar({
           }}
           onDrop={(e) => {
             e.preventDefault()
-            if (dragging) {
-              actions.onArchive(dragging, true)
+            if (dragging && !inArchive) {
+              actions.onArchive(dragging)
               flipArchiveLid()
               clearSel()
             }
             setDragging(null)
             setDropZone(null)
           }}
-          data-tip={inArchive ? 'Back to your notes' : 'Archived notes'}
+          data-tip={inArchive ? 'Back to your notes' : 'Archive — notes you have put away'}
           aria-pressed={inArchive}
           className={
             // No border, radius, shadow or blur of its own any more: the group
@@ -1316,7 +1440,11 @@ export function Sidebar({
             // button's own box, so the two halves tile with no dead pixel.
             // `border-none` is replaced rather than added to — it sets
             // border-style, which would leave a 1px-wide invisible border.
-            'flex h-full flex-1 items-center justify-center gap-1.5 border-y-0 border-r-0 border-l border-solid border-ink-300/30 px-2 text-[12px] font-medium tabular-nums outline-none transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ' +
+            // The one radius it does carry, `rounded-r-lg`, is the group's own
+            // end corner (the same role, so no new value): at rest the group
+            // hides it, and pressed in (organise/archivePress.ts) this half is
+            // still the end of the pill rather than a square-cornered block.
+            'flex h-full flex-1 items-center justify-center gap-1.5 rounded-r-lg border-y-0 border-r-0 border-l border-solid border-ink-300/30 px-2 text-[12px] font-medium tabular-nums outline-none transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-300 ' +
             (inArchive || dropZone === 'archive'
               ? 'bg-accent-500/15 text-accent-600'
               : 'bg-transparent text-accent-500 hover:bg-ink-300/15')
@@ -1325,7 +1453,7 @@ export function Sidebar({
           <span className={archiveLidOpen ? 'lid-open' : ''}>
             <ArchiveIcon className="h-4 w-4" />
           </span>
-          {archivedNodes.length > 0 && <span>{archivedNodes.length}</span>}
+          {archiveTop.length > 0 && <span>{archiveTop.length}</span>}
         </button>
         </div>
       </div>

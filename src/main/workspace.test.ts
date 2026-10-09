@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { setVaultRoot } from './vault'
-import { purgeEntries, restoreEntries, restoreRecoveryEntries, trashEntries } from './workspace'
+import { getWorkspace, migrateKey, purgeEntries, restoreEntries, restoreRecoveryEntries, trashEntries, updateEntries } from './workspace'
 import { TRASH_DIR, type MediaOrigin } from '../shared/workspace'
 
 // Against a REAL temporary vault, deliberately — no mocked file system.
@@ -121,5 +121,35 @@ describe('the bin, against a real vault', () => {
     expect(one?.media?.text).toBe('![](photo.png)\n')
     expect(two?.media?.text).toBe('![](two.png)\n')
     expect(two?.media?.line).toBe(9)
+  })
+})
+
+// Put back reads `archivedFrom` as a path, so a rename has to carry it like it
+// carries the entry's own key — rename the space a note was archived out of and
+// Put back must still find the way home (2026-10-08).
+describe('migrateKey and where an archived entry came from', () => {
+  let root = ''
+  beforeEach(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'mdnotes-test-'))
+    setVaultRoot(root)
+  })
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true })
+  })
+
+  it('follows a renamed space into archivedFrom, and leaves other records alone', async () => {
+    await getWorkspace()
+    await updateEntries(['Archive/Waves.md'], { archivedFrom: 'Year 12/Physics/Waves.md', archivedAt: 1 })
+    await updateEntries(['Archive/Diary.md'], { archivedFrom: 'Journal/Diary.md', archivedAt: 2 })
+    const ws = await migrateKey('Year 12', 'Year 13')
+    expect(ws.entries['Archive/Waves.md'].archivedFrom).toBe('Year 13/Physics/Waves.md')
+    expect(ws.entries['Archive/Diary.md'].archivedFrom).toBe('Journal/Diary.md')
+  })
+
+  it('does not touch a path that only starts with the same letters', async () => {
+    await getWorkspace()
+    await updateEntries(['Archive/x.md'], { archivedFrom: 'Year 120/x.md' })
+    const ws = await migrateKey('Year 12', 'Year 13')
+    expect(ws.entries['Archive/x.md'].archivedFrom).toBe('Year 120/x.md')
   })
 })

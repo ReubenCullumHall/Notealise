@@ -9,6 +9,7 @@ export const CH = {
   createNote: 'vault:createNote',
   createFolder: 'vault:createFolder',
   renameEntry: 'vault:renameEntry',
+  moveEntryInto: 'vault:moveEntryInto',
   /** renderer -> main: raw bytes of a vault file, for showing an image inline */
   readAsset: 'vault:readAsset',
   /** renderer -> main: bytes already in hand (paste/drop) to write beside a

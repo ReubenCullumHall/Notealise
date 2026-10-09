@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { spacesWearing, spacesWearingFont, withoutFont, withoutPageLook, withoutTint } from './library'
-import { DEFAULT_SETTINGS, freshSpace, type AppSettings } from '../../../shared/settings'
+import { DEFAULT_SETTINGS, freshArchive, freshSpace, type AppSettings } from '../../../shared/settings'
 
 // The half of "remove" that is invisible until much later: a space left
 // pointing at something its own picker no longer lists renders a look you
@@ -90,5 +90,19 @@ describe('taking something out of the collection', () => {
     })
     expect(spacesWearingFont(s, 'lora')).toBe(2)
     expect(spacesWearingFont(s, 'nope')).toBe(0)
+  })
+
+  // The archive has a look of its own (2026-10-08) — left out, it would be the
+  // one place still wearing something the collection no longer has.
+  it('takes it off the archive too, and counts the archive as one wearer', () => {
+    const s = settings({
+      pageLookLibrary: ['dots'],
+      spaces: [{ ...freshSpace('Revision'), pageLook: 'dots' }],
+      archive: { ...freshArchive('Archive'), pageLook: 'dots', font: 'lora' }
+    })
+    expect(spacesWearing(s, 'pageLook', 'dots')).toBe(2)
+    expect(withoutPageLook(s, 'dots').archive?.pageLook).toBe('')
+    expect(spacesWearingFont(s, 'lora')).toBe(1)
+    expect(withoutFont(s, 'lora').archive?.font).toBe('')
   })
 })

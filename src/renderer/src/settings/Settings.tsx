@@ -4,6 +4,7 @@ import { STARTUPS, type AppSettings } from './model'
 import { Icon, type IconName } from '../icons'
 import { PageTabs, Select, SettingRow, ToggleRow } from './primitives'
 import { Spaces, type SpaceActions } from './Spaces'
+import { ArchiveSettings } from './ArchiveSettings'
 import { Collection } from './Collection'
 import { Explore, type ExploreTab } from './Explore'
 import { RequestForm } from './RequestForm'
@@ -62,6 +63,7 @@ export type SectionId =
   | 'general'
   | 'customisation'
   | 'spaces'
+  | 'archive'
   | 'collection'
   | 'tutorials'
   | 'sourceFolder'
@@ -83,6 +85,8 @@ export type SectionId =
 //                    once (the tab that was the Customisation page), plus Your
 //                    collection: the fonts, page looks and tints you have.
 //   Spaces         — the same look settings, one space at a time.
+//   Archive        — the same look settings again, for the archive alone
+//                    (2026-10-08). Never reached by Look's "every space".
 //   Data           — where your notes live and moving things in and out:
 //                    Source folder, Recovery, Import, Transfer data.
 //   Help           — Tutorials, Report a bug, Request a feature.
@@ -99,7 +103,7 @@ export type SectionId =
 // results, the File menu's jumps ('import', 'updates'), goTo. A GROUP is only
 // how the pages are listed, so moving a page between groups never breaks a
 // route.
-type GroupId = 'general' | 'look' | 'spaces' | 'data' | 'help' | 'updates'
+type GroupId = 'general' | 'look' | 'spaces' | 'archive' | 'data' | 'help' | 'updates'
 
 interface Group {
   id: GroupId
@@ -121,6 +125,10 @@ const GROUPS: Group[] = [
     ]
   },
   { id: 'spaces', label: 'Spaces', icon: 'spaces', pages: [{ id: 'spaces', label: 'Spaces' }] },
+  // Its own entry, not a tab on Spaces (Reuben, 2026-10-08): the archive has a
+  // look like a space, but it is customised apart from them — see
+  // ArchiveSettings.tsx.
+  { id: 'archive', label: 'Archive', icon: 'archive', pages: [{ id: 'archive', label: 'Archive' }] },
   {
     id: 'data',
     label: 'Data',
@@ -1060,6 +1068,14 @@ function SettingsWindow({
                     }
                   : undefined
               }
+            />
+          )}
+          {section === 'archive' && (
+            <ArchiveSettings
+              settings={settings}
+              onChange={onChange}
+              actions={spaceActions}
+              fontLibrary={fontLibrary}
             />
           )}
           {section === 'spaces' && (

@@ -25,6 +25,7 @@ const api: VaultApi = {
   createNote: (dir, name) => ipcRenderer.invoke(CH.createNote, dir, name),
   createFolder: (dir, name) => ipcRenderer.invoke(CH.createFolder, dir, name),
   renameEntry: (from, to) => ipcRenderer.invoke(CH.renameEntry, from, to),
+  moveEntryInto: (from, toDir) => ipcRenderer.invoke(CH.moveEntryInto, from, toDir),
   scanLinks: (paths) => ipcRenderer.invoke(CH.scanLinks, paths),
   notesMentioning: (needles) => ipcRenderer.invoke(CH.notesMentioning, needles),
   getSettings: () => ipcRenderer.invoke(CH.getSettings),
