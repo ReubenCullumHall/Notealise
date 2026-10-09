@@ -13,7 +13,7 @@
 // `await import('electron')` inside the two functions that need `shell`. Keep it
 // that way: a top-level electron import would take this whole file out.
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { promises as fs, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -25,7 +25,9 @@ import {
   notesMentioning,
   purgeRecoveryItem,
   readNote,
+  renameWithRetry,
   setVaultRoot,
+  setWatcherRelease,
   trashEntry,
   writeNote
 } from './vault'
@@ -347,5 +349,60 @@ describe('moveEntryInto', () => {
     await expect(moveEntryInto('n.md', '.mdnotes')).rejects.toThrow()
     await expect(moveEntryInto('n.md', '../outside')).rejects.toThrow()
     expect(await read('n.md')).toBe('n')
+  })
+})
+
+// Windows refuses to rename a folder while the app's own watcher holds a handle on
+// a folder inside it. The rename lets the watcher go after its first refusal, tries
+// again at once, then lets it start again (found 2026-10-09; same in v1.4.1).
+describe('renameWithRetry and the folder watcher', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    setWatcherRelease(null)
+  })
+  const eperm = (): NodeJS.ErrnoException => Object.assign(new Error('EPERM'), { code: 'EPERM' })
+
+  it('releases the watcher once when a FOLDER is refused, retries, and resumes it', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdnotes-ren-'))
+    try {
+      await fs.mkdir(path.join(dir, 'a', 'b'), { recursive: true })
+      const real = fs.rename.bind(fs)
+      let calls = 0
+      vi.spyOn(fs, 'rename').mockImplementation(async (a, b) => {
+        if (calls++ === 0) throw eperm()
+        return real(a, b)
+      })
+      const resume = vi.fn()
+      const release = vi.fn(async () => resume)
+      setWatcherRelease(release)
+      await renameWithRetry(path.join(dir, 'a'), path.join(dir, 'c'))
+      expect(release).toHaveBeenCalledTimes(1)
+      expect(resume).toHaveBeenCalledTimes(1)
+      expect((await fs.stat(path.join(dir, 'c', 'b'))).isDirectory()).toBe(true)
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not touch the watcher for a FILE, and resumes it if the rename still fails', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdnotes-ren-'))
+    try {
+      await fs.writeFile(path.join(dir, 'n.md'), 'x')
+      vi.spyOn(fs, 'rename').mockRejectedValue(eperm())
+      const release = vi.fn(async () => () => {})
+      setWatcherRelease(release)
+      await expect(renameWithRetry(path.join(dir, 'n.md'), path.join(dir, 'm.md'), 2)).rejects.toThrow(
+        /Something else has it open/
+      )
+      expect(release).not.toHaveBeenCalled()
+
+      await fs.mkdir(path.join(dir, 'f'))
+      const resume = vi.fn()
+      setWatcherRelease(async () => resume)
+      await expect(renameWithRetry(path.join(dir, 'f'), path.join(dir, 'g'), 2)).rejects.toThrow()
+      expect(resume).toHaveBeenCalledTimes(1)
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true })
+    }
   })
 })

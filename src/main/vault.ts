@@ -241,23 +241,50 @@ async function resolveEol(abs: string): Promise<boolean> {
 const TRANSIENT = new Set(['EPERM', 'EACCES', 'EBUSY'])
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
+// ---------------------------------------------------------------------------
+// The app's OWN folder watcher is the most common thing holding a folder. On
+// Windows a directory can't be renamed or moved while a handle is open on anything
+// beneath it, and the watcher keeps one open on every folder in the vault — so
+// renaming a folder that contains a folder was refused every time (EPERM), and
+// the retry loop below could never win because the holder was this app. Found
+// 2026-10-09, identical in v1.4.1. The watcher registers a function here that
+// lets go of the vault for as long as the rename takes; it is only asked when a
+// FOLDER's first attempt has already failed, so ordinary renames never pay for it.
+// ---------------------------------------------------------------------------
+type WatcherRelease = () => Promise<() => void>
+let releaseWatcher: WatcherRelease | null = null
+export function setWatcherRelease(fn: WatcherRelease | null): void {
+  releaseWatcher = fn
+}
+
 export async function renameWithRetry(from: string, to: string, attempts = 6): Promise<void> {
-  for (let i = 0; ; i++) {
-    try {
-      await fs.rename(from, to)
-      return
-    } catch (e) {
-      const code = (e as NodeJS.ErrnoException).code ?? ''
-      if (i >= attempts - 1 || !TRANSIENT.has(code)) {
-        if (TRANSIENT.has(code)) {
+  let resume: (() => void) | null = null
+  try {
+    for (let i = 0; ; i++) {
+      try {
+        await fs.rename(from, to)
+        return
+      } catch (e) {
+        const code = (e as NodeJS.ErrnoException).code ?? ''
+        if (!TRANSIENT.has(code)) throw e
+        // First refusal on a folder: it may be our own watcher. Let go, try at once.
+        if (i === 0 && !resume && releaseWatcher) {
+          const isDir = await fs.stat(from).then((s) => s.isDirectory(), () => false)
+          if (isDir) {
+            resume = await releaseWatcher()
+            continue
+          }
+        }
+        if (i >= attempts - 1) {
           throw new Error(
-            'This folder is still syncing (OneDrive, Google Drive or iCloud) — wait a moment and try again.'
+            'Something else has it open (OneDrive or another sync app, an antivirus scan, or another program). Wait a moment, or close it, and try again.'
           )
         }
-        throw e
+        await sleep(Math.min(1000, 30 * 2 ** i)) // 30, 60, 120, 240, 480, 960ms, then capped at 1s
       }
-      await sleep(Math.min(1000, 30 * 2 ** i)) // 30, 60, 120, 240, 480, 960ms, then capped at 1s
     }
+  } finally {
+    resume?.()
   }
 }
 // A whole-folder rename (a space) waits far longer than a single file before

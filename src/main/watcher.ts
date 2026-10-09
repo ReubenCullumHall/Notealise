@@ -1,16 +1,19 @@
 import chokidar, { type FSWatcher } from 'chokidar'
 import path from 'node:path'
 import type { VaultChange } from '../shared/types'
-import { wasRecentlyWritten } from './vault'
+import { setWatcherRelease, wasRecentlyWritten } from './vault'
 
 let watcher: FSWatcher | null = null
+// What the watcher was started with, kept so it can be started again after a pause.
+let current: { root: string; onChange: (change: VaultChange) => void } | null = null
 
 // Watch the vault and push debounced external-change batches to the renderer.
 // - ignores dotfiles/dot-folders (incl. .mdnotes/) and node_modules
 // - ignores echoes of the app's own writes (recentWrites in vault.ts)
 // - debounces ~100ms so a burst of fs events becomes one renderer update
 export function startWatching(root: string, onChange: (change: VaultChange) => void): void {
-  stopWatching()
+  void closeWatcher()
+  current = { root, onChange }
 
   const batch = new Set<string>()
   let timer: NodeJS.Timeout | null = null
@@ -53,9 +56,28 @@ export function startWatching(root: string, onChange: (change: VaultChange) => v
   })
 }
 
-export async function stopWatching(): Promise<void> {
-  if (watcher) {
-    await watcher.close()
-    watcher = null
-  }
+async function closeWatcher(): Promise<void> {
+  const w = watcher
+  watcher = null
+  if (w) await w.close()
 }
+
+export async function stopWatching(): Promise<void> {
+  current = null
+  await closeWatcher()
+}
+
+// Windows refuses to rename or move a folder while anything holds a handle on a
+// folder beneath it, and this watcher holds one on every folder in the vault. So
+// a folder rename asks (vault.ts `renameWithRetry`, only after its first attempt
+// has been refused) for the watcher to let go for the length of the rename, and
+// to start again after. Never called for files, so ordinary saves don't pay for it.
+setWatcherRelease(async () => {
+  const cur = current
+  if (!watcher || !cur) return () => {}
+  await closeWatcher()
+  return () => {
+    // a vault switch or a quit in the meantime wins
+    if (current === cur && !watcher) startWatching(cur.root, cur.onChange)
+  }
+})

@@ -11,6 +11,7 @@ import {
   trashEntry,
   trashEntryToOS
 } from './vault'
+import { isArchiveName } from '../shared/settings'
 import {
   EMPTY_WORKSPACE,
   isSelfOrDescendant,
@@ -159,13 +160,21 @@ export async function reorderEntries(paths: string[]): Promise<Workspace> {
 export async function migrateKey(from: string, to: string): Promise<Workspace> {
   const ws = await ensureLoaded()
   if (from === to) return ws
+  const intoArchive = isArchiveName(to.split('/')[0])
   const entries: Record<string, EntryMeta> = {}
   for (const [key, meta] of Object.entries(ws.entries)) {
     // Where an archived entry came from is a path too: rename the space it came
     // out of ("Year 12" → "Year 13") and Put back still finds its way home
     // instead of making a "Year 12" folder that would become a new space.
+    //
+    // But not when the move IS an archiving (`to` is inside the Archive folder):
+    // then `from` is a place something has just LEFT, not one that was renamed, and
+    // other notes' "came from" records that happen to point there must stay put —
+    // they would otherwise be dragged into the Archive and Put back could no
+    // longer offer "where it came from" (a note archived, then its folder; or two
+    // same-named notes archived in turn).
     const was = meta.archivedFrom
-    const now = was === undefined ? undefined : remapPath(was, from, to)
+    const now = was === undefined || intoArchive ? was : remapPath(was, from, to)
     entries[remapPath(key, from, to)] = now === was ? meta : { ...meta, archivedFrom: now }
   }
   return commit({ ...ws, entries })

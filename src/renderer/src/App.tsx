@@ -900,7 +900,7 @@ export default function App(): React.JSX.Element {
           }
           return actual
         } catch (e) {
-          flash(`Couldn't rename the space: ${(e as Error).message}`)
+          flash(`Couldn't rename the space: ${cleanIpcError(e) || (e as Error).message}`)
           return null
         }
       },
@@ -3124,7 +3124,7 @@ export default function App(): React.JSX.Element {
    *  the cursor at the end, and leaves you to do the thing the card describes.
    *
    *  One note, started afresh each press — it says so at the top. It is only ever
-   *  reused while it still opens with its own heading (`PRACTICE_HEAD`): a note of
+   *  reused while it still opens with its own first line (`PRACTICE_HEAD`): a note of
    *  yours that merely has the name is never written over, the next free name
    *  ("Tutorial practice 2") is taken instead. If it is already open its text is
    *  replaced the way an outside change is (loaded copy + version bump), and the

@@ -28,10 +28,12 @@ export interface TutorialSpot {
   scrollTop: number
 }
 
-/** The note's name, and the line App checks before it ever overwrites one: a note
- *  of yours that merely has this name does not start with it, and is left alone. */
+/** The note's name, and the opening line App checks before it ever overwrites one: a
+ *  note of yours that merely has this name does not start with it, and is left alone.
+ *  It is a sentence, not a `# heading`, because the app already shows a note's name
+ *  above the page — a heading with the same words showed the name twice. */
 export const PRACTICE_TITLE = 'Tutorial practice'
-export const PRACTICE_HEAD = `# ${PRACTICE_TITLE}`
+export const PRACTICE_HEAD = 'This note starts afresh each time you press **Try it** in a tutorial.'
 
 /**
  * The practice note's whole text for one card: a line saying the note starts
@@ -42,9 +44,7 @@ export const PRACTICE_HEAD = `# ${PRACTICE_TITLE}`
  */
 export function practiceText(card: string, ask: string, start = '', stay = false): string {
   const lines = [
-    PRACTICE_HEAD,
-    '',
-    'This note starts afresh each time you press **Try it** in a tutorial. Write anything here.',
+    `${PRACTICE_HEAD} Write anything here.`,
     '',
     '---',
     '',

@@ -146,6 +146,31 @@ describe('migrateKey and where an archived entry came from', () => {
     expect(ws.entries['Archive/Diary.md'].archivedFrom).toBe('Journal/Diary.md')
   })
 
+  // Archiving is a move too, but it is something LEAVING a place, not a rename of
+  // it: other notes' records of coming from there must not follow it in (found in
+  // the 2026-10-09 Windows pass — Put back lost its "where it came from" shortcut).
+  it('does not drag other notes\' came-from records into the Archive when a folder is archived', async () => {
+    await getWorkspace()
+    await updateEntries(['Archive/Waves.md'], { archivedFrom: 'Revision/Physics/Waves.md', archivedAt: 1 })
+    const ws = await migrateKey('Revision/Physics', 'Archive/Physics')
+    expect(ws.entries['Archive/Waves.md'].archivedFrom).toBe('Revision/Physics/Waves.md')
+  })
+
+  it('does not point an older same-named note at the newer one when that is archived', async () => {
+    await getWorkspace()
+    await updateEntries(['Archive/Menu.md'], { archivedFrom: 'Revision/Menu.md', archivedAt: 1 })
+    const ws = await migrateKey('Revision/Menu.md', 'Archive/Menu (2).md')
+    expect(ws.entries['Archive/Menu.md'].archivedFrom).toBe('Revision/Menu.md')
+  })
+
+  it('still re-keys the moved entry itself into the Archive', async () => {
+    await getWorkspace()
+    await updateEntries(['Revision/Menu.md'], { order: 3 })
+    const ws = await migrateKey('Revision/Menu.md', 'Archive/Menu.md')
+    expect(ws.entries['Archive/Menu.md'].order).toBe(3)
+    expect(ws.entries['Revision/Menu.md']).toBeUndefined()
+  })
+
   it('does not touch a path that only starts with the same letters', async () => {
     await getWorkspace()
     await updateEntries(['Archive/x.md'], { archivedFrom: 'Year 120/x.md' })

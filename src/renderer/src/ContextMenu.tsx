@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { claimEscape } from './settings/escapeClaims'
 
 export interface MenuItem {
   label: string
@@ -33,6 +34,24 @@ export function ContextMenu({ x, y, items, onClose, heading }: Props): React.JSX
       top: Math.max(M, Math.min(y, window.innerHeight - r.height - M))
     })
   }, [x, y, items.length])
+  // Escape closes it, like every other popover here. Claimed (see escapeClaims.ts)
+  // so that, inside Settings, the same keypress closes this menu and not the whole
+  // window behind it. `onClose` is kept in a ref so a re-render doesn't re-bind.
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  useEffect(() => {
+    const release = claimEscape()
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      closeRef.current()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      release()
+    }
+  }, [])
   return (
     <div
       className="menu-backdrop"
