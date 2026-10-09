@@ -52,7 +52,7 @@
     <p class="page-lede">Notealise runs on your computer and keeps your notes as plain
       files on your own disk. It has no account system, no analytics, and no way to send
       your notes anywhere.</p>
-    <p class="page-meta">Last updated 2 October 2026</p>
+    <p class="page-meta">Last updated 9 October 2026</p>
 
     <h2>In short</h2>
     <ul>
@@ -60,7 +60,8 @@
         files in a folder you choose, and has no server to send them to.</li>
       <li>There is no account, no sign-in, no analytics, no tracking, and no advertising.</li>
       <li>The app makes a small, fixed set of outbound connections, all listed below: a
-        version check, and &mdash; only if you ask for one &mdash; a font download.</li>
+        version check, a font download if you ask for one, and a page-title look-up when you
+        paste a web address (which you can switch off).</li>
       <li>Because no personal information is collected, there is nothing to sign in to,
         export, or delete.</li>
     </ul>
@@ -102,6 +103,12 @@
         from the font picker, the app fetches that single font file from the jsDelivr CDN
         (<code>cdn.jsdelivr.net</code>). Nothing is fetched unless you ask for a specific
         font.</li>
+      <li><strong>Looking up a pasted link.</strong> When you paste a web address into a note,
+        Notealise asks that website for its page title (and, for a YouTube or Vimeo video, its
+        picture) and writes the title into your note. This happens once, at the moment you
+        paste, and never when you open or read a note. You can turn this off in Settings.
+        Playing a video loads YouTube&rsquo;s or Vimeo&rsquo;s player, and only after you
+        click it.</li>
       <li><strong>Installing an update.</strong> If you choose to install an update, the app
         downloads the new version from GitHub.</li>
       <li><strong>Spell check on Linux.</strong> On Linux, the first time spell check runs, the
