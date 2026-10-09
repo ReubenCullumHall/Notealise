@@ -49,6 +49,10 @@ export function decodeEntities(s: string): string {
   })
 }
 
+// Windows-1252's bytes 0x80–0x9F as characters (index = byte − 0x80). The five it
+// leaves unassigned stay as the control characters they decode to.
+const CP1252_HIGH = [...'€\u0081‚ƒ„…†‡ˆ‰Š‹Œ\u008dŽ\u008f\u0090‘’“”•–—˜™š›œ\u009džŸ']
+
 /** A page's bytes as text, in the encoding the page says it is in — the
  *  `Content-Type` header first, then a `<meta charset>` near the top, else UTF-8.
  *  A page in Latin-1 or Shift-JIS read as UTF-8 puts � in the title, which then
@@ -58,6 +62,15 @@ export function decodeHtmlBody(body: Buffer, contentType: string): string {
   const named = /charset\s*=\s*["']?([\w-]+)/i
   const label =
     named.exec(contentType)?.[1] ?? named.exec(body.subarray(0, 2048).toString('latin1'))?.[1] ?? 'utf-8'
+  // Browsers read "iso-8859-1" and "windows-1252" as the same thing (WHATWG), and
+  // an old page that says either means its 0x80–0x9F bytes as curly quotes, dashes
+  // and the euro sign. Some Node versions decode that label as plain Latin-1 and
+  // leave them as control characters — which is how CI's Node 20 failed this on
+  // the v1.5.0 tag (the app's own Electron is fine). Done by hand so no runtime
+  // can get it wrong.
+  if (/^(windows-1252|cp1252|x-cp1252|iso-8859-1|iso8859-1|latin1|l1|us-ascii|ascii)$/i.test(label)) {
+    return body.toString('latin1').replace(/[\u0080-\u009f]/g, (c) => CP1252_HIGH[c.charCodeAt(0) - 0x80] ?? c)
+  }
   try {
     return new TextDecoder(label).decode(body)
   } catch {
