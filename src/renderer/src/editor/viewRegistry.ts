@@ -1,4 +1,4 @@
-import { EditorView, ViewPlugin, type PluginValue } from '@codemirror/view'
+import { EditorView, ViewPlugin, type PluginValue, type ViewUpdate } from '@codemirror/view'
 import { linkEnv } from './linkEnv'
 
 // Every editor currently on screen, so a drag that starts in one pane can find
@@ -19,11 +19,32 @@ import { linkEnv } from './linkEnv'
 
 const views = new Set<EditorView>()
 
+/** The second (and last) sideways look: a voice note saved while its note was on
+ *  no screen waits until some editor shows that note again (voiceRecorder.ts).
+ *  These are told whenever a view starts showing another note or its text
+ *  changes. They run INSIDE CodeMirror's update, so a listener may only note
+ *  the view and act later — never dispatch from here. */
+const noteShown = new Set<(view: EditorView) => void>()
+export function onNoteShown(fn: (view: EditorView) => void): void {
+  noteShown.add(fn)
+}
+
+/** Every live editor showing the note at `path`. */
+export function viewsShowing(path: string): EditorView[] {
+  return [...views].filter((v) => notePathOf(v) === path)
+}
+
 /** Put this in the extension list and the view is findable while it lives. */
 export const registerView = ViewPlugin.fromClass(
   class implements PluginValue {
     constructor(private readonly view: EditorView) {
       views.add(view)
+    }
+    update(u: ViewUpdate): void {
+      if (!noteShown.size) return
+      if (u.docChanged || (u.startState.field(linkEnv, false)?.path ?? '') !== notePathOf(u.view)) {
+        for (const fn of noteShown) fn(u.view)
+      }
     }
     destroy(): void {
       views.delete(this.view)

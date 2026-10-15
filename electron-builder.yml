@@ -93,6 +93,16 @@ mac:
   electronLanguages: [en, en_GB]
   # Unsigned MVP build — do not attempt to sign or notarize.
   identity: null
+  # The sentence in macOS's own "Notealise would like to access the microphone"
+  # box, asked the first time a voice note is recorded — main/voice.ts asks
+  # then, never at launch. Left out, the box reads Electron's default, "This app
+  # needs access to the microphone". The build is ad-hoc signed and the signature
+  # changes with every build, so macOS may ask again after an update: the same
+  # cause as the Keychain question in enableCookieEncryption's comment above, and
+  # not fixable without signing. Left as it is. Needs a PACKAGED build to check
+  # (Contents/Info.plist); a dev or scratch build shows Electron's own text.
+  extendInfo:
+    NSMicrophoneUsageDescription: Notealise uses the microphone to record voice notes into your notes.
 dmg:
   writeUpdateInfo: false
 # Linux: one 64-bit AppImage — a single file that runs on most distributions

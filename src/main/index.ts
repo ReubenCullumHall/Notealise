@@ -16,6 +16,14 @@ import { initUpdater } from './updater'
 import { stopWatching } from './watcher'
 import { startRecoverySweep } from './workspace'
 import { sweepStaleExtractions } from './importers/notionZip/extractZip'
+import { allowMediaRequest, appPageFor } from './voice'
+
+// The page every window shows: the dev server's address under `npm run dev`
+// (electron-vite provides ELECTRON_RENDERER_URL), the built file otherwise.
+// Named once because two things must agree on it — `createWindow` loads it, and
+// the permission handler below allows the microphone to that page and no other.
+const RENDERER_FILE = path.join(__dirname, '../renderer/index.html')
+const DEV_URL = !app.isPackaged && process.env['ELECTRON_RENDERER_URL'] ? process.env['ELECTRON_RENDERER_URL'] : null
 
 // The Content-Security-Policy is injected into the renderer's HTML at build
 // time — see the `csp` plugin in electron.vite.config.ts, which is also where
@@ -78,10 +86,10 @@ function createWindow(): BrowserWindow {
   win.on('ready-to-show', () => win.show())
 
   // electron-vite provides ELECTRON_RENDERER_URL in dev; load the built file otherwise.
-  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+  if (DEV_URL) {
+    win.loadURL(DEV_URL)
   } else {
-    win.loadFile(path.join(__dirname, '../renderer/index.html'))
+    win.loadFile(RENDERER_FILE)
   }
 
   return win
@@ -105,11 +113,33 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.whenReady().then(async () => {
-  // Nothing in this app asks for a camera, a microphone, a location or a
-  // notification, so every such request is either a mistake or someone else's
-  // idea. Deny by default rather than leaving Chromium to prompt.
-  session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) =>
-    callback(false)
+  // Deny by default rather than leaving Chromium to decide. The ONE exception is
+  // the microphone, for voice notes: audio only (a request that also wants the
+  // camera is refused whole), from the main frame of one of the app's own
+  // windows, showing the app's own page. A video player's frame (the only
+  // frames the CSP admits) never gets it, whatever its `allow` attribute says.
+  // The rules and their tests are `allowMediaRequest` in voice.ts.
+  //
+  // No permission CHECK handler, deliberately: Electron answers checks "yes"
+  // without one, which is what lets the page list the microphones by name, and
+  // a check is not access — every getUserMedia still comes through here. Note
+  // that Chromium's --use-fake-ui-for-media-stream switch skips this handler
+  // altogether (measured: it handed a frame and the camera the fake devices),
+  // so a test that wants to see this rule work must leave that switch off.
+  const appPage = appPageFor(DEV_URL, RENDERER_FILE)
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) =>
+    callback(
+      allowMediaRequest(
+        {
+          permission,
+          mediaTypes: 'mediaTypes' in details ? details.mediaTypes : undefined,
+          isMainFrame: details.isMainFrame,
+          requestingUrl: details.requestingUrl,
+          fromAppWindow: BrowserWindow.getAllWindows().some((w) => w.webContents === wc)
+        },
+        appPage
+      )
+    )
   )
 
   installPlayerReferer(session.defaultSession)

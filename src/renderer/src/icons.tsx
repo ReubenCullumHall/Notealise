@@ -50,6 +50,7 @@ export type IconName =
   | 'export'
   | 'image'
   | 'video'
+  | 'mic'
   | 'info'
 
 // Each entry is the inner SVG for a 24×24 viewBox. Stroke icons inherit the
@@ -324,6 +325,14 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     <>
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <path d="M10 8.5l6 3.5-6 3.5z" />
+    </>
+  ),
+  /** A microphone — voice notes: the "/voice" command, a recording in the bin. */
+  mic: (
+    <>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0" />
+      <path d="M12 17.5V21" />
     </>
   ),
   /** Lower-case i in a circle. Marks a thing that explains itself on hover —

@@ -10,7 +10,7 @@
 // Pure data and string helpers, no fs and no DOM, so main, preload and the
 // renderer can all import it.
 
-export type AttachmentKind = 'image' | 'video'
+export type AttachmentKind = 'image' | 'video' | 'audio'
 
 interface AttachmentFormat {
   kind: AttachmentKind
@@ -34,7 +34,36 @@ const FORMATS: AttachmentFormat[] = [
   { kind: 'video', exts: ['webm'], mimes: ['video/webm'] },
   { kind: 'video', exts: ['mov'], mimes: ['video/quicktime'] },
   { kind: 'video', exts: ['m4v'], mimes: ['video/x-m4v'] },
-  { kind: 'video', exts: ['ogv'], mimes: ['video/ogg'] }
+  { kind: 'video', exts: ['ogv'], mimes: ['video/ogg'] },
+  // Voice notes (docs/feature-editor.md "Voice notes"). Every recording app
+  // anyone is likely to drop in: Apple Voice Memos (.m4a, and .qta from recent
+  // macOS/iOS), Windows Voice Recorder / Sound Recorder (.m4a .mp3 .wma .flac
+  // .wav), WhatsApp and Telegram (.opus .ogg), Android recorders (.m4a .amr
+  // .3gp), and the usual music formats. Being on this list means "we take it",
+  // not "the player can play it as it is" — some of these (.wma, .amr, .caf…)
+  // are converted to .m4a on the way in; see editor/voiceImport.ts.
+  //
+  // A dropped file's MIME type is often empty or wrong for audio (.opus, .qta
+  // and .amr have no type on many machines), so audio is also recognised by its
+  // extension — see `kindOfFile` in editor/attachInput.ts.
+  { kind: 'audio', exts: ['m4a'], mimes: ['audio/mp4', 'audio/x-m4a', 'audio/m4a'] },
+  { kind: 'audio', exts: ['mp3'], mimes: ['audio/mpeg', 'audio/mp3'] },
+  { kind: 'audio', exts: ['wav'], mimes: ['audio/wav', 'audio/x-wav', 'audio/wave', 'audio/vnd.wave'] },
+  { kind: 'audio', exts: ['aac'], mimes: ['audio/aac', 'audio/x-aac', 'audio/aacp'] },
+  { kind: 'audio', exts: ['ogg', 'oga'], mimes: ['audio/ogg', 'application/ogg'] },
+  { kind: 'audio', exts: ['opus'], mimes: ['audio/opus'] },
+  { kind: 'audio', exts: ['flac'], mimes: ['audio/flac', 'audio/x-flac'] },
+  { kind: 'audio', exts: ['weba'], mimes: ['audio/webm'] },
+  { kind: 'audio', exts: ['wma'], mimes: ['audio/x-ms-wma'] },
+  { kind: 'audio', exts: ['aif', 'aiff', 'aifc'], mimes: ['audio/aiff', 'audio/x-aiff'] },
+  { kind: 'audio', exts: ['caf'], mimes: ['audio/x-caf'] },
+  { kind: 'audio', exts: ['amr'], mimes: ['audio/amr'] },
+  { kind: 'audio', exts: ['awb'], mimes: ['audio/amr-wb'] },
+  { kind: 'audio', exts: ['mp2'], mimes: ['audio/mp2'] },
+  { kind: 'audio', exts: ['3gp', '3ga'], mimes: ['audio/3gpp', 'audio/3gpp2'] },
+  { kind: 'audio', exts: ['qta'], mimes: [] },
+  { kind: 'audio', exts: ['m4b'], mimes: ['audio/x-m4b'] },
+  { kind: 'audio', exts: ['mka'], mimes: ['audio/x-matroska'] }
 ]
 
 const extsOf = (kind: AttachmentKind): string[] =>
@@ -43,6 +72,10 @@ const extsOf = (kind: AttachmentKind): string[] =>
 /** For the picker's filters. Extensions only, no dots — Electron's own shape. */
 export const IMAGE_EXTS = extsOf('image')
 export const VIDEO_EXTS = extsOf('video')
+export const AUDIO_EXTS = extsOf('audio')
+/** What the "Attach…" picker offers — photos and videos. Voice notes have their
+ *  own picker (`pickAudioFiles`), because a recording goes through the voice
+ *  note path (a playability check, maybe a conversion) rather than straight in. */
 export const ATTACHMENT_EXTS = [...IMAGE_EXTS, ...VIDEO_EXTS]
 
 /** image/video/neither, from a bare extension (no dot, any case). */
@@ -144,7 +177,8 @@ export function resolveVaultPath(target: string, notePath: string): string | nul
  *  over-matches inside fenced code blocks, which is the safe direction — a photo
  *  reported as used by one note too many is a warning you can dismiss; one
  *  reported as used by none is a file deleted out from under a note. */
-/** THE pattern for an embed, in both forms this app writes.
+/** THE pattern for an embed, in the forms this app writes: a picture is
+ *  markdown, a video or a voice note is a one-line `<video>`/`<audio>` tag.
  *
  *  One constant because three things now read it — the index, the re-pointer
  *  and the "where is this picture" jump — and three regexes that must agree
@@ -156,7 +190,7 @@ export function resolveVaultPath(target: string, notePath: string): string | nul
  *  photo reported as used by one note too many is a warning you can dismiss;
  *  one reported as used by none is a file deleted out from under a note. */
 const embedPattern = (): RegExp =>
-  /!\[[^\]\n]*\]\(([^)\n]*)\)|<video\b[^>\n]*\bsrc=["']([^"']*)["'][^>\n]*>/gi
+  /!\[[^\]\n]*\]\(([^)\n]*)\)|<(?:video|audio)\b[^>\n]*\bsrc=["']([^"']*)["'][^>\n]*>/gi
 
 /** The target out of one regex match, unwrapped from `<…>` and stripped of a
  *  trailing `"title"`. */
@@ -345,7 +379,7 @@ export function repointFileLinks(
   }
   return text
     .replace(
-      /(!\[[^\]\n]*\]\()([^)\n]*)(\))|(<video\b[^>\n]*\bsrc=["'])([^"']*)(["'][^>\n]*>)/gi,
+      /(!\[[^\]\n]*\]\()([^)\n]*)(\))|(<(?:video|audio)\b[^>\n]*\bsrc=["'])([^"']*)(["'][^>\n]*>)/gi,
       (whole, a1?: string, dest1?: string, z1?: string, a2?: string, dest2?: string, z2?: string) =>
         dest1 !== undefined
           ? a1 + swapDestination(dest1, (t) => fix(t, false)) + z1

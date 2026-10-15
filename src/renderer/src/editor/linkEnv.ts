@@ -3,6 +3,7 @@ import { cleanIpcError } from '../ipcError'
 import type { NoteRef } from '../../../shared/links'
 import type { BlockInfo } from '../../../shared/blocks'
 import type { MediaOrigin } from '../../../shared/workspace'
+import type { VoiceSkip, VoiceSkipSeconds } from '../../../shared/voiceNote'
 import type { SpaceMark } from '../links/model'
 
 // What the editor needs to know about the vault in order to render a `[[link]]`:
@@ -40,6 +41,10 @@ export interface LinkEnv {
   /** each note's headings, by path — so a heading link written as a path
    *  (`[[Note#a#b]]`) can show just the heading it lands on */
   headings?: ReadonlyMap<string, string[]>
+  /** How far a voice note's skip buttons jump — App's setting, here because
+   *  arriving with the vault's view is what redraws every voice note when it
+   *  changes. Absent (onboarding, the tests): 10 seconds each way. */
+  voiceSkip?: VoiceSkip
 }
 
 export const EMPTY_ENV: LinkEnv = { notes: [], spaces: [], path: '' }
@@ -95,8 +100,17 @@ export interface LinkHandlers {
   /** A note's text — the open buffer when it has one, so what the `[[` picker
    *  lists inside a note is what you have typed, not what was last saved. */
   readNote: (path: string) => Promise<string>
-  /** Show the app's right-click menu at a point on screen. */
-  menu: (x: number, y: number, items: { label: string; run: () => void }[]) => void
+  /** Show the app's right-click menu at a point on screen — with a caption
+   *  above the items when the menu is a choice, and a quieter word after an
+   *  item, or a tick on the choice in use. */
+  menu: (
+    x: number,
+    y: number,
+    items: { label: string; run: () => void; hint?: string; checked?: boolean }[],
+    heading?: string
+  ) => void
+  /** Set how far one of a voice note's skip buttons jumps (right-click it). */
+  setVoiceSkip: (side: keyof VoiceSkip, seconds: VoiceSkipSeconds) => void
 }
 
 /** What `confirmMediaDelete` is given. A named type because three layers pass it

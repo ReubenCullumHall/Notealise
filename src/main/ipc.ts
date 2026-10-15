@@ -55,6 +55,7 @@ import { startWatching } from './watcher'
 import { sendBugReport, sendFeatureRequest } from './support'
 import { openAllowedExternal } from './externalLinks'
 import { lookUpLink, readLinkThumb } from './linkPreview'
+import { convertAudio, microphoneAccess, pickAudioFiles } from './voice'
 import {
   beginImport,
   getImporter,
@@ -224,7 +225,7 @@ export function registerIpc(window: BrowserWindow): void {
   // extension by `path.parse`'s reading, so it would otherwise land in the
   // vault as a hidden, extensionless file nothing can open.
   ipcMain.handle(CH.writeAsset, (_e, dir: string, filename: string, data: Uint8Array) => {
-    if (!kindForFilename(filename) && !isDocFilename(filename)) throw new Error(`Not a photo, video or document: ${filename}`)
+    if (!kindForFilename(filename) && !isDocFilename(filename)) throw new Error(`Not a photo, video, recording or document: ${filename}`)
     return writeAssetUnique(dir, filename, Buffer.from(data))
   })
   ipcMain.handle(CH.pickAttachment, async (_e, dir: string) => {
@@ -241,7 +242,9 @@ export function registerIpc(window: BrowserWindow): void {
     const out: { path: string; kind: 'image' | 'video' }[] = []
     for (const abs of res.filePaths) {
       const kind = attachmentKind(abs)
-      if (!kind) continue // filter dialogs are advisory on some OSes; skip anything else picked
+      // filter dialogs are advisory on some OSes; skip anything else picked. A
+      // recording is skipped too: voice notes come in through `pickAudioFiles`.
+      if (!kind || kind === 'audio') continue
       try {
         const data = await fsp.readFile(abs)
         const relPath = await writeAssetUnique(dir, path.basename(abs), data)
@@ -369,6 +372,12 @@ export function registerIpc(window: BrowserWindow): void {
   })
   ipcMain.handle(CH.revealInFolder, (_e, p: string) => revealInFolder(p))
   ipcMain.handle(CH.openVaultFile, (_e, p: string) => openVaultFile(p))
+  // Voice notes (main/voice.ts). None of the three writes into the vault: a
+  // recording reaches it through writeAsset, like any pasted file. The
+  // converter's arguments are checked there, not trusted from here.
+  ipcMain.handle(CH.microphoneAccess, () => microphoneAccess())
+  ipcMain.handle(CH.convertAudio, (_e, filename: unknown, data: unknown) => convertAudio(filename, data))
+  ipcMain.handle(CH.pickAudioFiles, () => pickAudioFiles(activeWindow()))
   // MAIN_STARTED_AT is module-level, so it is the moment this process booted —
   // not the moment the window asked.
   ipcMain.handle(CH.bootInfo, () => ({ startedAt: MAIN_STARTED_AT, version: app.getVersion() }))

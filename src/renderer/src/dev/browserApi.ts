@@ -496,6 +496,11 @@ const api: VaultApi = {
   lookUpLink: async () => ({ title: null, video: null }),
   linkThumb: async () => null,
   openVaultFile: async () => false, // no shell access outside Electron
+  // Voice notes: the browser asks for the microphone itself, so "yes" here just
+  // lets it; there is no converter and no native picker outside Electron.
+  microphoneAccess: async () => ({ ok: true as const }),
+  convertAudio: async () => ({ ok: false as const, reason: 'unsupported' as const, platform: 'other' as const }),
+  pickAudioFiles: async () => null,
   // Browser preview has no real folder picker or importer, so onboarding
   // (which needs both) is never worth showing here — always "already done".
   vaultEstablished: async () => false,

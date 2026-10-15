@@ -5,10 +5,14 @@ import {
   encodeTarget,
   extForMime,
   isDocFilename,
+  kindForFilename,
   kindForMime,
   type AttachmentKind
 } from '../../../shared/attachments'
+import { audioTag } from '../../../shared/voiceNote'
 import { linkEnv, notifyError, notifyUser } from './linkEnv'
+import { hasNoPicture, saveRecording } from './voiceImport'
+import { mightBeSoundOnly, ownLineInsert, tooBigMessage } from './voiceRecModel'
 
 // Getting a photo or video INTO a note: paste, drag-and-drop, and the explicit
 // "Attach…" command all end here. The picture/video is always written as a
@@ -44,21 +48,32 @@ function embedText(kind: AttachmentKind | 'file', name: string): string {
   // own name — every other editor shows it as a link, and here a click opens it
   // in its own app (webLinkPass.ts).
   if (kind === 'file') return `[${name.replace(/[[\]]/g, '')}](${target})`
+  // A voice note: the one line shared/voiceNote.ts defines, drawn by audioPass.
+  if (kind === 'audio') return audioTag(target)
   return kind === 'image' ? `![](${target})` : `<video controls src="${target}"></video>`
 }
 
-/** What a pasted or dropped file is to this editor: a photo, a video, a document
- *  we can open — or nothing it takes. Documents are known by their name (a File's
- *  MIME type is empty for a `.pages` or `.key`), photos and videos by their type. */
+/** What a pasted or dropped file is to this editor: a photo, a video, a
+ *  recording, a document we can open — or nothing it takes. Documents are known
+ *  by their name (a File's MIME type is empty for a `.pages` or `.key`), photos
+ *  and videos by their type. A recording by either: its type is often empty or
+ *  one the catalogue has never heard of (.opus, .qta and .amr have none on many
+ *  machines; Windows calls an .aac `audio/vnd.dlna.adts`), and anything typed
+ *  `audio/` goes the voice-note way rather than being typed into the note as
+ *  text by CodeMirror's own drop. */
 function kindOfFile(name: string, mime: string): AttachmentKind | 'file' | null {
-  return kindForMime(mime) ?? (isDocFilename(name) ? 'file' : null)
+  return (
+    kindForMime(mime) ??
+    (kindForFilename(name) === 'audio' || /^audio\//i.test(mime) ? 'audio' : null) ??
+    (isDocFilename(name) ? 'file' : null)
+  )
 }
 
 /** A clipboard image paste usually names the file "image.png" itself; a
  *  fallback only matters for the odd source that hands over no name at all. */
 function defaultName(kind: AttachmentKind, mime: string): string {
-  const ext = extForMime(mime) ?? (kind === 'image' ? 'png' : 'mp4')
-  return (kind === 'image' ? 'Pasted image' : 'Pasted video') + '.' + ext
+  const ext = extForMime(mime) ?? (kind === 'image' ? 'png' : kind === 'audio' ? 'm4a' : 'mp4')
+  return (kind === 'image' ? 'Pasted image' : kind === 'audio' ? 'Pasted recording' : 'Pasted video') + '.' + ext
 }
 
 /** The note this editor is showing. Read fresh each time on purpose — the view
@@ -144,7 +159,13 @@ function insertAtTarget(
   const len = view.state.doc.length
   const from = Math.min(t.from, len)
   const to = Math.min(Math.max(t.to, from), len)
-  const text = embedText(kind, name) + '\n'
+  // A voice note's player is a block, so it always gets a line of its own —
+  // dropped partway along a sentence, the sentence is split around it. Photos,
+  // videos and documents go exactly where they always went.
+  const text =
+    kind === 'audio'
+      ? ownLineInsert(view.state.doc.sliceString(view.state.doc.lineAt(from).from, from), embedText(kind, name))
+      : embedText(kind, name) + '\n'
   const after = from + text.length
   view.dispatch({
     changes: { from, to, insert: text },
@@ -175,13 +196,28 @@ async function insertFiles(
   view.dispatch({ effects: setTarget.of({ id, target: { from, to } }) })
   try {
     for (const file of files) {
-      const kind = kindOfFile(file.name, file.type)
+      let kind = kindOfFile(file.name, file.type)
       if (!kind) continue
       const filename = file.name || defaultName(kind === 'file' ? 'image' : kind, file.type)
       try {
         const bytes = new Uint8Array(await file.arrayBuffer())
-        const relPath = await window.api.writeAsset(dir, filename, bytes)
-        const name = relPath.slice(relPath.lastIndexOf('/') + 1)
+        // A "video" with no picture is a recording (Obsidian's recorder writes
+        // .webm, phones write sound-only .mp4). One WITH a picture — or one the
+        // check can't be sure about — stays a video, as it always was.
+        if (kind === 'video' && mightBeSoundOnly(filename, file.type) && (await hasNoPicture(file, filename, bytes))) {
+          kind = 'audio'
+        }
+        let name: string
+        if (kind === 'audio') {
+          // Played, converted or kept as it is — voiceImport decides, and says
+          // so. Null: nothing to add (too big to convert; already said).
+          const saved = await saveRecording(view.state, dir, filename, bytes, file)
+          if (!saved) continue
+          name = saved
+        } else {
+          const relPath = await window.api.writeAsset(dir, filename, bytes)
+          name = relPath.slice(relPath.lastIndexOf('/') + 1)
+        }
         // Saved, but the note moved on underneath it (or was swapped for
         // another one) — say both halves, because the file really is there and
         // a silent nothing reads as a broken paste.
@@ -279,6 +315,48 @@ export function attachFiles(view: EditorView): void {
       // reported rather than swallowed, same reasoning as insertFiles above.
       console.error('could not attach the picked files', e)
       notifyError(view.state, "Couldn't add that photo or video", e)
+    } finally {
+      view.dispatch({ effects: clearTarget.of(id) })
+      view.focus()
+    }
+  })()
+}
+
+/** "Voice note from a file": a native picker filtered to recordings — Voice
+ *  Memos, Voice Recorder, WhatsApp and the rest — for the recordings that are
+ *  already on the computer. Each one goes through the same voice-note path a
+ *  dropped recording does (voiceImport.ts: played as it is, or converted, or
+ *  kept as it is with a word about why), and lands where a photo from the
+ *  "Photo or video" picker would: at the cursor, in order, one per line.
+ *  Main reads the files and writes nothing; the originals stay where they are. */
+export function pickVoiceFiles(view: EditorView): void {
+  const notePath = notePathOf(view)
+  const dir = dirName(notePath)
+  void (async () => {
+    const sel = view.state.selection.main
+    const id = nextTargetId++
+    view.dispatch({ effects: setTarget.of({ id, target: { from: sel.from, to: sel.to } }) })
+    try {
+      const picked = await window.api.pickAudioFiles()
+      if (!picked) return // cancelled the dialog — not a failure
+      const tooBig = tooBigMessage(picked.tooBig)
+      if (tooBig) notifyUser(view.state, tooBig)
+      for (const { name: filename, data } of picked.files) {
+        try {
+          const name = await saveRecording(view.state, dir, filename, data)
+          if (!name) continue
+          if (!insertAtTarget(view, id, 'audio', name, notePath)) {
+            notifyUser(view.state, `Saved ${name}, but couldn't add it to the note — try again.`)
+          }
+        } catch (e) {
+          // One recording that won't save must not lose the others picked with it.
+          console.error(`could not add ${filename}`, e)
+          notifyError(view.state, `Couldn't add ${filename}`, e)
+        }
+      }
+    } catch (e) {
+      console.error('could not add the picked recordings', e)
+      notifyError(view.state, "Couldn't add that recording", e)
     } finally {
       view.dispatch({ effects: clearTarget.of(id) })
       view.focus()

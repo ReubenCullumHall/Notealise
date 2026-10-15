@@ -7,6 +7,8 @@ export interface MenuItem {
   danger?: boolean
   /** a quieter word after the label — "where it came from" */
   hint?: string
+  /** a tick after the label — the choice in use */
+  checked?: boolean
 }
 
 interface Props {
@@ -78,6 +80,11 @@ export function ContextMenu({ x, y, items, onClose, heading }: Props): React.JSX
           >
             {it.label}
             {it.hint && <span className="menu-hint">{it.hint}</span>}
+            {it.checked && (
+              <span className="menu-tick" aria-hidden="true">
+                ✓
+              </span>
+            )}
           </li>
         ))}
       </ul>

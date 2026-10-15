@@ -6,7 +6,7 @@ import type { EditorView } from '@codemirror/view'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { clearAssetCaches } from './editor/assetCache'
 import { checkMainIsCurrent } from './boot'
-import { encodeTarget, repointFileLinks } from '../../shared/attachments'
+import { encodeTarget, kindForFilename, repointFileLinks } from '../../shared/attachments'
 import { mediaUsage, otherNotesUsing } from './media/usage'
 import type { SectionId } from './settings/Settings'
 import { FormatToolbar } from './editor/FormatToolbar'
@@ -15,6 +15,7 @@ import { PaneDivider } from './tabs/PaneDivider'
 import { markCreated, markDeleted } from './organise/arrivals'
 import { PRACTICE_HEAD, PRACTICE_TITLE } from './settings/tutorials/tryIt'
 import { focusNoteEnd } from './editor/viewRegistry'
+import { flushRecordings, recordingsPending } from './editor/voiceRecorder'
 import { noteLayoutChange, notePaneChange } from './tabs/stripMotion'
 import { TabStrip } from './tabs/TabStrip'
 import { Island } from './tabs/TabIsland'
@@ -1132,7 +1133,8 @@ export default function App(): React.JSX.Element {
       // its own, and the ref is what this listener can read (it is bound once).
       if (!hasOnboardedRef.current) return
       if (document.querySelector('[aria-modal="true"]')) return
-      if (scrollsSideways(e.target)) return
+      // Taken by something in the note that scrolls sideways itself (a zoomed-in voice note).
+      if (e.defaultPrevented || scrollsSideways(e.target)) return
 
       const list = settingsRef.current.spaces
       if (list.length < 2) return
@@ -1219,7 +1221,8 @@ export default function App(): React.JSX.Element {
     const onWheel = (e: WheelEvent): void => {
       if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return
       const px = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1 // lines/pages → px
-      const step = swipeFeed.current(e.deltaX * px, e.deltaY * px, e.timeStamp, scrollsSideways(e.target))
+      const taken = e.defaultPrevented || scrollsSideways(e.target) // a zoomed-in voice note takes its own
+      const step = swipeFeed.current(e.deltaX * px, e.deltaY * px, e.timeStamp, taken)
       if (step) void stepSpace(step)
     }
     // Passive, like the Shift+wheel above: nothing here may stop a scroll that isn't ours.
@@ -1357,9 +1360,12 @@ export default function App(): React.JSX.Element {
       notes: vaultNotes,
       // already in the chosen emoji style, so the path bar, link chips and
       // link hover cards draw it without each needing the setting
-      spaces: settings.spaces.map((sp) => ({ folder: sp.folder, emoji: shownEmoji(sp.emoji, settings.emojiStyle) }))
+      spaces: settings.spaces.map((sp) => ({ folder: sp.folder, emoji: shownEmoji(sp.emoji, settings.emojiStyle) })),
+      // how far a voice note's skip buttons jump — arriving with the rest of
+      // this is what redraws every voice note on screen when one is changed
+      voiceSkip: settings.voiceSkip
     }),
-    [vaultNotes, settings.spaces, settings.emojiStyle]
+    [vaultNotes, settings.spaces, settings.emojiStyle, settings.voiceSkip]
   )
 
   const linkHandlers = useMemo(
@@ -1425,9 +1431,19 @@ export default function App(): React.JSX.Element {
         setMediaConfirm(req)
       },
       readNote: async (p) => docsRef.current.get(p) ?? (await window.api.readNote(p)),
-      menu: (x, y, items) => setMenu({ x, y, items: items.map((it) => ({ label: it.label, onClick: it.run })) })
+      menu: (x, y, items, heading) =>
+        setMenu({
+          x,
+          y,
+          heading,
+          items: items.map((it) => ({ label: it.label, onClick: it.run, hint: it.hint, checked: it.checked }))
+        }),
+      // Right-clicking a voice note's skip button. Read from the ref: this
+      // callback outlives the render it was built in.
+      setVoiceSkip: (side, seconds) =>
+        void changeSettings({ voiceSkip: { ...settingsRef.current.voiceSkip, [side]: seconds } })
     }),
-    [openLink, createFromLink, reveal, flash, showNotice, requestHeading]
+    [openLink, createFromLink, reveal, flash, showNotice, requestHeading, changeSettings]
   )
 
   // Delete-then-confirm for a photo or video pulled out of a note. The editor
@@ -3455,8 +3471,38 @@ export default function App(): React.JSX.Element {
   }, [flush])
   useEffect(() => {
     return window.api.onBeforeQuit(() => {
-      void flush().finally(() => window.api.notifyFlushed())
+      void Promise.allSettled([flush(), flushRecordings().then(flush)]).finally(() => window.api.notifyFlushed())
     })
+  }, [flush])
+  // Closing the WINDOW while a voice note records — the red button on a Mac, or
+  // Windows' ×, which is how the app quits there — must not lose it: until it
+  // is saved it exists only in memory. So that close waits while it is stopped
+  // and saved and its note written, then goes ahead (2026-10-14: without this
+  // nothing of the recording survived the close). A quit is let straight
+  // through, because the flush above has already done the same.
+  useEffect(() => {
+    let quitting = false
+    let saving = false
+    let letGo = false
+    const offQuit = window.api.onBeforeQuit(() => {
+      quitting = true
+    })
+    const onBeforeUnload = (e: BeforeUnloadEvent): void => {
+      if (quitting || letGo || !recordingsPending()) return
+      e.preventDefault()
+      e.returnValue = false // Electron's way to hold a close; no dialog is shown
+      if (saving) return
+      saving = true
+      void Promise.allSettled([flush(), flushRecordings().then(flush)]).finally(() => {
+        letGo = true
+        window.close()
+      })
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => {
+      offQuit()
+      window.removeEventListener('beforeunload', onBeforeUnload)
+    }
   }, [flush])
 
   // --- search ---------------------------------------------------------------
@@ -4216,9 +4262,10 @@ export default function App(): React.JSX.Element {
                 {/* Named, never counted. "3 other notes" tells you the size of
                     the problem and nothing about which notes have it — and you
                     cannot click what has not been named. */}
+                {/* A voice note is a recording, not a picture (2026-10-13). */}
                 {alsoUsedBy.length === 1
-                  ? 'It is also in this note, which will lose its picture:'
-                  : `It is also in these ${alsoUsedBy.length} notes, which will lose their picture:`}
+                  ? `It is also in this note, which will lose its ${mediaConfirm.file && kindForFilename(mediaConfirm.file) === 'audio' ? 'recording' : 'picture'}:`
+                  : `It is also in these ${alsoUsedBy.length} notes, which will lose their ${mediaConfirm.file && kindForFilename(mediaConfirm.file) === 'audio' ? 'recording' : 'picture'}:`}
                 <ul className="confirm-notes">
                   {alsoUsedBy.map((note) => (
                     <li key={note}>

@@ -22,7 +22,9 @@ const NO_LINK_HANDLERS: LinkHandlers = {
   confirmMediaDelete: () => {},
   // No vault behind the demo box: no other note to read, no menu to show.
   readNote: async () => '',
-  menu: () => {}
+  menu: () => {},
+  // …and no voice note whose skip buttons could be set.
+  setVoiceSkip: () => {}
 }
 
 interface Props extends OnboardingStepProps {

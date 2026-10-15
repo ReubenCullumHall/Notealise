@@ -113,6 +113,12 @@ export const CH = {
   linkThumb: 'app:linkThumb',
   /** renderer -> main: open a document the vault holds in its own app */
   openVaultFile: 'vault:openVaultFile',
+  /** renderer -> main: may the app use the microphone (asks once on macOS) */
+  microphoneAccess: 'voice:microphoneAccess',
+  /** renderer -> main: convert a recording the player can't play into .m4a */
+  convertAudio: 'voice:convertAudio',
+  /** renderer -> main: a native picker for recordings; returns names + bytes */
+  pickAudioFiles: 'voice:pickAudioFiles',
   /** renderer -> main: which import formats this build supports */
   importFormats: 'import:formats',
   /** renderer -> main: notes import — open a native picker scoped by format */

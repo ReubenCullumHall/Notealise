@@ -36,6 +36,7 @@ import {
   normalizeTintLibrary,
   PAGE_LOOK_INTENSITY_DEFAULT
 } from './looks'
+import { normalizeVoiceSkip, VOICE_SKIP_DEFAULT, type VoiceSkip } from './voiceNote'
 
 /** 'black' is Extra dark: the dark ramp with every surface taken to (near)
  *  pitch black, for OLED panels and dim rooms. It is a VARIANT of dark, not a
@@ -498,6 +499,12 @@ export interface AppSettings {
    *  network, not about how any set of notes looks. On by default (Reuben,
    *  2026-10-05) — pasting is the ask. See main/linkPreview.ts. */
   lookUpLinks: boolean
+  /** How far a voice note's two skip buttons jump, each set on its own by
+   *  right-clicking it — 5, 10, 15 or 30 seconds, or a minute (Reuben,
+   *  2026-10-14; shared/voiceNote.ts). Global for the same reason
+   *  `confirmMediaDelete` is: it is how this person likes to listen, not how any
+   *  set of notes looks. */
+  voiceSkip: VoiceSkip
   /** Full-colour or accent-coloured space emoji. Global, against the settings
    *  rule (CLAUDE.md: every look setting belongs to a space) — Reuben's call,
    *  2026-09-28: the switcher shows every space's emoji side by side, and the
@@ -629,6 +636,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   animationsEnabled: true,
   confirmMediaDelete: true,
   lookUpLinks: true,
+  voiceSkip: { ...VOICE_SKIP_DEFAULT },
   emojiStyle: 'colour',
   pageLookLibrary: [],
   tintLibrary: [],
@@ -926,6 +934,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
     confirmMediaDelete:
       typeof s.confirmMediaDelete === 'boolean' ? s.confirmMediaDelete : DEFAULT_SETTINGS.confirmMediaDelete,
     lookUpLinks: typeof s.lookUpLinks === 'boolean' ? s.lookUpLinks : DEFAULT_SETTINGS.lookUpLinks,
+    voiceSkip: normalizeVoiceSkip(s.voiceSkip),
     emojiStyle: EMOJI_STYLES.includes(s.emojiStyle as EmojiStyle)
       ? (s.emojiStyle as EmojiStyle)
       : DEFAULT_SETTINGS.emojiStyle,

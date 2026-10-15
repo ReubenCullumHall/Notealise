@@ -5,7 +5,7 @@ import { resolveVaultPath } from './imageAssets'
 import { kindForFilename } from '../../../shared/attachments'
 import { ANCHOR } from '../../../shared/workspace'
 
-// Selecting a photo/video embed and deleting it as one thing.
+// Selecting a photo/video/voice note embed and deleting it as one thing.
 //
 // Clicking the grip (attachMove's 3x2 dots) selects the WHOLE embed rather than
 // placing a cursor, and Backspace/Delete then removes it in one go and asks for
@@ -24,15 +24,17 @@ import { ANCHOR } from '../../../shared/workspace'
 // has to be taught is that a selection covering an embed EXACTLY means "this is
 // selected" and not the reveal-to-edit overlap the passes otherwise obey.
 
-/** An embed alone in its source text. Both forms are what `attachInput` writes:
- *  an image is markdown, a video is HTML (Markdown has no video syntax — see
- *  rule 4). Anchored, because these are matched against a candidate slice, not
- *  searched for inside one. */
+/** An embed alone in its source text. The forms are what the app writes: an
+ *  image is markdown, a video or a voice note is HTML (Markdown has no video or
+ *  audio syntax — see rule 4; shared/voiceNote.ts for the voice note's line).
+ *  Anchored, because these are matched against a candidate slice, not searched
+ *  for inside one. A voice note written as `![](memo.m4a)` is the IMAGE form. */
 const IMAGE_RE = /^!\[[^\]\n]*\]\([^)\n]*\)$/
 const VIDEO_RE = /^<video\b[^>\n]*>\s*<\/video>$/i
+const AUDIO_RE = /^<audio\b[^>\n]*>\s*<\/audio>$/i
 
 function isEmbed(text: string): boolean {
-  return IMAGE_RE.test(text) || VIDEO_RE.test(text)
+  return IMAGE_RE.test(text) || VIDEO_RE.test(text) || AUDIO_RE.test(text)
 }
 
 /** True when the document selection is exactly one embed and nothing else —
@@ -49,11 +51,14 @@ export function selectionIsEmbed(state: EditorState): boolean {
 
 /** Every embed on the line containing `pos`, as document ranges. Found by
  *  scanning the line's text rather than the syntax tree on purpose: the video
- *  form is raw HTML and has no markdown node to find, so one scan covers both. */
+ *  and voice note forms are raw HTML and have no markdown node to find, so one
+ *  scan covers all three. The `<audio>` form is the one audioPass draws — one
+ *  line, nothing but spaces between the tags — so the range the grip selects
+ *  is exactly the range the block stands for. */
 function embedsOnLine(state: EditorState, pos: number): { from: number; to: number }[] {
   const line = state.doc.lineAt(Math.min(Math.max(pos, 0), state.doc.length))
   const out: { from: number; to: number }[] = []
-  const scan = /!\[[^\]\n]*\]\([^)\n]*\)|<video\b[^>\n]*>\s*<\/video>/gi
+  const scan = /!\[[^\]\n]*\]\([^)\n]*\)|<video\b[^>\n]*>\s*<\/video>|<audio\b[^>\n]*>\s*<\/audio>/gi
   for (let m = scan.exec(line.text); m; m = scan.exec(line.text)) {
     out.push({ from: line.from + m.index, to: line.from + m.index + m[0].length })
   }
@@ -228,7 +233,7 @@ function cutRange(
 }
 
 /** The path an embed points at, exactly as written: the `(…)` of an image or
- *  the `src="…"` of a video. Null when neither is there to find.
+ *  the `src="…"` of a video or voice note. Null when neither is there to find.
  *
  *  Two shapes `attachInput` never writes but a hand-typed embed can, and both
  *  would otherwise yield a path that matches no file: a title after the
@@ -243,14 +248,16 @@ function embedTarget(text: string): string | null {
     return (inner ? inner[1] : raw.split(/\s+/)[0]) || null
   }
   // The same pattern videoPass uses to find the source it plays, so the file
-  // this deletes and the file that was on screen cannot come apart.
+  // this deletes and the file that was on screen cannot come apart. A voice
+  // note's `src` is read the same way (shared/voiceNote.ts's parser agrees on
+  // the quoted forms the app writes).
   const src = /\bsrc=["']([^"']*)["']/i.exec(text)
   return src ? src[1] || null : null
 }
 
 /** The vault-relative file an embed points at, or null when there isn't one to
  *  delete — which is a remote URL, a target that climbs out of the vault, or a
- *  target that is not a photo or video at all.
+ *  target that is not a photo, video or recording at all.
  *
  *  That last case is the one worth stating plainly: an embed's target is
  *  whatever somebody typed, and `![](Some note.md)` is a perfectly writable

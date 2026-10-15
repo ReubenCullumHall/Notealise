@@ -10,6 +10,7 @@ import { wikiPass } from './wikiPass'
 import { blockTagPass } from './blockTags'
 import { imagePass } from './imagePass'
 import { videoPass } from './videoPass'
+import { audioPass } from './audioPass'
 import { inlineHtmlPass } from './inlineHtmlPass'
 import { webLinkPass } from './webLinkPass'
 import { taskPass } from './taskPass'
@@ -404,6 +405,9 @@ export const PASSES: Pass[] = [
   // decoration, which a ViewPlugin may not provide — see blockTable.ts.
   imagePass,
   videoPass,
+  // voice notes: `<audio …></audio>`, and `![](memo.m4a)`, which imagePass
+  // leaves to it (audioPass.ts)
+  audioPass,
   inlineHtmlPass,
   taskPass,
   webLinkPass,

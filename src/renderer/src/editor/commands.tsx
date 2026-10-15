@@ -17,7 +17,8 @@ import {
   horizontalRule,
   wikiLink
 } from './formatCommands'
-import { attachFiles } from './attachInput'
+import { attachFiles, pickVoiceFiles } from './attachInput'
+import { startVoiceNote } from './voiceRecorder'
 
 // ---------------------------------------------------------------------------
 // THE editor command registry. One list, three surfaces:
@@ -267,6 +268,29 @@ export const EDITOR_COMMANDS: EditorCommand[] = [
     glyph: iconFace('image'),
     terms: ['image', 'photo', 'picture', 'video', 'attach', 'embed', 'file'],
     run: insert(attachFiles),
+    deferred: true
+  },
+  {
+    // Records the moment it runs — quick note-taking (editor/voiceRecorder.ts).
+    // Nothing is written until Stop, so it is `deferred` like the pickers.
+    id: 'voice',
+    label: 'Voice note',
+    hint: 'Record a voice note here',
+    group: 'Insert',
+    glyph: iconFace('mic'),
+    terms: ['voice', 'record', 'recording', 'audio', 'memo', 'mic', 'microphone', 'dictaphone', 'sound'],
+    run: insert(startVoiceNote),
+    deferred: true
+  },
+  {
+    // After "Photo or video" on purpose: "/file" still lands on the photo picker.
+    id: 'voiceFile',
+    label: 'Voice note from a file',
+    hint: 'Add recordings from your files — Voice Memos, Voice Recorder, WhatsApp…',
+    group: 'Insert',
+    glyph: iconFace('mic'),
+    terms: ['voice', 'audio', 'memo', 'recording', 'm4a', 'mp3', 'wav', 'wma', 'opus', 'import', 'sound', 'file'],
+    run: insert(pickVoiceFiles),
     deferred: true
   },
   {

@@ -259,6 +259,17 @@ describe('normalizeSettings', () => {
     }
   })
 
+  it('keeps each voice note skip button on one of its five choices', () => {
+    // set by right-clicking either button; a file from before they could be set
+    // reads as the 10 seconds they always were
+    expect(normalizeSettings({}).voiceSkip).toEqual({ back: 10, forward: 10 })
+    expect(normalizeSettings({ voiceSkip: { back: 5, forward: 60 } }).voiceSkip).toEqual({ back: 5, forward: 60 })
+    // hand-edited or half-synced: each side falls back on its own
+    expect(normalizeSettings({ voiceSkip: { back: 7, forward: 30 } }).voiceSkip).toEqual({ back: 10, forward: 30 })
+    expect(normalizeSettings({ voiceSkip: { back: '15', forward: null } }).voiceSkip).toEqual({ back: 10, forward: 10 })
+    expect(normalizeSettings({ voiceSkip: 'x' }).voiceSkip).toEqual({ back: 10, forward: 10 })
+  })
+
   it('drops the colour marker from an emoji only for the accent face', () => {
     // U+FE0F makes Chromium skip the one-colour font; colour mode needs it,
     // or a pencil draws as a black text glyph

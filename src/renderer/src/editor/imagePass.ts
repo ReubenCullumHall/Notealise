@@ -9,6 +9,7 @@ import { type Pass } from './livePreview'
 import { insideEmbed, selectionCovers, selectionSwallows, embedSpanAt, remeasureWhenSized } from './attachSelect'
 import { attachDragHandle } from './attachMove'
 import { isMediaSource, sourceCaption } from './mediaSource'
+import { isVoiceTarget } from './audioPass'
 
 // Inline images. `![alt](path)` is replaced by the picture itself, and the raw
 // markdown comes back when the cursor is inside it — the same reveal-to-edit
@@ -148,6 +149,11 @@ export const imagePass: Pass = (view, _active, push) => {
           if (c.name === 'URL') url = view.state.doc.sliceString(c.from, c.to)
         }
         if (!url) return
+        // `![](memo.m4a)` — a recording written as a picture, which imported
+        // notes carry — is a voice note, drawn by audioPass. Asked through the
+        // SAME test that pass claims it by, so the two can never both push a
+        // range for one embed (build() needs them disjoint).
+        if (isVoiceTarget(url)) return
 
         // Alt text is everything between "![" and the "]" that closes it.
         const raw = view.state.doc.sliceString(node.from, node.to)

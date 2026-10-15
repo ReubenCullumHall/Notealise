@@ -7,6 +7,7 @@ import { toPreviewLine } from '../shared/plainText'
 import { indexLinks, stripMd, type LinkRow } from '../shared/links'
 import { sanitizeFilename } from '../shared/filenames'
 import { indexEmbeds, isDocFilename } from '../shared/attachments'
+import { isRecordingName } from './voice'
 import { indexBlocks, indexHeadings } from '../shared/blocks'
 import { heldPath, RECOVERY_DIR, TRASH_DIR } from '../shared/workspace'
 
@@ -870,20 +871,26 @@ export async function revealInFolder(relPath: string): Promise<void> {
   shell.showItemInFolder(abs)
 }
 
-/** Open a document the vault holds (a PDF, a Word file…) in the program the
- *  computer uses for it — what a click on a file link in a note does.
+/** Open a document the vault holds (a PDF, a Word file…), or a recording, in the
+ *  program the computer uses for it — what a click on a file link in a note
+ *  does, and a voice note's "Open in its own app".
  *
  *  This hands a file to the operating system to OPEN, which for the wrong kind
  *  of file is the same as running it, and a note can come from someone else. So
- *  it is an allow-list of documents (`isDocFilename`, shared/attachments.ts) and
- *  it is checked here, in main, not trusted from the renderer: first the name
- *  asked for, then the file REALLY there after symlinks are followed — a link
- *  called `Slides.pdf` that points at something else is refused — and it must be
- *  inside the vault (rule 6) and a plain file. Returns whether the system took it. */
+ *  it is an allow-list — documents (`isDocFilename`, shared/attachments.ts) and
+ *  recordings (`isRecordingName`, voice.ts: sound files, and the four video
+ *  containers a voice note can arrive in; a player opens them, nothing runs
+ *  them) — and it is checked here, in main, not trusted from the renderer: first
+ *  the name asked for, then the file REALLY there after symlinks are followed — a
+ *  link called `Slides.pdf` that points at something else is refused — and it
+ *  must be inside the vault (rule 6) and a plain file. Returns whether the
+ *  system took it. */
+const opensInItsOwnApp = (name: string): boolean => isDocFilename(name) || isRecordingName(name)
+
 export async function openVaultFile(relPath: string): Promise<boolean> {
-  if (typeof relPath !== 'string' || !isDocFilename(relPath)) return false
+  if (typeof relPath !== 'string' || !opensInItsOwnApp(relPath)) return false
   const abs = await resolveReal(relPath)
-  if (!isDocFilename(abs)) return false
+  if (!opensInItsOwnApp(abs)) return false
   const st = await fs.stat(abs).catch(() => null)
   if (!st?.isFile()) return false
   const { shell } = await import('electron')

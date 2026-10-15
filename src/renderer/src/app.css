@@ -2698,6 +2698,11 @@ button.look-card:hover {
   font-size: 11px;
   color: rgb(var(--ink-400));
 }
+/* The choice in use, in a menu that is a choice ("Skip back by"). */
+.menu-tick {
+  float: right;
+  margin-left: 16px;
+}
 .menu-item.danger {
   color: #e5484d;
 }
@@ -4811,3 +4816,604 @@ html.space-vt::view-transition-new(root) {
   line-height: 18px;
   animation: fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+/* ===== VOICE NOTE BLOCK — editor/audioPass.ts (player + mixer). Owned by that file.
+   Functional first pass; the look comes later (Reuben, 2026-10-13: "styling later"). ===== */
+
+/* The voice note block (editor/voicePlayerUi.ts): one row the full width of the
+   text column, on its own line, with the display-maths rhythm (.cm-math-display
+   above) — play at the left edge, the waveform filling the middle, the time,
+   back 10 s, forward 10 s, and the mixer button at the far right. The mixer
+   opens underneath, inside the block. Interface type, not the note's font: it
+   is a control, not something written. Colours are tokens (rule 5); hover
+   changes colour, never size or position (the motion rule). */
+.cm-voice {
+  position: relative;
+  display: block;
+  /* in the note's own em, as the formula's margin is — the type size is set on
+     the rows below, so it doesn't shrink this */
+  margin: 0.3em 0;
+  font-family: var(--font-sans);
+  line-height: 1.35;
+  white-space: normal;
+  color: rgb(var(--ink-700));
+  -webkit-user-select: none;
+  user-select: none;
+}
+.cm-voice-row,
+.cm-voice-mixer {
+  font-size: 12.5px;
+}
+.cm-voice [hidden] {
+  display: none !important;
+}
+.cm-voice-row {
+  position: relative; /* containing block for the grip */
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+}
+/* The grip (attachMove.ts) lives in the line's 28px gutter, where every line's
+   grip is (lineMove.ts), so nothing in the row is covered. This bridge makes
+   the gutter beside the block part of the block while the pointer crosses to
+   the grip — dead space, never a control. */
+.cm-voice-row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -28px;
+  width: 28px;
+}
+.cm-voice .cm-attach-grip {
+  top: 50%;
+  left: -24px;
+  margin-top: -7px;
+  /* the line grip's colours, not the photo grip's: this one sits on the page */
+  background: transparent;
+  color: rgb(var(--ink-400) / 0.7);
+}
+.cm-voice:hover .cm-attach-grip,
+.cm-voice .cm-attach-grip:focus-visible {
+  opacity: 1;
+}
+.cm-voice .cm-attach-grip:hover {
+  background: rgb(var(--brand-500) / 0.12);
+  color: rgb(var(--brand-600));
+}
+/* While the pointer is on a voice note its gutter belongs to the block's own
+   grip: the line grip follows the pointer onto every line and would otherwise
+   land on top of it (nothing covers a control). */
+.cm-editor:has(.cm-voice:hover) .cm-line-grip {
+  visibility: hidden;
+}
+.cm-voice-controls {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 2px;
+}
+.cm-voice button:focus-visible {
+  outline: 2px solid rgb(var(--brand-300));
+  outline-offset: 1px;
+}
+/* Ink on paper, so it flips with the theme by itself. */
+.cm-voice .cm-voice-play {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-pill);
+  background: rgb(var(--ink-800));
+  color: rgb(var(--paper));
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.cm-voice .cm-voice-play:hover:not(:disabled) {
+  background: rgb(var(--ink-900));
+}
+.cm-voice .cm-voice-play:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Play and pause are one icon (voicePlayerUi.ts, playPauseIcon): the two
+   halves of the triangle become the two bars, point for point, so the browser
+   blends one outline into the other. The press and its bounce are the archive
+   button's (organise/archivePress.ts), played on the button from script. */
+.cm-voice-play .cm-voice-pp-a {
+  d: path('M8.6 6.67L12.93 9.34L12.93 14.66L8.6 17.33Z');
+}
+.cm-voice-play .cm-voice-pp-b {
+  d: path('M12.93 9.34L17.26 12L17.26 12L12.93 14.66Z');
+}
+.cm-voice-play.is-playing .cm-voice-pp-a {
+  d: path('M7.4 6.1L9.8 6.1L9.8 17.9L7.4 17.9Z');
+}
+.cm-voice-play.is-playing .cm-voice-pp-b {
+  d: path('M14.2 6.1L16.6 6.1L16.6 17.9L14.2 17.9Z');
+}
+.cm-voice-play path {
+  transition: d 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* The waveform: two rows of the same bars, the played one stronger and clipped
+   to how far it has got (voicePlayerUi.ts sets the clip each frame). The ink
+   ramp flips with the theme, so stronger is darker on light and lighter on
+   dark with no rule of its own. Under it all, an invisible range input the
+   size of the waveform does the seeking — click, drag, or the arrow keys. */
+.cm-voice-wavebox {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 48px;
+  height: 30px;
+  margin: 0 10px;
+}
+/* The rows hold one bar more than shows, so a zoomed-in stretch can slide
+   (voiceMixer.ts, stripAt) — this clips them to the waveform's own box. */
+.cm-voice-strip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.cm-voice-wave {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(100% * 97 / 96);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+/* Each bar is a slot of exactly 1/97 of the row, so 96 fill the box; the gap
+   between bars is the slot's own side padding, which the colour leaves out. */
+.cm-voice-wave i {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 2px;
+  padding: 0 clamp(0.5px, 0.225%, 1.5px);
+  border-radius: 1px; /* a line cap on a 1–4px bar, not a corner */
+  background: rgb(var(--ink-300));
+  background-clip: content-box;
+}
+/* `background-color`, never the `background` shorthand: that would reset the
+   bars' content-box clip and run the played bars together into one block. */
+.cm-voice-wave-played i {
+  background-color: rgb(var(--ink-800));
+}
+.cm-voice-seek {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+/* A 2px thumb, so where you click is where it seeks to, edge to edge. */
+.cm-voice-seek::-webkit-slider-thumb {
+  width: 2px;
+  height: 30px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.cm-voice-seek:disabled {
+  cursor: default;
+}
+/* Cmd (Ctrl) held over the waveform: the pointer says a click zooms. */
+.cm-voice-wavebox.zoom-in .cm-voice-seek {
+  cursor: zoom-in;
+}
+.cm-voice-wavebox.zoom-out .cm-voice-seek {
+  cursor: zoom-out;
+}
+/* Zoomed in: a hairline under the bars, the whole recording, with the stretch
+   on show marked in it. Only there while zoomed. */
+.cm-voice-zoombar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 2px;
+  border-radius: 1px; /* a line cap */
+  background: rgb(var(--wash) / 0.1);
+  visibility: hidden;
+  pointer-events: none;
+}
+.cm-voice-wavebox.is-zoomed .cm-voice-zoombar {
+  visibility: visible;
+}
+.cm-voice-zoomwin {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 1px; /* a line cap */
+  background: rgb(var(--ink-500));
+}
+.cm-voice-wavebox:has(.cm-voice-seek:focus-visible) {
+  outline: 2px solid rgb(var(--brand-300));
+  outline-offset: 3px;
+  border-radius: var(--r-control);
+}
+.cm-voice-time {
+  flex: none;
+  min-width: 34px;
+  margin-right: 6px;
+  text-align: right;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--ink-500));
+}
+.cm-voice .cm-voice-icon {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: rgb(var(--ink-500));
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.cm-voice .cm-voice-icon:hover:not(:disabled) {
+  background: rgb(var(--wash) / 0.06);
+  color: rgb(var(--ink-900));
+}
+.cm-voice .cm-voice-icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* The mixer button is "on" while its row is open — the accent, and a wash
+   behind it so "open" shows even with the grey Default accent… */
+.cm-voice .cm-voice-mixbtn.on {
+  background: rgb(var(--wash) / 0.06);
+  color: rgb(var(--accent-500));
+}
+/* …and carries a dot while the voice note plays with anything but the
+   defaults, so a changed one shows with the mixer shut. */
+.cm-voice-mixbtn.changed::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-pill);
+  background: rgb(var(--accent-500));
+}
+.cm-voice .cm-voice-text-btn {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid rgb(var(--wash) / 0.14);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: rgb(var(--ink-700));
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.cm-voice .cm-voice-text-btn:hover:not(:disabled) {
+  background: rgb(var(--wash) / 0.06);
+  color: rgb(var(--ink-900));
+}
+.cm-voice .cm-voice-text-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Not found / can't be played: the row says so, with the way out. */
+.cm-voice-alert {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 32px;
+  gap: 10px;
+  color: rgb(var(--ink-500));
+}
+.cm-voice-alert > svg {
+  flex: none;
+  margin-left: 7px;
+}
+.cm-voice-alert-msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cm-voice-alert-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+/* The mixer: under the waveform, not under the play button. */
+.cm-voice-mixer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px 22px;
+  margin-top: 4px;
+  padding: 10px 0 4px 42px;
+  border-top: 1px solid rgb(var(--wash) / 0.1);
+}
+.cm-voice-ctl {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 130px;
+  min-width: 0;
+  gap: 4px;
+}
+.cm-voice-ctl-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cm-voice-ctl-name {
+  color: rgb(var(--ink-700));
+}
+.cm-voice-ctl-value {
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--ink-500));
+}
+.cm-voice-ctl input[type='range'] {
+  width: 100%;
+  height: 16px;
+  margin: 0;
+  accent-color: rgb(var(--accent-500));
+  cursor: pointer;
+}
+.cm-voice-ctl-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: rgb(var(--ink-400));
+}
+.cm-voice .cm-voice-reset {
+  align-self: center;
+}
+/* On a page look the block sits on the page's own colour, so Lined, Grid,
+   Dots… never draw through it — the formula's rule above, for the same
+   reason. Invisible on a plain page. */
+:root:not([data-page-look='none']) .cm-voice {
+  background: var(--page-solid);
+  border-radius: var(--r-control);
+}
+/* On Lined and Worn it takes a whole number of rules, so the lines below stay
+   on theirs: voicePlayerUi.ts measures it into --snap-h (as ruleSnap.ts does a
+   formula) and this rounds up and splits the difference above and below. */
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-voice {
+  display: flow-root;
+  margin-top: 0;
+  margin-bottom: 0;
+  --snap-pad: calc((round(up, var(--snap-h, 0px), var(--page-rule)) - var(--snap-h, 0px)) / 2);
+  padding-top: var(--snap-pad);
+  padding-bottom: var(--snap-pad);
+}
+:root[data-motion='off'] .cm-voice button,
+:root[data-motion='off'] .cm-voice-play path {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-voice-play path {
+    transition: none;
+  }
+}
+
+/* ===== END VOICE NOTE BLOCK ===== */
+
+/* ===== VOICE RECORDER — editor/voiceRecorder.ts (the block shown while recording).
+   Functional first pass, same as above. ===== */
+
+/* The panel that stands where a voice note will go: Start recording until it
+   is pressed (Reuben, 2026-10-14), then a dot, what it is doing, the time, the
+   live waveform and Pause / Stop / Discard. The full width of the text column,
+   as the voice note's player will be. Interface type, not the note's font — it
+   is a control, not something written. Colours are tokens (rule 5). The one red
+   is the app's existing "live / destructive" red (229 72 77: .confirm-warn,
+   .mini.danger), named once here because theme.css has no token for it yet.
+   Hover changes colour, never size (the motion rule). */
+.cm-voice-rec {
+  --voice-rec-red: 229 72 77;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  /* A block, not a line, so the lines' 28px text gutter (highlight.ts) never
+     reaches it: given here, so it starts where the text does — and where the
+     voice note's player will be once it stops. */
+  margin: 6px 28px;
+  padding: 8px 10px 8px 12px;
+  border: 1px solid rgb(var(--wash) / 0.12);
+  border-radius: var(--r-surface);
+  background: rgb(var(--surface));
+  color: rgb(var(--ink-800));
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.3;
+  cursor: default;
+  user-select: none;
+}
+/* `hidden` must win over the display: flex the parts below set. */
+.cm-voice-rec [hidden] {
+  display: none !important;
+}
+.cm-voice-rec-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: rgb(var(--ink-300));
+  transition: background-color 0.2s ease;
+}
+/* Recording — including while Discard is asking — is the red dot, breathing. */
+.cm-voice-rec.is-live .cm-voice-rec-dot {
+  background: rgb(var(--voice-rec-red));
+  animation: voice-rec-pulse 1.6s ease-in-out infinite;
+}
+.cm-voice-rec[data-phase='paused'] .cm-voice-rec-dot {
+  background: rgb(var(--ink-400));
+}
+@keyframes voice-rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.cm-voice-rec-status {
+  font-weight: 500;
+  color: rgb(var(--ink-900));
+}
+.cm-voice-rec-time {
+  min-width: 3.4em;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--ink-500));
+}
+.cm-voice-rec-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* The live waveform: the player's bars on the player's grid, filling from the
+   left and then sliding (voiceRecorder.ts, paint), over a hairline that shows
+   where the voice will appear before there is any. */
+.cm-voice-rec-wavebox {
+  position: relative;
+  flex: 1 1 160px;
+  min-width: 96px;
+  height: 28px;
+  overflow: hidden;
+}
+.cm-voice-rec-wavebox::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: rgb(var(--wash) / 0.12);
+}
+.cm-voice-rec-wave {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(100% * 97 / 96);
+  display: flex;
+  align-items: center;
+}
+.cm-voice-rec-wave i {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 0;
+  min-height: 2px;
+  padding: 0 clamp(0.5px, 0.225%, 1.5px);
+  border-radius: 1px; /* a line cap on a 1–4px bar, not a corner */
+  background: rgb(var(--ink-600));
+  background-clip: content-box;
+}
+.cm-voice-rec[data-phase='paused'] .cm-voice-rec-wave i {
+  background-color: rgb(var(--ink-400));
+}
+.cm-voice-rec-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.cm-voice-rec-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  line-height: 1.2;
+  border: 1px solid rgb(var(--wash) / 0.14);
+  border-radius: var(--r-control);
+  background: rgb(var(--wash) / 0.04);
+  color: rgb(var(--ink-800));
+}
+.cm-voice-rec-btn:hover:not(:disabled) {
+  background: rgb(var(--wash) / 0.09);
+  color: rgb(var(--ink-900));
+}
+.cm-voice-rec-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Start recording, then Stop, is the button the panel is for: ink with paper
+   on it, either theme — and Start carries the record dot, in the red. */
+.cm-voice-rec-btn.is-record,
+.cm-voice-rec-btn.is-primary {
+  border-color: rgb(var(--ink-900));
+  background: rgb(var(--ink-900));
+  color: rgb(var(--paper));
+}
+.cm-voice-rec-btn.is-record:hover:not(:disabled),
+.cm-voice-rec-btn.is-primary:hover:not(:disabled) {
+  border-color: rgb(var(--ink-700));
+  background: rgb(var(--ink-700));
+  color: rgb(var(--paper));
+}
+.cm-voice-rec-btn.is-quiet {
+  border-color: transparent;
+  background: transparent;
+  color: rgb(var(--ink-500));
+}
+.cm-voice-rec-btn.is-quiet:hover:not(:disabled) {
+  background: rgb(var(--wash) / 0.08);
+  color: rgb(var(--ink-800));
+}
+.cm-voice-rec-btn.is-danger {
+  border-color: rgb(var(--voice-rec-red) / 0.5);
+  background: transparent;
+  color: rgb(var(--voice-rec-red));
+}
+.cm-voice-rec-btn.is-danger:hover:not(:disabled) {
+  background: rgb(var(--voice-rec-red) / 0.12);
+}
+.cm-voice-rec-glyph {
+  flex: none;
+  width: 11px;
+  height: 11px;
+}
+.cm-voice-rec-glyph.is-record {
+  color: rgb(var(--voice-rec-red));
+}
+/* A second /voice while this one records: the same wash a link's landing uses
+   (.cm-link-landed), fading out. Colour only. */
+.cm-voice-rec.is-flash {
+  animation: voice-rec-flash 1.6s ease-out;
+}
+@keyframes voice-rec-flash {
+  0%,
+  35% {
+    background-color: rgb(var(--accent-400) / 0.18);
+  }
+  100% {
+    background-color: rgb(var(--surface));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-voice-rec.is-live .cm-voice-rec-dot {
+    animation: none;
+  }
+}
+
+/* ===== END VOICE RECORDER ===== */

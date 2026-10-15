@@ -47,6 +47,34 @@ export interface VaultChange {
   paths: string[]
 }
 
+/** Which computer the app is on, as far as a voice-note message needs to know:
+ *  where the microphone switch lives differs (System Settings on a Mac,
+ *  Settings on Windows), and so does which converter exists. */
+export type VoicePlatform = 'darwin' | 'win32' | 'linux' | 'other'
+
+/** `microphoneAccess()`'s answer. `denied` — the person said no, or switched the
+ *  app off in the system's privacy settings; `restricted` — something above them
+ *  (a work profile, parental controls) forbids it; `unavailable` — there is no
+ *  microphone the system will hand over. */
+export type MicAccess =
+  | { ok: true }
+  | { ok: false; reason: 'denied' | 'restricted' | 'unavailable'; platform: VoicePlatform }
+
+/** `convertAudio()`'s answer. `unsupported` — this computer has no converter that
+ *  reads this kind of file (a .wma on a Mac, anything on Linux without ffmpeg);
+ *  `failed` — the converter ran and gave up (a damaged file); `too-big` — over
+ *  the size limit main will take into memory. */
+export type ConvertedAudio =
+  | { ok: true; name: string; data: Uint8Array }
+  | { ok: false; reason: 'unsupported' | 'failed' | 'too-big'; platform: VoicePlatform }
+
+/** `pickAudioFiles()`'s answer: the chosen recordings' names and bytes, and the
+ *  names of any left out for being over the size limit. */
+export interface PickedAudio {
+  files: { name: string; data: Uint8Array }[]
+  tooBig: string[]
+}
+
 /** The typed API exposed on `window.api` by the preload bridge. Every path
  *  argument is vault-relative and validated against the vault root in main. */
 export interface VaultApi {
@@ -271,6 +299,21 @@ export interface VaultApi {
    *  computer uses for it. False if it isn't a document we open, isn't there, or
    *  the system couldn't. Main decides what counts — see `openVaultFile`. */
   openVaultFile(path: string): Promise<boolean>
+
+  // --- voice notes (docs/feature-editor.md "Voice notes") ------------------
+  /** Make sure the app may use the microphone. On a Mac this asks the system
+   *  the first time (its own "Notealise would like to access the microphone"
+   *  box); after that, and on Windows and Linux, it only reports. Call it just
+   *  before recording — never at launch. */
+  microphoneAccess(): Promise<MicAccess>
+  /** Turn a recording the player can't play (a .wma, an Apple Lossless .m4a, an
+   *  .amr…) into an .m4a with the computer's own converter. Writes nothing into
+   *  the vault: the caller saves the result like any pasted file. */
+  convertAudio(filename: string, data: Uint8Array): Promise<ConvertedAudio>
+  /** A native picker filtered to recordings. Returns their names and bytes
+   *  (nothing is written to the vault — the voice-note path checks and saves
+   *  them), or null if the picker was cancelled. */
+  pickAudioFiles(): Promise<PickedAudio | null>
   /** Subscribe to update state changes; returns an unsubscribe function. */
   onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
 

@@ -41,7 +41,11 @@ const PERSISTED_IDS = [
   'mathInline',
   'link',
   'table',
-  'rule'
+  'rule',
+  // The voice notes' two (2026-10-13): pinned from the start, since they become
+  // a file format the moment someone puts one on a toolbar button.
+  'voice',
+  'voiceFile'
 ]
 
 describe('the command registry', () => {
@@ -120,6 +124,34 @@ describe('matchesQuery', () => {
     const hits = SLASH_COMMANDS.filter((c) => matchesQuery(c, 'inline'))
     expect(hits[0].id).toBe('mathInline')
     expect(hits.map((c) => c.id)).toContain('code')
+  })
+
+  it('lands on "Voice note" for every word someone reaches for to record', () => {
+    // Enter takes the first match and the registry's order is the ranking, so
+    // each of these must find the recorder before anything else — quick
+    // note-taking means "/rec" + Enter, not "/rec", arrow, arrow, Enter.
+    for (const word of ['voice', 'rec', 'record', 'audio', 'memo', 'mic', 'sound', 'dictaphone']) {
+      const hits = SLASH_COMMANDS.filter((c) => matchesQuery(c, word))
+      expect(hits[0]?.id, `/${word}`).toBe('voice')
+    }
+    // …and the file picker is right behind it for the same words.
+    expect(SLASH_COMMANDS.filter((c) => matchesQuery(c, 'voice')).map((c) => c.id)).toEqual(['voice', 'voiceFile'])
+  })
+
+  it('took no one else\'s word when the voice commands arrived', () => {
+    // Both list words other commands already answer to ("file", "sound"), so
+    // the commands that owned them must still come first.
+    const first = (word: string): string | undefined => SLASH_COMMANDS.find((c) => matchesQuery(c, word))?.id
+    expect(first('file')).toBe('attach')
+    expect(first('photo')).toBe('attach')
+    expect(first('video')).toBe('attach')
+    expect(first('link')).toBe('wikilink')
+    expect(first('note')).toBe('wikilink')
+    expect(first('list')).toBe('bullet')
+    expect(first('table')).toBe('table')
+    expect(first('divider')).toBe('rule')
+    // The recording formats find the picker, since there is nothing to record.
+    for (const ext of ['m4a', 'mp3', 'wav', 'wma', 'opus']) expect(first(ext), `/${ext}`).toBe('voiceFile')
   })
 
   it('offers everything for an empty query', () => {
