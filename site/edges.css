@@ -1,0 +1,35 @@
+/* ── Corners: three sizes on every page, nothing else (Reuben, 2026-10-15:
+   "all edges of all elements have a max of 2-3, 1 for square and 1-2 for
+   rounded depending on if it's big").
+     square  2px   small labels, marks, inline code, colour swatches
+     rounded 6px   anything you click, and small cards
+     big     12px  panels and pictures: the Try it window, the exhibits,
+                   screenshots, tutorial and update cards
+   Round things stay round (dots, the colour circles in the Try it window,
+   the slider knob, the logo, the on/off switch on the install guides).
+   Loaded last on every page, so it wins over each page's own corner. ──── */
+:root { --r-sq: 2px; --r: 6px; --r-big: 12px; }
+
+.paper-washes button, .compare-tag, .ph-tag, .nl-note mark, .nl-note code,
+.inside-note mark, .page-main code, .rel-list code, .rel-tag, .page-eyebrow,
+kbd, .app-space::before, .app-tree span, .app-note .bar {
+  border-radius: var(--r-sq) !important;
+}
+
+.btn, .paper-looks button, .nl-search, .nl-row, .nl-seg button, .nl-space,
+.nl-auto, .mc-option, .mc-cancel, .mock-btn, .shot::after, .app-search,
+.app-space, .tut-shot, .st-cards li, .st-grid li, .faq details {
+  border-radius: var(--r) !important;
+}
+/* The home page's questions are rows split by a line, not boxes: a rounded
+   corner curled the ends of each line up (Reuben, 2026-10-16). */
+.stop-faq .faq details { border-radius: 0 !important; }
+/* tabs: rounded on top, square where they meet the page below */
+.nl-tab, .st-tabs button { border-radius: var(--r) var(--r) 0 0 !important; }
+
+.nl, .nl-strip, .compare-stage, .paper-page, .move-report, .inside-card,
+.shot, .disk, .app, .tut-card, .tut-link, .rel, .rel-sheet,
+.rel-open:focus-visible::after, .mac-chooser, .status, .mock, .drag, .tshoot,
+.st-shot, .st-flipcard, .topbar-social {
+  border-radius: var(--r-big) !important;
+}

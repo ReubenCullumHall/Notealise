@@ -1,0 +1,108 @@
+/* ── Hover on everything you can click (Reuben, 2026-10-14) ──────────────
+   Loaded last on every page. One family of moves so the site feels like one
+   thing: the brand's highlighter (yellow, or the link's own page colour)
+   sweeps in behind ink, underlines draw in from the left, icons turn a
+   little, and download buttons fill with ink from the cursor. Buttons never
+   grow or jump — the colour moves, not the box. */
+
+:root { --hv-ease: cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* Top bar page links: the page's colour sweeps in left to right as the same
+   pale, centred highlight the headings use (highlights.css). */
+.topbar-links a {
+  --tab-band: color-mix(in oklab, var(--tab-c) var(--hl-soft, 46%), var(--bg));
+  background: linear-gradient(transparent calc(var(--hl-top) - 1%), var(--tab-band) var(--hl-top),
+    var(--tab-band) var(--hl-bottom), transparent calc(var(--hl-bottom) + 1%)) 0 0 / 0% 100% no-repeat;
+  transition: color .2s ease, background-size .45s var(--hv-ease);
+  padding-inline: 3px; margin-inline: -3px;
+}
+.topbar-links a:hover { color: var(--ink); background-size: 100% 100%; }
+
+/* The logo and the social icons stay still on hover (Reuben, 2026-10-15:
+   the turn "looks weird"); the social icons keep their colour change. */
+
+/* Download buttons (and any .btn): ink floods in from where the cursor came
+   in, and drains back out to where it left (Reuben, 2026-10-15: "the
+   opposite colour, not accent… like black/white ink is flooding the
+   button"). The ink is the button's own text colour, so it is black on a
+   light page and white on a dark one, and follows the download section when
+   it takes on the Try it window's theme. hover.js puts the circle's centre
+   at the cursor; with no script it grows from the middle. */
+@property --ink-r { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.btn {
+  --flood: var(--ink); --flood-on: var(--bg);
+  --ink-x: 50%; --ink-y: 50%; --ink-r: 0px;
+  background-image: radial-gradient(circle at var(--ink-x) var(--ink-y),
+    var(--flood) calc(var(--ink-r) - 0.5px), transparent var(--ink-r)) !important;
+  background-repeat: no-repeat !important;
+  background-position: 0 0 !important;
+  background-size: 100% 100% !important;
+  transition: --ink-r .45s cubic-bezier(0.4, 0, 0.2, 1), color .2s ease, border-color .2s ease !important;
+}
+:root[data-carry-theme="dark"] .walk .btn { --flood: oklch(0.93 0.012 70); --flood-on: var(--carry-bg); }
+.btn:hover, .btn:focus-visible, .walk .btn:hover, .walk .btn.primary:hover {
+  --ink-r: var(--ink-max, 420px);
+  background-color: transparent !important;
+  color: var(--flood-on) !important;
+  border-color: var(--flood) !important;
+  transition: --ink-r .6s cubic-bezier(0.22, 1, 0.36, 1), color .25s ease .08s, border-color .2s ease !important;
+}
+.btn.st-btn:hover, .btn.st-btn:focus-visible { background-color: var(--raised) !important; }
+
+/* Plain text links: the underline darkens and draws in thicker */
+.stop-body a, .faq a, .page-main p a, .page-main li a, .lede a, .tshoot-body a, .aside a, .status-link {
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color .2s ease, text-decoration-thickness .2s ease, color .2s ease;
+}
+.stop-body a:hover, .faq a:hover, .page-main p a:hover, .page-main li a:hover,
+.lede a:hover, .tshoot-body a:hover, .aside a:hover, .status-link:hover {
+  text-decoration-color: var(--accent); text-decoration-thickness: 3px;
+}
+
+/* Footer and "back" links: an underline that draws in from the left */
+.footer-links a, .page-back, .back {
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0% 1px no-repeat;
+  transition: color .2s ease, background-size .35s var(--hv-ease);
+  padding-bottom: 2px;
+}
+.footer-links a:hover, .page-back:hover, .back:hover { background-size: 100% 1px; }
+
+/* 03's paper picker: pills fill softly, swatches open a ring */
+.paper-looks button:not(.on):hover { background: color-mix(in oklab, var(--accent) 22%, transparent); border-color: var(--ink); color: var(--ink); }
+.paper-washes button { transition: outline-offset .25s var(--hv-ease), outline-color .2s ease; outline: 2px solid transparent; outline-offset: 0; }
+.paper-washes button:not(.on):hover { outline-color: var(--line-2); outline-offset: 3px; }
+
+/* 01's slider: the knob breathes a ring while you're over the picture */
+.compare-knob { transition: box-shadow .3s var(--hv-ease); }
+.compare-stage:hover .compare-knob { box-shadow: 0 0 0 7px color-mix(in oklab, var(--accent) 35%, transparent); }
+
+/* Questions: the + sits in a small circle that fills yellow and turns a
+   quarter on hover (open, it is the × as before) */
+.faq summary { transition: color .2s ease; }
+.faq summary:hover { color: var(--ink); }
+.faq summary::after {
+  width: 1.2em; height: 1.2em; display: grid; place-items: center; border-radius: 50%;
+  transition: transform .35s var(--hv-ease), background-color .25s ease, color .2s ease !important;
+}
+.faq summary:hover::after { background-color: color-mix(in oklab, var(--accent) 55%, transparent); color: var(--ink); }
+
+/* Tutorials list: the title gets the same pale sky highlight, hugging the
+   words (inline, so it stops where the title does, not at the card's edge) */
+.tut-link-title {
+  display: inline;
+  --tut-band: color-mix(in oklab, var(--c-tutorials) var(--hl-soft, 46%), var(--bg));
+  background: linear-gradient(transparent calc(var(--hl-top) - 1%), var(--tut-band) var(--hl-top),
+    var(--tut-band) var(--hl-bottom), transparent calc(var(--hl-bottom) + 1%)) 0 0 / 0% 100% no-repeat;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  transition: background-size .45s var(--hv-ease);
+}
+.tut-link:hover .tut-link-title { background-size: 100% 100%; }
+
+/* What's new cards: the card firms up and lifts a soft shadow; its icons
+   stay still */
+.rel { transition: border-color .2s ease, box-shadow .35s var(--hv-ease); }
+.rel:hover { border-color: var(--ink); box-shadow: 0 14px 30px -18px rgb(0 0 0 / 0.35); }
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar-links a, .btn, .btn:hover, .btn:focus-visible, .footer-links a, .page-back, .back, .tut-link-title, .rel { transition: none !important; }
+}

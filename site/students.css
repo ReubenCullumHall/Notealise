@@ -1,0 +1,485 @@
+/* ══ Notealise for students — draft, 2026-10-14 ══════════════════════════
+   The "Revision" look (draft A): an exercise book open on a desk. Ruled
+   paper with a red margin line, a different highlighter per section drawn
+   as a real marker stroke, sticky-note numbers, real app screenshots taped
+   down at a slight angle. Bricolage Grotesque for headings, Caveat for the
+   handwritten bits, Inter for reading. */
+
+/* The fonts live on this site, like the rest of its fonts, so loading a page
+   asks nothing of any other company (the Privacy page lists every outside
+   service the site talks to). Latin and accented Latin only. */
+@font-face {
+  font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 400 800;
+  font-stretch: 75% 100%;
+  font-display: swap; src: url("fonts/bricolage-grotesque-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 400 800;
+  font-stretch: 75% 100%;
+  font-display: swap; src: url("fonts/bricolage-grotesque-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Caveat"; font-style: normal; font-weight: 500 700;
+  font-display: swap; src: url("fonts/caveat-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Caveat"; font-style: normal; font-weight: 500 700;
+  font-display: swap; src: url("fonts/caveat-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --bg: #fcfaf3;
+  --ink: #1d2433;
+  --soft: #4a5266;
+  --muted: rgb(29 36 51 / 0.55);
+  --line: rgb(29 36 51 / 0.14);
+  --line-2: rgb(29 36 51 / 0.28);
+  --raised: #fffefa;
+  --accent: #f5c518;
+  --on-accent: #1d2433;
+  --shot-bg: #f7f7f6;
+  --rule-c: rgb(64 120 200 / 0.13);
+  --margin-c: rgb(220 70 70 / 0.32);
+  --desk-shadow: 0 1px 1px rgb(29 36 51 / 0.06), 0 10px 24px -8px rgb(29 36 51 / 0.18);
+  --tape: rgb(245 225 160 / 0.72);
+  --face: "Bricolage Grotesque", "Inter", system-ui, sans-serif;
+  --hand: "Caveat", "Bradley Hand", cursive;
+  --hl-yellow: #f5c518;
+  --hl-pink: #ff8fbf;
+  --hl-green: #8fe07a;
+  --hl-blue: #86cdfb;
+  --hl-orange: #ffb35c;
+  --hl-mix: 78%;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151e; --ink: #eef0f5; --soft: #b9c0cf; --muted: rgb(238 240 245 / 0.55);
+    --line: rgb(238 240 245 / 0.13); --line-2: rgb(238 240 245 / 0.26); --raised: #181d29;
+    --on-accent: #11151e; --shot-bg: #000;
+    --rule-c: rgb(140 180 255 / 0.07); --margin-c: rgb(255 110 110 / 0.22);
+    --desk-shadow: 0 1px 1px rgb(0 0 0 / 0.3), 0 14px 30px -10px rgb(0 0 0 / 0.6);
+    --tape: rgb(245 225 160 / 0.32); --hl-mix: 46%;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151e; --ink: #eef0f5; --soft: #b9c0cf; --muted: rgb(238 240 245 / 0.55);
+  --line: rgb(238 240 245 / 0.13); --line-2: rgb(238 240 245 / 0.26); --raised: #181d29;
+  --on-accent: #11151e; --shot-bg: #000;
+  --rule-c: rgb(140 180 255 / 0.07); --margin-c: rgb(255 110 110 / 0.22);
+  --desk-shadow: 0 1px 1px rgb(0 0 0 / 0.3), 0 14px 30px -10px rgb(0 0 0 / 0.6);
+  --tape: rgb(245 225 160 / 0.32); --hl-mix: 46%;
+}
+
+/* ── The page: ruled exercise paper ──────────────────────────────────── */
+body.st-page {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(to right, transparent 0 63px, var(--margin-c) 63px 64px, transparent 64px 67px, var(--margin-c) 67px 68px, transparent 68px),
+    repeating-linear-gradient(to bottom, transparent 0 33px, var(--rule-c) 33px 34px);
+  overflow-x: clip;
+}
+@media (max-width: 720px) {
+  body.st-page { background-image: repeating-linear-gradient(to bottom, transparent 0 33px, var(--rule-c) 33px 34px); }
+}
+::selection { background: color-mix(in oklab, var(--hl-pink) 45%, var(--bg)); color: var(--ink); }
+body.st-page .topbar { background: color-mix(in oklab, var(--bg) 88%, transparent); border-bottom-color: var(--accent); }
+.st-page .topbar-links a { font-family: var(--face); font-weight: 600; }
+.st-page .footer-brand { font-family: var(--face); font-weight: 800; }
+
+.st { flex: 1 0 auto; width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 clamp(20px, 6vw, 96px); }
+[data-pen="yellow"] { --pen: var(--hl-yellow); }
+[data-pen="pink"]   { --pen: var(--hl-pink); }
+[data-pen="green"]  { --pen: var(--hl-green); }
+[data-pen="blue"]   { --pen: var(--hl-blue); }
+[data-pen="orange"] { --pen: var(--hl-orange); }
+
+/* ── Type ────────────────────────────────────────────────────────────── */
+.st-title, .st-h2 {
+  font-family: var(--face); font-weight: 750; font-variation-settings: "wdth" 88;
+  letter-spacing: -0.035em; line-height: 0.98; color: var(--ink); margin: 0; text-wrap: balance;
+}
+.st-title { font-size: clamp(2.6rem, 1rem + 6vw, 6rem); max-width: 12ch; }
+.st-h2 { font-size: clamp(2.2rem, 0.9rem + 4vw, 4.6rem); max-width: 13ch; }
+.st-hand { font: 600 clamp(1.5rem, 1.2rem + 1vw, 2rem)/1 var(--hand); color: var(--soft); margin: 0 0 14px; transform: rotate(-2deg); width: fit-content; }
+.st-lede { font-size: clamp(1.1rem, 1rem + 0.5vw, 1.35rem); line-height: 1.6; color: var(--soft); max-width: 40ch; margin: 26px 0 0; }
+.st-body p { margin: 0; max-width: 36ch; color: var(--soft); font-size: clamp(1.05rem, 0.95rem + 0.4vw, 1.25rem); line-height: 1.6; }
+.st-body p + p { margin-top: 1em; }
+.st-caption { margin: 14px 0 0; font: 600 1.25rem/1.35 var(--hand); color: var(--soft); }
+kbd {
+  font: 500 0.82em/1 "JetBrains Mono", ui-monospace, monospace;
+  padding: 0.18em 0.42em; border-radius: 5px;
+  background: var(--raised); border: 1px solid var(--line-2); box-shadow: 0 1.5px 0 var(--line-2);
+  color: var(--ink); white-space: nowrap;
+}
+
+/* ── Highlighter: a marker stroke (students.js draws it in each pen) ─── */
+/* Same paleness and placement as the home page's highlight (highlights.css);
+   only the brush edges are this page's own. students.js fits the stroke
+   between --hl-top and --hl-bottom. */
+.hl {
+  --hl-stroke: color-mix(in oklab, var(--pen, var(--hl-yellow)) var(--hl-soft, 46%), var(--bg));
+  background-image: var(--marker);
+  background-size: 100% 100%; background-repeat: no-repeat;
+  padding: 0 0.1em; margin: 0 -0.06em;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.rv .hl { background-size: 0% 100%; }
+.rv.in .hl { background-size: 100% 100%; transition: background-size 0.7s cubic-bezier(0.65, 0, 0.35, 1) 0.55s; }
+
+/* ── Sticky-note section numbers ─────────────────────────────────────── */
+.st-label {
+  margin: 0 0 clamp(14px, 2vw, 24px);
+  display: inline-flex; align-items: center; gap: 14px;
+  font: 600 clamp(1.45rem, 1.2rem + 0.8vw, 1.85rem)/1 var(--hand); color: var(--soft);
+}
+.st-label b {
+  display: inline-grid; place-items: center; width: 2.1em; height: 2.1em;
+  font: 700 0.62em/1 var(--face); letter-spacing: -0.02em;
+  color: #1d2433; background: var(--pen, var(--hl-yellow));
+  transform: rotate(-4deg);
+  box-shadow: 0 1px 1px rgb(0 0 0 / 0.08), 0 6px 10px -6px rgb(0 0 0 / 0.35);
+}
+[data-side="right"] .st-label b { transform: rotate(3deg); }
+
+/* ── Top of the page ─────────────────────────────────────────────────── */
+.st-hero {
+  padding: clamp(120px, 20vh, 200px) 0 clamp(60px, 10vh, 110px);
+  display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: clamp(36px, 6vw, 90px); align-items: center;
+}
+.st-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 26px; margin-top: 34px; }
+.st-cta-center { justify-content: center; }
+.btn.st-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  text-decoration: none; font: 700 16px/1 var(--face); letter-spacing: -0.01em;
+  padding: 17px 26px; border-radius: 10px; border: 2px solid var(--ink);
+  color: var(--ink); background-color: var(--raised);
+  box-shadow: 0 3px 0 0 var(--ink);
+}
+.btn.st-btn:active { transform: translateY(3px); box-shadow: 0 0 0 0 var(--ink); }
+.st-text-link {
+  font: 600 1.45rem/1 var(--hand); color: var(--ink); text-decoration: none;
+  --link-band: color-mix(in oklab, var(--hl-yellow) var(--hl-soft, 46%), var(--bg));
+  --link-line: color-mix(in oklab, var(--hl-yellow) var(--hl-mix), var(--bg));
+  /* a yellow underline at rest; pointing at it sweeps in the same pale,
+     centred highlight as everywhere else (highlights.css) */
+  background:
+    linear-gradient(transparent calc(var(--hl-top) - 1%), var(--link-band) var(--hl-top),
+      var(--link-band) var(--hl-bottom), transparent calc(var(--hl-bottom) + 1%)) 0 0 / 0% 100% no-repeat,
+    linear-gradient(var(--link-line), var(--link-line)) 0 100% / 100% 2px no-repeat;
+  padding-bottom: 3px; transition: background-size .45s var(--ease);
+}
+.st-text-link:hover { background-size: 100% 100%, 100% 2px; }
+.st-cards {
+  list-style: none; padding: 0; margin: 0;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 16px;
+}
+.st-cards li:nth-child(2), .st-cards li:nth-child(4) { margin-top: 26px; }
+.st-cards li {
+  padding: 42.5px 18px 18px; border-radius: 4px; border: 1px solid var(--line);
+  background-color: var(--raised); box-shadow: var(--desk-shadow);
+  background-image: linear-gradient(to bottom, transparent 0 24px, rgb(220 70 70 / 0.35) 24px 25px, transparent 25px),
+    repeating-linear-gradient(to bottom, transparent 0 21px, var(--rule-c) 21px 22px);
+}
+.st-cards li:nth-child(1) { --tilt: -1.5deg; } .st-cards li:nth-child(2) { --tilt: 1deg; }
+.st-cards li:nth-child(3) { --tilt: -0.6deg; } .st-cards li:nth-child(4) { --tilt: 1.4deg; }
+.st-cards li { transform: rotate(var(--tilt)); }
+/* The words sit on the card's printed lines (Reuben, 2026-10-16: "fix all of
+   these weird misalign bugs"). The lines are 22px apart, so the title and the
+   words under it step in 22px too, each resting 3px above a line: the title on
+   the third line, the words on the lines below it. The 42.5px and 3px come
+   from where each font puts its baseline in a 22px line. */
+.st-cards b { display: block; font: 800 1.6rem/22px var(--face); letter-spacing: -0.03em; color: var(--ink); }
+.st-cards span { display: block; margin-top: 3px; font-size: 14px; line-height: 22px; color: var(--soft); }
+
+/* ── A section ───────────────────────────────────────────────────────── */
+.st-stop { padding: clamp(70px, 12vh, 140px) 0; }
+[data-side="right"] .st-head { width: fit-content; max-width: 100%; margin-left: auto; }
+.st-head-center { text-align: center; }
+.st-head-center .st-h2 { margin-inline: auto; }
+.st-row {
+  display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(32px, 6vw, 100px); align-items: start; margin-top: clamp(32px, 5vw, 72px);
+}
+[data-side="right"] .st-row { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+[data-side="right"] .st-body { order: 2; }
+/* Wide screens: the picture sits beside the heading AND the words, centred on
+   them both, instead of starting below the heading and leaving that corner
+   empty (Reuben, 2026-10-15: "why is the left ones so far down"). */
+@media (min-width: 900px) {
+  .st-stop[data-side] {
+    /* even halves, so each big heading keeps the two lines it had */
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: clamp(32px, 5vw, 80px);
+    /* The heading and its words stay together as one block, centred beside
+       the picture. A tall picture used to stretch the heading's own row, which
+       opened a big gap between the heading and the words under it (Reuben,
+       2026-10-16: "fix this massive text gap"). The spare height now goes in
+       the empty rows above and below the block instead. */
+    grid-template-rows: 1fr auto auto 1fr;
+  }
+  .st-stop[data-side] .st-row { display: contents; }
+  .st-stop[data-side] .st-head { grid-column: 1; grid-row: 2; width: auto; margin-left: 0; }
+  .st-stop[data-side] .st-body { grid-column: 1; grid-row: 3; margin-top: clamp(32px, 5vw, 72px); }
+  .st-stop[data-side] .st-row > :not(.st-body) { grid-column: 2; grid-row: 1 / -1; align-self: center; }
+  .st-stop[data-side="right"] .st-head, .st-stop[data-side="right"] .st-body { grid-column: 2; }
+  .st-stop[data-side="right"] .st-row > :not(.st-body) { grid-column: 1; }
+}
+
+/* ── Screenshots taped onto the page ─────────────────────────────────── */
+.st-shot {
+  position: relative; margin: 0; width: fit-content; max-width: 100%;
+  padding: 14px; border-radius: 4px; border: 1px solid var(--line);
+  background: var(--shot-bg); box-shadow: var(--desk-shadow);
+  transform: rotate(var(--tilt, -0.8deg));
+}
+.st-shot img { display: block; max-width: 100%; height: auto; }
+.st-shot .shot-d { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .st-shot .shot-l, :root:not([data-theme="light"]) .st-face .shot-l { display: none; }
+  :root:not([data-theme="light"]) .st-shot .shot-d, :root:not([data-theme="light"]) .st-face .shot-d { display: block; }
+}
+:root[data-theme="dark"] .st-shot .shot-l, :root[data-theme="dark"] .st-face .shot-l { display: none; }
+:root[data-theme="dark"] .st-shot .shot-d, :root[data-theme="dark"] .st-face .shot-d { display: block; }
+.st-shot::before, .st-subjects::before, .st-flip::before {
+  content: ""; position: absolute; z-index: 3; top: -11px; left: 50%;
+  width: 92px; height: 24px; margin-left: -46px;
+  background: var(--tape); transform: rotate(-3deg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  pointer-events: none;
+}
+.st-stack { display: flex; flex-direction: column; gap: 34px; align-items: flex-start; }
+.st-stack .st-shot:nth-child(2) { --tilt: 1.2deg; margin-left: clamp(0px, 6vw, 70px); }
+.st-shot-small img { width: auto; }
+[data-side="right"] .st-row > .st-shot { --tilt: 0.9deg; }
+
+/* ── 01: subjects ────────────────────────────────────────────────────── */
+.st-subjects { position: relative; transform: rotate(0.6deg); }
+/* tape on the paper's top-right corner, below the tabs — never over a tab */
+.st-subjects::before { top: 38px; left: auto; right: -26px; margin: 0; transform: rotate(38deg); }
+.st-tabs { display: flex; gap: 4px; padding-left: 10px; position: relative; z-index: 1; }
+.st-tabs button {
+  font: 650 14px/1 var(--face); letter-spacing: -0.01em; cursor: pointer;
+  padding: 11px 16px 13px; margin-bottom: -2px;
+  border: 1px solid var(--line-2); border-bottom: 0; border-radius: 8px 8px 0 0;
+  background: color-mix(in oklab, var(--raised) 70%, var(--bg)); color: var(--soft);
+  transition: background-color .2s ease, color .2s ease, transform .3s var(--ease);
+  transform: translateY(4px);
+}
+.st-tabs button:hover { color: var(--ink); transform: translateY(1px); background: color-mix(in oklab, var(--tab, var(--hl-yellow)) 30%, var(--raised)); }
+.st-tabs button.on { background: var(--tab, var(--hl-yellow)); color: #1d2433; transform: none; border-color: var(--ink); }
+.st-tabs [data-subject="bio"] { --tab: var(--hl-green); }
+.st-tabs [data-subject="maths"] { --tab: var(--hl-blue); }
+.st-tabs [data-subject="physics"] { --tab: var(--hl-pink); }
+.st-tabs [data-subject="korean"] { --tab: var(--hl-yellow); }
+/* A formula on a line of its own, as the app draws it (app.css .cm-math-display):
+   centred, on the paper's own colour so the grid never runs through it */
+.st-math { display: flex; align-items: center; justify-content: center; height: calc(var(--rule) * 2 - 10px); margin: 5px 0; background: var(--raised); border-radius: var(--r, 6px); }
+.st-math .katex-display { margin: 0; padding: 0.15em 0; }
+.paper-page .katex { font-size: 1.12em; }
+
+/* the paper itself — the same looks as the home page's paper sample, which
+   are ported from the app (app.css [data-page-look]) */
+.paper-page {
+  --rule: 38px; --cell: 27.2px; --rule-y: 10px;
+  --line-c: rgb(29 36 51 / 0.13); --line-strong-c: rgb(29 36 51 / 0.26);
+  --look: none; --look-size: auto;
+  position: relative; border: 1px solid var(--line-2); border-radius: 4px;
+  background-color: var(--raised); box-shadow: var(--desk-shadow);
+  background-image: var(--look); background-size: var(--look-size);
+  /* as much room under the last line as above the heading (Reuben,
+     2026-10-16), measured from the line the words sit on */
+  padding: 19px 26px 16px; min-height: 230px;
+  font-family: var(--serif); font-size: 17px; line-height: var(--rule); color: var(--ink);
+  transition: opacity .2s ease;
+}
+:root[data-theme="dark"] .paper-page { --line-c: rgb(238 240 245 / 0.12); --line-strong-c: rgb(238 240 245 / 0.24); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .paper-page { --line-c: rgb(238 240 245 / 0.12); --line-strong-c: rgb(238 240 245 / 0.24); } }
+.paper-page p { margin: 0; }
+.paper-page .paper-h { font-weight: 600; font-size: 1.45em; }
+.paper-page[data-font="sans"] { font-family: "Inter", system-ui, sans-serif; }
+.paper-page[data-font="mono"] { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 15px; }
+.paper-page[data-look="lined"] {
+  --look: repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--rule) - 1px), var(--line-c) calc(var(--rule) - 1px), var(--line-c) var(--rule));
+  background-position: 0 var(--rule-y, 0px);
+}
+.paper-page[data-look="grid"] {
+  --look:
+    repeating-linear-gradient(to bottom, transparent 0, transparent calc(var(--cell) - 1px), var(--line-c) calc(var(--cell) - 1px), var(--line-c) var(--cell)),
+    repeating-linear-gradient(to right, transparent 0, transparent calc(var(--cell) - 1px), var(--line-c) calc(var(--cell) - 1px), var(--line-c) var(--cell));
+}
+.paper-page[data-look="dots"] {
+  --look: radial-gradient(circle at center, var(--line-strong-c) 0 1.1px, transparent 1.2px);
+  --look-size: var(--cell) var(--cell);
+}
+.paper-page[data-look="graph"] {
+  --cell: 13.6px;
+  --look:
+    repeating-linear-gradient(to bottom, var(--line-strong-c) 0 1px, transparent 1px calc(var(--cell) * 5)),
+    repeating-linear-gradient(to right, var(--line-strong-c) 0 1px, transparent 1px calc(var(--cell) * 5)),
+    repeating-linear-gradient(to bottom, var(--line-c) 0 1px, transparent 1px var(--cell)),
+    repeating-linear-gradient(to right, var(--line-c) 0 1px, transparent 1px var(--cell));
+}
+.paper-page.swap { opacity: 0; }
+
+/* ── 03: the flashcard ───────────────────────────────────────────────── */
+.st-flip { position: relative; width: fit-content; max-width: 100%; }
+/* the page of questions: as wide as the column allows, in the app's own
+   type, each question a toggle with the app's chevron */
+.st-flip:has(.st-qs) { width: min(100%, 620px); z-index: 1; }
+/* the card's place on the page is held (students.js); opening a question
+   draws the card down over the gap below instead of moving the page */
+.st-flip:has(.st-qs) { overflow: visible; }
+.st-qs { display: block; width: 100%; padding: 30px 34px 28px; cursor: default; font: 400 19px/1.5 "Inter", system-ui, sans-serif; color: var(--ink); }
+.st-qs:hover { transform: rotate(-1.2deg); box-shadow: var(--desk-shadow); }
+.st-q + .st-q { margin-top: 6px; }
+.st-q summary {
+  list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 10px;
+  padding: 7px 0; border-radius: var(--r, 6px);
+  -webkit-user-select: none; user-select: none;
+}
+.st-q summary::-webkit-details-marker { display: none; }
+.st-q summary::before {
+  content: ""; flex: none; width: 0.7em; height: 0.7em; translate: 0 0.05em;
+  background: var(--soft);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: rotate .25s var(--ease);
+}
+.st-q[open] summary::before { rotate: 90deg; }
+.st-q summary:hover { color: var(--ink); }
+.st-q summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.st-q p { margin: 2px 0 10px; padding-left: calc(0.7em + 10px); color: var(--soft); animation: qIn .3s var(--ease); }
+.st-q .katex { font-size: 1.05em; color: var(--ink); }
+.st-q-sep { display: inline-block; width: 1.6em; }
+@keyframes qIn { from { opacity: 0; translate: 0 -4px; } }
+.st-flip::before { left: 30%; }
+.st-flipcard {
+  display: grid; place-items: start; cursor: pointer;
+  width: fit-content; max-width: 100%; padding: 24px 24px;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: var(--shot-bg); box-shadow: var(--desk-shadow);
+  transform: rotate(-1.2deg);
+  transition: transform .5s var(--ease), box-shadow .3s ease;
+}
+.st-flipcard:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+.st-face { grid-area: 1 / 1; transition: opacity .35s ease, clip-path .5s var(--ease); }
+.st-face img { display: block; max-width: 100%; height: auto; }
+.st-face .shot-d { display: none; }
+.st-open { opacity: 0; clip-path: inset(0 0 100% 0); }
+.st-flipcard[aria-pressed="true"] .st-open { opacity: 1; clip-path: inset(0); }
+.st-flipcard[aria-pressed="true"] .st-shut { opacity: 0; }
+
+/* ── 06: the rest, as index cards ────────────────────────────────────── */
+.st-grid {
+  list-style: none; padding: 0; margin: clamp(40px, 6vw, 72px) 0 0;
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 22px;
+}
+.st-grid li { grid-column: span 2; }
+.st-grid li {
+  padding: 22px 20px 22px; border-radius: 4px; border: 1px solid var(--line);
+  background: var(--raised); box-shadow: var(--desk-shadow);
+  transform: rotate(var(--tilt, 0deg));
+  transition: transform .4s var(--ease);
+}
+.st-grid li:nth-child(4n+1) { --tilt: -0.8deg; } .st-grid li:nth-child(4n+2) { --tilt: 0.6deg; }
+.st-grid li:nth-child(4n+3) { --tilt: -0.4deg; } .st-grid li:nth-child(4n+4) { --tilt: 0.9deg; }
+.st-grid li:nth-child(1), .st-grid li:nth-child(2) { grid-column: span 3; }
+.st-grid h3 { margin: 0 0 8px; font: 750 1.2rem/1.15 var(--face); letter-spacing: -0.02em; color: var(--ink); }
+.st-grid p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--soft); }
+.st-shot-in { margin-top: 16px; padding: 10px; transform: none; box-shadow: none; }
+.st-shot-in::before { display: none; }
+
+/* ── 07: questions, as flashcards ────────────────────────────────────── */
+.st-faq-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(32px, 6vw, 100px); align-items: start; }
+.faq { display: flex; flex-direction: column; gap: 10px; }
+.faq details {
+  border: 1px solid var(--line); border-radius: 4px; background: var(--raised);
+  box-shadow: var(--desk-shadow); padding: 0 22px; transition: transform .25s ease;
+}
+.faq details:nth-child(odd)  { transform: rotate(-0.4deg); }
+.faq details:nth-child(even) { transform: rotate(0.35deg); }
+.faq details[open] { transform: none; }
+.faq summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  padding: 20px 0; font: 650 clamp(1.05rem, 0.95rem + 0.5vw, 1.3rem)/1.3 var(--face); letter-spacing: -0.015em; color: var(--ink);
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; flex: none; font: 700 30px/1 var(--hand); color: var(--soft); transition: transform .3s var(--ease); }
+.faq details[open] summary::after { transform: rotate(45deg); }
+.faq details p { margin: 0 0 22px; max-width: 52ch; color: var(--soft); line-height: 1.6; }
+
+/* ── The ending ──────────────────────────────────────────────────────── */
+.st-end { padding: clamp(80px, 14vh, 160px) 0 clamp(90px, 14vh, 160px); text-align: center; }
+.st-end-title { margin-inline: auto; }
+
+/* ── Arrivals (students.js adds .rv, then .in as each comes into view) ─ */
+.rv { opacity: 0; transition: opacity .4s ease, transform .85s var(--ease); }
+.rv.in { opacity: 1; }
+/* headings are written in left to right; never hidden by clip-path before
+   they arrive, only animated once .in lands */
+.st-title.rv, .st-h2.rv { transition: none; }
+.st-title.rv.in, .st-h2.rv.in { animation: stWrite 0.9s cubic-bezier(0.5, 0, 0.2, 1) both; }
+@keyframes stWrite { from { clip-path: inset(-0.3em 100% -0.3em -0.3em); } to { clip-path: inset(-0.3em -0.3em -0.3em -0.3em); } }
+/* labels and handwriting are stuck on */
+.st-label.rv, .st-hand.rv { transform: translateY(-10px) rotate(-3deg); }
+.st-label.rv.in { transform: none; }
+.st-hand.rv.in { transform: rotate(-2deg); }
+/* cards and pictures are dropped onto the desk */
+.st-shot.rv, .st-stack.rv, .st-subjects.rv, .st-flip.rv, .st-grid li.rv, .st-cards li.rv, .faq.rv {
+  transform: translateY(-30px) rotate(calc(var(--tilt, 0deg) - 4deg)) scale(1.04);
+}
+.st-shot.rv.in, .st-grid li.rv.in, .st-cards li.rv.in { transform: rotate(var(--tilt, 0deg)); }
+.st-stack.rv.in, .st-flip.rv.in, .faq.rv.in { transform: none; }
+.st-subjects.rv.in { transform: rotate(0.6deg); }
+.st-body.rv, .st-lede.rv, .st-cta.rv { transform: translateY(12px); }
+.st-body.rv.in, .st-lede.rv.in, .st-cta.rv.in { transform: none; }
+
+/* ── Phones and small windows ────────────────────────────────────────── */
+@media (max-width: 899px) {
+  .st-row, [data-side="right"] .st-row, .st-faq-grid { grid-template-columns: 1fr; }
+  [data-side="right"] .st-head { margin-left: 0; }
+  [data-side="right"] .st-body { order: 0; }
+  .st-hero { grid-template-columns: 1fr; }
+  .st-cards { gap: 12px; }
+  .st-cards li:nth-child(2), .st-cards li:nth-child(4) { margin-top: 0; }
+  .st-grid { grid-template-columns: 1fr 1fr; }
+  .st-grid li { grid-column: span 1; }
+  .st-grid li:nth-child(1), .st-grid li:nth-child(2) { grid-column: span 2; }
+  .st-shot, .st-subjects, .st-grid li, .st-cards li, .st-stack .st-shot:nth-child(2) { --tilt: 0deg; margin-left: 0; }
+  .st-subjects { transform: none; }
+  .st-subjects::before { right: -6px; }
+  .st-shot.rv, .st-stack.rv, .st-subjects.rv, .st-flip.rv, .st-grid li.rv, .st-cards li.rv, .faq.rv { transform: translateY(-22px); }
+  .st-subjects.rv.in { transform: none; }
+}
+@media (max-width: 520px) {
+  .st-grid { grid-template-columns: 1fr; }
+  .st-grid li, .st-grid li:nth-child(1), .st-grid li:nth-child(2) { grid-column: auto; }
+  /* five subjects have to fit inside the phone's edges; the tape comes off
+     the paper here, as there's no corner left that isn't a tab or a word */
+  .st-tabs { gap: 3px; padding-left: 4px; }
+  .st-tabs button { padding: 10px 8px 12px; font-size: 12.5px; }
+  .st-subjects::before { display: none; }
+  .paper-page { padding: 16px 18px 13px; font-size: 16px; }
+/* the smallest phones (320px wide): a little tighter again, so the five tabs
+   still fit without the page sliding sideways */
+@media (max-width: 360px) {
+  .st-tabs button { padding: 10px 5px 12px; font-size: 12px; }
+}
+}
+@media (prefers-reduced-motion: reduce) {
+  .rv, .rv.in { opacity: 1 !important; transform: none !important; animation: none !important; transition: none !important; }
+  .st-face, .st-flipcard, .st-tabs button, .st-grid li { transition: none; }
+}
+
+/* in the half-width column beside a heading on a smaller laptop, the five subject tabs take
+   the phone's tighter size so they fit */
+@media (min-width: 900px) and (max-width: 1099px) {
+  .st-tabs { gap: 3px; padding-left: 4px; }
+  .st-tabs button { padding: 10px 8px 12px; font-size: 12.5px; }
+}

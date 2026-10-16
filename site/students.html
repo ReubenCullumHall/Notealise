@@ -4,22 +4,32 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Notealise for students — Notealise</title>
-  <meta name="description" content="How Notealise works for lecture notes, revision, and coursework." />
+  <meta name="description" content="A space for every subject, maths that looks like maths, and answers you can hide until you've tested yourself. Free, with no account." />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="canonical" href="https://notealise.com/students.html" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Notealise" />
   <meta property="og:url" content="https://notealise.com/students.html" />
   <meta property="og:title" content="Notealise for students" />
-  <meta property="og:description" content="Lecture notes, revision decks, and coursework in plain Markdown files you keep forever." />
+  <meta property="og:description" content="A space for every subject, maths that looks like maths, and answers you can hide until you've tested yourself." />
   <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="Notealise for students" />
-  <meta name="twitter:description" content="Lecture notes, revision decks, and coursework in plain Markdown files you keep forever." />
   <link rel="stylesheet" href="nav.css" />
   <!-- dev theme switch (nav.js): applies a saved Light/Dark choice before paint; only ever set on local addresses -->
   <script>try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+  <link rel="stylesheet" href="students.css" />
+  <!-- KaTeX, the same maths drawing the app uses, so the Maths example is real maths -->
+  <link rel="stylesheet" href="katex/katex.min.css" />
+<link rel="stylesheet" href="hover.css" />
+<link rel="stylesheet" href="edges.css" />
+<link rel="stylesheet" href="align.css" />
+<link rel="stylesheet" href="highlights.css" />
 </head>
-<body class="page page-theme-students">
+<!-- DRAFT (2026-10-14). Every word on this page is Claude's draft for Reuben to
+     rewrite. Every feature named here is in the shipped app; every picture is a
+     real app screenshot from site/tutorials/img (the same ones the tutorials
+     use), except the paper in 01, which is the home page's paper sample (looks
+     ported from app.css). -->
+<body class="page page-theme-students st-page">
   <header class="topbar is-visible">
     <a class="topbar-brand" href="index.html">
       <img src="favicon.svg" alt="" />
@@ -27,7 +37,7 @@
     </a>
     <nav class="topbar-links">
       <a href="tutorials.html">Tutorials</a>
-      <a href="students.html"><span class="tb-wide">Notealise for students</span><span class="tb-narrow">Students</span></a>
+      <a href="students.html" class="is-active" aria-current="page"><span class="tb-wide">Notealise for students</span><span class="tb-narrow">Students</span></a>
       <a href="updates.html">What&rsquo;s new</a>
     </nav>
     <div class="topbar-social">
@@ -46,17 +56,235 @@
     </div>
   </header>
 
-  <main class="page-main">
-    <p class="page-eyebrow">For students</p>
-    <h1>Notealise for <span class="hl">students</span></h1>
-    <p class="page-lede">Lecture notes, revision decks, and coursework in plain Markdown
-      files you keep forever &mdash; page being written now.</p>
-    <a class="page-back" href="index.html">&larr; Back to home</a>
+  <main class="st">
+    <!-- ── Top of the page ─────────────────────────────────────────────── -->
+    <section class="st-hero">
+      <div class="st-hero-copy">
+      <p class="st-hand" data-rv>For students</p>
+      <h1 class="st-title" data-rv>Notes that are ready for <span class="hl">revision</span>.</h1>
+      <p class="st-lede" data-rv>Your notes open exactly where you left them, sorted by subject.</p>
+      <!-- One download button, at the end of the page (Reuben, 2026-10-15:
+           "bloatware at that stage"); the tutorials link takes its place. -->
+      <div class="st-cta" data-rv>
+        <a class="st-text-link" href="tutorials.html">See the tutorials</a>
+      </div>
+      </div>
+      <ul class="st-cards" aria-label="At a glance">
+        <li data-rv><b>Free</b><span>for good, no student plan to run out</span></li>
+        <li data-rv><b>Offline</b><span>library wifi optional</span></li>
+        <li data-rv><b>Any laptop</b><span>Windows, Mac (Intel too) and Linux</span></li>
+        <li data-rv><b>Yours</b><span>plain files that outlast the course</span></li>
+      </ul>
+    </section>
+
+    <!-- ── 01 A space for every subject ────────────────────────────────── -->
+    <section class="st-stop" data-side="left" data-pen="yellow">
+      <div class="st-head">
+        <p class="st-label" data-rv><b>01</b>Every subject</p>
+        <h2 class="st-h2" data-rv>A space for <span class="hl">every subject</span>.</h2>
+      </div>
+      <div class="st-row">
+        <div class="st-body" data-rv>
+          <p>Open Biology and that&rsquo;s all you see. October&rsquo;s notes on cells are still there, next to the page you said you&rsquo;d go back to.</p>
+        </div>
+        <div class="st-subjects" data-rv>
+          <div class="st-tabs" role="tablist" aria-label="Example subjects">
+            <button type="button" role="tab" class="on" data-subject="bio">Biology</button>
+            <button type="button" role="tab" data-subject="maths">Maths</button>
+            <button type="button" role="tab" data-subject="physics">Physics</button>
+            <button type="button" role="tab" data-subject="korean">Korean</button>
+          </div>
+          <div class="paper-page st-paper" id="stPaper" data-look="lined" data-font="serif">
+            <p class="paper-h" id="stPaperH">Cell structure</p>
+            <div id="stPaperBody">
+              <p>Mitochondria release energy.</p>
+              <p>Ribosomes make proteins.</p>
+              <p>The nucleus holds the DNA.</p>
+              <p>Water moves in by osmosis.</p>
+              <p>Plant cells also have a wall.</p>
+            </div>
+          </div>
+          <p class="st-caption">Example notes. The paper and the type change with the space.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 02 Maths ────────────────────────────────────────────────────── -->
+    <section class="st-stop" data-side="right" data-pen="blue">
+      <div class="st-head">
+        <p class="st-label" data-rv><b>02</b>Maths and science</p>
+        <h2 class="st-h2" data-rv>Maths that <span class="hl">looks like maths</span>.</h2>
+      </div>
+      <div class="st-row">
+        <div class="st-body" data-rv>
+          <p>The formulas look the way your teacher writes them on the board.</p>
+          <p>Spot a mistake? Click it, fix it.</p>
+        </div>
+        <figure class="st-shot" data-rv>
+          <img class="shot-l" src="tutorials/img/blocks-display-light.png" alt="A formula centred on its own line, the integral of x from 0 to 1 equals a half, with its box below" width="515" height="187" loading="lazy" />
+          <img class="shot-d" src="tutorials/img/blocks-display-dark.png" alt="A formula centred on its own line, the integral of x from 0 to 1 equals a half, with its box below" width="515" height="187" loading="lazy" />
+        </figure>
+      </div>
+    </section>
+
+    <!-- ── 03 Toggles as flashcards ────────────────────────────────────── -->
+    <section class="st-stop" data-side="left" data-pen="pink">
+      <div class="st-head">
+        <p class="st-label" data-rv><b>03</b>Testing yourself</p>
+        <h2 class="st-h2" data-rv>Hide the answer. <span class="hl">Test yourself</span>.</h2>
+      </div>
+      <div class="st-row">
+        <div class="st-body" data-rv>
+          <p>Fold each answer away and work down the list. Open one only when you&rsquo;re sure.</p>
+        </div>
+        <!-- One question for each subject in 01, taken from its note there.
+             A page of revision questions, each one a toggle as the app draws
+             it: a chevron and the question; open it for the answer
+             (Reuben, 2026-10-15: "bigger, and show the other cases of it in
+             studying"). Real <details>, so they open and shut by themselves. -->
+        <div class="st-flip" data-rv>
+          <div class="st-flipcard st-qs">
+            <details class="st-q" open><summary>What do mitochondria do?</summary>
+              <p>Release energy in respiration.</p></details>
+            <details class="st-q"><summary>Differentiate y = x².</summary>
+              <p><span data-tex="\frac{dy}{dx} = 2x">dy/dx = 2x</span></p></details>
+            <details class="st-q"><summary>What is the wave speed equation?</summary>
+              <p><span data-tex="v = f\lambda">v = fλ</span>, speed is frequency times wavelength.</p></details>
+            <details class="st-q"><summary>How do you say thank you, formally?</summary>
+              <p lang="ko">감사합니다.</p></details>
+          </div>
+          <p class="st-caption">Tap a question to open it.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 04 Colour ───────────────────────────────────────────────────── -->
+    <section class="st-stop" data-side="right" data-pen="green">
+      <div class="st-head">
+        <p class="st-label" data-rv><b>04</b>Colour</p>
+        <h2 class="st-h2" data-rv>Colour-code it like <span class="hl">your paper notes</span>.</h2>
+      </div>
+      <div class="st-row">
+        <div class="st-body" data-rv>
+          <p>The key terms are already highlighted, so your eyes go straight to them.</p>
+        </div>
+        <div class="st-stack" data-rv>
+          <figure class="st-shot">
+            <img class="shot-l" src="tutorials/img/colour-kinds-light.png" alt="In the note: a coral heading, an indigo bold word and a teal note link" width="448" height="103" loading="lazy" />
+            <img class="shot-d" src="tutorials/img/colour-kinds-dark.png" alt="In the note: a coral heading, an indigo bold word and a teal note link" width="448" height="103" loading="lazy" />
+          </figure>
+          <figure class="st-shot st-shot-small">
+            <img class="shot-l" src="tutorials/img/colour-highlight-light.png" alt="In the note: two words highlighted in amber" width="297" height="39" loading="lazy" />
+            <img class="shot-d" src="tutorials/img/colour-highlight-dark.png" alt="In the note: two words highlighted in amber" width="297" height="39" loading="lazy" />
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 05 Links ────────────────────────────────────────────────────── -->
+    <section class="st-stop" data-side="left" data-pen="orange">
+      <div class="st-head">
+        <p class="st-label" data-rv><b>05</b>Linking</p>
+        <h2 class="st-h2" data-rv>Join the <span class="hl">topics up</span>.</h2>
+      </div>
+      <div class="st-row">
+        <div class="st-body" data-rv>
+          <p>Waves links to Interference, and Interference links to the next topic. Follow them in order and you&rsquo;ve covered the lot.</p>
+        </div>
+        <div class="st-stack" data-rv>
+          <figure class="st-shot st-shot-small">
+            <img class="shot-l" src="tutorials/img/heading-light.png" alt="In the note: a link to Waves, at its heading Interference" width="224" height="43" loading="lazy" />
+            <img class="shot-d" src="tutorials/img/heading-dark.png" alt="In the note: a link to Waves, at its heading Interference" width="224" height="43" loading="lazy" />
+          </figure>
+          <figure class="st-shot">
+            <img class="shot-l" src="tutorials/img/paragraph-light.png" alt="In the note: a link to one paragraph in Waves, showing its first words" width="456" height="43" loading="lazy" />
+            <img class="shot-d" src="tutorials/img/paragraph-dark.png" alt="In the note: a link to one paragraph in Waves, showing its first words" width="456" height="43" loading="lazy" />
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 06 Everything else ──────────────────────────────────────────── -->
+    <section class="st-stop st-more" data-pen="yellow">
+      <div class="st-head st-head-center">
+        <p class="st-label" data-rv><b>06</b>The rest of the pencil case</p>
+        <h2 class="st-h2" data-rv>Everything else <span class="hl">you&rsquo;ll need</span>.</h2>
+      </div>
+      <ul class="st-grid">
+        <li data-rv>
+          <h3>Tables</h3>
+          <p>Type <kbd>/table</kbd>. Add rows and columns from the + bars at their edges.</p>
+          <figure class="st-shot st-shot-in">
+            <img class="shot-l" src="tutorials/img/blocks-table-light.png" alt="A table with two columns, Wave and Speed" width="480" height="94" loading="lazy" />
+            <img class="shot-d" src="tutorials/img/blocks-table-dark.png" alt="A table with two columns, Wave and Speed" width="480" height="94" loading="lazy" />
+          </figure>
+        </li>
+        <li data-rv>
+          <h3>Checklists</h3>
+          <p>Coursework deadlines, ticked off right in the note.</p>
+          <figure class="st-shot st-shot-in">
+            <img class="shot-l" src="tutorials/img/format-lists-light.png" alt="A bulleted list, a numbered list and a checklist with one item ticked" width="202" height="227" loading="lazy" />
+            <img class="shot-d" src="tutorials/img/format-lists-dark.png" alt="A bulleted list, a numbered list and a checklist with one item ticked" width="202" height="227" loading="lazy" />
+          </figure>
+        </li>
+        <li data-rv>
+          <h3>Lecture slides in the note</h3>
+          <p>Drop in a PDF or a PowerPoint. It&rsquo;s saved beside the note, and a click opens it in its own app.</p>
+        </li>
+        <li data-rv>
+          <h3>Two notes side by side</h3>
+          <p>Open up to three notes in columns: the lecture on one side, your summary on the other.</p>
+        </li>
+        <li data-rv>
+          <h3>An easier reading font</h3>
+          <p>Turn on the Easier reading font for any space that needs it.</p>
+        </li>
+        <li data-rv>
+          <h3>Bring last year with you</h3>
+          <p>Notes from Notion, Google Keep, Apple Notes or Word come across, with a report of anything that didn&rsquo;t.</p>
+        </li>
+        <li data-rv>
+          <h3>Archive a finished module</h3>
+          <p>Out of the way, still searchable, ready to put back when the exam comes round.</p>
+        </li>
+        <li data-rv>
+          <h3>Revision videos in the note</h3>
+          <p>Paste a YouTube link and it becomes the video&rsquo;s title. Switch on Player view and it plays right there.</p>
+        </li>
+      </ul>
+    </section>
+
+    <!-- ── 07 Questions ────────────────────────────────────────────────── -->
+    <section class="st-stop st-faq" data-pen="pink">
+      <div class="st-faq-grid">
+        <div class="st-head">
+          <p class="st-label" data-rv><b>07</b>Questions</p>
+          <h2 class="st-h2" data-rv>Before <span class="hl">you start</span>.</h2>
+        </div>
+        <div class="faq" data-rv>
+          <!-- Free, offline, which laptops and whose files are the four cards
+               at the top, so they aren't asked again here (Reuben, 2026-10-16). -->
+          <details><summary>Is there a dark mode?</summary><p>Yes, three: Dark, Extra dark and Slate. Each subject can have its own.</p></details>
+          <details><summary>Can I add photos of my handwritten notes?</summary><p>Yes. Paste or drag a photo into a note and it sits alongside what you typed.</p></details>
+          <details><summary>Can I share notes with a friend?</summary><p>Send them the note&rsquo;s file. It&rsquo;s plain text, so it opens in almost anything, even without Notealise.</p></details>
+          <details><summary>Can I use it on my laptop and the computer at home?</summary><p>There&rsquo;s no built-in sync. Keep your notes folder in OneDrive, Dropbox or iCloud Drive and open it on each computer.</p></details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── The ending ──────────────────────────────────────────────────── -->
+    <section class="st-end">
+      <h2 class="st-title st-end-title" data-rv>Streamline <span class="hl">your studying</span>.</h2>
+      <div class="st-cta st-cta-center" data-rv>
+        <a class="btn st-btn" href="index.html#download">Download it free</a>
+      </div>
+    </section>
   </main>
 
   <footer class="footer">
     <span class="footer-brand">Notealise <span class="footer-est">est. 2026</span></span>
     <nav class="footer-links">
+      <a href="index.html">Home</a>
       <a href="privacy.html">Privacy</a>
       <a href="terms.html">Terms</a>
     </nav>
@@ -64,5 +292,8 @@
   </footer>
 
   <script src="nav.js"></script>
+  <script src="katex/katex.min.js"></script>
+  <script src="students.js"></script>
+<script src="hover.js"></script>
 </body>
 </html>

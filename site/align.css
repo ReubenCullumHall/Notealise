@@ -1,0 +1,9 @@
+/* ── Small line-up fixes found in the misalignment sweep (Reuben,
+   2026-10-16: "fix all of these weird misalign bugs, check the whole
+   website"). Loaded on every page after edges.css. ───────────────────── */
+
+/* Install guides, "Not working? Here's what worked for me": when the line
+   wraps on a phone, the arrow sat halfway between the two lines. It now sits
+   beside the first line, like a bullet. 1lh is one line of the text. */
+.tshoot > summary { align-items: flex-start; }
+.tshoot > summary .tshoot-chev { margin-top: calc((1lh - 15px) / 2); }

@@ -525,14 +525,12 @@
       notes: [
         {
           t: "Tuesday",
-          s: "The market had the good bread again.",
+          s: "Sent Priya the first draft. Numbers due Thursday.",
           html:
             "<h4>Tuesday</h4>" +
-            "<p>The market had the good bread again. Walked back the long way, past the " +
-            "allotments, and got in later than I meant to.</p>" +
-            "<p>Started the book Sam lent me. Slow, but the kind of slow that is going " +
-            "somewhere.</p>" +
-            "<p>Tomorrow: ring the dentist, actually.</p>"
+            "<p>Sent Priya the <strong>first draft</strong>. Numbers due Thursday.</p>" +
+            "<p>Walked back the long way, past the allotments.</p>" +
+            "<p>Still need to <mark>book the dentist</mark>. Third week running.</p>"
         },
         {
           t: "Things to stop doing",

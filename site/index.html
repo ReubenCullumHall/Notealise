@@ -61,7 +61,7 @@
        changes WHEN they are fetched; the <script> tags at the bottom still run
        them, in the same order, at the same point. -->
   <link rel="preload" href="nav.js?v=20260929c" as="script" />
-  <link rel="preload" href="landing.js?v=20261002b" as="script" />
+  <link rel="preload" href="landing.js?v=20261016a" as="script" />
   <link rel="stylesheet" href="nav.css?v=20260929c" />
   <!-- dev theme switch (nav.js): applies a saved Light/Dark choice before paint; only ever set on local addresses -->
   <script>try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
@@ -483,6 +483,11 @@
       .footer { justify-content: center; text-align: center; }
     }
   </style>
+<link rel="stylesheet" href="home.css" />
+<link rel="stylesheet" href="hover.css" />
+<link rel="stylesheet" href="edges.css" />
+<link rel="stylesheet" href="align.css" />
+<link rel="stylesheet" href="highlights.css" />
 </head>
 <body>
   <!-- Loading gate — see the long comment in <head> for what it fixes. Removed
@@ -929,8 +934,8 @@
           <figcaption><span>In Notealise</span></figcaption>
           <div class="inside-note">
             <p class="inside-h">Tuesday</p>
-            <p>The market had the <strong>good bread</strong> again.</p>
-            <p>Tomorrow: <mark>ring the dentist</mark>, actually.</p>
+            <p>Sent Priya the <strong>first draft</strong>. Numbers due Thursday.</p>
+            <p>Still need to <mark>book the dentist</mark>. Third week running.</p>
           </div>
         </figure>
         <span class="inside-eq" aria-hidden="true">=</span>
@@ -938,9 +943,9 @@
           <figcaption><span>On your disk</span><code>Journal/Tuesday.md</code></figcaption>
 <pre><b># Tuesday</b>
 
-The market had the <b>**good bread**</b> again.
+Sent Priya the <b>**first draft**</b>. Numbers due Thursday.
 
-Tomorrow: &lt;mark class="hl-amber"&gt;ring the dentist&lt;/mark&gt;, actually.</pre>
+Still need to &lt;mark class="hl-amber"&gt;book the dentist&lt;/mark&gt;. Third week running.</pre>
         </figure>
       </div>
     </section>
@@ -963,9 +968,9 @@ Tomorrow: &lt;mark class="hl-amber"&gt;ring the dentist&lt;/mark&gt;, actually.<
         <div class="paper" data-reveal>
           <div class="paper-page" id="paperPage" data-look="lined">
             <p class="paper-h">Tuesday</p>
-            <p>The market had the good bread again.</p>
+            <p>Sent Priya the first draft. Numbers due Thursday.</p>
             <p>Walked back the long way, past the allotments.</p>
-            <p>Tomorrow: ring the dentist, actually.</p>
+            <p>Still need to book the dentist. Third week running.</p>
           </div>
           <div class="paper-controls">
             <div class="paper-looks" role="group" aria-label="Paper">
@@ -1158,7 +1163,7 @@ Tomorrow: &lt;mark class="hl-amber"&gt;ring the dentist&lt;/mark&gt;, actually.<
 
     <div class="btns">
       <a id="winBtn" class="btn" href="install/windows.html?dl=1">
-        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.7 10.2 4.7v6.8H3V5.7zM10.2 12.5v6.8L3 18.3v-5.8h7.2zM11.2 4.55 21 3.2v8.3h-9.8V4.55zM21 12.5v8.3l-9.8-1.35V12.5H21z"/></svg>
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 3h8.5v8.5H3zM12.5 3H21v8.5h-8.5zM3 12.5h8.5V21H3zM12.5 12.5H21V21h-8.5z"/></svg>
         <span class="btn-label"><span class="btn-pre">Download for</span> Windows</span>
       </a>
       <a id="macBtn" class="btn" href="install/mac.html?dl=1">
@@ -1197,11 +1202,11 @@ Tomorrow: &lt;mark class="hl-amber"&gt;ring the dentist&lt;/mark&gt;, actually.<
       </div>
       <div class="faq" data-reveal>
         <details><summary>Is it really free?</summary><p>Yes. No trial and no subscription.</p></details>
+        <details><summary>Is there a phone app?</summary><p>No. It&rsquo;s built for Windows, for Linux and for Macs, both Apple silicon and Intel.</p></details>
         <details><summary>Why does my computer warn me when I open it?</summary><p>Notealise isn&rsquo;t signed with a paid certificate yet, so Windows and macOS ask you to confirm the first time. That&rsquo;s the only reason. Step-by-step guides for <a href="install/windows.html">Windows</a> and <a href="install/mac.html">Mac</a>.</p></details>
         <details><summary>Does it work offline?</summary><p>Yes. It runs on your computer and only goes online to check for updates, or to fetch an extra font if you pick one. <a href="privacy.html">Everything it connects to</a>.</p></details>
         <details><summary>Can I use it on two computers?</summary><p>There&rsquo;s no built-in sync. Keep your notes folder in OneDrive, Dropbox or iCloud Drive (on Linux, Dropbox) and open it on each computer, Windows, Mac or Linux. Just don&rsquo;t edit the same note on both at once.</p></details>
         <details><summary>Will my notes open in Obsidian or VS Code?</summary><p>Yes. They&rsquo;re ordinary Markdown files, so other apps can open the same folder. A few extras, like coloured text, can look plainer there.</p></details>
-        <details><summary>Is there a phone app?</summary><p>No. It&rsquo;s built for Windows, for Linux and for Macs, both Apple silicon and Intel.</p></details>
       </div>
     </div>
   </section>
@@ -1209,9 +1214,6 @@ Tomorrow: &lt;mark class="hl-amber"&gt;ring the dentist&lt;/mark&gt;, actually.<
   <footer class="footer">
     <span class="footer-brand">Notealise <span class="footer-est">est. 2026</span></span>
     <nav class="footer-links">
-      <a href="tutorials.html">Tutorials</a>
-      <a href="students.html">Notealise for students</a>
-      <a href="updates.html">What&rsquo;s new</a>
       <a href="privacy.html">Privacy</a>
       <a href="terms.html">Terms</a>
     </nav>
@@ -1430,9 +1432,11 @@ Tomorrow: &lt;mark class="hl-amber"&gt;ring the dentist&lt;/mark&gt;, actually.<
     else { document.addEventListener("wm-playing", __startTagline, { once: true }); }
   </script>
   <script src="nav.js?v=20260929c"></script>
-  <script src="landing.js?v=20261002b"></script>
+  <script src="landing.js?v=20261016a"></script>
   <!-- Download for macOS: picks the Mac build, or asks which Mac in a popup -->
   <script src="mac-chip.js?v=20260915a"></script>
   <script src="mac-chooser.js?v=20260915b"></script>
+<script src="home.js"></script>
+<script src="hover.js"></script>
 </body>
 </html>

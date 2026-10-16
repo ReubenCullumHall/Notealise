@@ -1,0 +1,314 @@
+/* ══ Home page — the "Own your files" look (draft B, picked 2026-10-14) ═══
+   Who it's for: people leaving Notion/Evernote because they want their notes
+   back, Obsidian-curious people who found it too fiddly, anyone who reads
+   the privacy page first.
+   World: a technical drawing of a file. Dot-grid ground, crop marks round
+   every exhibit, a dot-matrix face for numbers (Nothing-style), and the
+   highlighter is a slim band dragged across like a text selection.
+   Type: Geist for headlines and reading, Geist Mono for labels, Doto
+   (dot-matrix) for numbers only. One colour: crayon yellow. */
+
+/* The fonts live on this site, like the rest of its fonts, so loading a page
+   asks nothing of any other company (the Privacy page lists every outside
+   service the site talks to). Latin and accented Latin only. */
+@font-face {
+  font-family: "Doto"; font-style: normal; font-weight: 500 900;
+  font-display: swap; src: url("fonts/doto-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Doto"; font-style: normal; font-weight: 500 900;
+  font-display: swap; src: url("fonts/doto-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Geist"; font-style: normal; font-weight: 400 700;
+  font-display: swap; src: url("fonts/geist-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Geist"; font-style: normal; font-weight: 400 700;
+  font-display: swap; src: url("fonts/geist-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Geist Mono"; font-style: normal; font-weight: 400 600;
+  font-display: swap; src: url("fonts/geist-mono-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Geist Mono"; font-style: normal; font-weight: 400 600;
+  font-display: swap; src: url("fonts/geist-mono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --bg: #ecebe6;
+  --ink: #121211;
+  --soft: #4b4a46;
+  --muted: rgb(18 18 17 / 0.52);
+  --line: rgb(18 18 17 / 0.15);
+  --line-2: rgb(18 18 17 / 0.32);
+  --raised: #f5f4f0;
+  --accent: #f5c518;
+  --on-accent: #121211;
+  --dot: rgb(18 18 17 / 0.16);
+  --sel: #f5c518;
+  --sel-ink: #121211;
+  --hl-soft: 46%;
+  /* the Try it window's edge, for a light / dark window on this page (.nl below) */
+  --nl-edge-light: 0 4px 10px -2px rgb(18 18 17 / 0.16), 0 28px 60px -18px rgb(18 18 17 / 0.42);
+  /* a dark window on this light page casts a deeper shadow (Reuben, 2026-10-16) */
+  --nl-edge-dark: 0 6px 14px -2px rgb(18 18 17 / 0.26), 0 34px 72px -16px rgb(18 18 17 / 0.62);
+  --wm-blend: multiply;
+  --face: "Geist", "Inter", system-ui, sans-serif;
+  --gmono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --dots: "Doto", "Geist Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b0b0b;
+    --ink: #ecebe6;
+    --soft: #a9a8a2;
+    --muted: rgb(236 235 230 / 0.5);
+    --line: rgb(236 235 230 / 0.13);
+    --line-2: rgb(236 235 230 / 0.3);
+    --raised: #141413;
+    --dot: rgb(236 235 230 / 0.12);
+    --wm-blend: screen;
+    --hl-soft: 34%;
+    --nl-edge-dark: 0 1px 2px rgb(0 0 0 / 0.3), 0 30px 60px -36px rgb(0 0 0 / 0.6);
+    --nl-edge-light: 0 0 0 1px rgb(236 235 230 / 0.12), 0 0 32px rgb(236 235 230 / 0.24), 0 0 110px -6px rgb(236 235 230 / 0.42);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0b0b;
+  --ink: #ecebe6;
+  --soft: #a9a8a2;
+  --muted: rgb(236 235 230 / 0.5);
+  --line: rgb(236 235 230 / 0.13);
+  --line-2: rgb(236 235 230 / 0.3);
+  --raised: #141413;
+  --dot: rgb(236 235 230 / 0.12);
+  --wm-blend: screen;
+  --hl-soft: 34%;
+  --nl-edge-dark: 0 1px 2px rgb(0 0 0 / 0.3), 0 30px 60px -36px rgb(0 0 0 / 0.6);
+  --nl-edge-light: 0 0 0 1px rgb(236 235 230 / 0.12), 0 0 32px rgb(236 235 230 / 0.24), 0 0 110px -6px rgb(236 235 230 / 0.42);
+}
+#nl-gate { background: var(--bg) !important; }
+
+body {
+  background-color: var(--bg);
+  background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.4px);
+  background-size: 24px 24px;
+  font-family: var(--face);
+}
+::selection { background: var(--sel); color: var(--sel-ink); }
+
+/* ── Headlines: tight grotesk, typed in ──────────────────────────────── */
+.stop-title, .try h2, .walk-line {
+  font-family: var(--face); font-weight: 600;
+  letter-spacing: -0.045em; line-height: 1.06;
+}
+.stop-title { max-width: 15ch; }
+/* typed: home.js splits each headline into letters (.ch) */
+.typed.reveal, .typed.reveal.is-in { opacity: 1 !important; animation: none !important; clip-path: none !important; }
+.typed .ch { opacity: 0; }
+.typed.is-in .ch { animation: chIn 1ms steps(1, end) forwards; animation-delay: calc(var(--i) * 26ms); }
+.typed:not(.reveal) .ch { opacity: 1; }
+@keyframes chIn { to { opacity: 1; } }
+.typed .w { white-space: nowrap; }
+
+/* ── The highlight: dragged across left to right after the headline finishes
+   typing.
+   A pale wash behind the bodies of the letters, the way a real highlighter
+   sits (Reuben, 2026-10-15: "never really liked this highlight… less harsh").
+   The old band was full-strength yellow hanging off the bottom of the words.
+   Its top and bottom are measured from the letters by hover.js (on Geist:
+   34% is just above the top of an "x", 81% just under the baseline), the
+   same rule every highlight on the site follows (highlights.css).
+   Ascenders and descenders poke out of it. ──────────────────────────── */
+.hl {
+  --hl-band: color-mix(in oklab, var(--sel) var(--hl-soft, 46%), var(--bg));
+  --hl-stroke: var(--hl-band);
+  background-image: linear-gradient(transparent calc(var(--hl-top) - 1%), var(--hl-band) var(--hl-top),
+    var(--hl-band) var(--hl-bottom), transparent calc(var(--hl-bottom) + 1%));
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  padding: 0 0.03em; margin: 0 -0.03em;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  position: relative;
+}
+.reveal .hl { background-size: 0% 100%; }
+.reveal.is-in .hl {
+  background-size: 100% 100%;
+  transition: background-size .5s cubic-bezier(0.4, 0, 0.2, 1) var(--type-end, 0.8s);
+}
+/* No caret after the highlight (Reuben, 2026-10-16: "no flashing cursor
+   on any of them, keep it clean"). */
+
+/* ── Section labels: dot-matrix number, mono label, a yellow square ──── */
+.stop-eyebrow {
+  font: 500 12px/1 var(--gmono); letter-spacing: 0.12em; text-transform: uppercase;
+  display: inline-flex; align-items: center; gap: 12px; color: var(--soft);
+}
+.stop-eyebrow b {
+  font: 900 30px/0.8 var(--dots); letter-spacing: 0.02em; margin: 0; color: var(--ink);
+}
+.stop-eyebrow::after { content: ""; width: 7px; height: 7px; background: var(--sel); order: -1; }
+.try .stop-eyebrow { justify-content: center; }
+.stop-body p { font-family: var(--face); color: var(--soft); letter-spacing: -0.005em; }
+
+/* ── Exhibits: square, hairline, crop marks at the corners ───────────── */
+.paper-page, .inside-card, .move-report { background-color: var(--raised); }
+.compare, .paper, .move, .insides { position: relative; }
+.compare::after, .paper::after, .move::after, .insides::after {
+  --m: var(--line-2);
+  content: ""; position: absolute; inset: -12px; pointer-events: none;
+  background:
+    linear-gradient(var(--m), var(--m)) 0 0 / 10px 1px, linear-gradient(var(--m), var(--m)) 0 0 / 1px 10px,
+    linear-gradient(var(--m), var(--m)) 100% 0 / 10px 1px, linear-gradient(var(--m), var(--m)) 100% 0 / 1px 10px,
+    linear-gradient(var(--m), var(--m)) 0 100% / 10px 1px, linear-gradient(var(--m), var(--m)) 0 100% / 1px 10px,
+    linear-gradient(var(--m), var(--m)) 100% 100% / 10px 1px, linear-gradient(var(--m), var(--m)) 100% 100% / 1px 10px;
+  background-repeat: no-repeat;
+}
+.move-report, .inside-file pre { font-family: var(--gmono); }
+.inside-card figcaption, .move-cap, .compare-tag { font-family: var(--gmono); }
+.inside-eq { font: 800 2.6rem/1 var(--dots); color: var(--ink); }
+
+/* arrival: a scan from the top edge down, a yellow scan line riding it */
+.compare.reveal, .paper.reveal, .move.reveal, .insides.reveal, .faq.reveal, .nl-wrap.reveal {
+  opacity: 0; transform: none; transition: opacity .2s linear;
+}
+.compare.reveal.is-in, .paper.reveal.is-in, .move.reveal.is-in, .insides.reveal.is-in, .faq.reveal.is-in, .nl-wrap.reveal.is-in {
+  opacity: 1; transform: none;
+  animation: scanIn .9s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+@keyframes scanIn {
+  from { clip-path: inset(-14px -14px 100% -14px); }
+  to   { clip-path: inset(-14px -14px -14px -14px); }
+}
+.compare.reveal.is-in::before, .paper.reveal.is-in::before, .move.reveal.is-in::before, .insides.reveal.is-in::before {
+  content: ""; position: absolute; left: -12px; right: -12px; height: 2px; top: 0; z-index: 5;
+  background: var(--sel); pointer-events: none;
+  animation: scanLine .9s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+@keyframes scanLine { from { top: 0; opacity: 1; } 92% { top: 100%; opacity: 1; } to { top: 100%; opacity: 0; } }
+.stop-head .stop-eyebrow.reveal { transform: translateX(-20px); }
+.stop-head .stop-eyebrow.reveal.is-in { transform: none; transition: opacity .3s ease, transform .5s cubic-bezier(0.16, 1, 0.3, 1); }
+
+.paper-looks button { font: 500 12px/1 var(--gmono); text-transform: uppercase; letter-spacing: 0.06em; }
+.paper-looks button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+/* ── Hero facts: a spec table, numbers in dot matrix ─────────────────── */
+/* The row's top and bottom lines are drawn, not borders, so they can be
+   drawn in left to right once the tagline has finished (Reuben, 2026-10-14).
+   Hidden from the first paint under html.wm-motion (set in <head>, so there
+   is no flash); home.js adds .lines-in when "constraint" finishes turning
+   italic. No JS / reduced motion: the lines are simply there. */
+.hero-stats { position: relative; }
+.hero-stats::before, .hero-stats::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 1px;
+  background: var(--line); transform-origin: 0 50%; pointer-events: none;
+}
+.hero-stats::before { top: 0; }
+.hero-stats::after { bottom: 0; }
+html.wm-motion .hero-stats::before, html.wm-motion .hero-stats::after {
+  transform: scaleX(0);
+  /* safety net: if home.js never runs, the lines still arrive */
+  animation: statLineLate 0s linear 20s forwards;
+}
+html.wm-motion .hero-stats.lines-in::before, html.wm-motion .hero-stats.lines-in::after {
+  transform: scaleX(1);
+  transition: transform .8s cubic-bezier(0.65, 0, 0.35, 1) .12s;
+}
+html.wm-motion .hero-stats.lines-in::after { transition-delay: .26s; }
+@keyframes statLineLate { to { transform: scaleX(1); } }
+.hero-stats li { padding-top: 18px; }
+.hero-stats b { font-family: var(--dots); font-weight: 900; font-size: 1.45em; letter-spacing: 0.02em; color: var(--ink); }
+.hero-stats li > span { font-family: var(--gmono); font-size: 11.5px; letter-spacing: 0.01em; }
+/* Every bit of dot-matrix text: Doto is already at its heaviest weight, so the
+   dots are thickened with a thin outline in their own colour (Reuben,
+   2026-10-15: "easier to read, bolder… same font"). The outline also eats
+   into the gaps between letters, so the spacing opens by the same amount. */
+.stop-eyebrow b, .inside-eq, .hero-stats b {
+  font-weight: 900; -webkit-text-stroke: 0.04em currentColor; letter-spacing: 0.06em;
+}
+/* "$0" and ".md" read smaller than "Any" and "Spaces" (a narrow number, a
+   lowercase word), so they're drawn 15% bigger (Reuben, 2026-10-15). Grown
+   upwards from their baseline, so the words under them and the row's height
+   stay exactly where they were. */
+.hero-stats li:nth-child(-n+2) b { transform: scale(1.15); transform-origin: 50% 100%; }
+/* The ".md" caption runs to five lines in one row of four, the tallest box, so
+   its last line sat on the bottom rule (Reuben, 2026-10-15). Its lines close up
+   a little and the space they give back goes underneath, so the row keeps its
+   height and the other three boxes don't move. 0.75em = 5 lines × (1.45 − 1.3). */
+@media not all and (max-width: 40rem) {
+  .hero-stats li:nth-child(2) > span { line-height: 1.3; padding-bottom: 0.75em; }
+}
+/* Every caption starts straight under its number. They used to be centred in
+   a three-line box, which pushed the two-line "$0" caption half a line lower
+   than the others (Reuben, 2026-10-16: misaligned). */
+.hero-stats li > span { align-items: flex-start; }
+.hero-plain { font-family: var(--gmono); font-size: 13px; letter-spacing: 0.02em; color: var(--soft); }
+
+/* ── Questions ───────────────────────────────────────────────────────── */
+/* starts 58px sooner after the download buttons (Reuben, 2026-10-15: "a
+   bit too much space there"); the usual top space of a section, less 58px */
+.stop-faq { padding-top: calc(clamp(72px, 12vh, 150px) - 58px); }
+.faq summary { font-family: var(--face); font-weight: 500; letter-spacing: -0.02em; }
+.faq summary::after { font: 400 20px/1 var(--gmono); }
+.faq details[open] summary { color: var(--ink); }
+.faq details[open] summary::before { content: ""; width: 7px; height: 7px; background: var(--sel); flex: none; order: -1; }
+.faq summary { justify-content: flex-start; }
+.faq summary::after { margin-left: auto; }
+
+/* ── Buttons (their corners live in edges.css, their hover in hover.css) */
+.btn { border-width: 1px; font-family: var(--face); font-weight: 600; letter-spacing: -0.01em; }
+/* Logos drawn to one size: Tux fills its whole square, the Windows and Apple
+   marks only ~three-quarters of theirs, so those two get a bigger box to
+   stand as tall as Tux beside them (Reuben, 2026-10-15). */
+#winBtn svg { width: 24px; height: 24px; }
+#macBtn svg { width: 26px; height: 26px; }
+.btn-pre { font-family: var(--gmono); font-weight: 400; letter-spacing: 0.02em; text-transform: uppercase; font-size: 10.5px; }
+
+.topbar { background: color-mix(in oklab, var(--bg) 86%, transparent) !important; }
+.topbar-links a { font-family: var(--gmono); font-size: 12.5px; letter-spacing: 0.02em; }
+.footer, .footer-brand { font-family: var(--gmono); }
+
+/* ── The Try it window: settles into the page (Reuben, 2026-10-15) ─────
+   Its frame is the page's own hairline rather than the app's dark border,
+   with the big rounded corner and a soft shadow underneath. When its theme
+   is the opposite of the page's, it gets a little more: a firmer shadow for
+   a dark window on the light page, a faint light glow for a light window on
+   the dark page (Reuben, 2026-10-15). The arrival wipe leaves room for
+   both, or they would be cut off flat. */
+.nl, .nl[data-theme="dark"] {
+  border-color: var(--line-2) !important;
+  transition: background-color .3s ease, color .3s ease, border-color .3s ease, box-shadow .4s ease;
+}
+/* With no colour picked a highlight in the Try it note is invisible, so it
+   gives up its padding too; otherwise "book the dentist" sat a space away
+   from its full stop. */
+.nl[data-tint="none"] .nl-note mark { padding: 0; }
+.nl { box-shadow: var(--nl-edge-light); }
+.nl[data-theme="dark"] { box-shadow: var(--nl-edge-dark); }
+.nl-wrap.reveal.is-in { animation-name: scanInWide; }
+@keyframes scanInWide {
+  from { clip-path: inset(-90px -90px 100% -90px); }
+  to   { clip-path: inset(-90px -90px -90px -90px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .compare.reveal.is-in, .paper.reveal.is-in, .move.reveal.is-in, .insides.reveal.is-in, .faq.reveal.is-in, .nl-wrap.reveal.is-in { animation: none; }
+}
+
+/* ── The logo on the loading screen: no box (Reuben, 2026-10-14) ─────────
+   While the word is lifted above the loading screen, the <h1> carries a
+   z-index and a transform, which seals the clip off from the panel behind
+   it — so its blend (multiply in light, screen in dark) only ever saw the
+   h1's own empty box, and the clip's baked white/black showed as a
+   rectangle. The real site hides this because its page is pure white/black.
+   Blending the whole lifted <h1> instead lets it see the panel. The motion,
+   the sizes and the timing are untouched; the rule ends with the lift. */
+html.nl-gate-on .wordmark, html.nl-moving .wordmark { mix-blend-mode: var(--wm-blend, normal); }

@@ -1694,3 +1694,56 @@ out to 3, and make them take up the same space, just make it 3 buttons)"*.
   and before then the link is a GitHub "Not Found". If the latest release lacks the file it says
   so instead; if GitHub can't be asked (offline, rate limit, 4s) it downloads as the others do.
   Windows and macOS are untouched.
+
+## The revamp, 2026-10-14 → 16 — a new home page, the Students page, and one set of rules for every page
+
+Built as a draft (`drafts/site-revamp/`, `build.py` copied `site/` and layered the changes on)
+and moved into `site/` on 2026-10-16 once Reuben had been through it on desktop and phone.
+
+**Home page — "own your files" (`home.css`, `home.js`).** Dot-grid ground, crop marks round each
+exhibit, Geist for headings and reading, Geist Mono for labels, Doto (dot-matrix) for numbers only,
+one colour: crayon yellow. The headline highlight is dragged across after the heading types in.
+No caret blinks after it (Reuben, 2026-10-16: "no flashing cursor on any of them, keep it clean").
+The Try it window takes a shadow on the light page and a white glow on the dark one
+(`--nl-edge-light/-dark`); the Tuesday note reads the same in sections 02, 03 and the Try it window.
+
+**Students page — "revision" (`students.css`, `students.js`).** An exercise book: ruled paper, a red
+margin line, a marker stroke per section, sticky-note numbers, Bricolage Grotesque headings, Caveat
+for the handwritten bits. Four subjects (Biology, Maths, Physics, Korean), the same four through the
+whole page. The theme lives in the examples, never in labels (the 7pm–11pm framing was tried and
+cut). Rules that took a round each:
+- **Every subject's note is a heading and five rows, and each row fits one line on a 320px phone**,
+  so all four are exactly the same size and switching tabs never resizes anything. A formula on its
+  own line takes exactly two rows (`.st-math`). As much room under the last line as above the
+  heading. `fit()` measures each subject in an invisible copy using its *computed* height —
+  `getBoundingClientRect()` includes the paper's tilt, which is taller, and that left empty space at
+  the bottom.
+- **Wide screens: the heading and its words stay together, centred beside the picture**
+  (`grid-template-rows: 1fr auto auto 1fr`). Letting a tall picture span the heading's own row
+  opened a big gap between heading and words.
+- **The Test yourself card grows over the gap below it**; the page never moves (`hold()`).
+- Maths is drawn with KaTeX, copied from the app's own `node_modules` into `site/katex/` (with its
+  licence), loaded on this page only.
+
+**Every page (`hover.css`, `edges.css`, `align.css`, `highlights.css`, `hover.js`).**
+- **Corners: three sizes and nothing else** — 2px small marks, 6px anything you click and small
+  cards, 12px panels and pictures. Round things stay round.
+- **Highlights are a pale wash across the letters' bodies**, from just above an "x" to just under the
+  baseline. Fonts put those heights in different places, so `hover.js` measures each highlighted
+  element from the font's own numbers and sets `--hl-top/--hl-bottom`.
+- **Hover moves colour, never shape:** a band sweeps in behind top-bar links and tutorial titles;
+  download buttons fill with ink (the opposite colour, not the accent) from where the cursor came in.
+  Nothing turns or grows on hover (Reuben, 2026-10-15).
+- The footer no longer repeats the top bar's links.
+
+**Fonts are hosted on the site.** All five new families are woff2 in `site/fonts/` (Latin and
+accented Latin). Loading them from Google would have made the Privacy page's "The website" section
+untrue — it lists every outside service the site talks to.
+
+**What the line-up sweep (2026-10-16) caught:** the "$0" caption sat half a line lower than the
+other three (captions were centred in a three-line box; now they start under their number); the
+question dividers curled at their ends (a corner radius on a one-sided border); the index-card words
+drifted across the card's printed lines (now 22px steps on the 22px rules); the install guides'
+arrow floated between two wrapped lines. **Check the phone version with a phone browser or
+`?device=phone`, not a narrow desktop window** — the download ending and the Try it window differ by
+device, not by width.

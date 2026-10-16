@@ -1,0 +1,25 @@
+/* ── Highlights: one look on every page (Reuben, 2026-10-15: "make the
+   highlight opacity and centered aspects the same" as the home page).
+   Every highlight, the ones in headings and the ones a link gets when you
+   point at it, is the same pale wash (--hl-soft of its colour into the page)
+   sitting across the bodies of the letters: from just above the top of an
+   "x" to just under the line the letters sit on. Each page keeps its own
+   colour, and the students page keeps its brush-stroke edges.
+
+   Fonts differ, so the band's top and bottom (--hl-top / --hl-bottom) are
+   measured from each highlighted element's own letters by hover.js; the
+   values below only stand in until it has. Loaded on every page. ──────── */
+:root { --hl-soft: 46%; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --hl-soft: 34%; } }
+:root[data-theme="dark"] { --hl-soft: 34%; }
+
+.hl, .topbar-links a, .tut-link-title, .st-text-link { --hl-top: 34%; --hl-bottom: 81%; }
+
+/* the other pages' heading highlights ("Learn Notealise", "Recent changes",
+   the version numbers): their page colour, pale and centred */
+body.page:not(.st-page) .hl {
+  --hl-stroke: color-mix(in oklab, var(--accent) var(--hl-soft), var(--bg));
+  background-image: linear-gradient(transparent calc(var(--hl-top) - 1%), var(--hl-stroke) var(--hl-top),
+    var(--hl-stroke) var(--hl-bottom), transparent calc(var(--hl-bottom) + 1%));
+  padding: 0 0.03em; margin: 0 -0.03em;
+}
