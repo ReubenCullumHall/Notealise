@@ -16,7 +16,7 @@ import {
   type EmojiStyle,
   type Space
 } from '../../../shared/settings'
-import { ACCENT_MODES, DENSITIES, EDITOR_WIDTHS, resolveTheme, TEXT_TONES, THEMES } from './model'
+import { ACCENT_MODES, CORNER_STYLES, DENSITIES, EDITOR_WIDTHS, resolveTheme, TEXT_TONES, THEMES } from './model'
 import { AccentPicker } from './AccentPicker'
 import { Icon } from '../icons'
 import { Differs, SettingRow, ToggleRow } from './primitives'
@@ -1058,7 +1058,7 @@ export function SpaceDeleteConfirm({
             <span
               aria-hidden="true"
               className={
-                'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ' +
+                'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-control border ' +
                 // accent-*, matching App.tsx's TickRow — see ACCENT_KEYS in
                 // settings/model.ts for why brand-* does not follow the accent.
                 (keepPreset ? 'border-accent-400 bg-accent-500/25 text-accent-600' : 'border-ink-300/50')
@@ -1343,6 +1343,57 @@ export function AccentReachSection({ space, onChange }: SpaceProps): React.JSX.E
           />
         </div>
       )}
+    </section>
+  )
+}
+
+/** How big each option's picture draws its corner: the panel corner (the
+ *  10px --r-surface) at twice size, so a quarter rounder still reads at a
+ *  glance. A picture OF each option, so fixed numbers rather than the live
+ *  sizes — the live ones only ever show the option that is picked. */
+const CORNER_PREVIEW: Record<Space['corners'], number> = { sharp: 0, rounded: 20, round: 25 }
+
+/** Corners — open with the basics, under the theme cards (Reuben, 2026-10-26).
+ *  Reshapes every button, tab and panel at once (theme.css, "corner style"). */
+export function CornersSection({
+  space,
+  onChange,
+  differs = false
+}: SpaceProps & { differs?: boolean }): React.JSX.Element {
+  return (
+    <section className="settings-group">
+      <h3>
+        Corners
+        {differs && <Differs />}
+      </h3>
+      <p className="hint">The shape of every button, tab, panel and box in the app.</p>
+      <div className="mode-row">
+        {CORNER_STYLES.map((c) => {
+          const on = space.corners === c.id
+          return (
+            // flex-col + justify-start: a button centres its content
+            // vertically, so the card with the one-line hint drew its picture
+            // lower than the other two
+            <button
+              key={c.id}
+              className={'mode-btn flex flex-col justify-start' + (on ? ' on' : '')}
+              aria-pressed={on}
+              onClick={() => onChange({ corners: c.id })}
+            >
+              <span
+                aria-hidden="true"
+                className={
+                  'mb-2 mt-1 block h-7 w-12 border-l-2 border-t-2 ' +
+                  (on ? 'border-brand-500' : 'border-ink-400')
+                }
+                style={{ borderTopLeftRadius: CORNER_PREVIEW[c.id] }}
+              />
+              <span className="t">{c.label}</span>
+              <span className="s">{c.hint}</span>
+            </button>
+          )
+        })}
+      </div>
     </section>
   )
 }

@@ -3,6 +3,7 @@ import {
   AccentReachSection,
   AccentSection,
   ButtonEdgesSection,
+  CornersSection,
   DensitySection,
   Disclosure,
   DisclosureGroup,
@@ -29,8 +30,8 @@ import type { FontLibrary } from './useInstalledFonts'
 // differently — which is the whole point of "the same page, scoped".
 //
 // Laid out basics-first (Reuben, 2026-09-29: "easier for people who just want
-// the basics"). Theme, accent colour and fonts — what most people open
-// Settings to change — sit open at the top. Everything else is in six folds
+// the basics"). Theme, corners, accent colour and fonts — what most people open
+// Settings to change — sit open at the top (corners joined them 2026-10-26). Everything else is in six folds
 // below them, and the settings only a few people want are in the last one,
 // Advanced. It was nine folds, with the theme inside the first.
 
@@ -123,6 +124,9 @@ export function SpaceForm({
     <div className="flex flex-col gap-6">
       {/* The basics, open. */}
       <ThemeCards space={space} onChange={onChange} differs={anyDiffer(['theme'])} />
+      {/* Up with the basics, under the theme it most resembles — Reuben's call
+          (2026-10-26), the one setting beside theme, accent and fonts here. */}
+      <CornersSection space={space} onChange={onChange} differs={anyDiffer(['corners'])} />
       <AccentSection space={space} onChange={onChange} differs={anyDiffer(['accent'])} />
       <SpaceFonts space={space} onChange={onChange} fontLibrary={fontLibrary} differs={differs} />
 

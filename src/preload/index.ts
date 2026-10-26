@@ -127,8 +127,14 @@ contextBridge.exposeInMainWorld('api', api)
 
 // Fetched synchronously (before the renderer's first paint) so index.html can set
 // [data-theme]/[data-density] on <html> immediately — no flash of the wrong theme.
-type PaintCache = { theme: string; density: string; textTone: string; buttonDefinition: boolean }
-let themeCache: PaintCache = { theme: 'dark', density: 'cozy', textTone: 'grey', buttonDefinition: false }
+type PaintCache = { theme: string; density: string; textTone: string; buttonDefinition: boolean; corners: string }
+let themeCache: PaintCache = {
+  theme: 'dark',
+  density: 'cozy',
+  textTone: 'grey',
+  buttonDefinition: false,
+  corners: 'rounded'
+}
 try {
   const c = ipcRenderer.sendSync(CH.settingsCache) as PaintCache | undefined
   if (c && typeof c === 'object') themeCache = c

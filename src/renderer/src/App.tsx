@@ -245,7 +245,7 @@ function TickRow({
       <span
         aria-hidden="true"
         className={
-          'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-[4px] border ' +
+          'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-control border ' +
           (on ? 'border-accent-400 bg-accent-500/25 text-accent-600' : 'border-ink-300/50')
         }
       >

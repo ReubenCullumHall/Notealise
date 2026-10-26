@@ -54,6 +54,18 @@ describe('normalizeSettings', () => {
     }
   })
 
+  it('defaults corners to rounded and takes only the three it knows', () => {
+    // rounded is how the app has always looked, so a settings.json written
+    // before corners existed must keep looking exactly as it did
+    expect(activeSpace(normalizeSettings({ spaces: [{ folder: 'A' }] })).corners).toBe('rounded')
+    for (const corners of ['sharp', 'rounded', 'round'] as const) {
+      expect(activeSpace(normalizeSettings({ spaces: [{ folder: 'A', corners }] })).corners).toBe(corners)
+    }
+    for (const bad of ['Sharp', 'extra', '', 1, null]) {
+      expect(activeSpace(normalizeSettings({ spaces: [{ folder: 'A', corners: bad }] })).corners).toBe('rounded')
+    }
+  })
+
   it('starts a space with the chrome a new user should see', () => {
     // The links strip and the path bar are the features, not decorations on
     // them: a space that started without either read as the feature missing
@@ -650,11 +662,12 @@ describe('normalizeThemeCache / settingsFromThemeCache', () => {
     theme: DEFAULT_SPACE.theme,
     density: DEFAULT_SPACE.density,
     textTone: DEFAULT_SPACE.textTone,
-    buttonDefinition: DEFAULT_SPACE.buttonDefinition
+    buttonDefinition: DEFAULT_SPACE.buttonDefinition,
+    corners: DEFAULT_SPACE.corners
   }
 
   it('never throws, and defaults on junk', () => {
-    for (const j of [null, undefined, 0, 'nope', [], { theme: 'neon', density: 9 }]) {
+    for (const j of [null, undefined, 0, 'nope', [], { theme: 'neon', density: 9, corners: 'wobbly' }]) {
       expect(normalizeThemeCache(j)).toEqual(DEFAULT_CACHE)
     }
   })
@@ -671,7 +684,7 @@ describe('normalizeThemeCache / settingsFromThemeCache', () => {
   })
 
   it('round-trips every paint value <html> needs', () => {
-    const cache = { theme: 'black', density: 'ultra', textTone: 'white', buttonDefinition: true } as const
+    const cache = { theme: 'black', density: 'ultra', textTone: 'white', buttonDefinition: true, corners: 'sharp' } as const
     expect(normalizeThemeCache(cache)).toEqual(cache)
   })
 
@@ -680,13 +693,15 @@ describe('normalizeThemeCache / settingsFromThemeCache', () => {
       theme: 'black',
       density: 'ultra',
       textTone: 'white',
-      buttonDefinition: true
+      buttonDefinition: true,
+      corners: 'round'
     })
     expect(activeSpace(s)).toMatchObject({
       theme: 'black',
       density: 'ultra',
       textTone: 'white',
-      buttonDefinition: true
+      buttonDefinition: true,
+      corners: 'round'
     })
     expect(normalizeSettings(s)).toEqual(s)
   })

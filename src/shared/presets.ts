@@ -165,7 +165,7 @@ const PART_KEYS: Record<LookPart, readonly (keyof SpaceLook)[]> = {
   // NOTES are in that island is not here and cannot be — that lives per note in
   // workspace.json (`EntryMeta.island`), so pouring a preset never moves a
   // single note.
-  appearance: ['emoji', 'islandName', 'theme', 'textTone', 'buttonDefinition', 'density', 'editorWidth', 'accent', 'accentMode', 'accentUiText', 'pageLook', 'font', 'uiFont', 'dyslexiaFont', 'tint', 'pageLookIntensity', 'pageLookAccent'],
+  appearance: ['emoji', 'islandName', 'theme', 'textTone', 'buttonDefinition', 'density', 'corners', 'editorWidth', 'accent', 'accentMode', 'accentUiText', 'pageLook', 'font', 'uiFont', 'dyslexiaFont', 'tint', 'pageLookIntensity', 'pageLookAccent'],
   colour: ['colorStyle', 'colorAuto', 'colorInherit', 'colorFadeNested', 'colorPalette', 'formatColors'],
   arranging: ['freeArrange', 'compactNav'],
   links: ['showLinks', 'linksPosition'],
@@ -175,7 +175,7 @@ const PART_KEYS: Record<LookPart, readonly (keyof SpaceLook)[]> = {
 }
 
 export const PART_LABELS: Record<LookPart, { label: string; hint: string }> = {
-  appearance: { label: 'Appearance', hint: 'emoji, tab island name, theme, accent, density, button edges' },
+  appearance: { label: 'Appearance', hint: 'emoji, tab island name, theme, accent, density, corners, button edges' },
   colour: { label: 'Colour', hint: 'how entry colours paint, the palette, auto-colouring, heading and link colours' },
   arranging: { label: 'Arranging', hint: 'sidebar order and the nav buttons' },
   links: { label: 'Links', hint: "whether a note's links strip shows, and where it sits" },

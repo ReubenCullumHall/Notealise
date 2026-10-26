@@ -70,6 +70,14 @@ export const DENSITIES: {
   { id: 'ultra', label: 'Ultra compact', hint: 'Minimal spacing', bar: { h: 3, gap: 1 } }
 ]
 
+/** Ordered squarest first, like DENSITIES runs roomiest first. The hints are
+ *  Reuben's own description of each (2026-10-26). */
+export const CORNER_STYLES: { id: Space['corners']; label: string; hint: string }[] = [
+  { id: 'sharp', label: 'Sharp', hint: 'Square corners for an even, stacked look.' },
+  { id: 'rounded', label: 'Rounded', hint: 'The default.' },
+  { id: 'round', label: 'Extra round', hint: 'Softer corners, a little easier on the eye.' }
+]
+
 export const EDITOR_WIDTHS: { id: Space['editorWidth']; label: string; hint: string }[] = [
   { id: 'normal', label: 'Normal', hint: 'The comfortable reading width used today.' },
   { id: 'wide', label: 'Wide', hint: 'More room per line — good for a big monitor.' },
@@ -443,6 +451,7 @@ export function applySettings(s: AppSettings): void {
   const theme = resolveTheme(a.theme)
   root.dataset.theme = theme
   root.dataset.density = a.density
+  root.dataset.corners = a.corners
   root.dataset.editorWidth = a.editorWidth
   root.dataset.textTone = a.textTone
   root.dataset.buttonDef = a.buttonDefinition ? 'on' : 'off'

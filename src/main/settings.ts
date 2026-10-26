@@ -104,7 +104,8 @@ async function applyWrite(root: string | null, partial: Partial<AppSettings>): P
       theme: a.theme,
       density: a.density,
       textTone: a.textTone,
-      buttonDefinition: a.buttonDefinition
+      buttonDefinition: a.buttonDefinition,
+      corners: a.corners
     })
   }
   return next

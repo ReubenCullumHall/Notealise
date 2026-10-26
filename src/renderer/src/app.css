@@ -1186,14 +1186,16 @@ div.cm-math-editing {
 }
 /* A link is drawn as one pill even when it is several marks (target + heading).
    Only the first mark rounds its left edge and only the last its right, so
-   `[[Waves#Interference]]` reads as one thing rather than two boxes. */
+   `[[Waves#Interference]]` reads as one thing rather than two boxes.
+   Its own 5px, scaled by the Corners setting's multiplier (theme.css) so a
+   Sharp space squares it off and Rounded draws it exactly as before. */
 .cm-wikilink-lead {
-  border-top-left-radius: 5px;
-  border-bottom-left-radius: 5px;
+  border-top-left-radius: calc(5px * var(--r-k));
+  border-bottom-left-radius: calc(5px * var(--r-k));
 }
 .cm-wikilink-tail {
-  border-top-right-radius: 5px;
-  border-bottom-right-radius: 5px;
+  border-top-right-radius: calc(5px * var(--r-k));
+  border-bottom-right-radius: calc(5px * var(--r-k));
 }
 /* The heading half of `[[Note#Heading]]`. The "#" itself is hidden by the pass;
    this is what stands in for it, so the link reads "Waves › Interference". */
@@ -2880,13 +2882,15 @@ button.look-card:hover {
   border-radius: 0;
   background: transparent;
 }
+/* 11px = the frame's --r-surface plus its 1px border, scaled by the Corners
+   setting's multiplier like the frame itself (theme.css). */
 .disclosure-group > :first-child > button {
-  border-top-left-radius: 11px;
-  border-top-right-radius: 11px;
+  border-top-left-radius: calc(11px * var(--r-k));
+  border-top-right-radius: calc(11px * var(--r-k));
 }
 .disclosure-group > :last-child > button:only-child {
-  border-bottom-left-radius: 11px;
-  border-bottom-right-radius: 11px;
+  border-bottom-left-radius: calc(11px * var(--r-k));
+  border-bottom-right-radius: calc(11px * var(--r-k));
 }
 /* Button definition, for the container rather than each row — the rows no
    longer carry a ring of their own. Written without the `:not(:hover)` guard

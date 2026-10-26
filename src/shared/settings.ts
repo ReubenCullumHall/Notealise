@@ -65,6 +65,14 @@ export type DensityId = 'large' | 'cozy' | 'compact' | 'ultra'
  *  long-standing reading width; 'wide' and 'full' trade line length for using
  *  more of a large monitor, which 'normal' leaves as empty space either side. */
 export type EditorWidthId = 'normal' | 'wide' | 'full'
+/** The shape of every corner in the app — buttons, tabs, panels, the space
+ *  buttons, maths boxes (Reuben, 2026-10-26). 'rounded' is the look the app
+ *  has always had; 'round' (shown as "Extra round") makes every corner about a
+ *  quarter rounder, for a softer read; 'sharp' squares them all off, round-ended
+ *  things included, for an even, stacked look. theme.css turns it into the
+ *  three corner sizes (`--r-*`) and the sidebar's row corner, so nothing that
+ *  draws a corner has to know this setting exists. */
+export type CornerStyleId = 'sharp' | 'rounded' | 'round'
 export type AccentMode = 'text' | 'tint'
 /** How every space's emoji is drawn: the OS's own full-colour emoji, or the
  *  bundled one-colour Noto Emoji set painted in the accent (theme.css). */
@@ -131,6 +139,8 @@ export interface Space {
   buttonDefinition: boolean
   /** how tightly the sidebar packs rows */
   density: DensityId
+  /** the shape of every corner — see CornerStyleId */
+  corners: CornerStyleId
   /** how wide the editor's text column grows — the sidebar and note chrome are
    *  unaffected, this is only the writing area itself */
   editorWidth: EditorWidthId
@@ -559,6 +569,7 @@ export const DEFAULT_SPACE: Space = {
   textTone: 'grey',
   buttonDefinition: false,
   density: 'cozy',
+  corners: 'rounded',
   editorWidth: 'normal',
   accent: 'default',
   accentMode: 'text',
@@ -668,6 +679,7 @@ export function freshArchive(folder: string): Space {
 const THEMES: readonly ThemeId[] = ['system', 'dark', 'light', 'black', 'slate']
 const TEXT_TONES: readonly TextToneId[] = ['grey', 'white']
 const DENSITIES: readonly DensityId[] = ['large', 'cozy', 'compact', 'ultra']
+const CORNER_STYLES: readonly CornerStyleId[] = ['sharp', 'rounded', 'round']
 const EDITOR_WIDTHS: readonly EditorWidthId[] = ['normal', 'wide', 'full']
 const MODES: readonly AccentMode[] = ['text', 'tint']
 const COLOR_STYLES: readonly ColorStyle[] = ['tag', 'row', 'solid']
@@ -754,6 +766,9 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     buttonDefinition:
       typeof s.buttonDefinition === 'boolean' ? s.buttonDefinition : DEFAULT_SPACE.buttonDefinition,
     density: DENSITIES.includes(s.density as DensityId) ? (s.density as DensityId) : DEFAULT_SPACE.density,
+    corners: CORNER_STYLES.includes(s.corners as CornerStyleId)
+      ? (s.corners as CornerStyleId)
+      : DEFAULT_SPACE.corners,
     editorWidth: EDITOR_WIDTHS.includes(s.editorWidth as EditorWidthId)
       ? (s.editorWidth as EditorWidthId)
       : DEFAULT_SPACE.editorWidth,
@@ -1192,6 +1207,9 @@ export interface ThemeCache {
    *  keys and falls back to the defaults — no migration. */
   textTone: TextToneId
   buttonDefinition: boolean
+  /** a paint value too: without it a Sharp space launches rounded and squares
+   *  off a frame later */
+  corners: CornerStyleId
 }
 
 export function normalizeThemeCache(raw: unknown): ThemeCache {
@@ -1203,7 +1221,10 @@ export function normalizeThemeCache(raw: unknown): ThemeCache {
       ? (c.textTone as TextToneId)
       : DEFAULT_SPACE.textTone,
     buttonDefinition:
-      typeof c.buttonDefinition === 'boolean' ? c.buttonDefinition : DEFAULT_SPACE.buttonDefinition
+      typeof c.buttonDefinition === 'boolean' ? c.buttonDefinition : DEFAULT_SPACE.buttonDefinition,
+    corners: CORNER_STYLES.includes(c.corners as CornerStyleId)
+      ? (c.corners as CornerStyleId)
+      : DEFAULT_SPACE.corners
   }
 }
 
@@ -1228,7 +1249,8 @@ export function settingsFromThemeCache(c: ThemeCache): AppSettings {
         theme: c.theme,
         density: c.density,
         textTone: c.textTone,
-        buttonDefinition: c.buttonDefinition
+        buttonDefinition: c.buttonDefinition,
+        corners: c.corners
       }
     ]
   }

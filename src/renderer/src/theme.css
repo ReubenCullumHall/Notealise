@@ -94,11 +94,32 @@
 
    The ONE documented exception is a 1–2px radius on an element that is itself
    only 1–2px tall (drop indicators, the pane divider, the miniature bars inside
-   a theme preview). That is a line cap, not an object corner, and it stays. */
+   a theme preview). That is a line cap, not an object corner, and it stays.
+
+   CORNER STYLE (Settings → Look → Corners, per space; Reuben 2026-10-26).
+   One multiplier, --r-k, scales the three sizes together, so the roles keep
+   their proportions in every style and nothing that draws a corner needs to
+   know the setting exists. Rounded is the app as it always was (1). Extra
+   round is about a quarter rounder (1.25) — pills are already as round as they
+   go, so they stay. Sharp is 0 for everything, pills included: a fully square,
+   even look. The sidebar rows' own corner (--row-radius, set per density
+   below) is scaled by the same --r-k, and so are the three corners that keep
+   their own size: a link chip in a note (5px), the tutorials' pictures of one,
+   and the first/last row of a Settings fold (11px) — app.css / parts.tsx.
+   The multiplier is substituted on :root, where these are declared — so it
+   must be set on :root (data-corners on <html>), never on a descendant. */
 :root {
-  --r-control: 4px;
-  --r-surface: 10px;
+  --r-k: 1;
+  --r-control: calc(4px * var(--r-k));
+  --r-surface: calc(10px * var(--r-k));
   --r-pill: 9999px;
+}
+:root[data-corners='round'] {
+  --r-k: 1.25;
+}
+:root[data-corners='sharp'] {
+  --r-k: 0;
+  --r-pill: 0px;
 }
 
 /* ---- colour ramps -------------------------------------------------------- */
@@ -331,23 +352,23 @@
    uncoloured one. At ultra there is only 1px of padding to give. */
 :root,
 :root[data-density='cozy'] {
-  --row-py: 8px;   --row-gap: 6px;  --row-radius: 12px; --row-title: 14px;
+  --row-py: 8px;   --row-gap: 6px;  --row-radius: calc(12px * var(--r-k)); --row-title: 14px;
   --row-sub: 12px; --row-icon: 16px; --row-indent: 14px; --row-pad0: 8px;
   --row-sub-display: block; --row-gutter: 3px;
 }
 :root[data-density='large'] {
-  --row-py: 11px;  --row-gap: 7px; --row-radius: 14px; --row-title: 15px;
+  --row-py: 11px;  --row-gap: 7px; --row-radius: calc(14px * var(--r-k)); --row-title: 15px;
   --row-sub: 12.5px; --row-icon: 18px; --row-indent: 18px; --row-pad0: 10px;
   --row-sub-display: block; --row-gutter: 4px;
 }
 :root[data-density='compact'] {
-  --row-py: 4px;   --row-gap: 5px;  --row-radius: 8px;  --row-title: 13px;
+  --row-py: 4px;   --row-gap: 5px;  --row-radius: calc(8px * var(--r-k));  --row-title: 13px;
   --row-sub: 11px; --row-icon: 15px; --row-indent: 12px; --row-pad0: 6px;
   --row-sub-display: block; --row-gutter: 2px;
 }
 /* one line per item, no previews — maximum items per screen */
 :root[data-density='ultra'] {
-  --row-py: 1px;   --row-gap: 4px;  --row-radius: 5px;  --row-title: 12px;
+  --row-py: 1px;   --row-gap: 4px;  --row-radius: calc(5px * var(--r-k));  --row-title: 12px;
   --row-sub: 11px; --row-icon: 13px; --row-indent: 10px; --row-pad0: 5px;
   --row-sub-display: none; --row-gutter: 1px;
 }

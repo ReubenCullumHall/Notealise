@@ -93,7 +93,7 @@ export function Code({ children, className = '' }: { children: React.ReactNode; 
  *  from the registry, a palette token — never an invented look. */
 export function Sample({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-[5px] bg-wash/[0.08] px-2 py-1 text-ink-800">
+    <span className="inline-flex items-center gap-1.5 rounded-[calc(5px*var(--r-k))] bg-wash/[0.08] px-2 py-1 text-ink-800">
       {children}
     </span>
   )
@@ -102,7 +102,7 @@ export function Sample({ children }: { children: React.ReactNode }): React.JSX.E
 /** How a link looks in the note, so the page shows the real thing. */
 export function Chip({ children, icon = 'doc' }: { children: React.ReactNode; icon?: IconName }): React.JSX.Element {
   return (
-    <span className="inline-flex items-center gap-1 rounded-[5px] bg-wash/[0.08] px-1.5 py-0.5 text-ink-800">
+    <span className="inline-flex items-center gap-1 rounded-[calc(5px*var(--r-k))] bg-wash/[0.08] px-1.5 py-0.5 text-ink-800">
       <Icon name={icon} className="h-3 w-3 opacity-60" />
       {children}
     </span>

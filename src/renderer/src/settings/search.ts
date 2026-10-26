@@ -77,10 +77,11 @@ export const SEARCH_INDEX: SearchEntry[] = [
   { section: 'general', disclosure: 'More', label: 'Replay the first-run walkthrough', hint: 'Reopens the introduction you saw the first time.', keywords: 'onboarding tutorial first run walkthrough welcome intro replay redo again reset vault' },
   { section: 'general', disclosure: 'More', label: 'Reset to a blank test vault', hint: 'Switch to a disposable folder to try things out.', keywords: 'test vault wipe clean slate sandbox reset disposable experiment developer' },
 
-  // Look → Every space. The three basics sit above the folds, so they carry
-  // no `disclosure`.
+  // Look → Every space. The basics (theme, corners, accent, fonts) sit above
+  // the folds, so they carry no `disclosure`.
   { section: 'customisation', label: 'Look', anchor: 'Theme', hint: 'Theme, colours, fonts and the page, for every space at once.', keywords: 'customisation customization customise customize appearance personalise personalize style design look feel' },
   { section: 'customisation', label: 'Theme', hint: 'Light, dark, extra dark or slate, applied to the whole app.', keywords: 'dark mode light mode night mode black extra dark slate grey gray blue grey blue gray navy grey mode gray mode appearance colour scheme color scheme white background grey background gray background bright darker lighter system automatic oled amoled' },
+  { section: 'customisation', label: 'Corners', hint: 'Sharp, rounded or extra round — the shape of every button, tab and panel.', keywords: 'corner rounded round rounder roundness sharp square squared radius edges shape soft softer boxy curved curve' },
   { section: 'customisation', label: 'Accent colour', hint: 'The colour headings, titles and switches take.', keywords: 'accent color colour highlight brand main tint hue personalise personalize' },
   { section: 'customisation', label: 'Interface font', hint: 'The font for the sidebar, settings and buttons.', keywords: 'font fonts typeface typography ui interface menu sidebar serif sans' },
   { section: 'customisation', label: 'Notes font', hint: 'The font your notes are written in.', keywords: 'font fonts typeface typography writing note body text serif sans handwriting' },
