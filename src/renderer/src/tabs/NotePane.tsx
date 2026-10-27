@@ -9,6 +9,7 @@ import { startPaneReorder } from './paneReorder'
 import { formatDateTime, formatNumber, formatWhenShort } from '../intl'
 import { HoverCard } from '../HoverCard'
 import { LinksBlock, LINKS_BLOCK_HEIGHT } from '../links/LinksBlock'
+import { NoteTape } from './VoiceDeck'
 import type { Inspect } from '../links/LinkInspector'
 import { incomingLinks, outgoingLinks } from '../links/model'
 import type { LinkEnv, LinkHandlers, OpenHow } from '../editor/linkEnv'
@@ -684,6 +685,17 @@ export function NotePane({
                 <Icon name="code" className="h-4 w-4" />
               </button>
             )}
+            {/* The tape: on a note with a voice note in it, a cassette at the
+                top of the same corner stack — above the eye, or where the eye
+                would be (Reuben, 2026-10-16). Absolutely positioned like the
+                other two, so it costs no layout appearing or going. */}
+            <NoteTape
+              path={path}
+              doc={doc}
+              viewRef={viewRef}
+              skip={env.voiceSkip}
+              bottom={12 + 40 * ((markdownPro ? 1 : 0) + (raw ? 0 : 1))}
+            />
           </div>
         )}
 

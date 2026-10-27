@@ -10,7 +10,8 @@ import {
   isDocFilename,
   kindForExt,
   kindForFilename,
-  kindForMime
+  kindForMime,
+  voiceEmbeds
 } from './attachments'
 
 // This catalogue exists because main and the renderer used to keep separate
@@ -201,5 +202,37 @@ describe('a note moves, and its links to files follow', () => {
   it('is a no-op the second time', () => {
     const once = repointFileLinks(text, 'A/N.md', 'B/N.md')
     expect(repointFileLinks(once, 'B/N.md', 'B/N.md')).toBe(once)
+  })
+})
+
+describe('voiceEmbeds', () => {
+  const note = 'Lectures/Week 1.md'
+
+  it('finds both forms, in order, resolved against the note, with the embed as written', () => {
+    const text = [
+      '# Week 1',
+      '<audio controls src="Voice%20note%202026-10-15%2014.32.m4a" data-speed="1.25"></audio>',
+      'A photo ![](board.png) and a video <video controls src="clip.mp4"></video>',
+      '![](../Imported/memo.mp3)'
+    ].join('\n')
+    expect(voiceEmbeds(text, note)).toEqual([
+      {
+        file: 'Lectures/Voice note 2026-10-15 14.32.m4a',
+        embed: '<audio controls src="Voice%20note%202026-10-15%2014.32.m4a" data-speed="1.25">'
+      },
+      { file: 'Imported/memo.mp3', embed: '![](../Imported/memo.mp3)' }
+    ])
+  })
+
+  it('takes an <audio> tag at its word whatever the extension — a browser recording is .webm', () => {
+    expect(voiceEmbeds('<audio controls src="rec.webm"></audio>', note).map((v) => v.file)).toEqual(['Lectures/rec.webm'])
+    // …while a markdown picture of a .webm is not a voice note (it is a video)
+    expect(voiceEmbeds('![](rec.webm)', note)).toEqual([])
+  })
+
+  it('lists a recording used twice once, and nothing for a note without one', () => {
+    const twice = '<audio controls src="a.m4a"></audio>\n\n<audio controls src="a.m4a" data-volume="2"></audio>'
+    expect(voiceEmbeds(twice, note)).toHaveLength(1)
+    expect(voiceEmbeds('# Plain\n\n![](pic.png)', note)).toEqual([])
   })
 })

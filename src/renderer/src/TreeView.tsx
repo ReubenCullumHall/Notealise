@@ -516,19 +516,10 @@ export function TreeView({
                   <Icon name="restore" />
                 </RowBtn>
               )}
-              <RowBtn
-                title="Move to bin"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onTrash([node.path])
-                }}
-              >
-                <Icon name="trash" />
-              </RowBtn>
-              {/* star LAST so it sits at the row's right edge — the same spot
-                  the always-on marker holds at rest, so pinning/unpinning a
-                  hovered row doesn't make it hop sideways. Matches folder rows,
-                  where the star is already last. */}
+              {/* Star on the inside, bin on the OUTSIDE at the row's right
+                  edge (Reuben, 2026-10-16). It was the other way round, so the
+                  hover star landed on the set pin's resting spot; a pinned row
+                  now shows its star one place further in while hovered. */}
               <RowBtn
                 title={isPinned ? 'Unpin' : 'Pin to favourites'}
                 tone={isPinned ? 'brand' : 'ink'}
@@ -538,6 +529,15 @@ export function TreeView({
                 }}
               >
                 <Icon name={isPinned ? 'starFilled' : 'star'} />
+              </RowBtn>
+              <RowBtn
+                title="Move to bin"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onTrash([node.path])
+                }}
+              >
+                <Icon name="trash" />
               </RowBtn>
             </div>
           </>

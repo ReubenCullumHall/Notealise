@@ -1,6 +1,7 @@
 import type { EditorView } from '@codemirror/view'
 import {
   VOICE_DEFAULTS,
+  VOICE_NAME_MAX,
   isDefaultVoice,
   normalizeVoice,
   skipWords,
@@ -9,7 +10,7 @@ import {
 } from '../../../shared/voiceNote'
 import { BOUNCE, BOUNCE_MS, motionOn } from '../tabs/tabStyles'
 import { createPress } from '../organise/archivePress'
-import { attachDragHandle } from './attachMove'
+import { EMBED_SOURCE, attachDragHandle } from './attachMove'
 import { sourceCaption } from './mediaSource'
 import { playerFor, type VoicePlayer } from './voicePlayer'
 import {
@@ -66,6 +67,8 @@ export interface VoiceBlockProps {
   rel: string | null
   /** the mixer settings written on the line */
   settings: VoiceSettings
+  /** the name written on the line, '' for none — shown above the player */
+  name: string
   /** the grip has selected it as one object: ring it */
   selected: boolean
   /** the eye is on: this source goes under the block */
@@ -83,6 +86,11 @@ export interface VoiceBlockActions {
   openElsewhere(): void
   /** A skip button was right-clicked: offer its five choices at that point. */
   skipMenu(side: keyof VoiceSkip, x: number, y: number): void
+  /** Write this name onto the voice note's line ('' takes it off). */
+  rename(name: string): void
+  /** The block was right-clicked, or its grip clicked while selected: offer
+   *  "Name voice note…" at that point. */
+  menu(x: number, y: number): void
 }
 
 /** The block behind a widget's DOM — how `updateDOM` and `destroy` find it. */
@@ -149,6 +157,9 @@ export class VoiceBlock {
   private seeking = false
   private destroyed = false
   private caption: HTMLElement | null = null
+  /** the name above the player, and the box it is typed into */
+  private readonly nameEl: HTMLElement
+  private nameInput: HTMLInputElement | null = null
   /** the stretch of the recording across the waveform; null is all of it */
   private zoom: ZoomWindow | null = null
   /** where playback was at the last frame — a change while paused is a skip
@@ -219,16 +230,36 @@ export class VoiceBlock {
 
     const root = el('span', 'cm-voice')
     root.setAttribute('role', 'group')
-    root.setAttribute('aria-label', `Voice note: ${recordingName(props.src)}`)
+    root.setAttribute('aria-label', `Voice note: ${props.name || recordingName(props.src)}`)
     if (props.selected) root.classList.add('cm-attach-selected')
     this.dom = root
     blocks.set(root, this)
     root.addEventListener('pointerdown', this.engage, true)
 
+    // Its name, when it has one (Reuben, 2026-10-16) — above the player, where
+    // the box to type it into opens too (`startNaming`).
+    this.nameEl = el('span', 'cm-voice-name')
+    root.appendChild(this.nameEl)
+    // Right-click anywhere on it: name it. The skip buttons keep their own menu.
+    root.addEventListener('contextmenu', (e) => {
+      if (e.target === this.nameInput) return
+      e.preventDefault()
+      this.actions.menu(e.clientX, e.clientY)
+    })
+
     const row = el('span', 'cm-voice-row')
     // The grip: select (click), move (drag, into another pane too) and delete
-    // (Backspace once selected) the voice note as one thing — attachMove's.
-    row.appendChild(attachDragHandle(view))
+    // (Backspace once selected) the voice note as one thing — attachMove's. A
+    // click on it once it is ALREADY selected opens the name menu beside it.
+    const grip: HTMLElement = attachDragHandle(view, {
+      ...EMBED_SOURCE,
+      onClick: (v, pos, range) => {
+        if (!this.props.selected) return EMBED_SOURCE.onClick?.(v, pos, range)
+        const r = grip.getBoundingClientRect()
+        this.actions.menu(r.left, r.bottom + 4)
+      }
+    })
+    row.appendChild(grip)
 
     // --- the player ---------------------------------------------------------
     this.controls = el('span', 'cm-voice-controls')
@@ -404,6 +435,7 @@ export class VoiceBlock {
     root.appendChild(this.mixer)
 
     if (props.source) this.setCaption(props.source)
+    this.renderName()
 
     this.zoom = zooms.get(this.key) ?? null
     snap?.observe(root)
@@ -428,6 +460,11 @@ export class VoiceBlock {
       if (p && !sameSettings(p.settings, this.live)) p.apply(this.live)
     }
     if (next.source !== prev.source) this.setCaption(next.source)
+    if (next.name !== prev.name) {
+      if (this.player) this.player.label = next.name
+      this.dom.setAttribute('aria-label', `Voice note: ${next.name || recordingName(next.src)}`)
+      this.renderName()
+    }
     this.renderSkip()
     this.renderSliders()
     this.render()
@@ -444,6 +481,54 @@ export class VoiceBlock {
     this.dom.removeEventListener('wheel', this.onWheel)
     window.removeEventListener('pointerdown', this.letGo, true)
     snap?.unobserve(this.dom)
+  }
+
+  /** Open the box to type its name into, holding the name it has. Enter or
+   *  clicking away keeps what was typed; Escape leaves it as it was. */
+  startNaming(): void {
+    if (this.destroyed || this.nameInput) return
+    const input = el('input', 'cm-voice-name-input')
+    input.type = 'text'
+    input.value = this.props.name
+    input.placeholder = 'Name this voice note'
+    input.maxLength = VOICE_NAME_MAX
+    input.setAttribute('aria-label', 'Voice note name')
+    input.spellcheck = false
+    this.nameInput = input
+    let done = false
+    const finish = (keep: boolean): void => {
+      if (done) return
+      done = true
+      const value = input.value
+      this.nameInput = null
+      this.renderName()
+      if (keep) this.actions.rename(value)
+      this.view.focus()
+    }
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation()
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        finish(true)
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        finish(false)
+      }
+    })
+    input.addEventListener('blur', () => finish(true))
+    this.nameEl.replaceChildren(input)
+    this.nameEl.hidden = false
+    this.view.requestMeasure()
+    input.focus()
+    input.select()
+  }
+
+  /** The name above the player, or nothing — unless its box is open. */
+  private renderName(): void {
+    if (this.nameInput) return
+    this.nameEl.textContent = this.props.name
+    this.nameEl.hidden = this.props.name === ''
+    this.view.requestMeasure()
   }
 
   /** Disable the two buttons while a playable copy is being made. */
@@ -466,6 +551,7 @@ export class VoiceBlock {
     const p = playerFor(rel)
     this.player = p
     p.mount(this.view)
+    p.label = this.props.name
     // The note's settings, ready for the next play — unless it is already
     // playing (scrolled back into view mid-play), when nothing should change.
     if (!p.playing) p.apply(this.live)

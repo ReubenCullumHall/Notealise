@@ -34,10 +34,18 @@ def reset_vault() -> Path:
     return vault
 
 
+SRC = Path(__file__).resolve().parents[2] / 'src'
+
+
 @contextmanager
 def app(port: int):
-    """The scratch app, muted (a playback check makes no sound), closed normally at the end."""
-    env = {k: v for k, v in os.environ.items() if k != 'ELECTRON_RUN_AS_NODE'}
+    """The scratch app, muted (a playback check makes no sound), closed normally at the end.
+    Refuses an old build: on 2026-10-16 a build failed, the run went on against the last one, and
+    its checks reported on code that was not there."""
+    built = WORK / 'out/main/index.js'
+    if not built.exists() or any(p.stat().st_mtime > built.stat().st_mtime for p in SRC.rglob('*') if p.is_file()):
+        raise SystemExit(f'the scratch build is older than src/ — run build.sh again (if it failed: {WORK / "build.log"})')
+    env ={k: v for k, v in os.environ.items() if k != 'ELECTRON_RUN_AS_NODE'}
     proc = subprocess.Popen([str(ELECTRON), str(WORK / 'out/main/index.js'), f'--user-data-dir={WORK / "ud"}',
                              f'--remote-debugging-port={port}', '--mute-audio'],
                             env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

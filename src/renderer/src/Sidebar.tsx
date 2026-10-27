@@ -7,6 +7,7 @@ import type { Workspace } from '../../shared/workspace'
 import { activeSpace, shownEmoji, withoutSpace, type AppSettings, type Space } from '../../shared/settings'
 import type { UpdateStatus } from '../../shared/update'
 import { UpdateBanner } from './update/UpdateBanner'
+import { SidebarDeck } from './tabs/VoiceDeck'
 import { ArchiveIcon, BinIcon, Icon } from './icons'
 import { MediaTag } from './MediaBadge'
 import { heldPath, TRASH_DIR } from '../../shared/workspace'
@@ -108,6 +109,11 @@ interface Props {
   searchContextLabel: string | null
   onOpenSearchHit: (hit: SearchHit, newTab?: boolean) => void
   update: UpdateStatus
+  /** the notes showing in a column right now — the tape's player sits in the
+   *  footer only while its note is not one of them (tabs/VoiceDeck.tsx) */
+  notesOnScreen: string[]
+  /** the tape player's ↗: back to its note, at the voice note */
+  onGoToRecording: (note: string, rel: string) => void
   /** the 7-day recovery safety net (Settings-only) — see shared/workspace.ts */
   onRestoreRecovery: (ids: string[]) => void
   onPurgeRecovery: (ids?: string[]) => void
@@ -290,6 +296,8 @@ export function Sidebar({
   searchContextLabel,
   onOpenSearchHit,
   update,
+  notesOnScreen,
+  onGoToRecording,
   onRestoreRecovery,
   onPurgeRecovery,
   onTransferChanged,
@@ -1145,6 +1153,14 @@ export function Sidebar({
         )}
 
         <UpdateBanner status={update} />
+
+        {/* The voice note playing (or last played) in a note you have moved
+            away from, still playable from here — Arc's sidebar player. */}
+        <SidebarDeck
+          onScreen={(note) => notesOnScreen.includes(note)}
+          skip={settings.voiceSkip}
+          onGoTo={onGoToRecording}
+        />
 
         {/* The space switcher, directly above "Switch folder": one row of
             emoji, one per top-level folder (up to SPACE_CAP = 15), wrapping

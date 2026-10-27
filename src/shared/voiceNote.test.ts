@@ -6,9 +6,10 @@ import {
   normalizeVoice,
   parseAudioOpenTag,
   voiceFileName,
+  withVoiceName,
   withVoiceSettings
 } from './voiceNote'
-import { indexEmbeds, kindForFilename, kindForMime, repointFileLinks, retargetEmbeds } from './attachments'
+import { indexEmbeds, kindForFilename, kindForMime, repointFileLinks, retargetEmbeds, voiceEmbeds } from './attachments'
 
 describe('audioTag', () => {
   it('writes the plain tag when nothing has been changed', () => {
@@ -48,13 +49,14 @@ describe('parseAudioOpenTag', () => {
   it('reads what audioTag writes, settings included', () => {
     const tag = audioTag('Voice%20note.m4a', { volume: 1.5, tone: 0.4, speed: 0.75 })
     const open = tag.slice(0, tag.indexOf('>') + 1)
-    expect(parseAudioOpenTag(open)).toEqual({ src: 'Voice%20note.m4a', settings: { volume: 1.5, tone: 0.4, speed: 0.75 } })
+    expect(parseAudioOpenTag(open)).toEqual({ src: 'Voice%20note.m4a', settings: { volume: 1.5, tone: 0.4, speed: 0.75 }, name: '' })
   })
 
   it('reads a hand-written tag: any order, single quotes, no controls', () => {
     expect(parseAudioOpenTag(`<AUDIO data-speed='2' src='memo.mp3'>`)).toEqual({
       src: 'memo.mp3',
-      settings: { volume: 1, tone: 0, speed: 2 }
+      settings: { volume: 1, tone: 0, speed: 2 },
+      name: ''
     })
   })
 
@@ -111,5 +113,36 @@ describe('audio as an attachment kind', () => {
     expect(repointFileLinks(text, 'Physics/Week 1.md', 'Chemistry/Week 1.md')).toContain(
       'src="../Physics/memo%201.m4a" data-speed="1.5"'
     )
+  })
+})
+
+describe('a voice note\'s name', () => {
+  const tag = '<audio controls src="memo.m4a" data-speed="1.5">'
+
+  it('is written on the line, read back exactly, and leaves the rest alone', () => {
+    const named = withVoiceName(tag, 'Lecture 3')
+    expect(named).toBe('<audio controls src="memo.m4a" data-speed="1.5" data-name="Lecture 3">')
+    expect(parseAudioOpenTag(named)).toMatchObject({ src: 'memo.m4a', name: 'Lecture 3', settings: { speed: 1.5 } })
+    // renamed in place, then taken off again
+    expect(withVoiceName(named, 'Week 2')).toBe('<audio controls src="memo.m4a" data-speed="1.5" data-name="Week 2">')
+    expect(withVoiceName(named, '  ')).toBe(tag)
+    // a mixer change afterwards keeps the name
+    expect(parseAudioOpenTag(withVoiceSettings(named, { volume: 2, tone: 0, speed: 1 }))?.name).toBe('Lecture 3')
+    expect(parseAudioOpenTag(tag)?.name).toBe('')
+  })
+
+  it('survives any characters, and none of them can break the tag or point it at another file', () => {
+    const name = `Tom's "big" <idea> & src='other.m4a' = 2 > 1`
+    const named = withVoiceName(tag, name)
+    expect(parseAudioOpenTag(named)?.name).toBe(name)
+    expect(parseAudioOpenTag(named)?.src).toBe('memo.m4a')
+    // the scan every other part of the app uses still finds the one real recording
+    expect(indexEmbeds(named + '</audio>')).toEqual(['memo.m4a'])
+    expect(voiceEmbeds(named + '</audio>', 'N.md').map((v) => v.file)).toEqual(['memo.m4a'])
+  })
+
+  it('is one tidy line', () => {
+    expect(parseAudioOpenTag(withVoiceName(tag, '  Lecture\n\n  3  '))?.name).toBe('Lecture 3')
+    expect(parseAudioOpenTag(withVoiceName(tag, 'x'.repeat(500)))?.name).toHaveLength(120)
   })
 })

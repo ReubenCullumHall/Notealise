@@ -136,3 +136,43 @@ describe('the line grip follows the pointer (a line other than the cursor\'s)', 
     expect(s.doc.sliceString(r.from, r.to)).toBe('Last')
   })
 })
+
+describe('a voice note, photo or video on its own line is a block of its own', () => {
+  // They go into a note on the line straight under the text, with no blank line
+  // (voiceRecModel.ts ownLineInsert, attachInput.ts), so the paragraph walk must
+  // not glue them to it (Reuben, 2026-10-16: dragging a paragraph took the voice
+  // note under it too).
+  const doc = [
+    'testing around other things that might make noise',
+    '<audio controls src="memo.m4a" data-name="Lecture 3"></audio>',
+    'A line written straight after it',
+    '![](board.png)',
+    'and one more',
+    '<video controls src="clip.mp4"></video>'
+  ].join('\n')
+  const at = (needle: string): number => doc.indexOf(needle) + 1
+  const hovered = (pos: number): string => {
+    const s = state(doc, 0)
+    const r = blockRange(s, pos)
+    return s.doc.sliceString(r.from, r.to)
+  }
+
+  it('grabbing the text takes only the text, not the voice note under it', () => {
+    expect(hovered(at('testing around'))).toBe('testing around other things that might make noise')
+    expect(hovered(at('A line written'))).toBe('A line written straight after it')
+    expect(hovered(at('and one more'))).toBe('and one more')
+  })
+
+  it('grabbing the voice note, the photo or the video takes only that line', () => {
+    expect(hovered(at('<audio'))).toBe('<audio controls src="memo.m4a" data-name="Lecture 3"></audio>')
+    expect(hovered(at('![]'))).toBe('![](board.png)')
+    expect(hovered(at('<video'))).toBe('<video controls src="clip.mp4"></video>')
+  })
+
+  it('a picture inside a sentence is still part of its paragraph', () => {
+    const d = 'Look at this ![](a.png) here\nand the next line'
+    const s = state(d, 0)
+    const r = blockRange(s, 2)
+    expect(s.doc.sliceString(r.from, r.to)).toBe(d)
+  })
+})

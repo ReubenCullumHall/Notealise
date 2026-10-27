@@ -3,6 +3,7 @@ import { lineOfEmbed } from '../../../shared/attachments'
 import { VOICE_DEFAULTS, type VoiceSettings } from '../../../shared/voiceNote'
 import { linkEnv } from './linkEnv'
 import { isRaw } from './rawView'
+import { viewsShowing } from './viewRegistry'
 import { cachedVoiceUrl, loadVoice, onVoiceReset, waveFor } from './voiceAssets'
 import { HIGH_SHELF_HZ, LIMITER, LOW_SHELF_HZ, skipTarget, toneGains } from './voiceMixer'
 import { WAVE_MAX_BYTES, WAVE_MAX_SECONDS } from './voiceWave'
@@ -19,7 +20,9 @@ import { WAVE_MAX_BYTES, WAVE_MAX_SECONDS } from './voiceWave'
 //
 // A player is let go when nothing shows its recording any more (see `unmount`)
 // and when the vault switches (`onVoiceReset`, the same moment every cached
-// picture and video goes).
+// picture and video goes) — except the one on the TAPE (`deckPlayer`): the
+// recording last played, which keeps playing while you go to another tab and is
+// steered from the sidebar until its × (Reuben, 2026-10-16; tabs/VoiceDeck.tsx).
 //
 // The sound goes through Web Audio so the mixer can work on it:
 //
@@ -100,6 +103,12 @@ export class VoicePlayer {
   envelope: Float32Array | null = null
   /** what the sound is playing with right now */
   settings: VoiceSettings = { ...VOICE_DEFAULTS }
+  /** the tape's speaker button — silent without touching the volume the note keeps */
+  muted = false
+  /** the note it was last shown or played in — where the tape's arrow goes back to */
+  note = ''
+  /** the name its voice note was given there ('' for none) — the tape's title */
+  label = ''
   released = false
 
   private graph: Graph | null = null
@@ -189,23 +198,34 @@ export class VoicePlayer {
     a.defaultPlaybackRate = s.speed
     a.playbackRate = s.speed
     const g = this.graph
+    const volume = this.muted ? 0 : s.volume
     if (g) {
       const { low, high } = toneGains(s.tone)
-      setParam(g.gain.gain, s.volume, immediate)
+      setParam(g.gain.gain, volume, immediate)
       setParam(g.low.gain, low, immediate)
       setParam(g.high.gain, high, immediate)
     } else if (this.noGraph) {
-      a.volume = Math.min(1, Math.max(0, s.volume))
+      a.volume = Math.min(1, Math.max(0, volume))
     }
     this.emit()
   }
 
+  /** The tape's speaker button. */
+  setMuted(on: boolean): void {
+    this.muted = on
+    this.apply(this.settings)
+  }
+
   // --- who is showing it ---------------------------------------------------------
 
-  /** A block for this recording has been drawn in `view`. */
-  mount(view: EditorView): void {
+  /** A block for this recording has been drawn in `view` — or, with no view, the
+   *  tape's pop-up is showing it. Either way it is not to be let go meanwhile. */
+  mount(view?: EditorView): void {
     this.mounted++
-    this.views.add(view)
+    if (view) {
+      this.views.add(view)
+      this.note = view.state.field(linkEnv, false)?.path ?? this.note
+    }
     clearTimeout(this.releaseTimer)
   }
 
@@ -218,14 +238,28 @@ export class VoicePlayer {
    *  note was closed or switched, the line was deleted, Markdown pro is showing
    *  the source — so that is what is checked, a moment later, once CodeMirror
    *  has finished redrawing (a block being replaced unmounts before its
-   *  replacement mounts). */
+   *  replacement mounts). The tape's recording is the exception: only its line
+   *  being deleted lets that one go (`letGoIfUnused`). */
   unmount(): void {
     this.mounted = Math.max(0, this.mounted - 1)
     if (this.mounted > 0 || this.released) return
     clearTimeout(this.releaseTimer)
-    this.releaseTimer = setTimeout(() => {
-      if (!this.mounted && !this.stillInANote()) this.release()
-    }, 400)
+    this.releaseTimer = setTimeout(() => this.letGoIfUnused(), 400)
+  }
+
+  /** Release it unless something still shows it, or it is on the tape. */
+  letGoIfUnused(): void {
+    if (this.released || this.mounted || this.stillInANote()) return
+    if (deck === this && !this.goneFromItsNote()) return
+    this.release()
+  }
+
+  /** True when its note is on screen and no longer holds it — the line was
+   *  deleted. A note on NO screen (another tab, or closed) still holds it as far
+   *  as the tape is concerned: going back to it is what the tape's arrow is for. */
+  private goneFromItsNote(): boolean {
+    const showing = viewsShowing(this.note).filter((v) => v.dom.isConnected)
+    return showing.length > 0 && showing.every((v) => lineOfEmbed(v.state.doc.toString(), this.note, this.rel) === 0)
   }
 
   private stillInANote(): boolean {
@@ -245,6 +279,7 @@ export class VoicePlayer {
     if (this.released) return
     this.released = true
     if (registry.get(this.rel) === this) registry.delete(this.rel)
+    if (deck === this) setDeck(null)
     this.abort.abort()
     cancelAnimationFrame(this.raf)
     clearTimeout(this.probeTimer)
@@ -290,6 +325,7 @@ export class VoicePlayer {
     on('play', () => {
       for (const other of registry.values()) if (other !== this) other.pause()
       if (!this.raf) this.raf = requestAnimationFrame(this.tick)
+      setDeck(this)
       this.emit()
     })
     on('pause', () => {
@@ -449,6 +485,52 @@ export function playerFor(rel: string): VoicePlayer {
   const player = new VoicePlayer(rel)
   registry.set(rel, player)
   return player
+}
+
+// --- the tape ------------------------------------------------------------------
+//
+// The recording last played, wherever it was played from (its block, the note's
+// tape button, a key). It is what the sidebar's player steers once its note is
+// off screen, and it is kept playing through a tab switch or a closed tab. Let go
+// by the sidebar player's ×, by another recording being played, by its line being
+// deleted, and by the vault switch.
+
+let deck: VoicePlayer | null = null
+const deckListeners = new Set<() => void>()
+
+/** The recording on the tape, or null. */
+export function deckPlayer(): VoicePlayer | null {
+  return deck
+}
+
+/** Be told when a different recording goes on the tape, or it is emptied. */
+export function onDeck(fn: () => void): () => void {
+  deckListeners.add(fn)
+  return () => deckListeners.delete(fn)
+}
+
+function setDeck(p: VoicePlayer | null): void {
+  if (deck === p) return
+  const prev = deck
+  deck = p
+  for (const fn of [...deckListeners]) fn()
+  // The one it replaces was only being kept for the tape.
+  prev?.letGoIfUnused()
+}
+
+/** The sidebar player's ×: stop, and take it off the tape. */
+export function ejectDeck(): void {
+  deck?.pause()
+  setDeck(null)
+}
+
+/** A note was renamed or moved: the tape follows it, so its arrow still goes there. */
+export function deckNoteMoved(from: string, to: string): void {
+  if (!deck) return
+  if (deck.note === from) deck.note = to
+  else if (deck.note.startsWith(from + '/')) deck.note = to + deck.note.slice(from.length)
+  else return
+  for (const fn of [...deckListeners]) fn()
 }
 
 // The vault switch: stop everything. Relative paths name different files now.

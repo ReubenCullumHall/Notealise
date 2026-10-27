@@ -52,6 +52,11 @@ export type IconName =
   | 'video'
   | 'mic'
   | 'info'
+  // the voice-note tape (tabs/VoiceDeck.tsx)
+  | 'cassette'
+  | 'arrowUpRight'
+  | 'volume'
+  | 'volumeOff'
 
 // Each entry is the inner SVG for a 24×24 viewBox. Stroke icons inherit the
 // wrapper's stroke; filled marks set their own fill and clear the stroke.
@@ -342,6 +347,36 @@ const PATHS: Record<IconName, React.JSX.Element> = {
       <circle cx="12" cy="12" r="9" />
       <path d="M12 11v5" />
       <path d="M12 7.75v.5" />
+    </>
+  ),
+  /** A cassette: the shell, its two reels, the tape between them and the
+   *  ridge along the bottom — the note's voice-note button. */
+  cassette: (
+    <>
+      <rect x="2.5" y="5" width="19" height="14" rx="2" />
+      <circle cx="8.5" cy="11" r="2" />
+      <circle cx="15.5" cy="11" r="2" />
+      <path d="M8.5 13h7" />
+      <path d="M6.5 19l1.5-3h8l1.5 3" />
+    </>
+  ),
+  /** North-east arrow: go back to where this came from. */
+  arrowUpRight: (
+    <>
+      <path d="M7 17L17 7" />
+      <path d="M8.5 7H17v8.5" />
+    </>
+  ),
+  volume: (
+    <>
+      <path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z" />
+      <path d="M15.5 9.5a3.5 3.5 0 0 1 0 5" />
+    </>
+  ),
+  volumeOff: (
+    <>
+      <path d="M4 9.5v5h3.5l4.5 4v-13l-4.5 4z" />
+      <path d="M15.5 10l4 4M19.5 10l-4 4" />
     </>
   )
 }

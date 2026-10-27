@@ -228,6 +228,29 @@ export function lineOfEmbed(text: string, notePath: string, file: string): numbe
   return 0
 }
 
+/** Every voice note in `text`, in the order they appear and once each: the vault
+ *  path of its recording, and the embed exactly as written — an `<audio …>` open
+ *  tag (its mixer settings live there, shared/voiceNote.ts) or a markdown picture
+ *  pointing at a recording, which is what imported notes carry. The note's tape
+ *  button reads this (tabs/VoiceDeck.tsx). The same scan as the index and the
+ *  "where is this picture" jump, so the three agree on what a voice note is. */
+export function voiceEmbeds(text: string, notePath: string): { file: string; embed: string }[] {
+  const out: { file: string; embed: string }[] = []
+  const seen = new Set<string>()
+  const scan = embedPattern()
+  for (let m = scan.exec(text); m; m = scan.exec(text)) {
+    const target = targetOf(m)
+    const file = target ? resolveVaultPath(target, notePath) : null
+    if (!file || seen.has(file)) continue
+    // A tag says what it is; a markdown picture is a recording by its extension.
+    const voice = m[0].startsWith('<') ? /^<audio\b/i.test(m[0]) : kindForFilename(file) === 'audio'
+    if (!voice) continue
+    seen.add(file)
+    out.push({ file, embed: m[0] })
+  }
+  return out
+}
+
 /** Write `file` (a vault path) as a target relative to the note at `notePath`,
  *  percent-encoded the way `encodeTarget` writes one.
  *

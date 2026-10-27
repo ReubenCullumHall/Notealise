@@ -16,6 +16,7 @@ import { markCreated, markDeleted } from './organise/arrivals'
 import { PRACTICE_HEAD, PRACTICE_TITLE } from './settings/tutorials/tryIt'
 import { focusNoteEnd } from './editor/viewRegistry'
 import { flushRecordings, recordingsPending } from './editor/voiceRecorder'
+import { deckNoteMoved, ejectDeck } from './editor/voicePlayer'
 import { noteLayoutChange, notePaneChange } from './tabs/stripMotion'
 import { TabStrip } from './tabs/TabStrip'
 import { Island } from './tabs/TabIsland'
@@ -735,6 +736,8 @@ export default function App(): React.JSX.Element {
       setWordCounts((c) => remapRecord(c, map))
       setVersions((v) => remapRecord(v, map))
       applyLayout(renamePath(layoutRef.current, oldPath, newRel))
+      // The voice note on the tape, if its note is the one that moved.
+      deckNoteMoved(oldPath, newRel)
       // A tab open in a space that ISN'T on screen right now lives in
       // spaceTabs' stash (see its declaration), not in layoutRef — the line
       // above never reaches it. Repath every stashed space too, or switching
@@ -1308,6 +1311,25 @@ export default function App(): React.JSX.Element {
       } else await openNote(p, how === 'tab' || how === 'background')
     },
     [openBeside, openNote, enterSpace, requestHeading, applyLayout, loadDoc]
+  )
+
+  /** The sidebar tape player's arrow: back to the note it is playing from —
+   *  its space, its tab (opened again if it was closed), the voice note itself
+   *  scrolled to. The same "take me to it" as the photo dialog's (`pendingEmbed`). */
+  const goToRecording = useCallback(
+    async (note: string, rel: string): Promise<void> => {
+      if (!noteRefs(treeRef.current).some((n) => n.path === note)) {
+        // Binned or deleted since it was played: nothing to go back to.
+        ejectDeck()
+        flash("That note isn't there any more")
+        return
+      }
+      await enterSpace(spaceOf(note))
+      applyLayout(showTab(layoutRef.current, note))
+      if (!docsRef.current.has(note)) await loadDoc(note)
+      setPendingEmbed({ path: note, file: rel })
+    },
+    [enterSpace, applyLayout, loadDoc, flash]
   )
 
   /** Clicking a `[[link]]` to a note nobody has written yet: make it, beside the
@@ -3848,6 +3870,8 @@ export default function App(): React.JSX.Element {
         onOpenSearchHit={openSearchResult}
         revealRef={revealRef}
         update={update}
+        notesOnScreen={layout.panes}
+        onGoToRecording={(note, rel) => void goToRecording(note, rel)}
         onRestoreRecovery={restoreRecovery}
         onPurgeRecovery={purgeRecovery}
         onTransferChanged={() => void loadPresets()}

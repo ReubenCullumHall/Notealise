@@ -5,6 +5,7 @@ import { createEdgeScroller } from '../edgeScroll'
 import type { BlockRange } from './blockMove'
 import { notePathOf, viewAtPoint } from './viewRegistry'
 import { retargetEmbeds } from '../../../shared/attachments'
+import { GHOST_MAX_PX, ghostBody, hideSource, showGhost, type Ghost } from './dragGhost'
 
 // Dragging an image/video embed to a different line in the note — the same
 // grip-and-drag interaction blockTable.ts's column handle already uses
@@ -41,7 +42,7 @@ export interface DragSource {
 
 /** The media grip: one line, and a click selects the embed on it as one object.
  *  Exactly the behaviour this file had before it took a `DragSource` at all. */
-const EMBED_SOURCE: DragSource = {
+export const EMBED_SOURCE: DragSource = {
   rangeAt: (view, pos) => {
     const line = view.state.doc.lineAt(pos)
     return { from: line.from, to: line.to }
@@ -58,6 +59,9 @@ const EMBED_SOURCE: DragSource = {
  *  no position: the line it acts on is resolved from the button's own DOM node
  *  at mousedown, which is both always current AND what frees ImageWidget /
  *  VideoWidget from rebuilding every time their line shifts. */
+/** Each drag's ghost is its own (dragGhost.ts `Ghost.id`). */
+let ghostIds = 0
+
 export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SOURCE): HTMLElement {
   const btn = document.createElement('button')
   btn.type = 'button'
@@ -123,7 +127,21 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
     // follows the pointer into another pane, which is what makes this a
     // transfer between notes rather than only a reorder inside one.
     let dropView = view
+    // What the drop point shows instead of a line: the carried block, greyed, in
+    // a gap at the drop point (dragGhost.ts). Made at the first move; `shown` is
+    // where its gap is open right now, if anywhere. Up here because `measure`
+    // reads it, and runs once straight away.
+    let ghost: (Omit<Ghost, 'at'> & { fullHeight: number }) | null = null
+    let shown: { view: EditorView; at: number; height: number } | null = null
+    // The carried block's own place, closed up while its gap is open elsewhere:
+    // where it starts and how tall it is, in the note's own coordinates as they
+    // were before anything closed or opened.
+    let gone: { top: number; h: number } | null = null
 
+    // Every y here is measured from the top of the note (not the window), and as
+    // the note stands with NO gap open and nothing closed up — so a boundary
+    // keeps its number however the gap moves, and scrolling only changes what
+    // the pointer's y converts to (`freeY`).
     let boundaries: { y: number; pos: number }[] = []
     // Measured lazily and re-measured whenever the view has scrolled: a wheel
     // scroll or an edge-autoscroll mid-drag moves the lines under the cursor,
@@ -151,25 +169,67 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       measuredScroll = scroll
       measuredViewport = v.viewport.from
       const vDoc = v.state.doc
-      const docTop = v.documentTop
       const blocks = v.viewportLineBlocks
-      boundaries = blocks.map((b) => ({ y: b.top + docTop, pos: b.from }))
+      // Measured while the gap is open and the block's own place closed, every
+      // line after the closed place sits `gone.h` higher and every line after the
+      // gap `height` lower than in the note as it stands. Put both back, so a
+      // boundary is where its line really is and the gap never moves the target
+      // it is showing (dragGhost.ts).
+      const gap = shown && shown.view === v ? shown : null
+      const shut = gone && v === view ? gone : null
+      const free = (pos: number, y: number, afterGap: boolean): number =>
+        y + (shut && pos > firstLine.from ? shut.h : 0) - (gap && afterGap ? gap.height : 0)
+      boundaries = blocks.map((b) => ({ y: free(b.from, b.top, !!gap && b.from > gap.at), pos: b.from }))
       const last = blocks[blocks.length - 1]
       if (last) {
         const lastLine = vDoc.lineAt(Math.min(last.to, vDoc.length))
-        boundaries.push({
-          y: last.bottom + docTop,
-          pos: lastLine.number < vDoc.lines ? vDoc.line(lastLine.number + 1).from : vDoc.length
-        })
+        const pos = lastLine.number < vDoc.lines ? vDoc.line(lastLine.number + 1).from : vDoc.length
+        const gapInside = !!gap && (gap.at <= last.from || (gap.at === pos && pos === vDoc.length && vDoc.lineAt(pos).from !== pos))
+        boundaries.push({ y: free(pos, last.bottom, gapInside), pos })
       }
+    }
+
+    /** The pointer's y on screen → where it is in the note as it stands (the
+     *  boundaries' coordinates), undoing the open gap and the closed-up place.
+     *  Over the gap it is the gap's own boundary: the pointer is on the place it
+     *  already shows. */
+    const freeY = (clientY: number): number => {
+      const y = clientY - dropView.documentTop
+      const gap = shown && shown.view === dropView ? shown : null
+      const gTop = gap ? boundaries.find((b) => b.pos === gap.at)?.y : undefined
+      if (!gap || gTop === undefined) return y
+      const H = gap.height
+      const shut = gone && dropView === view ? gone : null
+      if (!shut) return y >= gTop + H ? y - H : y >= gTop ? gTop : y
+      const { top: S, h } = shut
+      if (gTop >= S + h) {
+        // the gap is below the closed place, which pulled it up by h
+        const g = gTop - h
+        return y < S ? y : y < g ? y + h : y <= g + H ? gTop : y + h - H
+      }
+      // the gap is above the closed place
+      return y < gTop ? y : y <= gTop + H ? gTop : y < S + H ? y - H : y - H + h
     }
     measure()
     if (!boundaries.length) return // nothing measured (shouldn't happen — bail quietly)
 
     let moved = false
     let target = ownFrom
-    let marker: HTMLElement | null = null
     let finished = false
+    /** Alt held on the last move: a copy into another pane leaves the block where it is. */
+    let copyHeld = false
+    /** where the carried block starts, from the top of the note (see `gone`) */
+    let srcTop = 0
+    const showAt = (v: EditorView, at: number | null): void => {
+      if (!ghost) return
+      if (shown && (shown.view !== v || at === null) && shown.view.dom.isConnected) showGhost(shown.view, null)
+      if (at === null) {
+        shown = null
+        return
+      }
+      showGhost(v, { id: ghost.id, height: ghost.height, body: ghost.body, at })
+      shown = { view: v, at, height: ghost.height }
+    }
 
     // Holding near the top or bottom of the editor scrolls it — the only way to
     // move a picture further than one screenful on a trackpad, where the
@@ -190,43 +250,65 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       finished = true
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
-      window.removeEventListener('blur', cleanup)
+      window.removeEventListener('blur', abandon)
       window.removeEventListener('keydown', onKey)
       scroller.stop()
-      marker?.remove()
-      marker = null
+    }
+
+    /** Close the gap and open the block's place again. Not part of `cleanup`: a
+     *  drop does both in the same step as the move — the edit itself clears them
+     *  (dragGhost.ts) — so the copy becomes the block without anything on screen
+     *  moving. Every other ending calls this. */
+    const clearShown = (): void => {
+      showAt(dropView, null)
+      if (view.dom.isConnected) hideSource(view, null)
+      gone = null
+    }
+
+    const abandon = (): void => {
+      cleanup()
+      clearShown()
     }
 
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') cleanup() // abandon the drag, change nothing
+      if (e.key === 'Escape') abandon() // abandon the drag, change nothing
     }
 
-    /** Put the drop marker on the boundary nearest `y`. Split out of `onMove`
+    /** Open the ghost's gap on the boundary nearest `y`. Split out of `onMove`
      *  because the edge-scroller has to call it too: while the pointer is held
      *  still in the scroll zone the document keeps moving under it, and nothing
-     *  else would re-run this — the marker would sit on a line that had
-     *  scrolled away. */
+     *  else would re-run this — the gap would sit on a line that had scrolled
+     *  away. */
     const place = (y: number): void => {
       measure()
       if (!boundaries.length) return
+      const at = freeY(y)
       let best = boundaries[0]
-      for (const b of boundaries) if (Math.abs(b.y - y) < Math.abs(best.y - y)) best = b
+      for (const b of boundaries) if (Math.abs(b.y - at) < Math.abs(best.y - at)) best = b
       target = best.pos
-      if (marker) {
-        const rect = dropView.dom.getBoundingClientRect()
-        marker.style.top = `${best.y}px`
-        marker.style.left = `${rect.left}px`
-        marker.style.width = `${rect.width}px`
-      }
+      if (!moved || !ghost) return
+      // On its own edges (or inside itself) it is not moving anywhere: no gap,
+      // and the block back in its place.
+      const home = dropView === view && target >= ownFrom && target <= ownTo
+      // Its place closes up while it is carried — unless Alt is copying it into
+      // another pane, when it stays.
+      const closes = !home && !(copyHeld && dropView !== view)
+      gone = closes ? { top: srcTop, h: ghost.fullHeight } : null
+      hideSource(view, closes ? { from: firstLine.from, to: lastLine.to } : null)
+      showAt(dropView, home ? null : target)
     }
 
     const onMove = (m: MouseEvent): void => {
       if (!moved && Math.abs(m.clientY - start.clientY) < 4) return
+      copyHeld = m.altKey
       if (!moved) {
         moved = true
-        marker = document.createElement('div')
-        marker.className = 'cm-attach-drop-marker'
-        document.body.appendChild(marker)
+        // The block's own place and height where it is now, so the gap is its
+        // size and its place can close up by exactly that much.
+        srcTop = view.lineBlockAt(firstLine.from).top
+        const full = Math.max(1, view.lineBlockAt(lastLine.to).bottom - srcTop)
+        const height = Math.min(Math.round(full), GHOST_MAX_PX)
+        ghost = { height, fullHeight: full, body: ghostBody(view, firstLine.from, lastLine.to, full > GHOST_MAX_PX), id: ++ghostIds }
       }
       // A pane with no note in it (the blank column) is not a place text can go,
       // so the pointer being over one leaves the target where it was rather than
@@ -240,7 +322,17 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       place(m.clientY)
     }
 
+    // Whatever the drop does — a move, a copy, nothing at all — the gap and the
+    // closed-up place go afterwards (a move has already taken them with it).
     const onUp = (up: MouseEvent): void => {
+      try {
+        drop(up)
+      } finally {
+        clearShown()
+      }
+    }
+
+    const drop = (up: MouseEvent): void => {
       const wasMoved = moved
       const dropAt = target
       const into = dropView
@@ -336,7 +428,7 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
 
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
-    window.addEventListener('blur', cleanup)
+    window.addEventListener('blur', abandon)
     window.addEventListener('keydown', onKey)
   })
 

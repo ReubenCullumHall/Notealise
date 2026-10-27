@@ -3744,6 +3744,18 @@ button.look-card:hover {
    "matching the theme" means matching THAT, not inventing a second scheme. */
 .cm-attach-grip:hover { background: rgb(var(--brand-500) / 0.4); color: rgb(var(--brand-50)); }
 .cm-attach-grip:active { cursor: grabbing; }
+/* Every block's six dots — a line's (.cm-line-grip) and a photo's, video's or
+   voice note's — take the pointer over more than the 20×14 they draw: 24×26
+   (Reuben, 2026-10-16: "make the hitbox slightly bigger"). Part of the button
+   itself, so the extra is the grip's to click. Kept 2px short of the line's 28px
+   gutter on each side, so a click at the very start of a line still lands in the
+   text. */
+.cm-line-grip::after,
+.cm-attach-grip::after {
+  content: '';
+  position: absolute;
+  inset: -6px -2px;
+}
 
 /* A photo/video selected as ONE object (clicking its grip), rather than a text
    selection that happens to cross it. The passes keep rendering the picture in
@@ -3774,23 +3786,49 @@ button.look-card:hover {
 .cm-embed-picked .cm-cursorLayer { display: none; }
 .cm-attach-selected ::selection { background: transparent; }
 
-/* The insertion line shown while dragging, moved by JS to whichever visible
-   line boundary the pointer is nearest (attachMove.ts). Fixed + appended to
-   `document.body`, not relative to the editor: the target line can be
-   anywhere in the viewport, not scoped to one small widget the way the
-   table's own drop line is scoped to `.cm-table-grid`. Thinner and a step
-   lighter on the ramp (brand-400, not -500) than a first pass — the table's
-   own drop line gets away with full saturation because it's a slim 3px
-   vertical strip inside a small control; a horizontal bar spanning the whole
-   editor reads as much heavier at the same weight. */
-.cm-attach-drop-marker {
-  position: fixed;
-  height: 2px;
-  margin-top: -1px;
-  border-radius: var(--r-pill);
-  background: rgb(var(--brand-400) / 0.85);
+/* Where a dragged block will land (dragGhost.ts, Reuben 2026-10-16): a gap in
+   the note at the drop point holding a greyed copy of what is being carried —
+   the text or picture itself rather than a line, so you can see what goes
+   where. The gap's height is set from script and must not grow: attachMove
+   counts on it to keep the drop point steady. Greyed by opacity and colour,
+   never blurred, so the copy still reads as the thing it is. */
+.cm-drag-ghost {
+  position: relative;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: var(--r-control);
+  background: rgb(var(--ink-300) / 0.1);
   pointer-events: none;
-  z-index: 50;
+}
+.cm-drag-ghost-body {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+/* A tall block's copy is cut off and fades out at the bottom of its gap. */
+.cm-drag-ghost.is-capped .cm-drag-ghost-body {
+  -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
+  mask-image: linear-gradient(to bottom, #000 60%, transparent);
+}
+/* Nothing inside a copy is reached for: no hover states, no grips. */
+.cm-drag-ghost * {
+  pointer-events: none !important;
+}
+.cm-drag-ghost .cm-attach-grip {
+  display: none;
+}
+/* A video or an embedded player stands in as a plain box its size. */
+.cm-drag-ghost-media {
+  max-width: 100%;
+  border-radius: var(--r-surface);
+  background: rgb(var(--ink-400) / 0.35);
+}
+/* The block's own place, closed up while it is carried (zero high — the drag
+   counts on it). */
+.cm-drag-gone {
+  height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .cm-table {
@@ -4719,10 +4757,14 @@ html.space-vt::view-transition-new(root) {
 .cm-editor.cm-focused .cm-line-grip {
   opacity: 0.45;
 }
-/* On the line the POINTER is over — whether or not the editor has focus. Stronger
-   than the cursor line's faint mark: the pointer is looking for it. */
-.cm-line-grip.is-hover {
-  opacity: 0.7;
+/* On the line the POINTER is over — whether or not the editor has focus. As
+   strong as a voice note's own grip (Reuben, 2026-10-16: "like the others"):
+   at 0.7 of a 55% grey it could not be seen at all on a dark page, and with the
+   editor focused the faint rule above out-ranked it. */
+.cm-line-grip.is-hover,
+.cm-editor.cm-focused .cm-line-grip.is-hover {
+  opacity: 1;
+  color: rgb(var(--ink-400) / 0.7);
 }
 .cm-editor.cm-focused .cm-line-grip:hover,
 .cm-line-grip.is-hover:hover,
@@ -4869,6 +4911,44 @@ html.space-vt::view-transition-new(root) {
   left: -28px;
   width: 28px;
 }
+/* Its name, when it has one (voicePlayerUi.ts `renderName`), above the player
+   and in line with the play button; and the box it is typed into, which keeps
+   the same letters in the same place. */
+.cm-voice-name {
+  display: block;
+  padding-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--ink-800));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* the box reaches 7px left of the name, so the letters stay put — not clipped */
+.cm-voice-name:has(.cm-voice-name-input) {
+  overflow: visible;
+}
+.cm-voice-name-input {
+  box-sizing: border-box;
+  width: min(100%, 360px);
+  margin-left: -7px;
+  padding: 2px 6px;
+  border: 1px solid rgb(var(--ink-300) / 0.6);
+  border-radius: var(--r-control);
+  background: rgb(var(--surface));
+  font: inherit;
+  color: inherit;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.cm-voice-name-input:focus {
+  border-color: rgb(var(--brand-400));
+}
+.cm-voice-name-input::placeholder {
+  font-weight: 400;
+  color: rgb(var(--ink-400));
+}
 .cm-voice .cm-attach-grip {
   top: 50%;
   left: -24px;
@@ -4929,19 +5009,25 @@ html.space-vt::view-transition-new(root) {
    halves of the triangle become the two bars, point for point, so the browser
    blends one outline into the other. The press and its bounce are the archive
    button's (organise/archivePress.ts), played on the button from script. */
-.cm-voice-play .cm-voice-pp-a {
+/* `.deck-play` is the tape's play button (tabs/VoiceDeck.tsx) — the same icon. */
+.cm-voice-play .cm-voice-pp-a,
+.deck-play .cm-voice-pp-a {
   d: path('M8.6 6.67L12.93 9.34L12.93 14.66L8.6 17.33Z');
 }
-.cm-voice-play .cm-voice-pp-b {
+.cm-voice-play .cm-voice-pp-b,
+.deck-play .cm-voice-pp-b {
   d: path('M12.93 9.34L17.26 12L17.26 12L12.93 14.66Z');
 }
-.cm-voice-play.is-playing .cm-voice-pp-a {
+.cm-voice-play.is-playing .cm-voice-pp-a,
+.deck-play.is-playing .cm-voice-pp-a {
   d: path('M7.4 6.1L9.8 6.1L9.8 17.9L7.4 17.9Z');
 }
-.cm-voice-play.is-playing .cm-voice-pp-b {
+.cm-voice-play.is-playing .cm-voice-pp-b,
+.deck-play.is-playing .cm-voice-pp-b {
   d: path('M14.2 6.1L16.6 6.1L16.6 17.9L14.2 17.9Z');
 }
-.cm-voice-play path {
+.cm-voice-play path,
+.deck-play path {
   transition: d 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 /* The waveform: two rows of the same bars, the played one stronger and clipped

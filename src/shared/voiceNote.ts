@@ -82,6 +82,8 @@ export interface ParsedAudioTag {
   /** the target exactly as written (still percent-encoded) */
   src: string
   settings: VoiceSettings
+  /** the name the person gave it (`data-name`), '' for none */
+  name: string
 }
 
 const OPEN_TAG = /^<audio\b([^>]*)>$/i
@@ -107,7 +109,8 @@ export function parseAudioOpenTag(openTag: string): ParsedAudioTag | null {
       volume: attr(m[1], 'data-volume'),
       tone: attr(m[1], 'data-tone'),
       speed: attr(m[1], 'data-speed')
-    })
+    }),
+    name: cleanVoiceName(decodeAttr(attr(m[1], 'data-name') ?? ''))
   }
 }
 
@@ -124,6 +127,59 @@ export function withVoiceSettings(openTag: string, s: Partial<VoiceSettings>): s
   const slash = /\/$/.test(kept) ? ' /' : ''
   const body = slash ? kept.slice(0, -1).replace(/\s+$/, '') : kept
   return `<audio${body}${voiceAttrs(normalizeVoice(s))}${slash}>`
+}
+
+// --- the name ----------------------------------------------------------------------
+//
+// A voice note can be given a name (Reuben, 2026-10-16) — "Lecture 3", not
+// "Voice note 2026-10-15 14.32". Like the mixer it belongs to THIS voice note in
+// THIS note, so it is written on the same line, `data-name="Lecture 3"`, which
+// other editors ignore; the recording's file keeps its own name. (The markdown
+// form, `![Lecture 3](memo.m4a)`, keeps it as the picture's alt text —
+// editor/audioPass.ts.)
+
+/** At most this long: a name is a label, not a note. */
+export const VOICE_NAME_MAX = 120
+
+/** A name as it is kept: one line, no runs of spaces, trimmed, not too long. */
+export function cleanVoiceName(raw: string): string {
+  return raw.replace(/\s+/g, ' ').trim().slice(0, VOICE_NAME_MAX).trim()
+}
+
+/** Inside a double-quoted attribute. `>` too: the tag is found by scanning to
+ *  the first `>` (shared/attachments.ts), and a raw one would end it early. And
+ *  `'` and `=`, so no name can ever read as a second `src='…'` — the embed scan
+ *  takes the LAST one in the tag, and the name is written after the real one. */
+const encodeAttr = (s: string): string =>
+  s
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/=/g, '&#61;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+function decodeAttr(s: string): string {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#61;/g, '=')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+}
+
+/** The same open tag with its name set to `name` — or taken off, for ''. Every
+ *  other attribute stays as it was, in place. Unchanged when it isn't an
+ *  `<audio>` tag. */
+export function withVoiceName(openTag: string, name: string): string {
+  const m = OPEN_TAG.exec(openTag.trim())
+  if (!m) return openTag
+  const kept = m[1].replace(/\s+data-name\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+)/gi, '').replace(/\s+$/, '')
+  const slash = /\/$/.test(kept) ? ' /' : ''
+  const body = slash ? kept.slice(0, -1).replace(/\s+$/, '') : kept
+  const clean = cleanVoiceName(name)
+  return `<audio${body}${clean ? ` data-name="${encodeAttr(clean)}"` : ''}${slash}>`
 }
 
 // --- the skip buttons ------------------------------------------------------------

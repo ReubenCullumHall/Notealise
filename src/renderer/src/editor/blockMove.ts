@@ -21,7 +21,14 @@ export interface BlockRange {
 const isBlank = (text: string): boolean => text.trim() === ''
 /** Where a paragraph stops: a blank line, or a toggle list's markup line (a
  *  paragraph written straight under a title is still not part of the title). */
-const isEdge = (text: string): boolean => isBlank(text) || isToggleMarkup(text)
+const isEdge = (text: string): boolean => isBlank(text) || isToggleMarkup(text) || isEmbedLine(text)
+/** A line that is nothing but a voice note, a video or a picture. Those go into
+ *  a note on the line straight under the text, with no blank line between
+ *  (voiceRecModel.ts `ownLineInsert`, attachInput.ts), so each is a block of its
+ *  own — never glued to the paragraph beside it (Reuben, 2026-10-16: dragging a
+ *  paragraph took the voice note under it too). */
+const isEmbedLine = (text: string): boolean =>
+  /^\s*<(audio|video)\b[^>]*>\s*<\/\1>\s*$/i.test(text) || /^\s*!\[[^\]\n]*\]\([^)\n]*\)\s*$/.test(text)
 
 /** The fenced code block containing `pos`, or null.
  *
@@ -91,7 +98,7 @@ export function blockRange(state: EditorState, at?: number): BlockRange {
   }
 
   const line = doc.lineAt(head)
-  if (isBlank(line.text)) return { from: line.from, to: line.to }
+  if (isBlank(line.text) || isEmbedLine(line.text)) return { from: line.from, to: line.to }
 
   let first = line.number
   let last = line.number

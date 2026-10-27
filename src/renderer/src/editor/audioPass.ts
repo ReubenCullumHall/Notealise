@@ -13,6 +13,8 @@ import {
   normalizeVoice,
   parseAudioOpenTag,
   skipWords,
+  cleanVoiceName,
+  withVoiceName,
   withVoiceSettings,
   type VoiceSettings,
   type VoiceSkip
@@ -78,6 +80,9 @@ export interface VoiceSpan {
   /** the target exactly as written (unwrapped from `<…>` for markdown) */
   src: string
   settings: VoiceSettings
+  /** the name given to it — `data-name` on the tag, the alt text of the
+   *  markdown form — '' for none */
+  name: string
 }
 
 /** Every voice note in [from, to), found in the syntax tree.
@@ -90,7 +95,7 @@ export interface VoiceSpan {
 export function voiceNotesIn(state: EditorState, from: number, to: number): VoiceSpan[] {
   const doc = state.doc
   const out: VoiceSpan[] = []
-  let open: { from: number; to: number; src: string; settings: VoiceSettings } | null = null
+  let open: { from: number; to: number; src: string; settings: VoiceSettings; name: string } | null = null
   syntaxTree(state).iterate({
     from,
     to,
@@ -100,7 +105,16 @@ export function voiceNotesIn(state: EditorState, from: number, to: number): Voic
           if (c.name !== 'URL') continue
           const target = unwrap(doc.sliceString(c.from, c.to))
           if (target && isVoiceTarget(target)) {
-            out.push({ from: node.from, to: node.to, openTo: node.to, form: 'md', src: target, settings: { ...VOICE_DEFAULTS } })
+            const alt = /^!\[([^\]\n]*)\]/.exec(doc.sliceString(node.from, node.to))?.[1] ?? ''
+            out.push({
+              from: node.from,
+              to: node.to,
+              openTo: node.to,
+              form: 'md',
+              src: target,
+              settings: { ...VOICE_DEFAULTS },
+              name: cleanVoiceName(alt)
+            })
           }
         }
         return false
@@ -117,7 +131,7 @@ export function voiceNotesIn(state: EditorState, from: number, to: number): Voic
       open = null
       if (doc.lineAt(o.from).number !== doc.lineAt(node.to).number) return
       if (doc.sliceString(o.to, node.from).trim() !== '') return
-      out.push({ from: o.from, to: node.to, openTo: o.to, form: 'tag', src: o.src, settings: o.settings })
+      out.push({ from: o.from, to: node.to, openTo: o.to, form: 'tag', src: o.src, settings: o.settings, name: o.name })
     }
   })
   return out
@@ -150,6 +164,23 @@ export function settingsChange(doc: Text, span: VoiceSpan, s: VoiceSettings): Ch
   }
   if (isDefaultVoice(normalizeVoice(s))) return null
   return { from: span.from, to: span.to, insert: audioTag(span.src.replace(/"/g, '%22'), s) }
+}
+
+/** The edit that writes `name` onto a voice note ('' takes it off), or null when
+ *  it already has it. The tag keeps it as `data-name` (shared/voiceNote.ts); the
+ *  markdown form as its alt text — which every other editor also shows — with
+ *  square brackets left out, since one would end the alt early. */
+export function nameChange(doc: Text, span: VoiceSpan, name: string): ChangeSpec | null {
+  const clean = cleanVoiceName(name)
+  if (clean === span.name) return null
+  if (span.form === 'tag') {
+    const open = doc.sliceString(span.from, span.openTo)
+    const next = withVoiceName(open, clean)
+    return next === open ? null : { from: span.from, to: span.openTo, insert: next }
+  }
+  const text = doc.sliceString(span.from, span.to)
+  const next = text.replace(/^!\[[^\]\n]*\]/, `![${clean.replace(/[[\]]/g, '')}]`)
+  return next === text ? null : { from: span.from, to: span.to, insert: next }
 }
 
 /** The edit that points a voice note at another file, `target` already encoded
@@ -194,6 +225,7 @@ class VoiceNoteWidget extends WidgetType {
       a.src === b.src &&
       a.rel === b.rel &&
       a.selected === b.selected &&
+      a.name === b.name &&
       a.source === b.source &&
       a.settings.volume === b.settings.volume &&
       a.settings.tone === b.settings.tone &&
@@ -208,7 +240,9 @@ class VoiceNoteWidget extends WidgetType {
       commit: (s) => writeSettings(view, block.dom, s),
       makePlayable: () => makePlayableCopy(view, block),
       openElsewhere: () => openElsewhere(view, block.props.rel),
-      skipMenu: (side, x, y) => skipMenu(view, side, x, y)
+      skipMenu: (side, x, y) => skipMenu(view, side, x, y),
+      rename: (name) => writeName(view, block.dom, name),
+      menu: (x, y) => blockMenu(view, block, x, y)
     })
     return block.dom
   }
@@ -258,6 +292,7 @@ export const audioPass: Pass = (view, _active, push) => {
             src: n.src,
             rel: recordingPath(n.src, notePath),
             settings: n.settings,
+            name: n.name,
             selected: picked,
             source: showSource ? state.doc.sliceString(n.from, n.to) : null,
             skip
@@ -299,6 +334,26 @@ function writeSettings(view: EditorView, dom: HTMLElement, s: VoiceSettings): vo
   const change = settingsChange(view.state.doc, span, s)
   if (!change) return
   view.dispatch({ changes: change, annotations: Transaction.addToHistory.of(false) })
+}
+
+/** A name typed into the block: onto its line. Unlike the mixer this is in the
+ *  undo history — the name is on screen, so Cmd+Z visibly takes it back. */
+function writeName(view: EditorView, dom: HTMLElement, name: string): void {
+  const span = spanOfBlock(view, dom)
+  if (!span) return
+  const change = nameChange(view.state.doc, span, name)
+  if (change) view.dispatch({ changes: change })
+}
+
+/** Right-click on the block, or a click on its six dots once it is selected:
+ *  name it (Reuben, 2026-10-16), in the app's own menu. */
+function blockMenu(view: EditorView, block: VoiceBlock, x: number, y: number): void {
+  const handlers = view.state.facet(linkHandlersFacet)?.current
+  if (!handlers) return
+  const named = block.props.name !== ''
+  const items = [{ label: named ? 'Rename voice note…' : 'Name voice note…', run: () => block.startNaming() }]
+  if (named) items.push({ label: 'Remove name', run: () => writeName(view, block.dom, '') })
+  handlers.menu(x, y, items)
 }
 
 /** The voice note pointing at `src` nearest `near` — for when its block went off

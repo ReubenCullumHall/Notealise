@@ -24,6 +24,7 @@ import { blockTable } from './blockTable'
 import { toggleList } from './toggleList'
 import { toggleMarkdown } from './toggleModel'
 import { lineMove } from './lineMove'
+import { dragGhost } from './dragGhost'
 import { blockFlash } from './blockFlash'
 import { dropCopiedTags } from './blockIds'
 import { relink } from './relink'
@@ -161,6 +162,8 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // The six-dot grip beside the active line (lineMove.ts). After the passes,
     // so it never competes with a widget for the same gesture.
     lineMove,
+    // Where a dragged block will land, shown as a greyed copy of it (dragGhost.ts).
+    dragGhost,
     // The heading or block a link lands on, lit for a moment (blockFlash.ts).
     blockFlash,
     // A pasted copy of a tagged block drops the copy's tag (blockIds.ts).
