@@ -88,12 +88,49 @@ export function bounceFrames(tilt: Tilt): Keyframe[] {
   }))
 }
 
+/** The voice note's play button presses differently (Reuben, 2026-10-27:
+ *  "don't make it bounce so much, the actual button seems to move up and down
+ *  not go in and out"). On a 32px round button the sink and the tip above read
+ *  as a hop, so this one only shrinks toward its centre and grows back — no
+ *  sink, no tip — with one small bounce instead of two. Still never bigger than
+ *  it rests. */
+export const SQUEEZE = {
+  scale: 0.9,
+  bounceMs: 320
+}
+
+/** The squeeze `a` of the way in (0 = resting, 1 = all the way). */
+export function squeezePose(a: number): string {
+  return `scale(${r(1 - (1 - SQUEEZE.scale) * a)})`
+}
+
+/** Going in. */
+export function squeezeFrames(): Keyframe[] {
+  return [{ transform: squeezePose(0) }, { transform: squeezePose(1) }]
+}
+
+/** Coming back out: to its full size, one small dip, and rest. */
+export function squeezeBounceFrames(): Keyframe[] {
+  const legs: Array<[offset: number, amount: number]> = [
+    [0, 1],
+    [0.45, 0],
+    [0.72, 0.25],
+    [1, 0]
+  ]
+  return legs.map(([offset, a], i) => ({
+    offset,
+    transform: squeezePose(a),
+    ...(i < legs.length - 1 ? { easing: a > legs[i + 1][1] ? easeInSine : easeOutSine } : {})
+  }))
+}
+
 /**
  * One button's press. `down` on pointerdown, `up` on pointerup / leave /
  * cancel, `key` for a press that came from the keyboard (no pointer, so it
- * sinks straight and bounces at once).
+ * sinks straight and bounces at once). `'squeeze'` is the voice note's
+ * in-and-out press (SQUEEZE above); the default is the archive button's.
  */
-export function createPress(): {
+export function createPress(kind: 'press' | 'squeeze' = 'press'): {
   down: (el: HTMLElement, x: number, y: number) => void
   up: (el: HTMLElement) => void
   key: (el: HTMLElement) => void
@@ -110,7 +147,10 @@ export function createPress(): {
 
   const bounce = (el: HTMLElement): void => {
     stop()
-    bouncing = el.animate(bounceFrames(tilt), { duration: PRESS.bounceMs, easing: 'linear' })
+    bouncing =
+      kind === 'squeeze'
+        ? el.animate(squeezeBounceFrames(), { duration: SQUEEZE.bounceMs, easing: 'linear' })
+        : el.animate(bounceFrames(tilt), { duration: PRESS.bounceMs, easing: 'linear' })
     const mine = bouncing
     void mine.finished.then(
       () => {
@@ -126,7 +166,11 @@ export function createPress(): {
       stop()
       tilt = tiltAt(el.getBoundingClientRect(), x, y)
       // Held at the bottom until the pointer comes up.
-      pressing = el.animate(pressFrames(tilt), { duration: PRESS.downMs, easing: easeOutQuad, fill: 'forwards' })
+      pressing = el.animate(kind === 'squeeze' ? squeezeFrames() : pressFrames(tilt), {
+        duration: PRESS.downMs,
+        easing: easeOutQuad,
+        fill: 'forwards'
+      })
     },
     up(el) {
       const held = pressing
@@ -146,7 +190,11 @@ export function createPress(): {
       if (!motionOn()) return
       stop()
       tilt = NO_TILT
-      pressing = el.animate(pressFrames(tilt), { duration: PRESS.downMs, easing: easeOutQuad, fill: 'forwards' })
+      pressing = el.animate(kind === 'squeeze' ? squeezeFrames() : pressFrames(tilt), {
+        duration: PRESS.downMs,
+        easing: easeOutQuad,
+        fill: 'forwards'
+      })
       const held = pressing
       void held.finished.then(
         () => {

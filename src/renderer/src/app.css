@@ -5007,8 +5007,9 @@ html.space-vt::view-transition-new(root) {
 }
 /* Play and pause are one icon (voicePlayerUi.ts, playPauseIcon): the two
    halves of the triangle become the two bars, point for point, so the browser
-   blends one outline into the other. The press and its bounce are the archive
-   button's (organise/archivePress.ts), played on the button from script. */
+   blends one outline into the other. The press and its bounce are played on
+   the button from script: a squeeze in and out (organise/archivePress.ts,
+   SQUEEZE). */
 /* `.deck-play` is the tape's play button (tabs/VoiceDeck.tsx) — the same icon. */
 .cm-voice-play .cm-voice-pp-a,
 .deck-play .cm-voice-pp-a {

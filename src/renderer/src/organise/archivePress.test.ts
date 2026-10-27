@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { bounceFrames, NO_TILT, pose, PRESS, pressFrames, tiltAt } from './archivePress'
+import {
+  bounceFrames,
+  NO_TILT,
+  pose,
+  PRESS,
+  pressFrames,
+  squeezeBounceFrames,
+  squeezeFrames,
+  squeezePose,
+  SQUEEZE,
+  tiltAt
+} from './archivePress'
 
 /** The numbers out of a pose, in order: rotateX, rotateY, sink, scale. */
 const parts = (t: string): number[] => {
@@ -62,5 +73,37 @@ describe('the archive button press', () => {
     expect(tiltAt(box, 100, 90)).toEqual({ x: -PRESS.maxDeg, y: -PRESS.maxDeg })
     // a pointer that strays outside (a drag off the edge) is held to the edge
     expect(tiltAt(box, 400, -20)).toEqual({ x: PRESS.maxDeg, y: PRESS.maxDeg })
+  })
+})
+
+// The voice note's play button (Reuben, 2026-10-27: "the actual button seems to
+// move up and down not go in and out").
+describe('the voice play button squeeze', () => {
+  const scaleOf = (t: string): number => {
+    const m = t.match(/^scale\((-?[\d.]+)\)$/)
+    if (!m) throw new Error(`not a squeeze: ${t}`)
+    return Number(m[1])
+  }
+
+  it('only grows and shrinks — no sink, no tip, nothing that moves it up or down', () => {
+    for (const k of [...squeezeFrames(), ...squeezeBounceFrames()]) {
+      expect(k.transform).toMatch(/^scale\([\d.]+\)$/)
+    }
+  })
+
+  it('goes in from rest and comes back to rest', () => {
+    expect(squeezeFrames().map((k) => scaleOf(k.transform as string))).toEqual([1, SQUEEZE.scale])
+    const back = squeezeBounceFrames().map((k) => scaleOf(k.transform as string))
+    expect(back[0]).toBe(SQUEEZE.scale)
+    expect(back[back.length - 1]).toBe(1)
+  })
+
+  it('bounces once, smaller than the press, and never swells past its own size', () => {
+    const back = squeezeBounceFrames().map((k) => scaleOf(k.transform as string))
+    for (const s of back) expect(s).toBeLessThanOrEqual(1)
+    const dips = back.filter((s, i) => i > 0 && i < back.length - 1 && s < 1)
+    expect(dips).toHaveLength(1)
+    expect(dips[0]).toBeGreaterThan(SQUEEZE.scale)
+    expect(squeezePose(0)).toBe('scale(1)')
   })
 })

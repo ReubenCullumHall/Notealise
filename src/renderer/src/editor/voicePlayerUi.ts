@@ -48,12 +48,12 @@ import { BARS, ENVELOPE_PER_SECOND, barsFor } from './voiceWave'
 // the voice note's own line when a slider is let go (audioPass.ts does the
 // writing; this only reports what was chosen).
 //
-// Added 2026-10-14 (Reuben): play/pause presses in and bounces back (the archive
-// button's press, organise/archivePress.ts) while its icon morphs between the
-// two shapes; Cmd-click on the waveform (Ctrl-click off a Mac) zooms in where
-// you click and Cmd+Shift-click zooms back out; each skip button is set on its
-// own by right-clicking it (5 s to a minute); and the mixer slides open and shut
-// the way a new note grows into the sidebar.
+// Added 2026-10-14 (Reuben): play/pause presses in and bounces back (since
+// 2026-10-27 a squeeze toward its centre, organise/archivePress.ts) while its
+// icon morphs between the two shapes; Cmd-click on the waveform (Ctrl-click
+// off a Mac) zooms in where you click and Cmd+Shift-click zooms back out;
+// each skip button is set on its own by right-clicking it (5 s to a minute);
+// and the mixer slides open and shut the way a new note grows into the sidebar.
 //
 // The six-dot grip sits in the line's gutter, where every line's grip is, so
 // nothing in the row is covered; while the pointer is on the block the gutter's
@@ -176,7 +176,7 @@ export class VoiceBlock {
   /** the mixer as it was last shown, and the slide moving it, if one is */
   private mixerOpen = false
   private slide: { open: boolean; anims: Animation[] } | null = null
-  private readonly press = createPress()
+  private readonly press = createPress('squeeze')
 
   private readonly controls: HTMLElement
   private readonly playBtn: HTMLButtonElement
