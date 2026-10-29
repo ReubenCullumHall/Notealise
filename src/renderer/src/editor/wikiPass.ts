@@ -243,7 +243,11 @@ export const wikiPass: Pass = (view, _active, push) => {
         const textFrom = slash === -1 ? innerFrom : innerFrom + slash + 1
         if (textFrom > innerFrom) push(innerFrom, textFrom, hideDeco, true)
 
-        if (hash === -1 || innerFrom + hash < textFrom) {
+        // A `#` that is part of the note's own NAME ("C# basics") is not a
+        // heading: resolveLink matched the whole thing, and says so by having
+        // no heading where the text has one.
+        const nameHash = link.heading !== null && !!r?.path && r.heading === null
+        if (hash === -1 || innerFrom + hash < textFrom || nameHash) {
           text(textFrom, innerTo, ' cm-wikilink-tail')
         } else {
           // Hide the "#" and let the heading half wear a "›" from CSS, so the

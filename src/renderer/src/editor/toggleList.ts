@@ -21,6 +21,7 @@ import {
   atNoteEnd,
   findToggles,
   flipChange,
+  openAroundChanges,
   guarded,
   OPEN_PREFIX,
   ownsTailBlank,
@@ -687,4 +688,30 @@ const guard = EditorState.transactionFilter.of((tr) => {
   }
 })
 
-export const toggleList: Extension = [toggleField, snap, toggleKeys, arrowShortcut, guard]
+/** Open the shut toggles hiding `pos` (see `openAroundChanges`) and bring it into
+ *  view. Not an undo step, like a click on the triangle. True when any opened. */
+export function openTogglesAround(view: EditorView, pos: number): boolean {
+  const changes = openAroundChanges(view.state, pos)
+  if (!changes.length) return false
+  const tr = view.state.update({ changes, annotations: Transaction.addToHistory.of(false), filter: false })
+  view.dispatch(tr)
+  const at = tr.changes.mapPos(pos)
+  view.dispatch({ effects: EditorView.scrollIntoView(at, { y: 'center' }) })
+  return true
+}
+
+/** Find (Cmd+F → Next) landing on a word inside a shut toggle opens it, so the
+ *  match is on screen — it used to be selected but stay hidden (bug scan
+ *  2026-10-27; Reuben, 2026-10-29). */
+const revealOnFind = EditorView.updateListener.of((u) => {
+  if (!u.transactions.some((tr) => tr.isUserEvent('select.search'))) return
+  const pos = u.state.selection.main.from
+  if (!openAroundChanges(u.state, pos).length) return
+  const view = u.view
+  // An update may not dispatch; do it straight after.
+  queueMicrotask(() => {
+    if (view.state.selection.main.from === pos) openTogglesAround(view, pos)
+  })
+})
+
+export const toggleList: Extension = [toggleField, snap, toggleKeys, arrowShortcut, guard, revealOnFind]

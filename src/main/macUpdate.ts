@@ -164,10 +164,20 @@ export async function downloadMacDmg(
   const part = `${dest}.part`
   await fs.rm(part, { force: true })
 
+  // A download that stops arriving is given up on, rather than sitting on
+  // "downloading" for ever while every Download press returned the same stuck
+  // one (bug scan 2026-10-27). The check has its own 15 s limit; this is the
+  // download's: no answer, or no new bytes, for STALL_MS.
+  const STALL_MS = 60_000
   const res = await new Promise<Electron.IncomingMessage>((resolve, reject) => {
     const req = net.request({ method: 'GET', url: release.dmgUrl as string })
     req.setHeader('User-Agent', `Notealise/${app.getVersion()}`)
+    const noAnswer = setTimeout(() => {
+      req.abort()
+      reject(new Error('the download didn’t start — try again'))
+    }, STALL_MS)
     req.on('response', (r) => {
+      clearTimeout(noAnswer)
       if (r.statusCode < 200 || r.statusCode >= 300) {
         asStream(r).resume() // drain, or the socket is held open
         reject(new Error(`the download answered ${r.statusCode}`))
@@ -175,14 +185,24 @@ export async function downloadMacDmg(
       }
       resolve(r)
     })
-    req.on('error', reject)
+    req.on('error', (e) => {
+      clearTimeout(noAnswer)
+      reject(e)
+    })
     req.end()
   })
 
   const total = Number(res.headers['content-length'] ?? 0)
   let seen = 0
   let lastReported = -1
+  let stall: ReturnType<typeof setTimeout> | undefined
+  const armStall = (): void => {
+    clearTimeout(stall)
+    stall = setTimeout(() => asStream(res).destroy(new Error('the download stalled — try again')), STALL_MS)
+  }
+  armStall()
   res.on('data', (chunk: Buffer) => {
+    armStall()
     seen += chunk.length
     if (seen > MAX_DMG_BYTES) {
       asStream(res).destroy(new Error('that download is larger than any release'))
@@ -214,5 +234,7 @@ export async function downloadMacDmg(
   } catch (e) {
     await fs.rm(part, { force: true })
     throw e
+  } finally {
+    clearTimeout(stall)
   }
 }

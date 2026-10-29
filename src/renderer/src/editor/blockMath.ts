@@ -53,8 +53,24 @@ class BlockMathWidget extends WidgetType {
 export function fencedMathBlocks(doc: Text): { open: number; close: number }[] {
   const out: { open: number; close: number }[] = []
   let openLine = -1
+  // Inside a ``` / ~~~ code block a `$$` line is code, not maths: it used to be
+  // drawn as a formula over the code, and one Backspace at the closing fence
+  // took three code lines with it (bug scan 2026-10-27).
+  let fence: string | null = null
   for (let i = 1; i <= doc.lines; i++) {
-    if (doc.line(i).text.trim() !== '$$') continue
+    const text = doc.line(i).text
+    const f = /^ {0,3}(`{3,}|~{3,})/.exec(text)
+    if (f) {
+      if (fence === null) {
+        fence = f[1]
+        openLine = -1 // a $$ left open above a code block doesn't pair across it
+      } else if (f[1][0] === fence[0] && f[1].length >= fence.length && !text.trim().slice(f[1].length).trim()) {
+        fence = null
+      }
+      continue
+    }
+    if (fence !== null) continue
+    if (text.trim() !== '$$') continue
     if (openLine === -1) {
       openLine = i
       continue

@@ -1,7 +1,8 @@
 import { app } from 'electron'
 import { promises as fs, readFileSync } from 'node:fs'
 import path from 'node:path'
-import { getVaultRoot } from './vault'
+import { randomBytes } from 'node:crypto'
+import { getVaultRoot, renameWithRetry } from './vault'
 import {
   activeSpace,
   type AppSettings,
@@ -23,6 +24,22 @@ function settingsPathFor(root: string | null): string | null {
   return root ? path.join(root, '.mdnotes', SETTINGS_FILE) : null
 }
 
+/** Copy a settings.json that won't parse to `settings.damaged-<time>.json`, once
+ *  per damaged file (a second read of the same bytes doesn't copy again). */
+const keptDamaged = new Set<string>()
+async function keepDamagedCopy(p: string): Promise<void> {
+  try {
+    const raw = await fs.readFile(p)
+    const key = `${p}:${raw.length}:${raw.subarray(0, 64).toString('hex')}`
+    if (keptDamaged.has(key)) return
+    keptDamaged.add(key)
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    await fs.writeFile(path.join(path.dirname(p), `settings.damaged-${stamp}.json`), raw)
+  } catch {
+    /* best effort — the copy must never stop the app opening */
+  }
+}
+
 async function readSettingsFrom(root: string | null): Promise<AppSettings> {
   const p = settingsPathFor(root)
   if (p) {
@@ -30,8 +47,12 @@ async function readSettingsFrom(root: string | null): Promise<AppSettings> {
       let raw = await fs.readFile(p, 'utf8')
       if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1) // tolerate a UTF-8 BOM
       return normalizeSettings(JSON.parse(raw))
-    } catch {
-      /* no settings file yet — fall through to cache/defaults */
+    } catch (e) {
+      // No file yet — fall through to cache/defaults. But a file that EXISTS and
+      // won't parse (cut off by a crash or a sync mid-write) is about to be
+      // overwritten by the first save, so keep a copy of it beside it first:
+      // every space's look lives in there (bug scan 2026-10-27).
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') await keepDamagedCopy(p)
     }
   }
   return settingsFromThemeCache(readThemeCacheSync())
@@ -80,7 +101,11 @@ async function applyWrite(root: string | null, partial: Partial<AppSettings>): P
   const p = settingsPathFor(root)
   if (p) {
     await fs.mkdir(path.dirname(p), { recursive: true })
-    await fs.writeFile(p, JSON.stringify(next, null, 2), 'utf8')
+    // Temp file + rename, like workspace.json: written in place, a crash or a
+    // sync client mid-write left a cut-off file that the next launch couldn't read.
+    const tmp = path.join(path.dirname(p), `.${SETTINGS_FILE}.${randomBytes(6).toString('hex')}.tmp`)
+    await fs.writeFile(tmp, JSON.stringify(next, null, 2), 'utf8')
+    await renameWithRetry(tmp, p)
   }
   // The cache mirrors the ACTIVE space — that's what the user will see next
   // launch. Note this also means switching space refreshes the cache for free,

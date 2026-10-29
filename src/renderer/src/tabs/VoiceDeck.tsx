@@ -137,6 +137,15 @@ interface CardProps {
 function DeckCard(props: CardProps): React.JSX.Element {
   const { player, settings, skip, place } = props
   const { ready, playing, muted } = usePlayback(player)
+  // The speaker button belongs to the tape. Close the tape (or switch it to
+  // another recording) and the sound comes back, or the block's own play button
+  // played silently with nothing to say why (bug scan 2026-10-27).
+  useEffect(
+    () => () => {
+      if (player.muted) player.setMuted(false)
+    },
+    [player]
+  )
   const [listOpen, setListOpen] = useState(false)
   const several = (props.choices?.length ?? 0) > 1
 

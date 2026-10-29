@@ -399,6 +399,17 @@ export function unwrapSpec(
   }
 }
 
+/** The changes that open every shut toggle hiding position `pos` — the toggle it
+ *  sits in and any shut toggle around that one — so a search that lands there
+ *  shows it (Reuben, 2026-10-29: "even if its in a toggle, it should expand to
+ *  obviously show you where it is"). Empty when nothing hides it. */
+export function openAroundChanges(state: EditorState, pos: number): { from: number; insert: string }[] {
+  const line = state.doc.lineAt(pos).number
+  return findToggles(state)
+    .filter((t) => !t.open && line > t.titleLine && line <= t.tailLine)
+    .map((t) => flipChange(t) as { from: number; insert: string })
+}
+
 /** The one-attribute change that opens or shuts a toggle. `<details` is 8
  *  characters and ` open` 5. */
 export function flipChange(t: Toggle): { from: number; to?: number; insert?: string } {

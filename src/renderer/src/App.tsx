@@ -6,7 +6,7 @@ import type { EditorView } from '@codemirror/view'
 import { ContextMenu, type MenuItem } from './ContextMenu'
 import { clearAssetCaches } from './editor/assetCache'
 import { checkMainIsCurrent } from './boot'
-import { encodeTarget, kindForFilename, repointFileLinks } from '../../shared/attachments'
+import { encodeTarget, indexEmbeds, kindForFilename, repointFileLinks, resolveVaultPath } from '../../shared/attachments'
 import { mediaUsage, otherNotesUsing } from './media/usage'
 import type { SectionId } from './settings/Settings'
 import { FormatToolbar } from './editor/FormatToolbar'
@@ -15,7 +15,7 @@ import { PaneDivider } from './tabs/PaneDivider'
 import { markCreated, markDeleted } from './organise/arrivals'
 import { PRACTICE_HEAD, PRACTICE_TITLE } from './settings/tutorials/tryIt'
 import { focusNoteEnd } from './editor/viewRegistry'
-import { flushRecordings, recordingsPending } from './editor/voiceRecorder'
+import { flushRecordings, recordingsPending, voiceNoteMoved } from './editor/voiceRecorder'
 import { deckNoteMoved, ejectDeck } from './editor/voicePlayer'
 import { noteLayoutChange, notePaneChange } from './tabs/stripMotion'
 import { TabStrip } from './tabs/TabStrip'
@@ -121,6 +121,7 @@ import {
   autoColorPlan,
   colorOf,
   findNode,
+  flattenNotes,
   isArchived,
   siblingColors,
   sortSiblings
@@ -143,6 +144,9 @@ const nameOf = (p: string): string => {
   return i === -1 ? p : p.slice(i + 1)
 }
 const joinPath = (dir: string, name: string): string => (dir ? `${dir}/${name}` : name)
+/** Every folder path in a tree. */
+const folderPaths = (nodes: TreeNode[]): string[] =>
+  nodes.flatMap((n) => (n.type === 'dir' ? [n.path, ...folderPaths(n.children ?? [])] : []))
 /** Which space's folder `path` sits under, or '' when it's outside every space
  *  (loose at the vault root). Spaces are top-level vault folders (CLAUDE.md
  *  rule 1: "the folders on disk ARE the spaces"), so this is pure path
@@ -434,6 +438,8 @@ export default function App(): React.JSX.Element {
    *  WHICH note, the pane decides WHERE in it, because only the pane has the
    *  text (see CodeEditor's `revealEmbed` effect). */
   const [pendingEmbed, setPendingEmbed] = useState<{ path: string; file: string } | null>(null)
+  /** "Search notes" result clicked: the words to find and show in that note. */
+  const [pendingText, setPendingText] = useState<{ path: string; text: string } | null>(null)
   // The sidebar's "open this folder, close the rest", handed up so the path bar
   // can drive it. Imperative on purpose — see Sidebar's `revealRef` prop.
   const revealRef = useRef<((folder: string) => void) | null>(null)
@@ -510,6 +516,18 @@ export default function App(): React.JSX.Element {
   // gets written when a pane you are typing in now triggers the flush.
   const dirtyRef = useRef<Map<string, string>>(new Map())
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // A note being renamed from its title row: Enter drops you into the note while
+  // the rename is still on its way, so typing in that gap is held here rather
+  // than written under the OLD name (which recreated "Untitled.md" and left the
+  // named note empty — bug scan 2026-10-27). `movedTo` covers the one render
+  // after the rename lands, before the pane hears its new path.
+  const renamingRef = useRef<Set<string>>(new Set())
+  const movedToRef = useRef<Map<string, string>>(new Map())
+  // Once the panes have rendered with their new paths, the old name is free
+  // again (a fresh "Untitled" may well take it) and must not be redirected.
+  useEffect(() => {
+    movedToRef.current.clear()
+  }, [layout])
 
   /** The flush currently in flight, if any. Two of these must never overlap.
    *
@@ -532,8 +550,16 @@ export default function App(): React.JSX.Element {
       if (!pending.length) return
       dirtyRef.current.clear()
       for (const [path, text] of pending) {
+        if (renamingRef.current.has(path)) {
+          if (!dirtyRef.current.has(path)) dirtyRef.current.set(path, text)
+          continue
+        }
         try {
           await window.api.writeNote(path, text)
+          // Keep "Search notes" up to date with what was just saved. Its copy of
+          // each note was only refreshed by changes made OUTSIDE the app, so words
+          // typed here weren't found (bug scan 2026-10-27).
+          if (contentCache.current.has(path)) contentCache.current.set(path, text)
         } catch (e) {
           // Keep the buffer for a later retry — unless typing has already put a
           // newer one in its place, which must not be overwritten by this one.
@@ -554,7 +580,8 @@ export default function App(): React.JSX.Element {
   }, [flash])
 
   const onDocChange = useCallback(
-    (path: string, text: string): void => {
+    (typedPath: string, text: string): void => {
+      const path = movedToRef.current.get(typedPath) ?? typedPath
       dirtyRef.current.set(path, text)
       // Keep the loaded copy current too: a pane that shows this note again
       // later re-seeds from here, and stale text would look like lost edits.
@@ -738,6 +765,8 @@ export default function App(): React.JSX.Element {
       applyLayout(renamePath(layoutRef.current, oldPath, newRel))
       // The voice note on the tape, if its note is the one that moved.
       deckNoteMoved(oldPath, newRel)
+      // ...and a recording running in it, or waiting to be added to it.
+      voiceNoteMoved(oldPath, newRel)
       // A tab open in a space that ISN'T on screen right now lives in
       // spaceTabs' stash (see its declaration), not in layoutRef — the line
       // above never reaches it. Repath every stashed space too, or switching
@@ -851,6 +880,7 @@ export default function App(): React.JSX.Element {
   /** Kept pointing at the live `followMove` below, for the same reason: the space
    *  rename is declared long before it. */
   const followMoveRef = useRef<(from: string, to: string) => Promise<void>>(async () => {})
+  const followRenameRef = useRef<(from: string, to: string) => Promise<void>>(async () => {})
 
   const spaceActions: SpaceActions = useMemo(
     () => ({
@@ -879,6 +909,8 @@ export default function App(): React.JSX.Element {
           // A space is a folder: notes in OTHER spaces that link to a photo or file
           // inside it would be left aiming at its old name.
           await followMoveRef.current(from, actual)
+          // ...and so would `[[Space/Note]]` links into it from other spaces.
+          await followRenameRef.current(from, actual)
           // Main sanitises for cross-platform safety, so say so rather than
           // letting the name quietly come back different — same as tree rename.
           if (actual !== to) flash(`Renamed to "${actual}" (adjusted for cross-platform safety)`)
@@ -1065,6 +1097,28 @@ export default function App(): React.JSX.Element {
       return run
     },
     [switchSpaceNow]
+  )
+
+  /** A settings write that may also change which space is on screen — Settings →
+   *  Spaces' own tabs, "Add a space", a new space from a saved look, deleting the
+   *  space you're in. Those used to write `activeSpaceFolder` straight into
+   *  settings, so the sidebar moved but the TABS didn't: the old space's tabs
+   *  were shown in the new one and then saved under the wrong space (bug scan
+   *  2026-10-27). The rest of the write lands first (a new space must exist
+   *  before it can be switched to); the switch itself goes through switchSpace,
+   *  the one route that swaps each space's tabs. */
+  const changeSettingsAndSpace = useCallback(
+    async (partial: Partial<AppSettings>): Promise<void> => {
+      const to = partial.activeSpaceFolder
+      if (to === undefined || to === settingsRef.current.activeSpaceFolder) {
+        await changeSettings(partial)
+        return
+      }
+      const { activeSpaceFolder: _switch, ...rest } = partial
+      if (Object.keys(rest).length) await changeSettings(rest)
+      await switchSpace(to)
+    },
+    [changeSettings, switchSpace]
   )
 
   // Clear the class once the entry animation is over, so the next switch gets a
@@ -1415,6 +1469,16 @@ export default function App(): React.JSX.Element {
         // So while anything else still holds the file, this is not a delete at
         // all: the text goes, the file stays, and it says so. `req.restore()`
         // still puts the text back, so Undo needs nothing extra.
+        // The same file a SECOND time in this very note: the other copy still
+        // needs it. The usage index leaves this note out on purpose (above), so
+        // deleting one of two copies binned the file and the other showed
+        // "Recording not found" after a restart (bug scan 2026-10-27).
+        const note = req.origin?.note
+        const text = note ? docsRef.current.get(note) : undefined
+        if (req.file && note && text && indexEmbeds(text).some((t) => resolveVaultPath(t, note) === req.file)) {
+          showNotice({ text: 'Removed this copy. The file stays — this note still uses it.' })
+          return
+        }
         const others = otherNotesUsing(mediaUsageRef.current, req.file, req.origin?.note)
         if (req.file && others.length > 0) {
           showNotice({
@@ -1678,15 +1742,26 @@ export default function App(): React.JSX.Element {
    */
   const followRename = useCallback(
     async (from: string, to: string): Promise<void> => {
-      if (titleOf(from) === titleOf(to)) return // a move: title-based links still resolve
+      // A move keeps title links working, but PATH links (`[[Physics/Waves]]`)
+      // name the folder too, so they are followed as well — for a note, a folder
+      // or a whole space (bug scan 2026-10-27).
+      if (from === to) return
       await flush()
       // The note list as it was BEFORE the rename. The tree has already been
       // reloaded by the time we get here, so the note is in it under its NEW
       // name — and `[[Waves]]` resolved against that list finds nothing, which
       // is exactly the link we are trying to follow. Putting the old name back
       // is what makes the resolution answer "this one".
+      const back = (p: string): string =>
+        p === to ? from : p.startsWith(to + '/') ? from + p.slice(to.length) : p
       const notes = noteRefs(treeRef.current).map((n) =>
-        n.path === to ? { path: from, title: titleOf(from), kind: 'note' as const } : n
+        n.path === to
+          ? n.kind === 'dir'
+            ? { ...n, path: from, title: titleOf(from) }
+            : { path: from, title: titleOf(from), kind: 'note' as const }
+          : back(n.path) !== n.path
+            ? { ...n, path: back(n.path) }
+            : n
       )
       // The LIVE index, not the last disk scan. A link you have just typed into
       // an open note is only in its buffer: the app's own saves are echo-guarded
@@ -1840,6 +1915,7 @@ export default function App(): React.JSX.Element {
   )
   // Reachable from callbacks declared ABOVE this point (the space rename).
   followMoveRef.current = followMove
+  followRenameRef.current = followRename
 
   // Anything that puts a note in a pane — a drop, a keyboard cycle, a restored
   // layout — goes through here for its content, so no path has to remember to
@@ -2077,7 +2153,7 @@ export default function App(): React.JSX.Element {
       // would paint the app twice — default theme for a frame, then the
       // preset's.
       const merged = { ...current, ...created }
-      await changeSettings({ ...created, ...withSpacePatch(merged, folder, preset.look) })
+      await changeSettingsAndSpace({ ...created, ...withSpacePatch(merged, folder, preset.look) })
       flash(
         folder === preset.name
           ? `Created "${folder}" from your saved look`
@@ -2162,6 +2238,31 @@ export default function App(): React.JSX.Element {
       void rescanLinks(paths.filter((p) => p.toLowerCase().endsWith('.md')))
       const t = await loadTree()
       await syncSpaces(t, settingsRef.current)
+      const onDisk = new Set(flattenNotes(t).map((n) => n.path))
+      // A note with unsaved typing whose FOLDER was renamed or moved outside the
+      // app (Finder, a sync from another computer): follow it to its new place
+      // when exactly one note of that name has just appeared, so the typing is
+      // saved there instead of failing on every save and being lost on quit
+      // (bug scan 2026-10-27).
+      for (const p of [...dirtyRef.current.keys()]) {
+        if (onDisk.has(p) || renamingRef.current.has(p)) continue
+        const name = p.slice(p.lastIndexOf('/') + 1)
+        const open = new Set(layoutRef.current.tabs)
+        const arrived = (q: string): boolean => paths.some((x) => q === x || q.startsWith(x + '/'))
+        const found = [...onDisk].filter((q) => q !== p && !open.has(q) && (q === name || q.endsWith('/' + name)) && arrived(q))
+        if (found.length === 1) {
+          remapOpen(p, found[0])
+          void flush()
+        }
+      }
+      // Tabs kept for spaces that aren't on screen are not in the layout above, so
+      // a note moved or deleted outside the app while you were elsewhere would
+      // come back as an empty tab (and typing would recreate it). Drop them now.
+      for (const [folder, stashed] of spaceTabs.current) {
+        let next = stashed
+        for (const q of stashed.tabs) if (!onDisk.has(q) && !dirtyRef.current.has(q)) next = closeTab(next, q)
+        if (next !== stashed) spaceTabs.current.set(folder, next)
+      }
       for (const p of layoutRef.current.tabs) {
         if (!paths.includes(p)) continue
         if (dirtyRef.current.has(p)) continue // don't clobber unsaved edits
@@ -2176,7 +2277,7 @@ export default function App(): React.JSX.Element {
         }
       }
     })
-  }, [loadTree, syncSpaces, applyLayout, rescanLinks])
+  }, [loadTree, syncSpaces, applyLayout, rescanLinks, remapOpen, flush])
 
   const pick = async (): Promise<void> => {
     // Captured before the await: true only for the very first "Choose folder…"
@@ -2571,6 +2672,23 @@ export default function App(): React.JSX.Element {
       // turned up under the sidebar's "Moved" divider without having moved
       // anywhere.
       const arrived: string[] = []
+      // All or nothing when a name is already taken there. The loop below stops at
+      // the first clash, so "Plan" moved, "Ideas" didn't, and the sidebar still
+      // showed Plan in its old place — clicking it opened an empty note and typing
+      // made a second copy (bug scan 2026-10-27). Checked against the folder as it
+      // is on disk, before anything moves.
+      {
+        const now = await window.api.listTree()
+        const inDest = (toDir === '' ? now : (findNode(now, toDir)?.children ?? [])).map((n) => n.path.toLowerCase())
+        const moving = new Set(paths.map((p) => p.toLowerCase()))
+        const clash = paths.find((from) => {
+          const dest = joinPath(toDir, nameOf(from)).toLowerCase()
+          return dest !== from.toLowerCase() && inDest.includes(dest) && !moving.has(dest)
+        })
+        if (clash) {
+          throw new Error(`"${stripMd(nameOf(clash))}" is already in that folder, so nothing was moved.`)
+        }
+      }
       // Dragged out of the place you're looking at — onto another space's tab,
       // or out of the archive — its row shrinks away like Move to bin's
       // (Reuben, 2026-10-09: "when anything enters or leaves the sidebar do
@@ -2597,6 +2715,7 @@ export default function App(): React.JSX.Element {
         if (crossed && toSpace === settingsRef.current.activeSpaceFolder) markCreated(actual)
         remapOpen(from, actual)
         await followMove(from, actual)
+        await followRename(from, actual) // `[[Folder/Note]]` links follow it too
         landed.push(actual)
         if (crossed) arrived.push(actual)
       }
@@ -2967,8 +3086,23 @@ export default function App(): React.JSX.Element {
       if (!paths.length) return
       markDeleted(paths)
       setWorkspace(await window.api.trashEntries(paths))
-      await loadTree()
-      forgetIfInside(paths)
+      const t = await loadTree()
+      // Only what really left. A move the computer refused (a file another
+      // program or a sync app has open — mostly Windows) used to close its tab
+      // and drop its unsaved typing anyway, with no message, while the note
+      // stayed in the sidebar (bug scan 2026-10-27).
+      const still = new Set([...flattenNotes(t).map((n) => n.path), ...folderPaths(t)])
+      const stayed = paths.filter((p) => still.has(p))
+      forgetIfInside(paths.filter((p) => !still.has(p)))
+      if (stayed.length) {
+        showNotice({
+          text:
+            stayed.length === 1
+              ? `Couldn't move "${stripMd(nameOf(stayed[0]))}" to the bin — something else has it open. Try again in a moment.`
+              : `Couldn't move ${stayed.length} of them to the bin — something else has them open. Try again in a moment.`,
+          linger: true
+        })
+      }
     })
 
   /** Put a restored photo's markdown back into the note it came out of.
@@ -3016,8 +3150,8 @@ export default function App(): React.JSX.Element {
     const rel = dir && landed.startsWith(dir + '/') ? landed.slice(dir.length + 1) : landed
     const target = encodeTarget(rel)
     return promised
-      .replace(/(!\[[^\]\n]*\]\()[^)\n]*(\))/, `$1${target}$2`)
-      .replace(/(\bsrc=["'])[^"']*(["'])/i, `$1${target}$2`)
+      .replace(/(!\[[^\]\n]*\]\()(?:[^()\n]|\([^()\n]*\))*(\))/, (_w, a: string, z: string) => a + target + z)
+      .replace(/(\bsrc=)(?:"[^"]*"|'[^']*')/i, (_w, a: string) => `${a}"${target}"`)
   }
 
   /** Go and look at something that has just come back. A note opens; a folder is
@@ -3291,7 +3425,10 @@ export default function App(): React.JSX.Element {
       // those still resolve — but the PHOTO and FILE links that pass through its name
       // do not (`followMove`).
       if (isNote) await followRename(node.path, actualRel)
-      else await followMove(node.path, actualRel)
+      else {
+        await followMove(node.path, actualRel)
+        await followRename(node.path, actualRel) // `[[Folder/Note]]` links into it
+      }
       const actualName = nameOf(actualRel)
       if (stripMd(actualName) !== stripMd(typed)) flash(nameChangedNotice(typed, actualName))
     })
@@ -3380,6 +3517,10 @@ export default function App(): React.JSX.Element {
     // confirmed — the same guard the tab keyboard below applies, and it has to
     // be here too now that two layout commands arrive through the menu.
     if (mediaConfirmRef.current) return
+    // Nor behind Settings or another window over the notes (bug scan 2026-10-27):
+    // a note made, split or archived there happens where you can't see it.
+    const covered = !!document.querySelector('[aria-modal="true"]')
+    if (covered && ['new-note', 'new-folder', 'split-pane', 'archive-note'].includes(cmd)) return
     if (cmd === 'new-note') void newNote('')
     else if (cmd === 'new-folder') void newFolder('')
     else if (cmd === 'import-notes') setSettingsJumpTo('import')
@@ -3403,6 +3544,11 @@ export default function App(): React.JSX.Element {
       // Nothing may move the note out from under a delete that is waiting to be
       // confirmed — see mediaConfirmRef.
       if (splashActiveRef.current || mediaConfirmRef.current) return
+      // Nor may it act on tabs you can't see: with Settings, a delete prompt or
+      // onboarding over the window, Cmd+W closed the NOTE hidden behind it and
+      // Cmd+1…9 / Ctrl+Tab switched tabs behind it (bug scan 2026-10-27). The
+      // same test the space shortcuts use.
+      if (!hasOnboardedRef.current || document.querySelector('[aria-modal="true"]')) return
       const mod = e.metaKey || e.ctrlKey
       if (e.key === 'Tab' && e.ctrlKey) {
         e.preventDefault()
@@ -3493,7 +3639,17 @@ export default function App(): React.JSX.Element {
   }, [flush])
   useEffect(() => {
     return window.api.onBeforeQuit(() => {
-      void Promise.allSettled([flush(), flushRecordings().then(flush)]).finally(() => window.api.notifyFlushed())
+      void Promise.allSettled([flush(), flushRecordings().then(flush)])
+        .then(async () => {
+          // Typing whose save still fails (its folder vanished, a locked file)
+          // would otherwise die with the window: write each to a "Recovered"
+          // note at the top of the vault instead (bug scan 2026-10-27).
+          for (const [path, text] of dirtyRef.current) {
+            const name = path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '')
+            await window.api.writeNote(`Recovered - ${name} ${Date.now()}.md`, text).catch(() => {})
+          }
+        })
+        .finally(() => window.api.notifyFlushed())
     })
   }, [flush])
   // Closing the WINDOW while a voice note records — the red button on a Mac, or
@@ -3736,6 +3892,9 @@ export default function App(): React.JSX.Element {
   }, [applyLayout])
 
   const openSearchResult = (h: SearchHit, newTab = false): void => {
+    // A match in the note's TEXT (it has a snippet): go to the words, opening a
+    // toggle they're inside (Reuben, 2026-10-29). A title match just opens.
+    const words = h.snippet ? query.trim() : ''
     void (async () => {
       // An all-spaces hit from elsewhere: land in its space first (same
       // ordering as following a cross-space `[[link]]`, see `openLink`) so the
@@ -3745,6 +3904,10 @@ export default function App(): React.JSX.Element {
         await switchSpace(owner)
       }
       await openNote(h.path, newTab)
+      if (words) {
+        setPendingText(null)
+        requestAnimationFrame(() => setPendingText({ path: h.path, text: words }))
+      }
     })()
     setQuery('')
   }
@@ -3757,10 +3920,20 @@ export default function App(): React.JSX.Element {
       // Same as the sidebar's Rename: the typed title is ONE name, never a path.
       const safeTitle = sanitizeFilename(title).name
       const fname = safeTitle.toLowerCase().endsWith('.md') ? safeTitle : `${safeTitle}.md`
-      const actualRel = await window.api.renameEntry(path, joinPath(parentOf(path), fname))
+      renamingRef.current.add(path)
+      let actualRel: string
+      try {
+        actualRel = await window.api.renameEntry(path, joinPath(parentOf(path), fname))
+        // Re-key held typing to the new name straight away — before the tree
+        // reloads — so nothing typed meanwhile can be written under the old one.
+        remapOpen(path, actualRel)
+        if (actualRel !== path) movedToRef.current.set(path, actualRel)
+      } finally {
+        renamingRef.current.delete(path)
+      }
+      if (dirtyRef.current.has(actualRel)) void flush()
       await loadTree()
       await loadWorkspace()
-      remapOpen(path, actualRel)
       await followRename(path, actualRel)
       const actualName = stripMd(nameOf(actualRel))
       if (actualName !== title) flash(nameChangedNotice(title, actualName))
@@ -3854,7 +4027,7 @@ export default function App(): React.JSX.Element {
         workspace={workspace}
         openPath={openPath}
         settings={settings}
-        onChangeSettings={(p) => void changeSettings(p)}
+        onChangeSettings={(p) => void changeSettingsAndSpace(p)}
         presets={presets}
         presetActions={presetActions}
         settingsJumpToSection={settingsJumpTo}
@@ -4054,6 +4227,8 @@ export default function App(): React.JSX.Element {
                   }
                   revealEmbed={pendingEmbed?.path === p ? pendingEmbed.file : null}
                   onRevealedEmbed={() => setPendingEmbed((cur) => (cur && cur.path === p ? null : cur))}
+                  revealText={pendingText?.path === p ? pendingText.text : null}
+                  onRevealedText={() => setPendingText((cur) => (cur && cur.path === p ? null : cur))}
                   focused={i === layout.focus}
                   split={layout.panes.length > 1}
                   slots={space.toolbarSlots}

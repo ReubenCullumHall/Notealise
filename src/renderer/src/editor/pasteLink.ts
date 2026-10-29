@@ -153,6 +153,16 @@ function inLiteral(state: EditorState, pos: number): boolean {
   return false
 }
 
+/** Straight after `](` or `<` that are typed but not yet closed — a link being
+ *  written by hand. The parser only sees a link once it's closed, so pasting an
+ *  address there was turned into a titled link INSIDE the one being typed:
+ *  `[my text]([Example Domain](https://example.com))` (bug scan 2026-10-27). */
+function writingLinkByHand(state: EditorState, pos: number): boolean {
+  const line = state.doc.lineAt(pos)
+  const before = line.text.slice(0, pos - line.from)
+  return /\]\([^)\s]*$/.test(before) || /<$/.test(before)
+}
+
 const notePathOf = (view: EditorView): string => view.state.field(linkEnv, false)?.path ?? ''
 
 /** Rewrite the pasted text as `form`, keeping the cursor where it was in
@@ -409,6 +419,7 @@ const pasteHandler = EditorView.domEventHandlers({
     // Into code, or into a link being written, is a plain paste — the address is
     // wanted as text.
     if (inLiteral(view.state, sel.from) || inLiteral(view.state, sel.to)) return false
+    if (writingLinkByHand(view.state, sel.from)) return false
     if (!sel.empty) {
       // Words selected: THEY become the link, at once and with no look-up — the
       // way Notion and Obsidian do it (Reuben, 2026-10-05). Only words on one

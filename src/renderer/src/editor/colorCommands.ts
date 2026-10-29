@@ -50,6 +50,42 @@ export function applyColor(view: EditorView, layer: Layer, name: string | null):
       to = Math.max(to, a.to)
     }
   }
+  // Across several lines, each line gets its own pair of tags, starting after
+  // its list / heading / quote marker. One tag running over line breaks looked
+  // right here, but every other app highlights only the first line of it (an
+  // HTML tag doesn't cross a Markdown paragraph) — bug scan 2026-10-27.
+  const doc = view.state.doc
+  if (doc.lineAt(from).number !== doc.lineAt(to).number) {
+    const text = doc.toString()
+    const changes: { from: number; to: number; insert: string }[] = []
+    for (let n = doc.lineAt(from).number; n <= doc.lineAt(to).number; n++) {
+      const line = doc.line(n)
+      const marker = /^(?:\s*(?:[-*+]\s+(?:\[[ xX]\]\s+)?|\d{1,9}[.)]\s+|#{1,6}\s+|>\s?))*/.exec(line.text)![0]
+      const a = Math.max(from, line.from + marker.length)
+      const b = Math.min(to, line.to)
+      if (a >= b || !doc.sliceString(a, b).trim()) continue
+      const r = recolor(text, a, b, tagFor(layer), name, scanLinks(line.text, line.from))
+      if (doc.sliceString(r.from, r.to) === r.insert) continue
+      changes.push({ from: r.from, to: r.to, insert: r.insert })
+    }
+    // An old tag that already runs over a line break can make two lines' edits
+    // overlap; that note keeps the one-region rewrite below, as before.
+    const overlaps = changes.some((c, i) => i > 0 && c.from < changes[i - 1].to)
+    if (!changes.length && !overlaps) {
+      view.focus()
+      return
+    }
+    if (!overlaps) {
+      const set = view.state.changes(changes)
+      view.dispatch({
+        changes: set,
+        selection: { anchor: set.mapPos(from, -1), head: set.mapPos(to, 1) },
+        annotations: formatEdit.of(true)
+      })
+      view.focus()
+      return
+    }
+  }
   // `[[Links]]` are not text to colour: the words around one take the colour,
   // the link itself never does (Reuben, 2026-09-29). It used to be wrapped whole.
   const lineFrom = view.state.doc.lineAt(from).from

@@ -112,7 +112,9 @@ export function extForMime(mime: string): string | null {
  *  RE-writing one (App's restore, when a file comes back under another name)
  *  have to agree character for character. */
 export function encodeTarget(name: string): string {
-  return encodeURIComponent(name).replace(/[()]/g, (c) => (c === '(' ? '%28' : '%29'))
+  // `'` too: a `<video src='…'>` written by hand or another app would end at it,
+  // and "Reuben's holiday.mp4" showed "Video not found" (bug scan 2026-10-27).
+  return encodeURIComponent(name).replace(/[()']/g, (c) => (c === '(' ? '%28' : c === ')' ? '%29' : '%27'))
 }
 
 /** Resolve an embed's target against the note holding it. Returns null for
@@ -190,12 +192,12 @@ export function resolveVaultPath(target: string, notePath: string): string | nul
  *  photo reported as used by one note too many is a warning you can dismiss;
  *  one reported as used by none is a file deleted out from under a note. */
 const embedPattern = (): RegExp =>
-  /!\[[^\]\n]*\]\(([^)\n]*)\)|<(?:video|audio)\b[^>\n]*\bsrc=["']([^"']*)["'][^>\n]*>/gi
+  /!\[[^\]\n]*\]\(((?:[^()\n]|\([^()\n]*\))*)\)|<(?:video|audio)\b[^>\n]*\bsrc=(?:"([^"]*)"|'([^']*)')[^>\n]*>/gi
 
 /** The target out of one regex match, unwrapped from `<…>` and stripped of a
  *  trailing `"title"`. */
 const targetOf = (m: RegExpExecArray | RegExpMatchArray): string => {
-  const raw = (m[1] ?? m[2] ?? '').trim()
+  const raw = (m[1] ?? m[2] ?? m[3] ?? '').trim()
   const inner = /^<(.*)>$/.exec(raw)
   return inner ? inner[1] : raw.split(/\s+/)[0]
 }
@@ -402,16 +404,19 @@ export function repointFileLinks(
   }
   return text
     .replace(
-      /(!\[[^\]\n]*\]\()([^)\n]*)(\))|(<(?:video|audio)\b[^>\n]*\bsrc=["'])([^"']*)(["'][^>\n]*>)/gi,
-      (whole, a1?: string, dest1?: string, z1?: string, a2?: string, dest2?: string, z2?: string) =>
-        dest1 !== undefined
-          ? a1 + swapDestination(dest1, (t) => fix(t, false)) + z1
-          : a2 !== undefined
-            ? a2 + (fix(dest2 as string, false) ?? (dest2 as string)) + z2
-            : whole
+      /(!\[[^\]\n]*\]\()((?:[^()\n]|\([^()\n]*\))*)(\))|(<(?:video|audio)\b[^>\n]*\bsrc=)("[^"]*"|'[^']*')([^>\n]*>)/gi,
+      (whole, a1?: string, dest1?: string, z1?: string, a2?: string, dest2?: string, z2?: string) => {
+        if (dest1 !== undefined) return a1 + swapDestination(dest1, (t) => fix(t, false)) + z1
+        if (a2 === undefined || dest2 === undefined) return whole
+        // The quote is kept as written: a name holding an apostrophe is
+        // double-quoted, and reading up to the first `'` cut it short.
+        const q = dest2[0]
+        const inner = dest2.slice(1, -1)
+        return a2 + q + (fix(inner, false) ?? inner) + q + z2
+      }
     )
     .replace(
-      /((?<!!)\[[^\]\n]*\]\()([^)\n]*)(\))/g,
+      /((?<!!)\[[^\]\n]*\]\()((?:[^()\n]|\([^()\n]*\))*)(\))/g,
       (_whole, a: string, dest: string, z: string) => a + swapDestination(dest, (t) => fix(t, true)) + z
     )
 }

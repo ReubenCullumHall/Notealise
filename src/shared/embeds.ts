@@ -134,6 +134,10 @@ export function cleanTitle(raw: string): string {
     // pair as code. A star with a space each side ("5 * 3") is not emphasis and stays.
     .replace(/(?<!\s)\*|\*(?!\s)/g, '')
     .replace(/`/g, '')
+    // A title naming an HTML tag ("<canvas>: the Canvas element") would put a
+    // real tag in the note, and the app hides tags — so it lost the word and
+    // ended up outside the link (bug scan 2026-10-27). The brackets go, the word stays.
+    .replace(/<(\/?[a-zA-Z][^<>]*)>/g, '$1')
     .replace(/\s{2,}/g, ' ')
     .trim()
   return flat.length > 140 ? flat.slice(0, 139).trimEnd() + '…' : flat

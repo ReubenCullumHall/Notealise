@@ -101,6 +101,8 @@ export function voiceNotesIn(state: EditorState, from: number, to: number): Voic
     to,
     enter: (node) => {
       if (node.name === 'Image') {
+        // Same rule as imagePass: one that spans a line break stays text.
+        if (doc.sliceString(node.from, node.to).includes('\n')) return false
         for (let c = node.node.firstChild; c; c = c.nextSibling) {
           if (c.name !== 'URL') continue
           const target = unwrap(doc.sliceString(c.from, c.to))
@@ -156,11 +158,25 @@ export function voiceSpanAt(state: EditorState, pos: number): VoiceSpan | null {
  *  end the attribute early, so that one character is escaped — it decodes back
  *  to the same file). Nothing to write for defaults: `![](memo.m4a)` already
  *  plays with them. */
+/** Only the characters that actually differ between `before` and `after`.
+ *  A name (in the undo history) and a mixer move (kept out of it) both rewrite
+ *  the same open tag; written as whole-tag replacements, undoing the name after
+ *  a mixer move put a second, old copy of the tag in front of the block (bug
+ *  scan 2026-10-27). Touching only its own attribute, each edit leaves the
+ *  other's alone. */
+function narrowChange(from: number, before: string, after: string): ChangeSpec {
+  let a = 0
+  while (a < before.length && a < after.length && before[a] === after[a]) a++
+  let b = 0
+  while (b < before.length - a && b < after.length - a && before[before.length - 1 - b] === after[after.length - 1 - b]) b++
+  return { from: from + a, to: from + before.length - b, insert: after.slice(a, after.length - b) }
+}
+
 export function settingsChange(doc: Text, span: VoiceSpan, s: VoiceSettings): ChangeSpec | null {
   if (span.form === 'tag') {
     const open = doc.sliceString(span.from, span.openTo)
     const next = withVoiceSettings(open, s)
-    return next === open ? null : { from: span.from, to: span.openTo, insert: next }
+    return next === open ? null : narrowChange(span.from, open, next)
   }
   if (isDefaultVoice(normalizeVoice(s))) return null
   return { from: span.from, to: span.to, insert: audioTag(span.src.replace(/"/g, '%22'), s) }
@@ -176,7 +192,7 @@ export function nameChange(doc: Text, span: VoiceSpan, name: string): ChangeSpec
   if (span.form === 'tag') {
     const open = doc.sliceString(span.from, span.openTo)
     const next = withVoiceName(open, clean)
-    return next === open ? null : { from: span.from, to: span.openTo, insert: next }
+    return next === open ? null : narrowChange(span.from, open, next)
   }
   const text = doc.sliceString(span.from, span.to)
   const next = text.replace(/^!\[[^\]\n]*\]/, `![${clean.replace(/[[\]]/g, '')}]`)

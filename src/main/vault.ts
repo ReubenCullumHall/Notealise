@@ -45,7 +45,13 @@ function requireVault(): string {
 // macOS (APFS) and Windows (NTFS) are case-insensitive but case-preserving, so
 // name comparisons must fold case on both. Linux is case-sensitive.
 const caseInsensitiveFs = process.platform === 'win32' || process.platform === 'darwin'
-const foldCase = (s: string): string => (caseInsensitiveFs ? s.toLowerCase() : s)
+// A Mac disk also treats the two ways of writing an accent (é as one character,
+// or e + a combining accent — Finder, zips and iCloud often write the second) as
+// the SAME name, so on macOS those are folded together too. Without it a rename,
+// archive or restore onto a "Café" written the other way replaced that note's
+// text without a word (bug scan 2026-10-27). Windows keeps the two apart.
+const foldCase = (s: string): string =>
+  caseInsensitiveFs ? (process.platform === 'darwin' ? s.normalize('NFC') : s).toLowerCase() : s
 /** Canonical comparison key for an absolute path. */
 const key = (abs: string): string => foldCase(path.normalize(abs))
 

@@ -116,10 +116,10 @@ export const videoPass: Pass = (view, _active, push) => {
         const text = view.state.doc.sliceString(node.from, node.to)
 
         if (OPEN.test(text)) {
-          const m = /\bsrc=["']([^"']*)["']/i.exec(text)
+          const m = /\bsrc=(?:"([^"]*)"|'([^']*)')/i.exec(text)
           // No src, no video — leave it as plain visible text rather than
           // rendering a widget with nothing to play.
-          if (m) stack.push({ from: node.from, src: m[1] })
+          if (m) stack.push({ from: node.from, src: m[1] ?? m[2] })
           return
         }
         if (!CLOSE.test(text) || !stack.length) return

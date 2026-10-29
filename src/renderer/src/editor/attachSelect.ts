@@ -251,8 +251,8 @@ function embedTarget(text: string): string | null {
   // this deletes and the file that was on screen cannot come apart. A voice
   // note's `src` is read the same way (shared/voiceNote.ts's parser agrees on
   // the quoted forms the app writes).
-  const src = /\bsrc=["']([^"']*)["']/i.exec(text)
-  return src ? src[1] || null : null
+  const src = /\bsrc=(?:"([^"]*)"|'([^']*)')/i.exec(text)
+  return src ? src[1] || src[2] || null : null
 }
 
 /** The vault-relative file an embed points at, or null when there isn't one to

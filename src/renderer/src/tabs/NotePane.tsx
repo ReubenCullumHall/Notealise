@@ -68,6 +68,10 @@ interface Props {
   revealEmbed: string | null
   /** the picture jump landed — App forgets the request */
   onRevealedEmbed?: () => void
+  /** words to find, select and show — a "Search notes" result was clicked */
+  revealText?: string | null
+  /** that jump landed — App forgets the request */
+  onRevealedText?: () => void
   /** show the strip of this note's links at all (Settings → Links) */
   showLinks: boolean
   /** and keep it on screen while the note scrolls, instead of letting it go.
@@ -181,6 +185,8 @@ export function NotePane({
   onRevealedHeading,
   revealEmbed,
   onRevealedEmbed,
+  revealText,
+  onRevealedText,
   showLinks,
   pinLinks,
   linksPosition,
@@ -624,6 +630,8 @@ export function NotePane({
               onRevealedHeading={onRevealedHeading}
               revealEmbed={revealEmbed}
               onRevealedEmbed={onRevealedEmbed}
+              revealText={revealText}
+              onRevealedText={onRevealedText}
               raw={raw}
               mediaSource={mediaSource}
             />

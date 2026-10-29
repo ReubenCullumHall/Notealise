@@ -42,6 +42,10 @@ function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1100,
     height: 720,
+    // Below this the sidebar kept its full width and the note shrank to ~120px,
+    // with buttons sliding under each other (bug scan 2026-10-27).
+    minWidth: 640,
+    minHeight: 420,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),

@@ -112,7 +112,10 @@ export function scanMath(
       }
       j++
     }
-    if (found !== -1 && text[found - 1] !== ' ') {
+    // ...and the closing `$` may not be followed by a digit (Pandoc's and
+    // Obsidian's rule), so prices — "$10-$20", "$5/$8", "US$5 or US$6" — stay
+    // text instead of turning into a formula (bug scan 2026-10-27).
+    if (found !== -1 && text[found - 1] !== ' ' && !/[0-9]/.test(text[found + 1] ?? '')) {
       const latex = text.slice(i + 1, found)
       if (latex.trim()) {
         emit(base + i, base + found + 1, latex, false)

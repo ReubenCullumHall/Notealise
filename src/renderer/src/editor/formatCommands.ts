@@ -319,7 +319,23 @@ export function wikiLink(view: EditorView): void {
   view.focus()
 }
 
-export const horizontalRule = (view: EditorView): void => insertBlock(view, '---')
+/** A divider. Straight under a line of text, `---` is Markdown's underline for a
+ *  HEADING — the sentence above turned into a heading and no line was drawn — so
+ *  it gets a blank line above it then; and the cursor moves to a fresh line below
+ *  it, so typing on doesn't glue onto the `---` (bug scan 2026-10-27). */
+export const horizontalRule = (view: EditorView): void => {
+  const { state } = view
+  const { from } = state.selection.main
+  const line = state.doc.lineAt(from)
+  const above =
+    from > line.from
+      ? line.text.slice(0, from - line.from)
+      : line.number > 1
+        ? state.doc.line(line.number - 1).text
+        : ''
+  const br = state.lineBreak
+  insertBlock(view, (above.trim() ? br : '') + '---' + br)
+}
 
 /** A toggle list (toggleModel.ts). The line the cursor is on becomes its
  *  title, without any list or heading mark it had; further selected lines go

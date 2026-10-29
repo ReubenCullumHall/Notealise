@@ -1,4 +1,4 @@
-import { Compartment, type Extension } from '@codemirror/state'
+import { Compartment, Prec, type Extension } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { search, searchKeymap } from '@codemirror/search'
@@ -28,6 +28,8 @@ import { dragGhost } from './dragGhost'
 import { blockFlash } from './blockFlash'
 import { dropCopiedTags } from './blockIds'
 import { relink } from './relink'
+import { exitListKey, listIndentKeys } from './listIndent'
+import { searchSkipsHiddenTags } from './searchHidden'
 import { registerView } from './viewRegistry'
 import { applyColor } from './colorCommands'
 import { completionExtension } from './completions'
@@ -61,6 +63,9 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // previous note's text — which the autosave then wrote to its file
     // (Reuben's call, 2026-09-19: undo starts fresh in each note).
     historyBox.of(history()),
+    // Enter on an empty list line ends the list with a blank line after it —
+    // above the Markdown language's own Enter, which would otherwise win.
+    Prec.highest(keymap.of([exitListKey])),
     // Our formatting bindings come first so they win over any defaults.
     keymap.of([
       // Ahead of defaultKeymap's own Backspace/Delete: these decline (return
@@ -73,6 +78,9 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
       { key: 'Mod-Shift-x', run: (v) => { strike(v); return true } },
       { key: 'Mod-Shift-l', run: (v) => { insertMath(v); return true } },
       { key: 'Mod-Shift-h', run: (v) => { applyColor(v, 'hl', DEFAULT_HL); return true } },
+      // Tab / Shift+Tab nest and un-nest list lines, and never move focus out of
+      // the note (Shift+Tab used to land in the name box and rename the note).
+      ...listIndentKeys,
       ...defaultKeymap,
       ...historyKeymap
     ]),
@@ -82,6 +90,8 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // toolbar rather than something popping up out of nowhere below whatever
     // is currently on screen.
     search({ top: true }),
+    // ...which never finds words inside the hidden colour/toggle/voice tags.
+    searchSkipsHiddenTags,
     // A SEPARATE keymap extension, placed AFTER the one above — CM6 resolves
     // a key by extension order, so this is what lets our own bindings keep
     // winning collisions rather than searchKeymap's. There is exactly one:

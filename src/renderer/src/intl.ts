@@ -43,8 +43,22 @@ export const userLocale: string | undefined = pickLocale(
   typeof window !== 'undefined' ? window.api?.systemLocale : undefined
 )
 
-const zoneOpt = (tz?: string): Intl.DateTimeFormatOptions =>
-  tz && tz !== 'system' ? { timeZone: tz } : {}
+/** Zones this runtime can't use. A zone it doesn't know (a typo in
+ *  settings.json, or a newer zone name carried over from another machine in the
+ *  vault) made every date throw — and Settings, the only place to fix it, went
+ *  to "Something in the interface broke" (bug scan 2026-10-27). Such a zone is
+ *  read as the computer's own instead. */
+const badZones = new Set<string>()
+const zoneOpt = (tz?: string): Intl.DateTimeFormatOptions => {
+  if (!tz || tz === 'system' || badZones.has(tz)) return {}
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz })
+    return { timeZone: tz }
+  } catch {
+    badZones.add(tz)
+    return {}
+  }
+}
 
 export const localZone = (): string => {
   try {

@@ -4,7 +4,7 @@ import { createFolder, createNote, setNoteTimes, writeAsset, writeNote } from '.
 import type { ImportPreview, ImportProgress, ImportResult } from '../../../shared/notesImport'
 import { importCancelled, type ImportRunner } from '../types'
 import { buildImportReport } from '../report'
-import { copyLocalAsset, isRemoteUrl } from '../assets'
+import { copyLocalAsset, encodeLinkPath, isRemoteUrl, LINK_PATTERN, linkTarget } from '../assets'
 import { createImportSpace } from '../space'
 import { duplicateWarning } from '../duplicates'
 import { createConverter } from '../html/turndown'
@@ -87,25 +87,24 @@ async function rewriteContent(
 ): Promise<string> {
   const sourceDir = path.dirname(sourceFilePath)
   const vaultDir = path.dirname(vaultRelPath)
-  const linkPattern = /(!?\[[^\]]*\]\()([^)]+)(\))/g
-  const matches = [...markdown.matchAll(linkPattern)]
+  const matches = [...markdown.matchAll(LINK_PATTERN)]
   let out = markdown
 
   for (const m of matches) {
-    const target = decodeURIComponent(m[2])
+    const target = linkTarget(m[2])
     if (isLocalPageTarget(target)) {
       const resolvedSource = path.resolve(sourceDir, target)
       const targetVaultPath = sourceToVaultPath.get(resolvedSource)
       if (targetVaultPath) {
         const rel = path.relative(vaultDir, targetVaultPath).split(path.sep).join('/')
-        out = out.replace(m[0], `${m[1]}${encodeURI(rel)}${m[3]}`)
+        out = out.replace(m[0], () => `${m[1]}${encodeLinkPath(rel)}${m[3]}`)
       } else {
         lossy.push({ path: vaultRelPath, note: `Link to "${target}" could not be resolved` })
       }
     } else if (isLocalAssetTarget(target)) {
       const newName = await copyLocalAsset(target, sourceDir, vaultDir)
       if (newName) {
-        out = out.replace(m[0], `${m[1]}${encodeURI(newName)}${m[3]}`)
+        out = out.replace(m[0], () => `${m[1]}${encodeLinkPath(newName)}${m[3]}`)
       } else {
         lossy.push({ path: vaultRelPath, note: `Attachment "${target}" could not be copied` })
       }

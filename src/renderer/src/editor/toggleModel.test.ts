@@ -9,6 +9,7 @@ import {
   guarded,
   hiddenLine,
   isToggleMarkup,
+  openAroundChanges,
   snapHead,
   toggleMarkdown,
   toggleText,
@@ -261,5 +262,27 @@ describe('the Toggle list command', () => {
     const b = harness(doc, at)
     toggleList(b.view, 'toggle')
     expect(b.read()).toBe('Ti|tle\nx')
+  })
+})
+
+
+describe('a search landing inside a shut toggle opens it (Reuben, 2026-10-29)', () => {
+  const apply = (doc: string, pos: number): string =>
+    state(doc).update({ changes: openAroundChanges(state(doc), pos) }).state.doc.toString()
+  it('opens the shut toggle the word is in', () => {
+    const doc = 'Intro\n\n' + T('Week 1', ['the secret word'], false) + '\n'
+    expect(apply(doc, doc.indexOf('secret'))).toBe('Intro\n\n' + T('Week 1', ['the secret word'], true) + '\n')
+  })
+  it('opens a shut toggle AND the shut one around it', () => {
+    const inner = T('Inner', ['deep word'], false)
+    const doc = T('Outer', ['above', '', ...inner.split('\n')], false) + '\n'
+    const out = apply(doc, doc.indexOf('deep'))
+    expect(findToggles(state(out)).every((t) => t.open)).toBe(true)
+    expect(out.replace(/<details open>/g, '<details>')).toBe(doc)
+  })
+  it('changes nothing for a word in an open toggle or outside any', () => {
+    const doc = 'plain word\n\n' + T('Open', ['seen word'], true) + '\n'
+    expect(openAroundChanges(state(doc), doc.indexOf('plain'))).toEqual([])
+    expect(openAroundChanges(state(doc), doc.indexOf('seen'))).toEqual([])
   })
 })

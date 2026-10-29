@@ -85,6 +85,13 @@ export const BLANK = ''
 
 export const EMPTY_LAYOUT: TabLayout = { tabs: [], panes: [], focus: 0 }
 
+/** The splits you stepped out of, carried into a layout built from scratch.
+ *  Three of the commonest moves (open a note, a sidebar click, a tab dropped on
+ *  a column) built their result without them, so a split shown as one joined
+ *  tab fell apart into separate tabs — and the saved session lost it — the next
+ *  time you opened almost anything (bug scan 2026-10-27). */
+const keepParked = (l: TabLayout): Pick<TabLayout, 'parked'> => (l.parked?.length ? { parked: l.parked } : {})
+
 /** Invariant 3: retire a blank tab that no longer has a pane. Applied by every
  *  operation that can take the blank's pane away from it. */
 const tidy = (l: TabLayout): TabLayout =>
@@ -289,7 +296,7 @@ export function openTab(l: TabLayout, path: string): TabLayout {
   const panes = l.panes.length ? replaceAt(l.panes, l.focus, path) : [path]
   // Swapping the note inside a column leaves the columns alone, so the widths
   // carry over; opening the FIRST pane is a fresh layout and starts even.
-  return tidy({ tabs, panes, focus: clampFocus(panes, l.focus), sizes: l.panes.length ? l.sizes : undefined })
+  return tidy({ ...keepParked(l), tabs, panes, focus: clampFocus(panes, l.focus), sizes: l.panes.length ? l.sizes : undefined })
 }
 
 /** GO to a note — a tab clicked in the strip, Cmd/Ctrl+1…9, Ctrl+Tab. Nothing
@@ -369,7 +376,7 @@ export function replaceActive(l: TabLayout, path: string): TabLayout {
   const tabs = l.tabs.includes(path)
     ? l.tabs.filter((t) => t !== leaving)
     : l.tabs.map((t) => (t === leaving ? path : t)) // substitute, keeping its place in the strip
-  return tidy({ tabs, panes, focus: l.focus, sizes: l.sizes }) // same columns, new note in one
+  return tidy({ ...keepParked(l), tabs, panes, focus: l.focus, sizes: l.sizes }) // same columns, new note in one
 }
 
 /** Rebuild a saved session against the vault as it is NOW. Notes that have been
@@ -513,11 +520,11 @@ export function showInPane(l: TabLayout, path: string, pane: number): TabLayout 
   const from = l.panes.indexOf(path)
   if (from === pane) return { ...l, tabs, focus: pane }
   const swapped = replaceAt(l.panes, pane, path)
-  if (from === -1) return tidy({ tabs, panes: swapped, focus: pane, sizes: l.sizes })
+  if (from === -1) return tidy({ ...keepParked(l), tabs, panes: swapped, focus: pane, sizes: l.sizes })
   const panes = withoutAt(swapped, from)
   // The note moved OUT of its own column into this one, so that column closes
   // and hands its width to the survivors — the same rule as any other close.
-  return tidy({ tabs, panes, focus: from < pane ? pane - 1 : pane, sizes: sizesRemove(l, from) })
+  return tidy({ ...keepParked(l), tabs, panes, focus: from < pane ? pane - 1 : pane, sizes: sizesRemove(l, from) })
 }
 
 /** Split: put `path` in a NEW pane at `at` (0…panes.length) — a tab dropped on

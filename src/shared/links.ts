@@ -260,6 +260,27 @@ export function resolveLink(link: WikiLink, notes: NoteRef[], fromPath: string):
   if (!link.target) {
     return { kind: 'self', heading: link.heading ?? '' }
   }
+  // A note whose NAME has a `#` in it — "C# basics", "Episode #3". `#` is also
+  // how a link names a heading, so `[[C# basics]]` read as heading "basics" in a
+  // note called "C", found nothing, and a click made an empty "C" (bug scan
+  // 2026-10-27). When the whole thing is a note's name, that note wins; heading
+  // links (`[[Waves#Speed]]`) are untouched, since no note is called that.
+  // (The parser trims both halves, so "C# basics" arrives as "C" + "basics" and
+  // the name is matched half by half, not glued back together.)
+  if (link.heading !== null && !link.heading.startsWith('^')) {
+    const heading = link.heading
+    const want = link.target.slice(link.target.lastIndexOf('/') + 1)
+    const named = notes.find((n) => {
+      if (n.kind === 'dir') return false
+      const i = n.title.indexOf('#')
+      return i !== -1 && eq(n.title.slice(0, i).trim(), want) && eq(n.title.slice(i + 1).trim(), heading)
+    })
+    if (named) {
+      const dir = link.target.includes('/') ? link.target.slice(0, link.target.lastIndexOf('/') + 1) : ''
+      const whole = resolveLink({ ...link, target: dir + named.title, heading: null }, notes, fromPath)
+      if (whole.kind === 'note') return whole
+    }
+  }
 
   const target = link.target
   const withMd = target.toLowerCase().endsWith('.md') ? target : target + '.md'
@@ -446,14 +467,22 @@ export function rewriteLinks(text: string, docPath: string, from: string, to: st
 
   const nextTitle = titleOf(to)
   const edits: { from: number; to: number; insert: string }[] = []
+  // `from` may be a FOLDER (a space or folder renamed, or moved): every link
+  // into it goes with it. Path links (`[[Physics/Waves]]`, which the `[[` list
+  // writes for another space) used to be left pointing at the old folder, went
+  // dashed, and a click made an empty note there (bug scan 2026-10-27).
+  const inside = (p: string): boolean => eq(p, from) || p.toLowerCase().startsWith(from.toLowerCase() + '/')
 
   for (const l of links) {
     const r = resolveLink(l, notes, docPath)
-    if (r.kind !== 'note' || !eq(r.path, from)) continue
+    if (r.kind !== 'note' || !inside(r.path)) continue
+    const moved = to + r.path.slice(from.length)
+    // A title link to a note that only MOVED still finds it by its title.
+    if (!l.target.includes('/') && !eq(r.path, from)) continue
     // Keep the shape the user wrote: a path link stays a path link, an alias
     // survives untouched (it's their words, not the note's name), and a heading
     // rides along.
-    const target = l.target.includes('/') ? stripMd(to) : nextTitle
+    const target = l.target.includes('/') ? stripMd(moved) : nextTitle
     const inner = target + (l.heading ? '#' + l.heading : '') + (l.alias ? '|' + l.alias : '')
     const insert = '[[' + inner + ']]'
     if (insert !== text.slice(l.from, l.to)) edits.push({ from: l.from, to: l.to, insert })

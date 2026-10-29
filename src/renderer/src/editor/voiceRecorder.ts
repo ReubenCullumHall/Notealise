@@ -92,6 +92,8 @@ interface RecorderSpot {
 
 const showRecorder = StateEffect.define<RecorderSpot>()
 const hideRecorder = StateEffect.define<number>()
+/** The note being recorded into was renamed or moved: the block goes with it. */
+const recorderMoved = StateEffect.define<{ from: string; to: string }>()
 
 const recorderSpot = StateField.define<RecorderSpot | null>({
   create: () => null,
@@ -100,6 +102,7 @@ const recorderSpot = StateField.define<RecorderSpot | null>({
     for (const e of tr.effects) {
       if (e.is(showRecorder)) spot = e.value
       else if (e.is(hideRecorder) && spot?.id === e.value) spot = null
+      else if (e.is(recorderMoved) && spot?.notePath === e.value.from) spot = { ...spot, notePath: e.value.to }
     }
     // Another note in this editor: the block goes with the note it belonged to.
     // The recording itself is stopped and saved by `recorderWatch` below.
@@ -381,7 +384,7 @@ class Recording {
 
   constructor(
     readonly view: EditorView,
-    readonly notePath: string
+    public notePath: string
   ) {}
 
   recordedMs(): number {
@@ -941,6 +944,29 @@ const adding = new Set<string>()
 /** Notes whose editor changed while an add was in progress: look again after. */
 const lookAgain = new Set<string>()
 let watching = false
+
+/** A note was renamed or moved (App's remapOpen). A recording running in it
+ *  keeps going and lands in it under its new name, and a voice note still
+ *  waiting for it follows it. Before this, renaming a note mid-recording
+ *  stopped the recording and queued it for the OLD name — a later new note of
+ *  that name got it instead (bug scan 2026-10-27). */
+export function voiceNoteMoved(from: string, to: string): void {
+  const remap = (p: string): string => (p === from ? to : p.startsWith(from + '/') ? to + p.slice(from.length) : p)
+  const rec = live
+  if (rec && !rec.leaving) {
+    const next = remap(rec.notePath)
+    if (next !== rec.notePath) {
+      if (!rec.viewGone) rec.view.dispatch({ effects: recorderMoved.of({ from: rec.notePath, to: next }) })
+      rec.notePath = next
+    }
+  }
+  for (const [p, list] of [...waiting]) {
+    const n = remap(p)
+    if (n === p) continue
+    waiting.delete(p)
+    waiting.set(n, [...(waiting.get(n) ?? []), ...list])
+  }
+}
 
 function addToItsNote(from: EditorView, notePath: string, name: string): void {
   const list = waiting.get(notePath) ?? []

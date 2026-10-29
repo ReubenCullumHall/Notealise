@@ -901,3 +901,29 @@ describe('a split is the user\'s arrangement (parked splits)', () => {
     invariants(moved)
   })
 })
+
+describe('a split you stepped out of stays one joined tab (bug scan 2026-10-27)', () => {
+  // a | c shown, b open; clicking b's tab parks the split as one joined tab.
+  const parkedSplit = (): TabLayout => showTab(splitAt(opened('a.md', 'b.md', 'c.md'), 'a.md', 0), 'b.md')
+
+  it('is set up parked', () => {
+    expect(parkedSplit().parked?.[0].panes).toEqual(['a.md', 'c.md'])
+  })
+  const moves: [string, (l: TabLayout) => TabLayout][] = [
+    ['a sidebar click on another note', (l) => replaceActive(l, 'd.md')],
+    ['opening a note', (l) => openTab(l, 'd.md')],
+    ['Cmd/Ctrl+click (new tab)', (l) => addTab(l, 'd.md')],
+    ['Cmd+number to a lone tab', (l) => selectTab(openTab(l, 'd.md'), 0)],
+    ['Ctrl+Tab', (l) => cycle(openTab(l, 'd.md'), 1)],
+    ['a tab dropped on a column', (l) => showInPane(openTab(l, 'd.md'), 'e.md', 0)],
+    ['the + button', (l) => newBlankTab(l)]
+  ]
+  for (const [what, move] of moves) {
+    it(`survives ${what}`, () => {
+      const l = move(parkedSplit())
+      const all = [l.panes, ...(l.parked ?? []).map((g) => g.panes)]
+      expect(all).toContainEqual(['a.md', 'c.md'])
+      invariants(l)
+    })
+  }
+})

@@ -57,7 +57,13 @@ async function readFromDisk(root: string | null): Promise<Workspace> {
     let raw = await fs.readFile(p, 'utf8')
     if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1) // tolerate a UTF-8 BOM
     return normalizeWorkspace(JSON.parse(raw))
-  } catch {
+  } catch (e) {
+    // A file that exists but won't parse would be overwritten by the next write
+    // (emptying the bin's list) — keep a copy beside it first (bug scan 2026-10-27).
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      await fs.copyFile(p, path.join(path.dirname(p), `workspace.damaged-${stamp}.json`)).catch(() => {})
+    }
     return { entries: {}, trash: [], recovery: [] } // no file yet — everything falls back to defaults
   }
 }

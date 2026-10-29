@@ -103,9 +103,24 @@ describe('insert commands', () => {
   it('breaks out of a line rather than inserting a block mid-sentence', () => {
     // a divider has to own its line at both ends, so the rest of the line moves
     // down rather than ending up on the `---`
+    // — and, since 2026-10-29, with a blank line between it and the text above:
+    // `some\n---` is Markdown's heading underline, which turned "some" into a
+    // heading and drew no line. The cursor waits on a fresh line below the rule.
     const { view, read } = harness('some text', 4)
     horizontalRule(view)
-    expect(read()).toBe('some\n---|\n text')
+    expect(read()).toBe('some\n\n---\n|\n text')
+  })
+
+  it('a divider under a paragraph does not make it a heading (bug scan 2026-10-27)', () => {
+    const { view, read } = harness('A sentence\n', 11)
+    horizontalRule(view)
+    expect(read()).toBe('A sentence\n\n---\n|')
+  })
+
+  it('a divider under a blank line needs no extra blank line', () => {
+    const { view, read } = harness('A sentence\n\n', 12)
+    horizontalRule(view)
+    expect(read()).toBe('A sentence\n\n---\n|')
   })
 
   it('inserts an EMPTY 2×2 — a header row and one body row', () => {

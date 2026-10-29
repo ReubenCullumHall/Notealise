@@ -4,7 +4,7 @@ import { createFolder, createNote, setNoteTimes, writeNote } from '../../vault'
 import type { ImportPreview, ImportProgress, ImportResult } from '../../../shared/notesImport'
 import { importCancelled, type ImportRunner } from '../types'
 import { buildImportReport } from '../report'
-import { copyLocalAsset, isRemoteUrl } from '../assets'
+import { copyLocalAsset, encodeLinkPath, isRemoteUrl, LINK_PATTERN, linkTarget } from '../assets'
 import { createImportSpace } from '../space'
 import { duplicateWarning } from '../duplicates'
 import { collectFiles } from '../files'
@@ -25,11 +25,25 @@ async function preview(paths: string[]): Promise<ImportPreview> {
   }
 }
 
+/** `Q&amp;A &#8211; Tom&#39;s notes` → `Q&A – Tom's notes`: a page title is
+ *  HTML text, and its codes went into the note's file name as written (bug scan
+ *  2026-10-27). */
+function decodeEntities(text: string): string {
+  const named: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+  return text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (whole, code: string) => {
+    if (code[0] === '#') {
+      const n = code[1] === 'x' || code[1] === 'X' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10)
+      return Number.isFinite(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : whole
+    }
+    return named[code.toLowerCase()] ?? whole
+  })
+}
+
 function titleFromHtml(html: string, fallback: string): string {
   const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i)
-  if (titleMatch && titleMatch[1].trim()) return titleMatch[1].trim()
+  if (titleMatch && titleMatch[1].trim()) return decodeEntities(titleMatch[1]).trim()
   const h1Match = html.match(/<h1[^>]*>([^<]*)<\/h1>/i)
-  if (h1Match && h1Match[1].trim()) return h1Match[1].trim()
+  if (h1Match && h1Match[1].trim()) return decodeEntities(h1Match[1]).trim()
   return fallback
 }
 
@@ -43,15 +57,14 @@ async function copyLocalImages(
   vaultRelPath: string,
   lossy: { path: string; note: string }[]
 ): Promise<string> {
-  const linkPattern = /(!?\[[^\]]*\]\()([^)]+)(\))/g
-  const matches = [...markdown.matchAll(linkPattern)]
+  const matches = [...markdown.matchAll(LINK_PATTERN)]
   let out = markdown
   for (const m of matches) {
-    const target = decodeURIComponent(m[2])
+    const target = linkTarget(m[2])
     if (isRemoteUrl(target) || target.startsWith('#')) continue
     const newName = await copyLocalAsset(target, sourceDir, vaultDir)
     if (newName) {
-      out = out.replace(m[0], `${m[1]}${encodeURI(newName)}${m[3]}`)
+      out = out.replace(m[0], () => `${m[1]}${encodeLinkPath(newName)}${m[3]}`)
     } else {
       lossy.push({ path: vaultRelPath, note: `Local reference "${target}" could not be copied` })
     }

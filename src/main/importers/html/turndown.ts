@@ -36,6 +36,7 @@ export function createConverter(opts: { dropHeaderChrome?: boolean } = {}): Turn
   // shouldn't gain one just for this one rule.
   interface CellLike {
     textContent: string | null
+    innerHTML?: string
   }
   interface RowLike {
     cells: CellLike[]
@@ -49,7 +50,14 @@ export function createConverter(opts: { dropHeaderChrome?: boolean } = {}): Turn
       const table = node as unknown as TableLike
       const rows = Array.from(table.rows)
       if (rows.length === 0) return ''
-      const cellText = (cell: CellLike): string => (cell.textContent ?? '').trim().replace(/\|/g, '\\|')
+      // A cell's own formatting comes across too — pictures, links, bold. Plain
+      // text dropped them, glued two paragraphs into one word and the Import
+      // Report still said nothing was lost (bug scan 2026-10-27). A table row is
+      // one line, so a cell's line breaks become <br>.
+      const cellText = (cell: CellLike): string => {
+        const md = cell.innerHTML !== undefined ? td.turndown(cell.innerHTML) : (cell.textContent ?? '')
+        return md.trim().replace(/\s*\n+\s*/g, '<br>').replace(/\|/g, '\\|')
+      }
       const rowLine = (row: RowLike): string => `| ${Array.from(row.cells).map(cellText).join(' | ')} |`
       const header = rowLine(rows[0])
       const divider = `| ${Array.from(rows[0].cells).map(() => '---').join(' | ')} |`

@@ -398,3 +398,43 @@ describe('titleOf', () => {
     expect(titleOf('Waves')).toBe('Waves')
   })
 })
+
+describe('a # in a note NAME (bug scan 2026-10-27)', () => {
+  const ref = (p: string): NoteRef => ({ path: p, title: p.slice(p.lastIndexOf('/') + 1).replace(/\.md$/, ''), kind: 'note' })
+  const notes = [ref('S/C# basics.md'), ref('S/Episode #3.md'), ref('S/Waves.md'), ref('S/Other.md')]
+  it('[[C# basics]] finds the note called that, with no heading', () => {
+    const r = resolveLink(scanLinks('[[C# basics]]')[0], notes, 'S/Other.md')
+    expect(r).toMatchObject({ kind: 'note', path: 'S/C# basics.md', heading: null })
+  })
+  it('[[Episode #3]] too', () => {
+    expect(resolveLink(scanLinks('[[Episode #3]]')[0], notes, 'S/Other.md')).toMatchObject({ path: 'S/Episode #3.md' })
+  })
+  it('a real heading link is untouched', () => {
+    expect(resolveLink(scanLinks('[[Waves#Speed]]')[0], notes, 'S/Other.md')).toMatchObject({ path: 'S/Waves.md', heading: 'Speed' })
+  })
+  it('renaming a linked note to "Waves #2" keeps its links working', () => {
+    const out = rewriteLinks('see [[Waves]]', 'S/Other.md', 'S/Waves.md', 'S/Waves #2.md', notes)!
+    const after = [ref('S/Waves #2.md'), ref('S/Other.md')]
+    expect(resolveLink(scanLinks(out)[0], after, 'S/Other.md')).toMatchObject({ path: 'S/Waves #2.md', heading: null })
+  })
+})
+
+describe('links follow a renamed space or folder (bug scan 2026-10-27)', () => {
+  const ref = (p: string, kind: 'note' | 'dir' = 'note'): NoteRef => ({ path: p, title: p.slice(p.lastIndexOf('/') + 1).replace(/\.md$/, ''), kind })
+  const before = [ref('Physics', 'dir'), ref('Physics/Waves.md'), ref('Maths', 'dir'), ref('Maths/Note.md')]
+  it('[[Physics/Waves]] becomes [[Science/Waves]] when the space is renamed', () => {
+    expect(rewriteLinks('see [[Physics/Waves]] and [[Waves]]', 'Maths/Note.md', 'Physics', 'Science', before)).toBe(
+      'see [[Science/Waves]] and [[Waves]]'
+    )
+  })
+  it('a heading and an alias ride along', () => {
+    expect(rewriteLinks('[[Physics/Waves#Speed|speed]]', 'Maths/Note.md', 'Physics', 'Science', before)).toBe(
+      '[[Science/Waves#Speed|speed]]'
+    )
+  })
+  it('a note moved into a folder keeps its path links', () => {
+    expect(rewriteLinks('[[Physics/Waves]]', 'Maths/Note.md', 'Physics/Waves.md', 'Physics/Term 3/Waves.md', before)).toBe(
+      '[[Physics/Term 3/Waves]]'
+    )
+  })
+})

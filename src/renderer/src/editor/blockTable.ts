@@ -2,6 +2,7 @@ import { StateEffect, StateField, type EditorState, type Extension } from '@code
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { isRaw } from './rawView'
+import { formatCell } from './cellFormat'
 import { depthOfLine, findToggles, hiddenLine } from './toggleModel'
 import {
   MIN_COLS,
@@ -113,6 +114,11 @@ function findTables(state: EditorState): FoundTable[] {
   syntaxTree(state).iterate({
     enter: (node) => {
       if (node.name !== 'Table') return
+      // A table inside a quote (`> | a |`) or indented under a list item has
+      // something before it on its lines. Editing a cell rewrites whole lines,
+      // which stripped the `> ` / the indent and pulled the table out (bug scan
+      // 2026-10-27) — so such a table is left as text, never rewritten.
+      if (node.from > doc.lineAt(node.from).from) return false
       const firstLine = doc.lineAt(node.from).number
       const lastLine = doc.lineAt(node.to).number
 
@@ -232,6 +238,41 @@ class TableWidget extends WidgetType {
       if (!then) view.focus()
     }
 
+    /** Enter on the LAST row: write the cell, close it, and put the cursor at the
+     *  start of the next thing below the table — or, when nothing follows it, on a
+     *  fresh line under it (after the blank line Markdown needs, or the new text
+     *  would join the table as a row). Reuben, 2026-10-29: "if there is no next
+     *  cell down then it goes onto the next block below the table". */
+    const leaveBelow = (row: number, col: number, text: string): void => {
+      if (done) return
+      done = true
+      const next = setCell(this.model, row, col, text)
+      const serialized = serializeTable(next, view.state.lineBreak)
+      const doc = view.state.doc
+      const br = view.state.lineBreak
+      let below: number | null = null
+      for (let n = doc.lineAt(this.to).number + 1; n <= doc.lines; n++) {
+        const t = doc.line(n).text.trim()
+        if (!t) continue
+        // A block drawn as something else (another table, a maths box, code, a
+        // divider, a toggle's title or end, a voice note or video) has its source
+        // hidden or fragile at its start — typing there would break it — so the
+        // cursor gets a fresh line of its own above it instead.
+        if (!/^(\||<|\$\$|```|~~~|---|\*\*\*|___)/.test(t)) below = doc.line(n).from
+        break
+      }
+      const changes = view.state.changes(
+        below !== null
+          ? { from: this.from, to: this.to, insert: serialized }
+          : // nothing usable below: a fresh line after the blank line Markdown needs
+            // (without it the new text would join the table as another row)
+            { from: this.from, to: this.to, insert: serialized + br + br }
+      )
+      const anchor = below !== null ? changes.mapPos(below) : this.from + serialized.length + 2 * br.length
+      view.dispatch({ changes, effects: setEditCell.of(null), selection: { anchor }, scrollIntoView: true })
+      view.focus()
+    }
+
     /** Move `by` cells, wrapping at the ends of rows. Returns null past either
      *  end, which simply closes the editor — growing the table on Tab is the
      *  next stage's job, not something to guess at here. */
@@ -285,12 +326,17 @@ class TableWidget extends WidgetType {
 
         input.addEventListener('input', grow)
         input.addEventListener('keydown', (e) => {
-          // Enter commits. Shift+Enter falls through to the textarea and makes
+          // Shift+Enter falls through to the textarea and makes
           // a new line in the cell, written to the file as `<br>` (writeCell) —
           // the same split as Notion and most chat boxes.
+          // Enter goes to the cell below — the next row, same column — and
+          // from the last row out to whatever is below the table (Reuben,
+          // 2026-10-29). It used to close the cell and leave the cursor at the
+          // table's start, so the next thing typed landed somewhere unexpected.
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
-            commit(row, col, input.value, null)
+            if (row + 1 < this.model.rows.length) commit(row, col, input.value, { table: this.from, row: row + 1, col })
+            else leaveBelow(row, col, input.value)
           } else if (e.key === 'Tab') {
             e.preventDefault()
             commit(row, col, input.value, step(row, col, e.shiftKey ? -1 : 1))
@@ -329,7 +375,9 @@ class TableWidget extends WidgetType {
           input.select()
         })
       } else {
-        cell.textContent = value
+        // Drawn with its formatting — bold, links, maths, colours — rather than
+        // as the raw text (bug scan 2026-10-27). The click still opens the raw text.
+        cell.appendChild(formatCell(value))
         cell.addEventListener('mousedown', (e) => {
           e.preventDefault() // stop CodeMirror putting a cursor inside the widget
           openCell(row, col)

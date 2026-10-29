@@ -157,6 +157,11 @@ export const imagePass: Pass = (view, _active, push) => {
 
         // Alt text is everything between "![" and the "]" that closes it.
         const raw = view.state.doc.sliceString(node.from, node.to)
+        // A label that runs onto a second line can't be swapped for a picture:
+        // CodeMirror refuses a plugin that hides a line break, and the whole
+        // window went to "Something in the interface broke" (bug scan 2026-10-27).
+        // Left as text, like the video pass does for a split tag.
+        if (raw.includes('\n')) return
         const alt = raw.slice(2, raw.indexOf(']', 2) === -1 ? 2 : raw.indexOf(']', 2))
 
         // `![title](https://youtu.be/…)` is a video, not a picture: a card that

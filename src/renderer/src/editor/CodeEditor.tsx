@@ -16,6 +16,20 @@ import { scanLinks } from '../../../shared/links'
 import { findHeading, linkTargets, targetAtLine } from './blockIds'
 import { flashLines } from './blockFlash'
 import { relinkClosed, relinkOpen } from './relink'
+import { openTogglesAround } from './toggleList'
+import { insideTag } from './searchHidden'
+
+/** Where `words` first appear in the note's own text — any case, skipping a
+ *  match inside a hidden tag (`<mark class=…>`, `<details>`) — or null. */
+function findVisibleText(state: EditorState, words: string): number | null {
+  const hay = state.doc.toString().toLowerCase()
+  const needle = words.toLowerCase()
+  if (!needle) return null
+  for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + 1)) {
+    if (!insideTag(state, i, i + needle.length)) return i
+  }
+  return null
+}
 
 interface Props {
   /** vault-relative path of the open note (identity for cursor/scroll memory) */
@@ -45,6 +59,13 @@ interface Props {
    *  `onRevealedHeading` does for a heading) — left standing it fired again every
    *  time the note came back on screen */
   onRevealedEmbed?: () => void
+  /** words to find and show — a "Search notes" result was clicked. The first
+   *  place they appear in the note's text (not inside its hidden colour or
+   *  toggle tags) is selected, any shut toggle around it is opened, and it is
+   *  scrolled to (Reuben, 2026-10-29). */
+  revealText?: string | null
+  /** told once that jump has landed, like `onRevealedEmbed` */
+  onRevealedText?: () => void
   /** the eye button: print each photo/video's own source under it, leaving the
    *  rest of the note formatted. Independent of `raw` — see mediaSource.ts. */
   mediaSource?: boolean
@@ -112,6 +133,8 @@ export function CodeEditor({
   onRevealedHeading,
   revealEmbed,
   onRevealedEmbed,
+  revealText,
+  onRevealedText,
   raw,
   mediaSource
 }: Props): React.JSX.Element {
@@ -124,6 +147,8 @@ export function CodeEditor({
   onRevealedRef.current = onRevealedHeading
   const onRevealedEmbedRef = useRef(onRevealedEmbed)
   onRevealedEmbedRef.current = onRevealedEmbed
+  const onRevealedTextRef = useRef(onRevealedText)
+  onRevealedTextRef.current = onRevealedText
   const docRef = useRef(doc)
   docRef.current = doc
   // Read once, at construction. The effect below owns every change after that.
@@ -431,6 +456,24 @@ export function CodeEditor({
     // Landed: the request has done its job.
     onRevealedEmbedRef.current?.()
   }, [revealEmbed, path, version])
+
+  // "Show me where those words are" — a "Search notes" result. Same shape as the
+  // two jumps above, including the `version` key (the text lands in its own effect).
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view || !revealText) return
+    const at = findVisibleText(view.state, revealText)
+    if (at === null) return // not in this note's text (a title match) — leave the cursor
+    const opened = openTogglesAround(view, at)
+    const from = opened ? findVisibleText(view.state, revealText) ?? at : at
+    view.dispatch({
+      selection: { anchor: from, head: from + revealText.length },
+      effects: EditorView.scrollIntoView(from, { y: 'center' })
+    })
+    flashLines(view, view.state.doc.lineAt(from).from, view.state.doc.lineAt(from).from)
+    view.focus()
+    onRevealedTextRef.current?.()
+  }, [revealText, path, version])
 
   // Escape dismisses the toolbar (selection stays; reselecting shows it again).
   useEffect(() => {

@@ -3,7 +3,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorState, type ChangeSpec } from '@codemirror/state'
 import { toggleMarkdown } from './toggleModel'
-import { isVoiceTarget, retargetChange, settingsChange, voiceNotesIn, voiceSpanAt } from './audioPass'
+import { isVoiceTarget, nameChange, retargetChange, settingsChange, voiceNotesIn, voiceSpanAt } from './audioPass'
 import { selectionIsEmbed, embedSpanAt, attachmentFileOf } from './attachSelect'
 import { VOICE_DEFAULTS } from '../../../shared/voiceNote'
 
@@ -188,5 +188,27 @@ describe('the grip treats a voice note as one embed', () => {
     )
     expect(attachmentFileOf('![](memo.mp3)', 'Note.md')).toBe('memo.mp3')
     expect(attachmentFileOf('<audio controls src="Other note.md"></audio>', 'Note.md')).toBeNull()
+  })
+})
+
+describe('undo after naming a voice note and then moving its mixer (bug scan 2026-10-27)', () => {
+  it('takes the name back and leaves the mixer setting, with no second tag', async () => {
+    const { Transaction } = await import('@codemirror/state')
+    const { history, undo } = await import('@codemirror/commands')
+    const doc = '<audio controls src="memo.m4a"></audio>\n'
+    let state = EditorState.create({ doc, extensions: [history(), markdown({ base: markdownLanguage, extensions: [toggleMarkdown] })] })
+    const span = () => {
+      ensureSyntaxTree(state, state.doc.length, 5000)
+      return voiceNotesIn(state, 0, state.doc.length)[0]
+    }
+    state = state.update({ changes: nameChange(state.doc, span(), 'Lecture')! }).state
+    const vol = settingsChange(state.doc, span(), { ...VOICE_DEFAULTS, volume: 1.1 })!
+    state = state.update({ changes: vol, annotations: Transaction.addToHistory.of(false) }).state
+    let after = state
+    undo({ state, dispatch: (tr) => (after = tr.state) })
+    const text = after.doc.toString()
+    expect(text.match(/<audio/g)?.length).toBe(1)
+    expect(text).not.toContain('data-name')
+    expect(text).toContain('data-volume="1.1"')
   })
 })
