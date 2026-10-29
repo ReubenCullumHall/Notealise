@@ -135,3 +135,5 @@ html.mc-leaving body { opacity: 0; transition: opacity .2s ease-in; }
   html.mc-leaving body { transition: none; }
 }
 
+/* The page behind stays put while the pop-up is open (mac-chooser.js). */
+html.mc-lock { overflow: hidden; }

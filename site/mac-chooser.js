@@ -56,7 +56,13 @@
     setTimeout(function () { location.href = url; }, 200);
   }
 
+  // While it's open the page behind stays put, and a click on the dimmed page
+  // closes it — the same as the What's new pop-ups (bug scan 2026-10-27).
+  dialog.addEventListener("close", function () { root.classList.remove("mc-lock"); });
+  dialog.addEventListener("click", function (e) { if (e.target === dialog) leave(""); });
+
   function ask() {
+    root.classList.add("mc-lock");
     if (!dialog.open) dialog.showModal();
   }
 

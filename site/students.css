@@ -87,7 +87,8 @@ body.st-page {
   body.st-page { background-image: repeating-linear-gradient(to bottom, transparent 0 33px, var(--rule-c) 33px 34px); }
 }
 ::selection { background: color-mix(in oklab, var(--hl-pink) 45%, var(--bg)); color: var(--ink); }
-body.st-page .topbar { background: color-mix(in oklab, var(--bg) 88%, transparent); border-bottom-color: var(--accent); }
+/* Solid, so the page doesn't show through behind the links (Reuben, 2026-10-29). */
+body.st-page .topbar { background: var(--bg); border-bottom-color: var(--accent); }
 .st-page .topbar-links a { font-family: var(--face); font-weight: 600; }
 .st-page .footer-brand { font-family: var(--face); font-weight: 800; }
 

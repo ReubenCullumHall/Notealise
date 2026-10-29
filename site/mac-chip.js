@@ -36,7 +36,10 @@
     }
     if (!knownChip) detectChip(function (c) { chip = c; settled(); });
     releaseAssets(function (n) { names = n; settled(); });
-    setTimeout(finish, 4000);
+    // Not 4 s: when GitHub is slow, "Download for macOS" did nothing at all for
+    // that long (bug scan 2026-10-27). Without the list the chip still decides,
+    // exactly as when GitHub can't be reached.
+    setTimeout(finish, 1500);
   }
 
   function releaseAssets(done) {

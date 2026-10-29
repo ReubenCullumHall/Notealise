@@ -30,6 +30,22 @@
   var msg = document.querySelector(".status-msg");
   var link = document.querySelector(".status-link");
 
+  // On a phone or tablet the guide is only for reading: its "Download it" link
+  // fetched an 83 MB installer the phone can't open (an iPhone was even asked
+  // which Mac it was). The home page shows phones no download buttons (Reuben,
+  // 2026-09-13), so the strip with the link is taken away here too (bug scan
+  // 2026-10-27). The same device test as landing.js; ?device=phone previews it.
+  var ua = navigator.userAgent || "";
+  var MOBILE = /[?&]device=phone(?:&|$)/.test(location.search) ||
+    !!(navigator.userAgentData && navigator.userAgentData.mobile) ||
+    /android|iphone|ipad|ipod|windows phone|mobile/i.test(ua) ||
+    (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+  if (MOBILE) {
+    var strip = document.querySelector(".status");
+    if (strip) strip.style.display = "none";
+    return;
+  }
+
   // The "get it again" / "download it" link always points at a stable URL. On a
   // Mac it is re-pointed once the visitor's chip is known.
   function pointLinksAt(file) {

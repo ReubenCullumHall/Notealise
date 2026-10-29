@@ -272,8 +272,18 @@ html.wm-motion .hero-stats.lines-in::after { transition-delay: .26s; }
 #macBtn svg { width: 26px; height: 26px; }
 .btn-pre { font-family: var(--gmono); font-weight: 400; letter-spacing: 0.02em; text-transform: uppercase; font-size: 10.5px; }
 
-.topbar { background: color-mix(in oklab, var(--bg) 86%, transparent) !important; }
+/* Solid, like every other page: at 86% the headings scrolling under it showed
+   through behind the links (Reuben, 2026-10-29: "not on purpose, fix that"). */
+.topbar { background: var(--bg) !important; }
 .topbar-links a { font-family: var(--gmono); font-size: 12.5px; letter-spacing: 0.02em; }
+/* The mono links are wider than the other pages', so on the narrowest phones
+   (320px — an iPhone SE, or Display Zoom) "What's new" ran under the Instagram
+   circle. A smaller gap gives it the same clearance as the other pages (bug
+   scan 2026-10-27). */
+@media (max-width: 340px) {
+  .topbar-links { gap: 8px; }
+  .topbar-links a { font-size: 12px; letter-spacing: 0; }
+}
 .footer, .footer-brand { font-family: var(--gmono); }
 
 /* ── The Try it window: settles into the page (Reuben, 2026-10-15) ─────
