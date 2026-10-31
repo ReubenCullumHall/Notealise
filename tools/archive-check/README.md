@@ -23,5 +23,6 @@ exactly the "shows Index once" check.
 What it does NOT cover: pressing the real Cmd+Shift+A keys (the menu item is clicked, and its shortcut
 is read back), the packaged app, Windows, a large vault.
 
-Windows: same idea with `electron.exe`, a junction for `node_modules`, and `Control` — see CLAUDE.md's
-"real main process on its own profile" gotcha.
+Windows (2026-10-31, 59/59): `check.py` picks `electron.exe`, `node` and `WORK=%TEMP%\notealise-check\build` by itself —
+build with the junction recipe in `../windows-check/README.md` and run `python -X utf8 check.py`. The real Ctrl+Shift+A key
+and odd file names are in `../windows-check/archive_windows.py`.

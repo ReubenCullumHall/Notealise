@@ -17,8 +17,11 @@ import json, os, shutil, signal, subprocess, sys, time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-WORK = Path(os.environ.get('WORK', '/tmp/corners-check'))
-ELECTRON = Path.home() / 'notes-app-mac/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
+WIN = sys.platform == 'win32'
+WORK = Path(os.environ.get('WORK', (os.environ.get('TEMP', '.') + '/notealise-check/build') if WIN else '/tmp/corners-check'))
+ELECTRON = (Path(__file__).resolve().parents[2] / 'node_modules/electron/dist/electron.exe') if WIN else \
+    Path.home() / 'notes-app-mac/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
+MOD = 'Control' if WIN else 'Meta'
 SHOTS = WORK / 'shots'
 PORT = 9339
 
@@ -137,7 +140,7 @@ def main():
             b, page = connect(p)
             page.locator('.tree-title', has_text='Maths').first.click()
             time.sleep(0.6)
-            page.locator('.tree-title', has_text='Physics').first.click(modifiers=['Meta'])
+            page.locator('.tree-title', has_text='Physics').first.click(modifiers=[MOD])
             time.sleep(0.6)
             page.locator('.tree-title', has_text='Maths').first.click()
             time.sleep(1.0)
@@ -213,7 +216,7 @@ def main():
             time.sleep(0.5)
             b.close()
         finally:
-            proc.send_signal(signal.SIGTERM)
+            proc.terminate()
             time.sleep(2.5)
 
         # 3. Relaunch in Journal — the very first paint should already be sharp
@@ -230,7 +233,7 @@ def main():
                 fails.append(f'relaunch not sharp: {first["html"]}')
             b.close()
         finally:
-            proc.send_signal(signal.SIGTERM)
+            proc.terminate()
             time.sleep(2)
 
     print('\nFAILS:' if fails else '\nall corner checks passed', *fails, sep='\n  ')

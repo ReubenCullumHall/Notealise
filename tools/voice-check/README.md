@@ -25,6 +25,8 @@ plus `--use-file-for-fake-audio-capture=<wav>`; never `--use-fake-ui-for-media-s
 the app's permission handler — docs/security.md 2c), the converter, drag-and-drop of a file, and how
 a real trackpad FEELS.
 
-Windows: same idea with `electron.exe`, a junction for `node_modules`, Control instead of Meta, and
-no `say`/`afconvert` (record a test file in Voice Recorder instead) — see CLAUDE.md's "real main
-process on its own profile" gotcha.
+Windows (works, 2026-10-31): `common.py` picks `electron.exe` and `WORK=%TEMP%\notealise-check\build` by itself and
+uses Control for Meta (and Ctrl+Y for redo); build with the junction recipe in `../windows-check/README.md`, make
+`memo.m4a` with `../windows-check/make_media.ps1` (copy it into WORK), then run the scripts as above. `NOTE_CRLF=1`
+writes the test notes with Windows line endings. Recording, the converter and pasting files are in
+`../windows-check/voice_windows.py`.

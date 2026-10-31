@@ -1,12 +1,17 @@
 """Shared by the voice-check scripts: a fresh two-space vault, and the scratch app on its own
 profile with a debug port. The app is the one `build.sh` built into $WORK (default
 /tmp/voice-check); it never touches ~/notes-app-mac's own profile or the installed app."""
-import json, os, shutil, signal, subprocess, time
+import json, os, shutil, subprocess, sys, time
 from contextlib import contextmanager
 from pathlib import Path
 
-WORK = Path(os.environ.get('WORK', '/tmp/voice-check'))
-ELECTRON = Path.home() / 'notes-app-mac/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
+WIN = sys.platform == 'win32'
+WORK = Path(os.environ.get('WORK', (os.environ.get('TEMP', '.') + '/notealise-check/build') if WIN else '/tmp/voice-check'))
+ELECTRON = (Path(__file__).resolve().parents[2] / 'node_modules/electron/dist/electron.exe') if WIN else     Path.home() / 'notes-app-mac/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
+# The key that is Cmd on a Mac and Ctrl elsewhere (the app's own zoom/undo modifier).
+MOD = 'Control' if WIN else 'Meta'
+# Redo: Ctrl+Y on Windows (CodeMirror's own binding), Cmd+Shift+Z on a Mac.
+REDO = 'Control+y' if WIN else 'Meta+Shift+z'
 
 
 def reset_vault() -> Path:
@@ -22,8 +27,10 @@ def reset_vault() -> Path:
     shutil.copy(WORK / 'memo.m4a', vault / 'Voice' / 'memo.m4a')
     lines = ['# Zoom', '', 'Above the voice note.', '', '<audio controls src="memo.m4a"></audio>', '', 'The line under it.', '']
     lines += [f'Filler line {i} so the note scrolls up and down.' for i in range(80)]
-    (vault / 'Voice' / 'Zoom.md').write_text('\n'.join(lines) + '\n')
-    (vault / 'Other' / 'Elsewhere.md').write_text('# Elsewhere\n\nThe other space.\n')
+    # LF unless NOTE_CRLF=1: Python on Windows would otherwise write CRLF files, which is a different test
+    nl = '\r\n' if os.environ.get('NOTE_CRLF') else '\n'
+    (vault / 'Voice' / 'Zoom.md').write_text('\n'.join(lines) + '\n', newline=nl)
+    (vault / 'Other' / 'Elsewhere.md').write_text('# Elsewhere\n\nThe other space.\n', newline=nl)
     (vault / '.mdnotes' / 'settings.json').write_text(json.dumps(
         {'spaces': [{'folder': 'Voice'}, {'folder': 'Other'}], 'activeSpaceFolder': 'Voice'}))
     ud = WORK / 'ud'
@@ -52,7 +59,7 @@ def app(port: int):
     try:
         yield proc
     finally:
-        proc.send_signal(signal.SIGTERM)
+        proc.terminate()
         time.sleep(2)
 
 

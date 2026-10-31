@@ -23,14 +23,16 @@ What it checks, in order:
 It also fails on any error in the window's console.
 """
 import json
-import re, os, shutil, signal, subprocess, time
+import re, os, shutil, subprocess, sys, time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-WORK = Path(os.environ.get('WORK', '/tmp/archive-check'))
+WIN = sys.platform == 'win32'
+WORK = Path(os.environ.get('WORK', (os.environ.get('TEMP', '.') + '/notealise-check/build') if WIN else '/tmp/archive-check'))
 HERE = Path(__file__).resolve().parent
-ELECTRON = Path.home() / 'notes-app-mac/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
-NODE = Path.home() / '.local/opt/node/bin/node'
+ELECTRON = (HERE.parents[1] / 'node_modules/electron/dist/electron.exe') if WIN else \
+    Path.home() / 'notes-app-mac/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
+NODE = Path('node') if WIN else Path.home() / '.local/opt/node/bin/node'
 PORT, INSPECT = 9351, 9352
 SHOTS = WORK / 'shots'
 VAULT = WORK / 'vault'
@@ -48,7 +50,7 @@ def check(name: str, ok, detail: str = '') -> None:
 def write(rel: str, text: str, age_days: int = 0) -> None:
     p = VAULT / rel
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text)
+    p.write_text(text, newline='\n')  # LF on every machine (Windows Python would write CRLF)
     if age_days:
         t = time.time() - age_days * DAY
         os.utime(p, (t, t))
@@ -88,7 +90,7 @@ def launch() -> subprocess.Popen:
 
 
 def quit_app(proc: subprocess.Popen) -> None:
-    proc.send_signal(signal.SIGTERM)
+    proc.terminate()
     try:
         proc.wait(10)
     except subprocess.TimeoutExpired:

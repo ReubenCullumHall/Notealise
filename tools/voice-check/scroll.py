@@ -6,9 +6,9 @@ Expected on the Mac (2026-10-15, a 22.6 s recording): 1, 8, 11b and 13 change sp
 (scroll 200) and leave min/max alone; 6 stops at 17.07–22.76 and 0–5.69; 10 keeps the panned
 stretch a second later, then follows again with the playhead in the middle; 12 is about 17 s.
 After a press elsewhere (8) NO event is cancelable: an unpressed voice note has no wheel listener."""
-import json, time
+import json, re, time
 from playwright.sync_api import sync_playwright
-from common import app, connect, open_zoom_note, reset_vault, window_state
+from common import app, connect, open_zoom_note, reset_vault, window_state, MOD
 
 PORT = 9462
 reset_vault()
@@ -27,7 +27,7 @@ with app(PORT), sync_playwright() as p:
         return {'events': len(w), 'cancelable': sum(1 for c, _ in w if c), 'prevented': sum(1 for _, d in w if d)}
     def back_to_voice():
         if 'Zoom' not in window_state(page)['space']:
-            page.locator('aside button[data-tip]', has_text='1').first.click()
+            page.locator('aside button[data-tip]', has_text=re.compile(r'^1$')).first.click()  # exact: the tape's skip button reads "10"
             time.sleep(1.0)
         open_zoom_note(page)
 
@@ -45,7 +45,7 @@ with app(PORT), sync_playwright() as p:
     back_to_voice()
 
     # 2 zoom in with Cmd-click (this also presses on the block)
-    page.keyboard.down('Meta'); page.mouse.click(cx, cy); page.keyboard.up('Meta')
+    page.keyboard.down(MOD); page.mouse.click(cx, cy); page.keyboard.up(MOD)
     time.sleep(0.4)
     R['2_zoomed'] = window_state(page)
 
@@ -88,7 +88,7 @@ with app(PORT), sync_playwright() as p:
 
     # 9 press on the block again (the time readout), zoomed: takes the swipe again
     box = seek.bounding_box(); cx, cy = box['x'] + box['width'] * 0.5, box['y'] + box['height'] / 2
-    page.keyboard.down('Meta'); page.mouse.click(cx, cy); page.keyboard.up('Meta')  # zoom in again (also a press)
+    page.keyboard.down(MOD); page.mouse.click(cx, cy); page.keyboard.up(MOD)  # zoom in again (also a press)
     time.sleep(0.3)
     page.mouse.click(text['x'] + 60, text['y'] + 5)  # let go...
     time.sleep(0.2)
@@ -115,7 +115,7 @@ with app(PORT), sync_playwright() as p:
     # 11 zoomed back out (Cmd+Shift-click twice): swipe over the block changes space as before
     box = seek.bounding_box(); cx, cy = box['x'] + box['width'] * 0.5, box['y'] + box['height'] / 2
     for _ in range(3):
-        page.keyboard.down('Meta'); page.keyboard.down('Shift'); page.mouse.click(cx, cy); page.keyboard.up('Shift'); page.keyboard.up('Meta')
+        page.keyboard.down(MOD); page.keyboard.down('Shift'); page.mouse.click(cx, cy); page.keyboard.up('Shift'); page.keyboard.up(MOD)
         time.sleep(0.3)
     R['11_unzoomed'] = window_state(page)
     r = swipe(cx, cy, 15, 0)

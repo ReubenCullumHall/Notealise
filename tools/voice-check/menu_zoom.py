@@ -6,7 +6,7 @@ Expected on the Mac (2026-10-15, a 22.6 s recording, clicks at the waveform's mi
   zoom: 0–22.76 → 8.53–14.22 → 9.88–12.88 (3 s; the pointer is the zoom-OUT magnifier) → 0–22.76."""
 import json, re, time
 from playwright.sync_api import sync_playwright
-from common import WORK, app, connect, open_zoom_note, reset_vault
+from common import WORK, app, connect, open_zoom_note, reset_vault, MOD
 
 PORT = 9461
 vault = reset_vault()
@@ -40,13 +40,13 @@ with app(PORT), sync_playwright() as p:
     page.mouse.move(x, y)
     R['zoom'] = [state()]
     for _ in range(4):
-        page.keyboard.down('Meta')
+        page.keyboard.down(MOD)
         page.mouse.move(x, y + 1)
         time.sleep(0.1)
         page.mouse.click(x, y)
         time.sleep(0.35)
         R['zoom'].append(state())
-        page.keyboard.up('Meta')
+        page.keyboard.up(MOD)
         time.sleep(0.1)
     R['settings_voiceSkip'] = json.loads((vault / '.mdnotes/settings.json').read_text()).get('voiceSkip')
     b.close()

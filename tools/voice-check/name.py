@@ -8,7 +8,7 @@ above the player and on the tape card; Escape leaves it, clicking away keeps it,
 First run, 2026-10-16 (Mac): 14 ok, 0 failed."""
 import json, sys, time
 from pathlib import Path
-from common import WORK, app, connect, open_zoom_note, reset_vault
+from common import WORK, app, connect, open_zoom_note, reset_vault, MOD, REDO
 from playwright.sync_api import sync_playwright
 
 SHOTS = Path(sys.argv[1]) if len(sys.argv) > 1 else WORK / 'shots'
@@ -64,10 +64,10 @@ with sync_playwright() as p, app(9346):
     page.screenshot(path=str(SHOTS / 'name-02-named.png'), clip={'x': wave['x'] - 80, 'y': wave['y'] - 60, 'width': 900, 'height': 120})
 
     # --- Cmd+Z takes it back, Cmd+Shift+Z puts it back -----------------------------
-    page.keyboard.press('Meta+z')
+    page.keyboard.press(f'{MOD}+z')
     time.sleep(1.0)
     check('Cmd+Z takes the name back', shown_name(page) is None and 'data-name' not in audio_line(note), (shown_name(page), audio_line(note)))
-    page.keyboard.press('Meta+Shift+z')
+    page.keyboard.press(REDO)
     time.sleep(1.0)
     check('Cmd+Shift+Z puts it back', shown_name(page) == 'Lecture 3', shown_name(page))
 

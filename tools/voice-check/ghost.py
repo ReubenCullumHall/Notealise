@@ -8,7 +8,7 @@ down), that the drop lands where the gap was, that Escape changes nothing, and a
 First run, 2026-10-16 (Mac): 13 ok, 0 failed."""
 import json, sys, time
 from pathlib import Path
-from common import WORK, app, connect, reset_vault
+from common import WORK, app, connect, reset_vault, MOD
 from playwright.sync_api import sync_playwright
 
 SHOTS = Path(sys.argv[1]) if len(sys.argv) > 1 else WORK / 'shots'
@@ -102,7 +102,7 @@ with sync_playwright() as p, app(9347):
     check('…and the ghost is gone, the place open again', page.evaluate(GHOST) is None and page.evaluate("() => document.querySelectorAll('.cm-drag-gone').length") == 0)
 
     # --- Escape mid-carry changes nothing -------------------------------------------
-    page.keyboard.press('Meta+z')
+    page.keyboard.press(f'{MOD}+z')
     time.sleep(1.2)
     check('(undo put it back)', note.read_text() == original, note.read_text()[:200])
     page.evaluate('() => document.activeElement.blur()')
