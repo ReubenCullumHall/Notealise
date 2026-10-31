@@ -1,8 +1,8 @@
 {
   "name": "notes-app",
   "private": true,
-  "version": "1.5.0",
-  "description": "A local-first Markdown editor \u2014 your notes stay as plain .md files on disk.",
+  "version": "1.6.0",
+  "description": "A local-first Markdown editor — your notes stay as plain .md files on disk.",
   "author": "Notealise",
   "desktopName": "notealise.desktop",
   "main": "./out/main/index.js",

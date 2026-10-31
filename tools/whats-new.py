@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Rebuild the What's new cards in site/updates.html from CHANGELOG.md.
 
-Takes the newest three dated sections (`## [x.y.z] - YYYY-MM-DD`) and writes one
-card per release between the `whats-new:start` / `whats-new:end` markers. The
+Takes every dated section (`## [x.y.z] - YYYY-MM-DD`), newest first, down to
+FIRST_SHOWN, and writes one card per release between the `whats-new:start` /
+`whats-new:end` markers. The page used to show only the newest three; since 1.6.0
+(Reuben, 2026-10-31) it keeps every release from 1.4.0 on, so each new release adds
+a card and nothing falls off. The
 lines are the changelog's own words (Reuben, 2026-09-26: What's new uses the
 changelog lines word for word) — only the Markdown marks become HTML, and
 straight quotes become curly ones. `[Unreleased]` is never read, and a
@@ -20,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHANGELOG = ROOT / "CHANGELOG.md"
 PAGE = ROOT / "site" / "updates.html"
-HOW_MANY = 3
+FIRST_SHOWN = "1.4.0"  # the oldest release with a card; everything newer is shown too
 START, END = "<!-- whats-new:start -->", "<!-- whats-new:end -->"
 
 # Lines kept off the site: Reuben, 2026-09-28 — the page must not give away future
@@ -102,9 +105,11 @@ def card(rel, latest):
 
 
 def main():
-    rels = releases()[:HOW_MANY]
-    if len(rels) < HOW_MANY:
-        sys.exit(f"Only {len(rels)} dated sections in CHANGELOG.md")
+    rels = releases()
+    versions = [r["version"] for r in rels]
+    if FIRST_SHOWN not in versions:
+        sys.exit(f"No dated section for {FIRST_SHOWN} in CHANGELOG.md")
+    rels = rels[: versions.index(FIRST_SHOWN) + 1]
     for r in rels:
         bad = [t for t in r["items"] if "needs Windows" in t]
         if bad:
