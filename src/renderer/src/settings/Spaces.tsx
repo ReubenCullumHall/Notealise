@@ -80,6 +80,10 @@ export interface SpaceActions {
    *  Settings → Archive's "Open the archive", so its look can be changed while
    *  you watch. In App, beside the rest of the archive. */
   onOpenArchive: () => Promise<void>
+  /** Put a whole space in the archive — its folder moves in, it leaves the
+   *  switcher, and its look is kept so Put back can make it a space again
+   *  (Reuben, 2026-10-26). The sidebar's right-click "Archive this space". */
+  onArchiveSpace: (folder: string) => Promise<void>
 }
 
 interface Props {

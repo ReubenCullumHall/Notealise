@@ -467,6 +467,20 @@ export interface AppSettings {
    *  the active space — the look, the sidebar's scope, where a new note lands,
    *  the tabs kept per space — follows it there too. See `activeSpace`. */
   archive: Space
+  /** How the top of the archive is ordered — the picker beside "Archive · N
+   *  items". Saved, so a restart keeps what you picked (Reuben, 2026-10-26:
+   *  "it should be like other spaces"). */
+  archiveSort: ArchiveSortId
+  /** Month headings in the archive's list ("October 2026" above what went in
+   *  that month) — a way of LOOKING at it, nothing moves on disk. Off unless the
+   *  user turns it on, and only drawn while the archive is sorted by date
+   *  (Reuben, 2026-10-31: "the user should decide the grouping themselves"). */
+  archiveByMonth: boolean
+  /** The looks of spaces archived WHOLE ("Archive this space"), keyed by where
+   *  the folder sits in the archive, so Put back can make each a space again,
+   *  look and all (Reuben, 2026-10-26). Losable like every sidecar: without its
+   *  record a put-back space just comes back with the default look. */
+  archivedSpaces: ArchivedSpace[]
   /** the `folder` of the active space — or of the archive, while you're in it */
   activeSpaceFolder: string
   // --- global: one app launch, one locale. Deliberately NOT per-space. ---
@@ -624,6 +638,21 @@ export const DEFAULT_SPACE: Space = {
 /** The archive's folder name when the vault doesn't already have one. */
 export const ARCHIVE_FOLDER = 'Archive'
 
+/** The archive's sorts, in the order its picker lists them (organise/model.ts
+ *  holds their labels). */
+export const ARCHIVE_SORT_IDS = ['recent', 'oldest', 'az', 'za', 'custom'] as const
+export type ArchiveSortId = (typeof ARCHIVE_SORT_IDS)[number]
+
+/** A space that went into the archive whole: where its folder is now, and the
+ *  look it had (AppSettings.archivedSpaces). */
+export interface ArchivedSpace {
+  path: string
+  space: Space
+}
+
+/** More than anyone archives whole spaces; a bound on a hand-edited file. */
+const ARCHIVED_SPACES_MAX = 100
+
 /** Is this top-level folder name the archive's? Any capitalisation — a vault
  *  made elsewhere may already hold an "archive" or an "ARCHIVE", and that is
  *  the user's archive, not a second space beside it. */
@@ -634,6 +663,9 @@ export function isArchiveName(name: string): boolean {
 export const DEFAULT_SETTINGS: AppSettings = {
   spaces: [DEFAULT_SPACE],
   archive: freshArchive(ARCHIVE_FOLDER),
+  archiveSort: 'recent',
+  archiveByMonth: false,
+  archivedSpaces: [],
   activeSpaceFolder: '',
   // Reopening what you had open is the default, as in every comparable editor:
   // with tabs, "start empty" throws away a whole arrangement rather than one
@@ -924,6 +956,11 @@ export function normalizeSettings(raw: unknown): AppSettings {
   return {
     spaces,
     archive,
+    archiveSort: ARCHIVE_SORT_IDS.includes(s.archiveSort as ArchiveSortId)
+      ? (s.archiveSort as ArchiveSortId)
+      : DEFAULT_SETTINGS.archiveSort,
+    archiveByMonth: s.archiveByMonth === true,
+    archivedSpaces: normalizeArchivedSpaces(s.archivedSpaces),
     activeSpaceFolder:
       spaces.some((x) => x.folder === wanted) || (!!wanted && wanted === archive.folder)
         ? wanted
@@ -958,6 +995,21 @@ export function normalizeSettings(raw: unknown): AppSettings {
     recentColors: normalizePalette(s.recentColors, RECENT_COLORS_MAX),
     savedColors: normalizePalette(s.savedColors, SAVED_COLORS_MAX)
   }
+}
+
+/** Shape only, like the session below: a string path and a whole space for
+ *  each, first one wins on a repeated path. Whether the folder is still in the
+ *  archive is Put back's question, asked when it happens. */
+function normalizeArchivedSpaces(raw: unknown): ArchivedSpace[] {
+  if (!Array.isArray(raw)) return []
+  const out: ArchivedSpace[] = []
+  for (const r of raw) {
+    if (out.length >= ARCHIVED_SPACES_MAX) break
+    if (!isPlainObject(r) || typeof r.path !== 'string' || !r.path || !isPlainObject(r.space)) continue
+    if (out.some((x) => x.path === r.path)) continue
+    out.push({ path: r.path, space: normalizeSpace(r.space) })
+  }
+  return out
 }
 
 /** A pre-tabs settings.json remembered one note. That is a session with one tab. */
@@ -1190,6 +1242,57 @@ export function withoutSpace(s: AppSettings, folder: string): Partial<AppSetting
   }
 }
 
+// --- a whole space in the archive (Reuben, 2026-10-26) ----------------------
+// "Archive this space" moves the space's folder into the archive like any
+// folder. These keep its LOOK while it is there, so Put back can make it a space
+// again — the one exception to "a gone space is never recreated", because
+// putting an archived space back is not undoing a delete.
+
+/** Forget the space — its neighbour is selected, as deleting does — and keep its
+ *  look under `path`, where its folder is about to sit in the archive. */
+export function withSpaceArchived(s: AppSettings, folder: string, path: string): Partial<AppSettings> {
+  const sp = s.spaces.find((x) => x.folder === folder)
+  if (!sp || !folder || !path) return {}
+  return {
+    ...withoutSpace(s, folder),
+    archivedSpaces: [...s.archivedSpaces.filter((r) => r.path !== path), { path, space: sp }].slice(
+      -ARCHIVED_SPACES_MAX
+    )
+  }
+}
+
+/** The record follows the folder when the move landed somewhere other than
+ *  asked — " (2)" on a name the archive already had — or when the folder is
+ *  renamed or moved inside the archive. */
+export function withArchivedSpaceMoved(s: AppSettings, from: string, to: string): Partial<AppSettings> {
+  if (from === to || !s.archivedSpaces.some((r) => r.path === from)) return {}
+  return {
+    archivedSpaces: s.archivedSpaces.filter((r) => r.path !== to).map((r) => (r.path === from ? { ...r, path: to } : r))
+  }
+}
+
+/** Put back as its own space: the folder that was at `from` in the archive is
+ *  now the top-level `to`. It is a space again with the look it had (the
+ *  default look when its record is gone), and the record is dropped. Not
+ *  selected — putting it back is not going to it. At the cap it is left alone
+ *  (Put back checks before moving anything). */
+export function withSpaceBack(s: AppSettings, from: string, to: string): Partial<AppSettings> {
+  const rec = s.archivedSpaces.find((r) => r.path === from)
+  const archivedSpaces = s.archivedSpaces.filter((r) => r.path !== from)
+  const dropped: Partial<AppSettings> = rec ? { archivedSpaces } : {}
+  if (!to || to.includes('/') || isArchiveName(to)) return dropped
+  const look: Space = rec ? { ...rec.space, folder: to } : freshSpace(to)
+  const at = s.spaces.findIndex((x) => x.folder === to)
+  // Already registered (a reconcile got there first): give it its look back.
+  if (at !== -1) return { ...dropped, spaces: numberSpaces(s.spaces.map((x, i) => (i === at ? look : x))) }
+  // A lone unbound space stands for "no folders yet": it is rebound, never
+  // appended beside (withNewSpace's rule).
+  if (s.spaces.length === 1 && s.spaces[0].folder === '') return { ...dropped, spaces: numberSpaces([look]) }
+  // Full: nothing changes, and the record is kept for a later try.
+  if (s.spaces.filter((x) => x.folder).length >= SPACE_CAP) return {}
+  return { ...dropped, spaces: numberSpaces([...s.spaces, look]) }
+}
+
 // --- the pre-paint cache ---------------------------------------------------
 
 /** The userData mirror read synchronously before the renderer exists. Flat, and
@@ -1242,6 +1345,7 @@ export function settingsFromThemeCache(c: ThemeCache): AppSettings {
     // collection" ends up mutating the defaults for the rest of the session.
     pageLookLibrary: [...DEFAULT_SETTINGS.pageLookLibrary],
     tintLibrary: [...DEFAULT_SETTINGS.tintLibrary],
+    archivedSpaces: [],
     archive: freshArchive(ARCHIVE_FOLDER),
     spaces: [
       {

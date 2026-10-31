@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { TreeNode } from '../../../shared/types'
 import type { Workspace } from '../../../shared/workspace'
 import {
+  asksToArchive,
+  importedSince,
+  monthLabel,
+  monthsBefore,
   archivedRoots,
   autoColorPlan,
   colorOf,
@@ -315,5 +319,59 @@ describe('sortArchived', () => {
     const input = [file('a.md'), file('b.md')]
     sortArchived(input, w, 'za')
     expect(input.map((n) => n.path)).toEqual(['a.md', 'b.md'])
+  })
+})
+
+// "Want to archive?" (Reuben, 2026-10-26): a note not edited for over three
+// months asks from its six-dot handle.
+describe('monthLabel', () => {
+  it('names the month a row went in, or "Earlier" with no date', () => {
+    expect(monthLabel(new Date(2026, 9, 31, 12).getTime())).toMatch(/2026/)
+    expect(monthLabel(new Date(2026, 9, 1).getTime())).toBe(monthLabel(new Date(2026, 9, 31).getTime()))
+    expect(monthLabel(new Date(2026, 9, 1).getTime())).not.toBe(monthLabel(new Date(2026, 8, 30).getTime()))
+    expect(monthLabel(undefined)).toBe('Earlier')
+  })
+})
+
+describe('asksToArchive', () => {
+  const now = new Date(2026, 9, 26, 12).getTime() // 26 Oct 2026, noon
+  const note = (updatedAt?: number): TreeNode => ({ ...file('Revision/Waves.md'), updatedAt })
+  const day = 86400000
+
+  it('asks once a note has gone more than three months unedited', () => {
+    expect(asksToArchive(note(new Date(2026, 6, 25).getTime()), {}, now)).toBe(true)
+    expect(asksToArchive(note(new Date(2026, 6, 27).getTime()), {}, now)).toBe(false)
+    expect(asksToArchive(note(now - day), {}, now)).toBe(false)
+  })
+
+  it('never asks about a folder, a pinned note, one told "never", or one with no edit time', () => {
+    const old = new Date(2025, 0, 1).getTime()
+    expect(asksToArchive({ ...dir('Revision'), updatedAt: old }, {}, now)).toBe(false)
+    expect(asksToArchive(note(old), { pinned: true }, now)).toBe(false)
+    expect(asksToArchive(note(old), { keepOutOfArchive: true }, now)).toBe(false)
+    expect(asksToArchive(note(undefined), {}, now)).toBe(false)
+    expect(asksToArchive({ ...file('Revision/photo.png'), updatedAt: old }, {}, now)).toBe(false)
+  })
+
+  it('counts from the day its space was imported when that is later than the last edit', () => {
+    const old = new Date(2024, 2, 3).getTime()
+    expect(asksToArchive(note(old), {}, now, now - day)).toBe(false) // imported yesterday, edited in 2024
+    expect(asksToArchive(note(old), {}, now, new Date(2026, 6, 25).getTime())).toBe(true) // 3+ months ago
+    expect(asksToArchive(note(old), {}, now, 0)).toBe(true) // no import day: the edit date alone
+  })
+
+  it('finds the import day on any folder above a note', () => {
+    const w = ws({ 'Imported': { importedAt: 500 }, 'Imported/Deep': { importedAt: 900 } })
+    expect(importedSince(w, 'Imported/Deep/x.md')).toBe(900)
+    expect(importedSince(w, 'Imported/y.md')).toBe(500)
+    expect(importedSince(w, 'Other/z.md')).toBe(0)
+    expect(importedSince(w, 'Imported')).toBe(0) // the folder itself isn't "above" itself
+  })
+
+  it('counts calendar months, and a short month ends on its last day', () => {
+    expect(new Date(monthsBefore(new Date(2026, 4, 31, 9).getTime(), 3)).getDate()).toBe(28) // 31 May → 28 Feb
+    expect(new Date(monthsBefore(new Date(2026, 4, 31, 9).getTime(), 3)).getMonth()).toBe(1)
+    expect(new Date(monthsBefore(new Date(2026, 0, 15, 9).getTime(), 3)).getFullYear()).toBe(2025) // Jan → Oct last year
+    expect(new Date(monthsBefore(new Date(2026, 0, 15, 9).getTime(), 3)).getMonth()).toBe(9)
   })
 })

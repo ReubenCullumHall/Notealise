@@ -77,6 +77,16 @@ export interface EntryMeta {
    *  usefully on at the same time. Raw view shows every syntax mark in the note;
    *  this shows only what each embed points at, and leaves the prose alone. */
   mediaSource?: boolean
+  /** "Never ask me this again" on this note's "Want to archive?" — the question
+   *  a note not edited in over 3 months asks from its six-dot handle (Reuben,
+   *  2026-10-26; organise/model.ts `asksToArchive`). Losable on the same terms
+   *  as the rest: without it the note just asks again. */
+  keepOutOfArchive?: boolean
+  /** On the space an import made: the day it landed. The notes inside keep
+   *  their old edit dates, so without this nearly every imported note would
+   *  ask "Want to archive?" at once; they count from this day instead
+   *  (Reuben, 2026-10-31; organise/model.ts `importedSince`). Losable. */
+  importedAt?: number
 }
 
 /** Where a binned photo or video came from INSIDE a note, so restoring it can
@@ -463,6 +473,10 @@ export function normalizeEntry(raw: unknown): EntryMeta {
   if (rawView !== undefined) meta.rawView = rawView
   const mediaSource = bool(v.mediaSource)
   if (mediaSource !== undefined) meta.mediaSource = mediaSource
+  const keepOutOfArchive = bool(v.keepOutOfArchive)
+  if (keepOutOfArchive !== undefined) meta.keepOutOfArchive = keepOutOfArchive
+  const importedAt = num(v.importedAt)
+  if (importedAt !== undefined) meta.importedAt = importedAt
   return meta
 }
 

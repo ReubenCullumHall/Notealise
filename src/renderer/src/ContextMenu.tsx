@@ -18,10 +18,13 @@ interface Props {
   onClose: () => void
   /** a caption above the items, for a menu that is a choice ("Put back in") */
   heading?: string
+  /** A line under the heading saying why the menu is asking — which makes the
+   *  heading a question rather than a caption ("Want to archive?"). */
+  note?: string
 }
 
 // A renderer-drawn menu (not Electron's native Menu) so prompt 5 can restyle it.
-export function ContextMenu({ x, y, items, onClose, heading }: Props): React.JSX.Element {
+export function ContextMenu({ x, y, items, onClose, heading, note }: Props): React.JSX.Element {
   // Kept inside the window: opened low down (a row near the foot of the
   // sidebar), a menu used to run off the bottom with its last items unreachable.
   const ref = useRef<HTMLUListElement>(null)
@@ -63,12 +66,13 @@ export function ContextMenu({ x, y, items, onClose, heading }: Props): React.JSX
         onClose()
       }}
     >
-      <ul ref={ref} className="menu" style={at} onClick={(e) => e.stopPropagation()}>
+      <ul ref={ref} className={note ? 'menu menu-ask' : 'menu'} style={at} onClick={(e) => e.stopPropagation()}>
         {heading && (
-          <li className="menu-heading" aria-hidden="true">
+          <li className="menu-heading" aria-hidden={note ? undefined : true}>
             {heading}
           </li>
         )}
+        {note && <li className="menu-note">{note}</li>}
         {items.map((it) => (
           <li
             key={it.label}

@@ -556,10 +556,17 @@ export function registerIpc(window: BrowserWindow): void {
     assertPicked(paths)
     return getImporter(format).preview(paths)
   })
-  ipcMain.handle(CH.importRun, (_e, format: ImportFormat, paths: string[], spaceName: string) => {
+  ipcMain.handle(CH.importRun, async (_e, format: ImportFormat, paths: string[], spaceName: string) => {
     assertPicked(paths)
     beginImport()
-    return getImporter(format).run(paths, spaceName, (p) => sendToWindow(CH.importProgress, p))
+    const result = await getImporter(format).run(paths, spaceName, (p) =>
+      sendToWindow(CH.importProgress, p)
+    )
+    // Stamp the new space with today, so its old notes don't all ask "Want to
+    // archive?" the moment they land. Best effort: a failure here is not an
+    // import failure, the notes are already written.
+    await updateEntries([result.spaceFolder], { importedAt: Date.now() }).catch(() => {})
+    return result
   })
   ipcMain.handle(CH.importCancel, () => requestImportCancel())
 

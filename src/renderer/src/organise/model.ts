@@ -7,6 +7,7 @@ import type { TreeNode } from '../../../shared/types'
 import type { EntryMeta, Workspace } from '../../../shared/workspace'
 import { isSelfOrDescendant } from '../../../shared/workspace'
 import { pickAutoColor } from '../../../shared/color'
+import type { ArchiveSortId } from '../../../shared/settings'
 import { userLocale } from '../intl'
 
 export const NO_META: EntryMeta = {}
@@ -246,7 +247,8 @@ export function findNode(nodes: TreeNode[], path: string): TreeNode | null {
  *  must not change where things land when restored. 'custom' hands the top of
  *  the archive back to the drag order every space has (2026-10-08, when the
  *  archive became a place you can arrange like a space). */
-export type ArchiveSort = 'recent' | 'oldest' | 'az' | 'za' | 'custom'
+// The ids live in shared/settings.ts, because the choice is saved there.
+export type ArchiveSort = ArchiveSortId
 
 export const ARCHIVE_SORTS: { id: ArchiveSort; label: string; short: string }[] = [
   { id: 'recent', label: 'Recently archived', short: 'Recent' },
@@ -281,6 +283,52 @@ export function onDate(ms: number | undefined): string | null {
     month: 'short',
     ...(d.getFullYear() !== today.getFullYear() ? { year: 'numeric' } : {})
   })
+}
+
+/** How long a note goes unedited before it asks "Want to archive?". */
+export const ARCHIVE_ASK_MONTHS = 3
+
+/** `months` calendar months before `now`, on the same day of the month — or the
+ *  month's last day when it is shorter (31 May less 3 months is 28/29 Feb). */
+export function monthsBefore(now: number, months: number): number {
+  const d = new Date(now)
+  const day = d.getDate()
+  d.setDate(1)
+  d.setMonth(d.getMonth() - months)
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()))
+  return d.getTime()
+}
+
+/** Does this sidebar row ask "Want to archive?" from its six-dot handle (Reuben,
+ *  2026-10-26)? A note — not a folder — that hasn't been edited for over
+ *  ARCHIVE_ASK_MONTHS. Never a pinned note (a favourite is in use by
+ *  definition), never one you answered "Never ask me this again", and never
+ *  one whose filesystem keeps no edit time. `since` is the day the note's space
+ *  was imported (`importedSince`): an import keeps each note's old edit date,
+ *  so the clock starts at the later of the two (Reuben, 2026-10-31). Where the
+ *  archive's own rows are drawn the question is simply not asked (TreeView
+ *  gets no `askArchive`). */
+export function asksToArchive(node: TreeNode, meta: EntryMeta, now: number, since = 0): boolean {
+  if (node.type !== 'file' || !node.path.toLowerCase().endsWith('.md')) return false
+  if (meta.pinned || meta.keepOutOfArchive || !node.updatedAt) return false
+  return Math.max(node.updatedAt, since) < monthsBefore(now, ARCHIVE_ASK_MONTHS)
+}
+
+/** The month a row went into the archive, as its heading reads ("October 2026"),
+ *  or "Earlier" for one with no archive date (put there by hand). */
+export function monthLabel(archivedAt: number | undefined): string {
+  if (!archivedAt) return 'Earlier'
+  return new Date(archivedAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+}
+
+/** The latest import day stamped on any folder above this path (0 for none). */
+export function importedSince(ws: Workspace, path: string): number {
+  const parts = path.split('/')
+  let at = 0
+  for (let i = 1; i < parts.length; i++) {
+    at = Math.max(at, metaOf(ws, parts.slice(0, i).join('/')).importedAt ?? 0)
+  }
+  return at
 }
 
 export function sortArchived(nodes: TreeNode[], ws: Workspace, sort: ArchiveSort): TreeNode[] {

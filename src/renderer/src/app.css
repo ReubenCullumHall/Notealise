@@ -510,6 +510,41 @@ button.icon:hover {
 .tree-row:hover .grip, .grip.is-on { opacity: 1; }
 .tree-row:hover .grip:hover { color: rgb(var(--ink-800)); }
 
+/* "Want to archive?" — a note not edited in over 3 months (organise/model.ts
+   `asksToArchive`, Reuben 2026-10-26). A question mark sits exactly where the
+   six dots go and, unlike the plain handle, shows without hovering: a question
+   you have to hover to find is not being asked. Still ONE button, and the row
+   still drags. The dots themselves are hidden under it — drawn faintly behind,
+   they read as a smudge at this size (measured 2026-10-26). Clicking asks; once
+   a selection is under way it selects like any handle. */
+.grip.asks {
+  position: relative;
+  opacity: 1;
+}
+.grip.asks > svg {
+  opacity: 0;
+}
+.grip-ask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(var(--ink-600));
+  pointer-events: none;
+  transition: color 0.18s ease;
+}
+.grip-ask svg {
+  stroke-width: 2.3;
+}
+.tree-row:hover .grip.asks:hover .grip-ask {
+  color: rgb(var(--ink-900));
+}
+/* On a coloured row the question takes the row's own ink, like its title. */
+.tree-row:is(.tint-tag, .tint-solid) .grip-ask {
+  color: rgb(var(--row-ink));
+}
+
 /* ctrl/cmd-click selection */
 .tree-row.row-picked {
   background: rgb(var(--wash) / 0.1);
@@ -2699,6 +2734,25 @@ button.look-card:hover {
   margin-left: 10px;
   font-size: 11px;
   color: rgb(var(--ink-400));
+}
+/* A menu that ASKS ("Want to archive?", from an old note's six-dot handle): the
+   heading is the question, so it reads at item size, and a line under it says
+   why it is asking. The answers are ordinary items. */
+.menu-ask {
+  max-width: 260px;
+}
+.menu-ask .menu-heading {
+  padding: 6px 10px 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(var(--ink-900));
+}
+.menu-note {
+  padding: 0 10px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgb(var(--ink-500));
+  cursor: default;
 }
 /* The choice in use, in a menu that is a choice ("Skip back by"). */
 .menu-tick {

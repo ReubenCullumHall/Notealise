@@ -10,8 +10,11 @@ import {
   settingsFromThemeCache,
   shownEmoji,
   SPACE_CAP,
+  withArchivedSpaceMoved,
   withNewSpace,
   withoutSpace,
+  withSpaceArchived,
+  withSpaceBack,
   withSpaceMoved,
   withSpacePatch,
   withSpaceRenamed,
@@ -872,5 +875,121 @@ describe('the archive', () => {
   it('has a look on the pre-paint fallback too', () => {
     expect(settingsFromThemeCache(normalizeThemeCache({})).archive.folder).toBe('Archive')
     expect(DEFAULT_SETTINGS.archive.folder).toBe('Archive')
+  })
+})
+
+// Round 2 of the archive (Reuben, 2026-10-26): its sort is saved, and a whole
+// space can go into it and come back as a space, look and all.
+describe('the archive, round 2', () => {
+  const three = (): AppSettings =>
+    normalizeSettings({
+      spaces: [
+        { folder: 'Journal', emoji: '📓' },
+        { folder: 'Revision', theme: 'light', emoji: '📚' },
+        { folder: 'Work' }
+      ],
+      activeSpaceFolder: 'Revision'
+    })
+
+  it('keeps the archive sort you picked, and falls back to Recently archived on junk', () => {
+    expect(normalizeSettings({}).archiveSort).toBe('recent')
+    expect(normalizeSettings({ archiveSort: 'az' }).archiveSort).toBe('az')
+    expect(normalizeSettings({ archiveSort: 'sideways' }).archiveSort).toBe('recent')
+  })
+
+  it('groups the archive by month only when asked, and only for a real yes', () => {
+    expect(normalizeSettings({}).archiveByMonth).toBe(false)
+    expect(normalizeSettings({ archiveByMonth: true }).archiveByMonth).toBe(true)
+    expect(normalizeSettings({ archiveByMonth: 'yes' }).archiveByMonth).toBe(false)
+  })
+
+  it('drops archived-space records that are not a path and a space, and repeats', () => {
+    const s = normalizeSettings({
+      archivedSpaces: [
+        { path: 'Archive/Revision', space: { folder: 'Revision', theme: 'light' } },
+        { path: 'Archive/Revision', space: { folder: 'Revision', theme: 'dark' } },
+        { path: '', space: {} },
+        { path: 'Archive/X' },
+        'nope',
+        null
+      ]
+    })
+    expect(s.archivedSpaces).toHaveLength(1)
+    expect(s.archivedSpaces[0].path).toBe('Archive/Revision')
+    expect(s.archivedSpaces[0].space.theme).toBe('light')
+  })
+
+  it('round-trips with an archived space on record', () => {
+    const once = normalizeSettings({
+      ...three(),
+      archiveSort: 'oldest',
+      archivedSpaces: [{ path: 'Archive/Old', space: { folder: 'Old', theme: 'light' } }]
+    })
+    expect(normalizeSettings(JSON.parse(JSON.stringify(once)))).toEqual(once)
+  })
+
+  it('archiving a space forgets it, selects its neighbour, and keeps its look', () => {
+    const s = three()
+    const next = { ...s, ...withSpaceArchived(s, 'Revision', 'Archive/Revision') }
+    expect(next.spaces.map((x) => x.folder)).toEqual(['Journal', 'Work'])
+    expect(next.activeSpaceFolder).toBe('Journal')
+    expect(next.archivedSpaces).toHaveLength(1)
+    expect(next.archivedSpaces[0]).toMatchObject({ path: 'Archive/Revision' })
+    expect(next.archivedSpaces[0].space).toMatchObject({ folder: 'Revision', theme: 'light', emoji: '📚' })
+  })
+
+  it('archiving a space nobody has does nothing', () => {
+    expect(withSpaceArchived(three(), 'Nope', 'Archive/Nope')).toEqual({})
+  })
+
+  it('the record follows its folder when it landed as "Revision (2)"', () => {
+    const s = three()
+    const a = { ...s, ...withSpaceArchived(s, 'Revision', 'Archive/Revision') }
+    const b = { ...a, ...withArchivedSpaceMoved(a, 'Archive/Revision', 'Archive/Revision (2)') }
+    expect(b.archivedSpaces.map((r) => r.path)).toEqual(['Archive/Revision (2)'])
+    expect(withArchivedSpaceMoved(b, 'Archive/Nope', 'Archive/X')).toEqual({})
+  })
+
+  it('put back as its own space: a space again, with its look, and not selected', () => {
+    const s = three()
+    const a = { ...s, ...withSpaceArchived(s, 'Revision', 'Archive/Revision') }
+    const b = { ...a, ...withSpaceBack(a, 'Archive/Revision', 'Revision') }
+    expect(b.spaces.map((x) => x.folder)).toEqual(['Journal', 'Work', 'Revision'])
+    expect(b.spaces[2]).toMatchObject({ theme: 'light', emoji: '📚' })
+    expect(b.activeSpaceFolder).toBe('Journal')
+    expect(b.archivedSpaces).toEqual([])
+  })
+
+  it('a reconcile that got there first is given the look back, not a second space', () => {
+    const s = three()
+    const a = { ...s, ...withSpaceArchived(s, 'Revision', 'Archive/Revision') }
+    const raced = { ...a, ...reconcileSpaces(a, ['Journal', 'Work', 'Revision', 'Archive']) }
+    expect(raced.spaces.find((x) => x.folder === 'Revision')?.theme).not.toBe('light')
+    const b = { ...raced, ...withSpaceBack(raced, 'Archive/Revision', 'Revision') }
+    expect(b.spaces.filter((x) => x.folder === 'Revision')).toHaveLength(1)
+    expect(b.spaces.find((x) => x.folder === 'Revision')).toMatchObject({ theme: 'light', emoji: '📚' })
+  })
+
+  it('with no record it still comes back as a space, with the default look', () => {
+    const s = three()
+    const b = { ...s, ...withSpaceBack(s, 'Archive/Old', 'Old') }
+    expect(b.spaces.map((x) => x.folder)).toContain('Old')
+    expect(b.spaces.find((x) => x.folder === 'Old')?.theme).toBe(DEFAULT_SPACE.theme)
+  })
+
+  it('put INTO another space it is a folder, and its kept look is let go', () => {
+    const s = three()
+    const a = { ...s, ...withSpaceArchived(s, 'Revision', 'Archive/Revision') }
+    const b = { ...a, ...withSpaceBack(a, 'Archive/Revision', 'Journal/Revision') }
+    expect(b.spaces.map((x) => x.folder)).toEqual(['Journal', 'Work'])
+    expect(b.archivedSpaces).toEqual([])
+  })
+
+  it('at the space cap nothing changes and the record is kept for later', () => {
+    const full = normalizeSettings({
+      spaces: Array.from({ length: SPACE_CAP }, (_, i) => ({ folder: `S${i}` })),
+      archivedSpaces: [{ path: 'Archive/Old', space: { folder: 'Old' } }]
+    })
+    expect(withSpaceBack(full, 'Archive/Old', 'Old')).toEqual({})
   })
 })

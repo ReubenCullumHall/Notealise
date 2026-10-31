@@ -12,6 +12,7 @@ import {
   trashEntryToOS
 } from './vault'
 import { isArchiveName } from '../shared/settings'
+import { getSettings } from './settings'
 import {
   EMPTY_WORKSPACE,
   isSelfOrDescendant,
@@ -247,6 +248,31 @@ export async function trashEntries(
   return next
 }
 
+/** Where a binned note really goes back to. Its folder is made again when it
+ *  has gone, which is right for a subfolder but wrong for a SPACE: restoring
+ *  into "Personal" after that space was archived would quietly make a new,
+ *  look-less "Personal" and leave the real one in the archive. A gone space is
+ *  never recreated (docs/plans/archive.md), so the note lands at the top of the
+ *  space you're in instead — where Put back sends one with nowhere to go.
+ *  Anything that isn't a note inside a missing space goes where it was. */
+async function restoreTarget(from: string): Promise<string> {
+  const parts = from.split('/')
+  const root = getVaultRoot()
+  if (parts.length < 2 || !root) return from
+  const top = parts[0]
+  const here = await fs.stat(path.join(root, top)).then(() => true, () => false)
+  if (here) return from
+  try {
+    const s = await getSettings()
+    const real = s.spaces.filter((x) => x.folder)
+    if (!real.length || top === s.archive.folder || real.some((x) => x.folder === top)) return from
+    const into = real.find((x) => x.folder === s.activeSpaceFolder) ?? real[0]
+    return `${into.folder}/${parts[parts.length - 1]}`
+  } catch {
+    return from
+  }
+}
+
 /** Put binned items back where they came from. */
 export async function restoreEntries(ids: string[]): Promise<RestoreResult> {
   await flushNow()
@@ -264,7 +290,7 @@ export async function restoreEntries(ids: string[]): Promise<RestoreResult> {
       continue
     }
     try {
-      landed[item.id] = await restoreEntry(item.id, item.name, item.from)
+      landed[item.id] = await restoreEntry(item.id, item.name, await restoreTarget(item.from))
     } catch (e) {
       console.error(`could not restore ${item.name}`, e)
       kept.push(item) // leave it in the bin rather than losing the record
@@ -340,7 +366,7 @@ export async function restoreRecoveryEntries(ids: string[]): Promise<RestoreResu
       continue
     }
     try {
-      landed[item.id] = await restoreFromRecovery(item.id, item.name, item.from)
+      landed[item.id] = await restoreFromRecovery(item.id, item.name, await restoreTarget(item.from))
     } catch (e) {
       console.error(`could not restore ${item.name} from recovery`, e)
       kept.push(item) // leave it in the safety net rather than losing the record

@@ -141,6 +141,8 @@ interface Props {
     onArchive: (paths: string[]) => void
     /** take these out of the archive, back to where they came from */
     onPutBack: (paths: string[], at?: { x: number; y: number }) => void
+    /** an old note's "?" was clicked: ask "Want to archive?" under it */
+    onAskArchive: (path: string, at: { x: number; y: number }) => void
     onRestoreFromBin: (ids: string[]) => void
     /** held file path, and the note it came out of (null if it wasn't in one) */
     onRevealHeld: (path: string, note: string | null) => void
@@ -383,7 +385,9 @@ export function Sidebar({
     setRevealTarget(folder)
   }, [])
   if (revealRef) revealRef.current = revealFolder
-  const [archiveSort, setArchiveSort] = useState<ArchiveSort>('recent')
+  // Saved with the settings, so a restart keeps it (Reuben, 2026-10-26).
+  const archiveSort = settings.archiveSort
+  const setArchiveSort = (v: ArchiveSort): void => onChangeSettings({ archiveSort: v })
   // "Hold over a space to open it": which inactive space tab (if any) a drag
   // is currently sitting over, armed to switch after SPACE_HOVER_OPEN_MS. The
   // timer id lives in a ref (it's fired imperatively, not read by render).
@@ -1079,7 +1083,11 @@ export function Sidebar({
                 nodes={shownTree}
                 mode="tree"
                 sortedTop={archiveSorted}
+                monthHeadings={
+                  inArchive && settings.archiveByMonth && (archiveSort === 'recent' || archiveSort === 'oldest')
+                }
                 archive={inArchive ? { onPutBack: actions.onPutBack } : undefined}
+                askArchive={inArchive ? undefined : actions.onAskArchive}
               />
 
               {mainTree.length === 0 && pinned.length === 0 && looseNotes.length === 0 && (
@@ -1098,7 +1106,13 @@ export function Sidebar({
                   <p className={SECTION_HEAD} data-tip="Notes in your vault that aren't inside a space">
                     Not in a space
                   </p>
-                  <TreeView {...commonTreeProps} nodes={looseNotes} mode="tree" rootDir="" />
+                  <TreeView
+                    {...commonTreeProps}
+                    nodes={looseNotes}
+                    mode="tree"
+                    rootDir=""
+                    askArchive={actions.onAskArchive}
+                  />
                 </>
               )}
             </>
@@ -1173,7 +1187,15 @@ export function Sidebar({
         {/* A single unbound space means "the whole vault" — there is nothing to
             switch between, so the strip would be one dead button. */}
         {!(spaces.length === 1 && !spaces[0].folder) && (
-          <div className="mb-2 flex flex-wrap items-center justify-center gap-1">
+          <div
+            // In the bin or the archive the spaces dim a little, so it's plain
+            // you've stepped out of them — the bin/archive button is the way
+            // back. Still clickable; not dimmed mid-drag, when they're drop targets.
+            className={
+              'mb-2 flex flex-wrap items-center justify-center gap-1 transition-opacity duration-[400ms] ease-in-out ' +
+              ((inBin || inArchive) && !dragging ? 'opacity-60' : '')
+            }
+          >
             {spaces.map((s, i) => {
               const on = s.folder === activeSpaceFolder
               const arming = armingSpace === s.folder
@@ -1262,6 +1284,12 @@ export function Sidebar({
               x={spaceMenu.x}
               y={spaceMenu.y}
               items={[
+                // The whole space into the archive, look kept for Put back
+                // (App's `archiveSpace`, Reuben 2026-10-26).
+                {
+                  label: 'Archive this space',
+                  onClick: () => void spaceActions.onArchiveSpace(spaceMenu.space.folder)
+                },
                 {
                   label: 'Delete space…',
                   danger: true,

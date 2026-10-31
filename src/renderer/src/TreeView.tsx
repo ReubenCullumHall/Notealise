@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import type { ColorStyle } from '../../shared/settings'
 import { inkOn, rgbChannels } from '../../shared/color'
 import { Icon } from './icons'
-import { colorOf, labelOf, metaOf, onDate, sortSiblings, splitMoved } from './organise/model'
+import { asksToArchive, colorOf, importedSince, labelOf, metaOf, monthLabel, onDate, sortSiblings, splitMoved } from './organise/model'
 import { DRAG_NOTE } from './tabs/island'
 import { anyDeleted, pendingCreated, takeCreated, wasDeleted } from './organise/arrivals'
 import { BOUNCE, BOUNCE_MS, BOUNCE_SOFT, SOFT_Y1, bounceAt, motionOn } from './tabs/tabStyles'
@@ -94,9 +94,17 @@ interface Props extends TreeActions {
    *  there; dropping INTO a folder still works, and so does everything below
    *  the top. */
   sortedTop?: boolean
+  /** The archive, sorted by date, with its user's "group by month" on: a small
+   *  month heading above the first row of each month. Looking only. */
+  monthHeadings?: boolean
   /** Set while this tree is the archive's: what was archived says when and
    *  from where on its second line, and carries a Put back button. */
   archive?: { onPutBack: (paths: string[], at?: { x: number; y: number }) => void }
+  /** A note not edited in over 3 months asks "Want to archive?" from its six-dot
+   *  handle (`asksToArchive`); clicking the question opens App's pop-up under it.
+   *  Left out where the question makes no sense — the archive, the pinned list,
+   *  search results. */
+  askArchive?: (path: string, at: { x: number; y: number }) => void
 }
 
 const parentOf = (p: string): string => {
@@ -208,7 +216,9 @@ export function TreeView({
   onToggleExpand,
   revealTarget,
   sortedTop = false,
+  monthHeadings = false,
   archive,
+  askArchive,
   onOpen,
   onContext,
   onMove,
@@ -392,30 +402,53 @@ export function TreeView({
   /** The row's colour control: a swatch when it has one, an outline when it
    *  doesn't. In the hover-action group beside pin and bin, because that is
    *  where the app already puts "do something to this row". */
-  const grip = (path: string): React.JSX.Element => (
-    <span
-      role="button"
-      tabIndex={0}
-      onClick={(e) => {
-        e.stopPropagation()
-        toggleSel(path)
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
+  const grip = (path: string, asks = false): React.JSX.Element => {
+    // "Want to archive?" is asked while nothing is being selected; once a
+    // selection is under way the handle selects, as every handle does.
+    const ask = asks && !selecting && !!askArchive
+    const press = (el: HTMLElement): void => {
+      if (ask) {
+        const r = el.getBoundingClientRect()
+        askArchive?.(path, { x: r.left, y: r.bottom + 4 })
+      } else toggleSel(path)
+    }
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
           e.stopPropagation()
-          toggleSel(path)
+          press(e.currentTarget)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            e.stopPropagation()
+            press(e.currentTarget)
+          }
+        }}
+        className={
+          'grip shrink-0 cursor-grab text-ink-300 outline-none active:cursor-grabbing' +
+          (picked(path) ? ' is-on' : '') +
+          (ask ? ' asks' : '')
         }
-      }}
-      className={
-        'grip shrink-0 cursor-grab text-ink-300 outline-none active:cursor-grabbing' +
-        (picked(path) ? ' is-on' : '')
-      }
-      data-tip={picked(path) ? 'Click to deselect · drag to move' : 'Click to select · drag to move'}
-    >
-      <Icon name="grip" />
-    </span>
-  )
+        data-tip={
+          ask
+            ? 'Not edited in over 3 months'
+            : picked(path)
+              ? 'Click to deselect · drag to move'
+              : 'Click to select · drag to move'
+        }
+      >
+        <Icon name="grip" />
+        {ask && (
+          <span className="grip-ask" aria-hidden="true">
+            <Icon name="question" />
+          </span>
+        )}
+      </span>
+    )
+  }
 
   const noteRow = (node: TreeNode, depth: number): React.JSX.Element => {
     const open = openPath === node.path
@@ -462,7 +495,7 @@ export function TreeView({
           if (e.key === 'Enter') onOpen(node.path)
         }}
       >
-        {!shelved && grip(node.path)}
+        {!shelved && grip(node.path, asksToArchive(node, meta, Date.now(), importedSince(workspace, node.path)))}
         <span className={'shrink-0 ' + (open || picked(node.path) ? 'text-brand-600' : 'text-ink-300')}>
           <Icon name="doc" />
         </span>
@@ -1026,7 +1059,21 @@ export function TreeView({
       }}
     >
       {movedGroup(movedTop, 0)}
-      {restTop.map((n) => renderRow(n, 0))}
+      {restTop.map((n, i) => {
+        const month = monthHeadings ? monthLabel(metaOf(workspace, n.path).archivedAt) : null
+        const before =
+          monthHeadings && i > 0 ? monthLabel(metaOf(workspace, restTop[i - 1].path).archivedAt) : null
+        return (
+          <Fragment key={n.path}>
+            {month !== null && month !== before && (
+              <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400 first:pt-1">
+                {month}
+              </p>
+            )}
+            {renderRow(n, 0)}
+          </Fragment>
+        )
+      })}
     </div>
   )
 }

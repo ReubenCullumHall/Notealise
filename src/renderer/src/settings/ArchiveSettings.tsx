@@ -1,6 +1,6 @@
 import { inArchive, withSpacePatch, type AppSettings, type Space } from '../../../shared/settings'
 import { ArchiveIcon } from '../icons'
-import { SettingRow } from './primitives'
+import { SettingRow, ToggleRow } from './primitives'
 import { SpaceForm } from './SpaceForm'
 import type { SpaceActions } from './Spaces'
 import type { FontLibrary } from './useInstalledFonts'
@@ -49,6 +49,18 @@ export function ArchiveSettings({ settings, onChange, actions, fontLibrary }: Pr
             {archive.folder}
           </span>
         </SettingRow>
+        <div className="border-t border-ink-300/15" />
+
+        {/* Looking only: nothing moves, and the archive's own sort decides the
+            order. Off by default — the user chooses (Reuben, 2026-10-31). */}
+        <div className="py-3">
+          <ToggleRow
+            on={settings.archiveByMonth}
+            onClick={() => onChange({ archiveByMonth: !settings.archiveByMonth })}
+            label="Group by month"
+            hint="Puts a heading like “October 2026” above what you archived that month. Your files stay where they are. It shows while the archive is sorted by Recently archived or Oldest first."
+          />
+        </div>
         <div className="border-t border-ink-300/15" />
 
         <SettingRow

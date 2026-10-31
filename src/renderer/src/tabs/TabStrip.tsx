@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../icons'
 import { BLANK, MAX_PANES, stripGroups, type Split } from './model'
 import {
@@ -59,6 +59,13 @@ interface Props {
    *  strip on screen", off). Its layout space stays reserved — nothing below
    *  it reflows — same as the links block and the note's own heading row. */
   hidden: boolean
+  /** Is this note in the archive? Its right-click menu offers Put back… instead
+   *  of Move to archive. */
+  isArchived: (path: string) => boolean
+  /** right-click → "Move to archive" (the sidebar's, for the note you're in) */
+  onArchive: (path: string) => void
+  /** right-click → "Put back…": Put back's own menu, opened where you clicked */
+  onPutBack: (path: string, x: number, y: number) => void
 }
 
 const nameOf = (p: string): string => p.slice(p.lastIndexOf('/') + 1)
@@ -466,7 +473,10 @@ export function TabStrip({
   onNewTab,
   island,
   dragging,
-  hidden
+  hidden,
+  isArchived,
+  onArchive,
+  onPutBack
 }: Props): React.JSX.Element {
   // The gap the dragged tab would land in: the path it goes before, or null for
   // "the end". `undefined` means no indicator at all (not over the strip).
@@ -882,6 +892,13 @@ export function TabStrip({
               draggable
               {...nameProps(item[0])}
               {...tabDragProps(item[0])}
+              // A lone tab's own menu: Move to archive (or Put back…) and Close.
+              // A blank tab has no note to act on.
+              onContextMenu={(e) => {
+                e.preventDefault()
+                if (!item[0]) return
+                setMenu({ x: e.clientX, y: e.clientY, path: item[0] })
+              }}
               className={
                 TAB_BASE +
                 (item[0] === active ? TAB_ON : TAB_OFF) +
@@ -957,9 +974,13 @@ export function TabStrip({
         x={menu.x}
         y={menu.y}
         path={menu.path}
+        grouped={!!groupOf(menu.path)}
         canTakeOut={!!groupOf(menu.path)}
+        archived={isArchived(menu.path)}
         onTakeOut={() => onTakeOutOfSplit(menu.path)}
         onUngroup={() => onUngroup(menu.path)}
+        onArchive={() => onArchive(menu.path)}
+        onPutBack={() => onPutBack(menu.path, menu.x, menu.y)}
         onClose={() => onClose(menu.path)}
         onDismiss={() => setMenu(null)}
       />
@@ -974,27 +995,51 @@ function TabGroupMenu({
   x,
   y,
   path,
+  grouped,
   canTakeOut,
+  archived,
   onTakeOut,
   onUngroup,
+  onArchive,
+  onPutBack,
   onClose,
   onDismiss
 }: {
   x: number
   y: number
   path: string
+  /** a piece of a joined tab (a split), not a lone tab */
+  grouped: boolean
   canTakeOut: boolean
+  archived: boolean
   onTakeOut: () => void
   onUngroup: () => void
+  onArchive: () => void
+  onPutBack: () => void
   onClose: () => void
   onDismiss: () => void
 }): React.JSX.Element {
   const name = titleOf(path)
   const items = [
-    ...(canTakeOut ? [{ label: `Take ${name} out of the split`, onClick: onTakeOut }] : []),
-    { label: 'Split them all apart', onClick: onUngroup },
+    ...(grouped && canTakeOut ? [{ label: `Take ${name} out of the split`, onClick: onTakeOut }] : []),
+    ...(grouped ? [{ label: 'Split them all apart', onClick: onUngroup }] : []),
+    // The sidebar's own words for the same two actions.
+    archived ? { label: 'Put back…', onClick: onPutBack } : { label: 'Move to archive', onClick: onArchive },
     { label: `Close ${name}`, onClick: onClose, danger: true }
   ]
+  // Escape closes it, like the sidebar's right-click menu — now that every tab
+  // has this menu, not only a split's (2026-10-26).
+  const dismiss = useRef(onDismiss)
+  dismiss.current = onDismiss
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      dismiss.current()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
   return (
     <div
       className="menu-backdrop"

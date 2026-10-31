@@ -83,6 +83,23 @@ describe('normalizeWorkspace', () => {
     expect('color' in ws.entries['a.md']).toBe(false)
   })
 
+  it('keeps "Never ask me this again", and lets Undo clear it', () => {
+    // The old-note "Want to archive?" answer (2026-10-26). Undo sends
+    // `{ keepOutOfArchive: undefined }`, which has to drop the key, not keep it.
+    const ws = normalizeWorkspace({
+      entries: { 'a.md': { keepOutOfArchive: true }, 'b.md': { keepOutOfArchive: 'yes' }, 'c.md': { keepOutOfArchive: undefined } }
+    })
+    expect(ws.entries['a.md']).toEqual({ keepOutOfArchive: true })
+    expect(ws.entries['b.md']).toEqual({})
+    expect('keepOutOfArchive' in ws.entries['c.md']).toBe(false)
+  })
+
+  it('keeps the day an import landed, and drops anything that is not a number', () => {
+    const ws = normalizeWorkspace({ entries: { Imported: { importedAt: 1700000000000 }, Bad: { importedAt: 'today' } } })
+    expect(ws.entries['Imported']).toEqual({ importedAt: 1700000000000 })
+    expect(ws.entries['Bad']).toEqual({})
+  })
+
   it('drops non-finite numbers rather than storing NaN/Infinity', () => {
     const ws = normalizeWorkspace({ entries: { 'a.md': { order: NaN, archivedAt: Infinity } } })
     expect(ws.entries['a.md']).toEqual({})

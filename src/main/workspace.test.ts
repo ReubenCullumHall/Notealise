@@ -178,3 +178,76 @@ describe('migrateKey and where an archived entry came from', () => {
     expect(ws.entries['Archive/x.md'].archivedFrom).toBe('Year 120/x.md')
   })
 })
+
+// A note binned from a space that was archived afterwards. Restoring used to
+// make the folder again — a new, look-less space beside the archived real one.
+describe('restoring into a space that has gone', () => {
+  let root = ''
+  const exists = async (rel: string): Promise<boolean> =>
+    fs.access(path.join(root, rel)).then(() => true, () => false)
+  const saySpaces = async (folders: string[], active: string): Promise<void> => {
+    await fs.mkdir(path.join(root, '.mdnotes'), { recursive: true })
+    await fs.writeFile(
+      path.join(root, '.mdnotes/settings.json'),
+      JSON.stringify({ spaces: folders.map((folder) => ({ folder })), activeSpaceFolder: active })
+    )
+  }
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'mdnotes-gone-'))
+    for (const d of ['Personal', 'Work']) await fs.mkdir(path.join(root, d), { recursive: true })
+    await fs.writeFile(path.join(root, 'Personal/Idea.md'), 'An idea')
+    await fs.writeFile(path.join(root, 'Work/Plan.md'), 'A plan')
+    setVaultRoot(root)
+  })
+
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true })
+  })
+
+  // "Personal" goes into the archive whole, the way Archive this space does it.
+  const archivePersonal = async (): Promise<void> => {
+    await fs.mkdir(path.join(root, 'Archive'), { recursive: true })
+    await fs.rename(path.join(root, 'Personal'), path.join(root, 'Archive/Personal'))
+  }
+
+  it('lands at the top of the space you are in, and makes no new space', async () => {
+    const binned = await trashEntries(['Personal/Idea.md'])
+    const id = binned.trash[0].id
+    // Binned first, then the space archived (its folder, now empty, goes with it).
+    await archivePersonal()
+    await saySpaces(['Work'], 'Work')
+    const res = await restoreEntries([id])
+    expect(res.landed[id]).toBe('Work/Idea.md')
+    expect(await exists('Work/Idea.md')).toBe(true)
+    expect(await exists('Personal')).toBe(false)
+  })
+
+  it('does the same from the 7-day recovery net', async () => {
+    const binned = await trashEntries(['Personal/Idea.md'])
+    const purged = await purgeEntries([binned.trash[0].id])
+    const id = purged.recovery[0].id
+    await archivePersonal()
+    await saySpaces(['Work'], 'Work')
+    const res = await restoreRecoveryEntries([id])
+    expect(res.landed[id]).toBe('Work/Idea.md')
+    expect(await exists('Personal')).toBe(false)
+  })
+
+  it('still makes a missing SUBfolder again inside a space that is there', async () => {
+    await fs.mkdir(path.join(root, 'Work/Sub'), { recursive: true })
+    await fs.writeFile(path.join(root, 'Work/Sub/Deep.md'), 'Deep')
+    const binned = await trashEntries(['Work/Sub/Deep.md'])
+    await fs.rm(path.join(root, 'Work/Sub'), { recursive: true })
+    await saySpaces(['Personal', 'Work'], 'Personal')
+    const res = await restoreEntries([binned.trash[0].id])
+    expect(res.landed[binned.trash[0].id]).toBe('Work/Sub/Deep.md')
+  })
+
+  it('a vault with no spaces keeps its old behaviour (the folder comes back)', async () => {
+    const binned = await trashEntries(['Personal/Idea.md'])
+    await fs.rm(path.join(root, 'Personal'), { recursive: true })
+    const res = await restoreEntries([binned.trash[0].id])
+    expect(res.landed[binned.trash[0].id]).toBe('Personal/Idea.md')
+  })
+})

@@ -61,6 +61,14 @@ export function installMenu(): void {
           click: () => sendMenuCommand('new-folder')
         },
         { type: 'separator' },
+        // The note you're in (App.tsx `archiveOpenNote`); the same as its tab's
+        // right-click "Move to archive".
+        {
+          label: 'Move to Archive',
+          accelerator: 'CommandOrControl+Shift+A',
+          click: () => sendMenuCommand('archive-note')
+        },
+        { type: 'separator' },
         { label: 'Import notes…', click: () => sendMenuCommand('import-notes') },
         { type: 'separator' },
         ...(isMac ? [] : [checkForUpdates, { type: 'separator' } as MenuItemConstructorOptions]),

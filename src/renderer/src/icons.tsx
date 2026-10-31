@@ -15,6 +15,7 @@ export type IconName =
   | 'bookmark'
   | 'trash'
   | 'archive'
+  | 'question'
   | 'restore'
   | 'search'
   | 'check'
@@ -128,6 +129,15 @@ const PATHS: Record<IconName, React.JSX.Element> = {
       <path d="M3 5h18v4H3z" />
       <path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
       <path d="M10 13h4" />
+    </>
+  ),
+  // A bare question mark, in the place of a note's six-dot handle when it asks
+  // "Want to archive?" (TreeView, `asksToArchive`). Drawn large: it stands in
+  // for the whole handle, so it fills about as much of the box as the dots do.
+  question: (
+    <>
+      <path d="M8.2 8.2a3.9 3.9 0 0 1 7.5 1.3c0 2.6-3.8 3.4-3.8 6" />
+      <path d="M12 20.6v.1" />
     </>
   ),
   restore: (

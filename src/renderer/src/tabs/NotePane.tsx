@@ -137,6 +137,12 @@ interface Props {
    *  (`MIN_PANE_PX`), because a CSS minimum would overflow a narrow window
    *  instead of just refusing to shrink. */
   size: number
+  /** This note is in the archive and is open in a space (a link brought it
+   *  here): a line across its top says so and offers Put back. Not shown in
+   *  the archive itself, where every note is archived. */
+  archived?: boolean
+  /** that line's Put back button: Put back's own menu, opened under it */
+  onPutBack?: (x: number, y: number) => void
 }
 
 const nameOf = (p: string): string => p.slice(p.lastIndexOf('/') + 1)
@@ -212,7 +218,9 @@ export function NotePane({
   dragging,
   edgeDrops,
   onDropTab,
-  size
+  size,
+  archived = false,
+  onPutBack
 }: Props): React.JSX.Element {
   // This pane's live CodeMirror, for its own format bar. Per pane, not per app:
   // each column's commands act on the column they sit in.
@@ -517,6 +525,34 @@ export function NotePane({
           )}
         </div>
       </div>
+
+      {/* A note in the archive, opened from a space by a link: the one line
+          that says where it lives, and the way back out (Reuben, 2026-10-26).
+          A band like the links strip's, under the format bar so the bar never
+          moves between notes; it stays put while the note scrolls, because it
+          is the thing that explains this tab being here at all. */}
+      {!blank && archived && (
+        <div
+          className="archive-line flex h-[30px] shrink-0 items-center gap-1.5 border-b border-ink-300/20 bg-surface/30 px-3 text-[12px] text-ink-500"
+          role="status"
+        >
+          <Icon name="archive" className="h-3.5 w-3.5 shrink-0 text-ink-400" />
+          <span className="truncate">In the archive</span>
+          {onPutBack && (
+            <button
+              type="button"
+              className="shrink-0 rounded-control border-none bg-transparent px-1.5 py-0.5 font-medium text-ink-700 outline-none transition-colors hover:bg-transparent hover:text-ink-900 hover:underline focus-visible:ring-2 focus-visible:ring-brand-300"
+              data-tip="Take it out of the archive"
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect()
+                onPutBack(r.left, r.bottom + 4)
+              }}
+            >
+              Put back
+            </button>
+          )}
+        </div>
+      )}
 
       {!blank && showLinks && linksPosition === 'top' && pinLinks && (
         <LinksBlock
