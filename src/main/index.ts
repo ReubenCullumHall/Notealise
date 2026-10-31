@@ -89,6 +89,16 @@ function createWindow(): BrowserWindow {
 
   win.on('ready-to-show', () => win.show())
 
+  // On Windows and Linux the × quits the app, but only AFTER the window is gone —
+  // and by then the quit below has no window left to ask to save, so the last
+  // second of typing (and the "Recovered" note) was lost. Turn the × into a quit
+  // while the window is still there. A Mac window can close without quitting.
+  win.on('close', (e) => {
+    if (process.platform === 'darwin' || quitting) return
+    e.preventDefault()
+    app.quit()
+  })
+
   // electron-vite provides ELECTRON_RENDERER_URL in dev; load the built file otherwise.
   if (DEV_URL) {
     win.loadURL(DEV_URL)
@@ -232,7 +242,10 @@ app.on('before-quit', (e) => {
     void stopWatching()
     app.quit()
   }
-  const timer = setTimeout(finish, 1500)
+  // Windows waits 4s, not 1.5: a save onto a file something else holds open retries
+  // for about a second per pass and the quit makes two passes before it writes the
+  // "Recovered" note — 1.5s ended the app first and the typing was lost.
+  const timer = setTimeout(finish, process.platform === 'win32' ? 4000 : 1500)
   ipcMain.once(CH.flushed, () => {
     clearTimeout(timer)
     finish()

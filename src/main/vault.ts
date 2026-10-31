@@ -304,11 +304,15 @@ const DIR_RENAME_ATTEMPTS = 16
 // Echo guard: paths the app itself just wrote, so the watcher can ignore its
 // own writes and not loop. ~1.5s TTL.
 // ---------------------------------------------------------------------------
-const recentWrites = new Set<string>()
+// A second write to the same file restarts its clock: with one timer per write, the
+// first write's timer cleared the mark ~1.5s in, while the second write's echo —
+// slower to arrive on Windows — was still on its way, and reached the editor.
+const recentWrites = new Map<string, NodeJS.Timeout>()
 function markWrite(abs: string): void {
   const k = key(abs)
-  recentWrites.add(k)
-  setTimeout(() => recentWrites.delete(k), 1500).unref()
+  const earlier = recentWrites.get(k)
+  if (earlier) clearTimeout(earlier)
+  recentWrites.set(k, setTimeout(() => recentWrites.delete(k), 1500).unref())
 }
 export function wasRecentlyWritten(abs: string): boolean {
   return recentWrites.has(key(abs))

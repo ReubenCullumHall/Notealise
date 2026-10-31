@@ -29,6 +29,7 @@ import {
   setVaultRoot,
   setWatcherRelease,
   trashEntry,
+  wasRecentlyWritten,
   writeNote
 } from './vault'
 import { RECOVERY_DIR, heldPath, isSafeHeldSegment } from '../shared/workspace'
@@ -130,6 +131,26 @@ describe('the vault boundary', () => {
     await writeNote('..todo.md', 'still mine')
     expect(await read('..todo.md')).toBe('still mine')
     expect(await readNote('..todo.md')).toBe('still mine')
+  })
+})
+
+describe('the echo guard', () => {
+  it('a second save keeps the file marked for a full 1.5s of its own', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const abs = path.join(root, 'echo.md')
+      await writeNote('echo.md', 'one')
+      await vi.advanceTimersByTimeAsync(1200)
+      await writeNote('echo.md', 'two')
+      // 1.6s after the first save: its own timer would have cleared the mark by now,
+      // but the second save's echo (slow to arrive on Windows) has not come yet.
+      await vi.advanceTimersByTimeAsync(400)
+      expect(wasRecentlyWritten(abs)).toBe(true)
+      await vi.advanceTimersByTimeAsync(1200)
+      expect(wasRecentlyWritten(abs)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

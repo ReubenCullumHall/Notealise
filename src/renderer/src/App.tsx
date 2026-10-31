@@ -575,7 +575,16 @@ export default function App(): React.JSX.Element {
           // Keep the buffer for a later retry — unless typing has already put a
           // newer one in its place, which must not be overwritten by this one.
           if (!dirtyRef.current.has(path)) dirtyRef.current.set(path, text)
-          flash(`Save failed: ${(e as Error).message}`)
+          const why = (e as Error).message
+          // "No such file" right after the note's folder was renamed outside the app is
+          // normal for a moment: the watcher follows the note to its new place (Windows
+          // takes a second or two to settle a renamed folder). Only say so if the typing
+          // is still unsaved, under the same name, after that.
+          if (/ENOENT/.test(why)) {
+            window.setTimeout(() => {
+              if (dirtyRef.current.get(path) === text) flash(`Save failed: ${why}`)
+            }, 3000)
+          } else flash(`Save failed: ${why}`)
         }
       }
     }

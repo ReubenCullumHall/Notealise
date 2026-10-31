@@ -108,7 +108,7 @@ const zooms = new Map<string, ZoomWindow>()
 const FLAT = 0.22
 
 /** Cmd on a Mac, Ctrl elsewhere — Ctrl-click on a Mac is a right-click. */
-const IS_MAC = /Mac/.test(navigator.userAgent)
+const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent)
 const zoomKey = (e: { metaKey: boolean; ctrlKey: boolean }): boolean => (IS_MAC ? e.metaKey : e.ctrlKey)
 
 /** The mixer's slide: open on the sidebar's new-note bounce and speed

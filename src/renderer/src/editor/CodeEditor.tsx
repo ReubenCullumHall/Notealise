@@ -362,7 +362,10 @@ export function CodeEditor({
     const view = viewRef.current
     if (!view) return
     const next = docRef.current
-    if (prevPath.current === path && view.state.doc.toString() === next) return
+    // The editor's text always ends its lines with \n; a Windows note read from disk
+    // may use \r\n. Compared raw they never match, so any reload of an unchanged
+    // note threw away the undo history and put the cursor back at the top.
+    if (prevPath.current === path && view.state.doc.toString() === next.replace(/\r\n?/g, '\n')) return
 
     const switching = prevPath.current !== null && prevPath.current !== path
     if (switching) perPath.set(prevPath.current as string, snapshot(view))
