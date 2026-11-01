@@ -319,9 +319,6 @@ export function Collection({
             {spaceLabel} — so putting a look on a space and tuning how it
             draws don't need two different pages. */}
         <div className={'mt-4' + (!here.pageLook ? ' pointer-events-none opacity-40' : '')}>
-          <label className="block text-[11.5px] font-medium text-ink-700" htmlFor="page-look-intensity">
-            Intensity — {here.pageLookIntensity}%
-          </label>
           <IntensitySlider value={here.pageLookIntensity} accent={here.pageLookAccent} onChange={setIntensity} />
           <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
             50 is how every look above is tuned by default. Faint down toward 10, bold up toward

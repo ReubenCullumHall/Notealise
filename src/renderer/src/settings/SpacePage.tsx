@@ -194,9 +194,6 @@ export function SpacePage({ space, onChange, collection }: Props): React.JSX.Ele
             whether it draws in the accent colour. Both greyed out on Plain —
             neither has anything to act on until a look is picked. */}
         <div className={'mt-4' + (!space.pageLook ? ' pointer-events-none opacity-40' : '')}>
-          <label className="block text-[11.5px] font-medium text-ink-700" htmlFor="page-look-intensity">
-            Intensity — {space.pageLookIntensity}%
-          </label>
           <IntensitySlider
             value={space.pageLookIntensity}
             accent={space.pageLookAccent}

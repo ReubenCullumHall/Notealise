@@ -322,8 +322,42 @@ function channels(h: number, s: number, l: number): string {
   return [f(0), f(8), f(4)].map((v) => Math.round(v * 255)).join(' ')
 }
 
-/** Write (or clear) accent variables onto `el`. Every call clears first, so
- *  switching mode can't leave stale variables behind. */
+/** Write a custom property on `el` only if it differs from what is already
+ *  there (`null` / '' removes it). Every write to a variable on <html> makes the
+ *  browser restyle every element in the window — ~26 ms on a real vault with
+ *  Settings open — even when the value is the same as before, and
+ *  applySettings runs on every settings save. Reading the inline value back is
+ *  free: it is the string we wrote, not a computed style. */
+function setVar(el: HTMLElement, name: string, value: string | null): void {
+  const cur = el.style.getPropertyValue(name)
+  if (!value) {
+    if (cur !== '') el.style.removeProperty(name)
+  } else if (cur !== value) el.style.setProperty(name, value)
+}
+
+/** What the last applyAccent was asked for. Same again means the same result,
+ *  so the call can return straight away. */
+let lastAccent: { el: HTMLElement; key: string } | null = null
+
+/** The theme's OWN ink (`--ink-*` from theme.css), per theme and text tone —
+ *  the only two things theme.css sets it by (`data-theme`, `data-text-tone`).
+ *  Read from the page the first time each pair is needed and kept, because
+ *  reading it means clearing our own `--ink-*` and asking for computed styles,
+ *  which makes the browser restyle the whole window on the spot. */
+const plainInk = new Map<string, (readonly [string, string])[]>()
+
+/** Write (or clear) accent variables onto `el`. Works out the full set it
+ *  wants, then writes only the ones that differ from what's there and removes
+ *  the rest, so switching mode can't leave stale variables behind.
+ *
+ *  Kept cheap on purpose (Reuben, 2026-11-01). This runs on every settings
+ *  save — and the accent colour picker saves on every pointer move. It used to
+ *  clear every variable and read the theme's ink back from computed styles each
+ *  time, forcing a whole-window restyle mid-call: 50–70 ms per move with a real
+ *  vault, so a colour drag stuttered and every switch in Settings paid for it.
+ *  Now it returns at once when nothing it depends on changed, and otherwise
+ *  only reads computed styles the first time a theme + tone pair is seen.
+ *  applySettings is the only writer of these variables. */
 function applyAccent(
   el: HTMLElement,
   opts: {
@@ -339,19 +373,22 @@ function applyAccent(
     active: boolean
   }
 ): void {
-  ALL_KEYS.forEach((k) => el.style.removeProperty(k))
-  const hue = accentHue(opts.accent)
-  if (!opts.active || hue == null) return
+  const key = JSON.stringify(opts)
+  if (lastAccent && lastAccent.el === el && lastAccent.key === key) return
+  lastAccent = { el, key }
 
-  // The theme's OWN ink, captured after the clear above and before anything is
-  // written over it. `uiText` mode repaints `--ink-*` wholesale — that is what
-  // "every label" means — and a note's body reads `--ink-900` like everything
-  // else, so without this there is no way left to put the note back. Read from
-  // the computed style rather than kept in a table here because these values
-  // live in theme.css and belong to whichever theme is active.
-  const plain = Object.keys(TEXT_RAMP[opts.theme]).map(
-    (k) => [k, getComputedStyle(el).getPropertyValue(k).trim()] as const
-  )
+  const want = new Map<string, string>()
+  // Every key we might have written before, plus anything wanted now — a
+  // light ramp key missing from the dark-built ALL_KEYS still gets written.
+  const write = (): void =>
+    new Set([...ALL_KEYS, ...want.keys()]).forEach((k) => setVar(el, k, want.get(k) ?? null))
+
+  const hue = accentHue(opts.accent)
+  if (!opts.active || hue == null) {
+    write()
+    return
+  }
+
   // the light theme has no white to give — see the tone block in theme.css
   const lift = opts.tone === 'white' && opts.theme !== 'light'
   const at = ([s, l]: [number, number], k: string): string =>
@@ -361,9 +398,7 @@ function applyAccent(
   // elements that read `--ink-acc-*` are accented however the rest is set —
   // and so "headings only" is the ramp NOT being applied to `--ink-*`, rather
   // than a second, separately-tuned colour that could drift from it.
-  Object.entries(TEXT_RAMP[opts.theme]).forEach(([k, stop]) =>
-    el.style.setProperty(accName(k), at(stop, k))
-  )
+  Object.entries(TEXT_RAMP[opts.theme]).forEach(([k, stop]) => want.set(accName(k), at(stop, k)))
 
   // `text` mode paints `--ink-*` ONLY when the user asks for every label
   // (`uiText`). Left alone — the default — the accent reaches the interface
@@ -374,22 +409,32 @@ function applyAccent(
   // `tint` is unchanged: its ramp tints the ink LIGHTLY by design and moves the
   // surfaces too, which is the whole difference between the two modes.
   if (opts.mode !== 'text') {
-    Object.entries(RAMP[opts.theme]).forEach(([k, stop]) => el.style.setProperty(k, at(stop, k)))
+    Object.entries(RAMP[opts.theme]).forEach(([k, stop]) => want.set(k, at(stop, k)))
   } else if (opts.uiText) {
-    Object.entries(TEXT_RAMP[opts.theme]).forEach(([k, stop]) =>
-      el.style.setProperty(k, at(stop, k))
-    )
+    Object.entries(TEXT_RAMP[opts.theme]).forEach(([k, stop]) => want.set(k, at(stop, k)))
     // …and hand the note its own ink back. app.css's `[data-ui-accent]` block
-    // is the only reader.
-    plain.forEach(([k, v]) => v && el.style.setProperty(k.replace('--ink-', '--ink-plain-'), v))
+    // is the only reader. `uiText` repaints `--ink-*` wholesale — that is what
+    // "every label" means — and a note's body reads `--ink-900` like everything
+    // else, so without the theme's own values there is no way to put it back.
+    const pairKey = `${opts.theme}|${opts.tone}`
+    let plain = plainInk.get(pairKey)
+    if (!plain) {
+      const inkKeys = Object.keys(TEXT_RAMP[opts.theme])
+      inkKeys.forEach((k) => el.style.removeProperty(k))
+      const cs = getComputedStyle(el)
+      plain = inkKeys.map((k) => [k, cs.getPropertyValue(k).trim()] as const)
+      plainInk.set(pairKey, plain)
+    }
+    plain.forEach(([k, v]) => v && want.set(k.replace('--ink-', '--ink-plain-'), v))
   }
   // Outside the mode branch on purpose — see ACCENT_KEYS. Read from the TINTED
   // ramp in both modes, so a switch is the same colour either way.
   const tinted = RAMP[opts.theme]
-  Object.entries(ACCENT_KEYS).forEach(([key, from]) => {
+  Object.entries(ACCENT_KEYS).forEach(([k, from]) => {
     const stop = tinted[from]
-    if (stop) el.style.setProperty(key, channels(hue, stop[0], stop[1]))
+    if (stop) want.set(k, channels(hue, stop[0], stop[1]))
   })
+  write()
 }
 
 /** Write (or clear) the font variables onto `el`. Four variables, three
@@ -407,27 +452,19 @@ function applyAccent(
  *  `applyAccent`, so switching a pick back to '' actually reverts to
  *  theme.css's own defaults rather than leaving a stale override in place. */
 function applyFont(el: HTMLElement, uiFont: string, font: string, dyslexiaFont: string): void {
-  el.style.removeProperty('--font-sans')
-  el.style.removeProperty('--font-serif')
-  el.style.removeProperty('--note-font-sans')
-  el.style.removeProperty('--note-font-serif')
-
+  // Worked out first and written once each through setVar, rather than
+  // removed and re-set: a remove-then-set of the same value still restyles
+  // the whole window.
   const ui = resolveFont(uiFont)
-  if (ui) {
-    const value = fontCssValue(ui)
-    el.style.setProperty('--font-sans', value)
-    el.style.setProperty('--font-serif', value)
-  }
-
+  const uiValue = ui ? fontCssValue(ui) : null
   const skin = resolveFont(font)
-  if (skin) {
-    const value = fontCssValue(skin)
-    el.style.setProperty('--note-font-sans', value)
-    el.style.setProperty('--note-font-serif', value)
-  }
-
+  const skinValue = skin ? fontCssValue(skin) : null
   const dys = resolveFont(dyslexiaFont)
-  if (dys) el.style.setProperty('--note-font-sans', fontCssValue(dys))
+
+  setVar(el, '--font-sans', uiValue)
+  setVar(el, '--font-serif', uiValue)
+  setVar(el, '--note-font-sans', dys ? fontCssValue(dys) : skinValue)
+  setVar(el, '--note-font-serif', skinValue)
 }
 
 /** Apply the settings to the document: theme + density as data-* attributes,
@@ -463,7 +500,7 @@ export function applySettings(s: AppSettings): void {
   root.dataset.rawMarks = a.rawMarkStyle
   const tint = splitToken(a.rawMarkTint)
   root.dataset.rawMarkLayer = tint.layer
-  root.style.setProperty('--raw-mark-ink', `var(--${a.rawMarkTint})`)
+  setVar(root, '--raw-mark-ink', `var(--${a.rawMarkTint})`)
   // The writing surface: a pattern behind the text and a colour wash under it
   // (shared/looks.ts). Both resolved to something the CSS can definitely draw
   // — an unknown id or an unparseable tint becomes a plain page, never a
@@ -474,11 +511,11 @@ export function applySettings(s: AppSettings): void {
   // sidebar) moves underneath it.
   root.dataset.pageLook = findPageLook(a.pageLook)?.id ?? 'none'
   const pageTint = parseTint(a.tint)
-  root.style.setProperty('--page-tint-rgb', pageTint ? rgbChannels(pageTint.hex) : '0 0 0')
-  root.style.setProperty('--page-tint-alpha', pageTint ? String(pageTint.opacity / 100) : '0')
+  setVar(root, '--page-tint-rgb', pageTint ? rgbChannels(pageTint.hex) : '0 0 0')
+  setVar(root, '--page-tint-alpha', pageTint ? String(pageTint.opacity / 100) : '0')
   // The pattern's own strength and colour — see the comment on --page-look-rgb
   // / --page-look-intensity in app.css for what these two axes mean.
-  root.style.setProperty('--page-look-intensity', String(a.pageLookIntensity / PAGE_LOOK_INTENSITY_DEFAULT))
+  setVar(root, '--page-look-intensity', String(a.pageLookIntensity / PAGE_LOOK_INTENSITY_DEFAULT))
   root.dataset.pageLookAccent = a.pageLookAccent ? 'on' : 'off'
   root.dataset.motion = s.animationsEnabled ? 'on' : 'off'
   // Global like `data-motion`: app.css's `.space-emoji` reads it to swap every
@@ -504,8 +541,7 @@ export function applySettings(s: AppSettings): void {
     const c = a.formatColors[k]
     for (const layer of ['tc', 'hl'] as const) {
       const name = `--fmt-${k}-${layer}`
-      if (c[layer]) root.style.setProperty(name, c[layer])
-      else root.style.removeProperty(name)
+      setVar(root, name, c[layer] || null)
     }
   }
 }

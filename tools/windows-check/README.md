@@ -68,3 +68,24 @@ reach the editor. A real screen grab only works while the app is in front (`rais
 inside the window — scroll the line into view first.
 
 Split-view pass (2026-11-01, `../split-check/`): **make a brand-new practice vault for every scenario** — the app saves the open tabs and splits INSIDE the vault (`.mdnotes/settings.json`), so a reused vault restores the last scenario's layout and the next check starts from the wrong picture (a false FAIL, caught by re-running clean). A mid-drag screenshot needs a 1px nudge first (a still pointer may not get its last `dragover`, so a hover outline reads as missing). One-letter note names make a tab piece ~27px wide and the hover × (laid over the name by design) covers all of it — click such a piece with Enter on the focused piece, not a mouse click. And match menu items by their exact label: `'move' in item` matched "Move to archive" and passed a check that should have failed.
+
+## Measuring smoothness (2026-11-01) — `smooth_check.py`
+
+For "it's laggy / not smooth". `python -X utf8 -I smooth_check.py slider [collection|every]`, `… click`, `… colour`.
+Each run copies the real vault (the one in `%APPDATA%\notes-app\config.json`) into the scratch folder, measures,
+and deletes the copy — an empty practice vault hides the cost (the first slider fix measured smooth on one and was
+still laggy in Reuben's hands). It counts frame gaps with `requestAnimationFrame` (over 25 ms is a stutter you can
+see), long tasks (over 50 ms: the window frozen), and for `click` CDP `Performance.getMetrics` per click.
+
+- **Before/after:** build HEAD into its own folder and point `BUILD=` at it — `git archive --format=zip -o <tmp>.zip HEAD`,
+  `Expand-Archive`, junction `node_modules` in, `npx electron-vite build --outDir $env:TEMP\notealise-check\build-head\out`,
+  junction `node_modules` into `build-head` too. Same script, same input, both builds.
+- **Where the time goes:** CDP `Profiler.start` / `Profiler.stop` around the drag and sum self time per function — the
+  build isn't minified, so names are real. Style work forced from script shows up as `getBoundingClientRect` /
+  `getPropertyValue` self time.
+- **Traps:** Look's page has more than one colour square — the folder-colour picker comes first (it saves only when
+  you confirm); use the accent's own panel (the "Any colour" button's `ancestor::div[2]`). The accent's shades come
+  from the colour's HUE alone, so a near-grey accent, or a drag in the square, recolours nothing — pick a strong
+  colour and drag the strip; the script prints how many different shades it saw. The vault copy sits in TEMP, not
+  OneDrive, so OneDrive's slower writes are NOT reproduced. Python's `shutil` needs `\\?\` long paths for a real vault.
+

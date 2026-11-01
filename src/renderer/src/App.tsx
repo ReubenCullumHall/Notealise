@@ -661,14 +661,72 @@ export default function App(): React.JSX.Element {
 
   // Appearance: load the active vault's settings (or cached defaults) and apply
   // theme/density/accent to <html>. `applySettings` is the only DOM writer.
-  const changeSettings = useCallback(async (partial: Partial<AppSettings>): Promise<AppSettings> => {
-    const next = await window.api.setSettings(partial)
-    setSettings(next)
-    applySettings(next)
-    // What was saved, for a caller that writes again straight after: the
-    // `settingsRef` copy only catches up at the next render.
-    return next
+  //
+  // One save at a time, and the changes that arrive while one is on its way
+  // are merged into ONE next save (Reuben, 2026-11-01). A colour picker or a
+  // slider that recolours the app live calls this on every pointer move; each
+  // call used to go straight to main, which queues them and does a full
+  // read-write-rename of settings.json per call — dozens a second, so the app
+  // fell further and further behind the pointer and caught up in jumps after
+  // it stopped. Merging is safe because main applies partials in order with
+  // later keys winning, which is exactly what `{ ...a, ...b }` does. Each
+  // caller still gets back the settings its change was saved in.
+  //
+  // A batch remembers the vault it was asked for in, and is dropped rather
+  // than sent if the vault has changed by the time it would go: main writes to
+  // whichever vault is open WHEN it is called (main/settings.ts), so a late
+  // send would put the old vault's change into the new one.
+  const vaultNow = useRef(vault)
+  vaultNow.current = vault
+  const settingsBatch = useRef<{
+    partial: Partial<AppSettings>
+    vault: string | null
+    waiters: { resolve: (s: AppSettings) => void; reject: (e: unknown) => void }[]
+  } | null>(null)
+  const settingsSaving = useRef(false)
+  const pumpSettings = useCallback((): void => {
+    if (settingsSaving.current || !settingsBatch.current) return
+    const batch = settingsBatch.current
+    settingsBatch.current = null
+    if (batch.vault !== vaultNow.current) {
+      batch.waiters.forEach((w) => w.reject(new Error('vault changed before this settings change was saved')))
+      return
+    }
+    settingsSaving.current = true
+    window.api.setSettings(batch.partial).then(
+      (next) => {
+        settingsSaving.current = false
+        setSettings(next)
+        applySettings(next)
+        batch.waiters.forEach((w) => w.resolve(next))
+        pumpSettings()
+      },
+      (err) => {
+        settingsSaving.current = false
+        batch.waiters.forEach((w) => w.reject(err))
+        pumpSettings()
+      }
+    )
   }, [])
+  const changeSettings = useCallback(
+    (partial: Partial<AppSettings>): Promise<AppSettings> =>
+      // Resolves with what was saved, for a caller that writes again straight
+      // after: the `settingsRef` copy only catches up at the next render.
+      new Promise<AppSettings>((resolve, reject) => {
+        const b = settingsBatch.current
+        if (b && b.vault === vaultNow.current) {
+          b.partial = { ...b.partial, ...partial }
+          b.waiters.push({ resolve, reject })
+        } else {
+          // A batch left over from another vault is dropped by the pump; this
+          // one replaces it as the next to send.
+          b?.waiters.forEach((w) => w.reject(new Error('vault changed before this settings change was saved')))
+          settingsBatch.current = { partial, vault: vaultNow.current, waiters: [{ resolve, reject }] }
+        }
+        pumpSettings()
+      }),
+    [pumpSettings]
+  )
   /** Which vault the `settings` in state were read from.
    *
    *  `vault` is set at the START of a folder switch and the settings arrive
@@ -1463,19 +1521,29 @@ export default function App(): React.JSX.Element {
     return out
   }, [tree])
 
+  /** Each space's folder and emoji — already in the chosen emoji style, so the
+   *  path bar, link chips and link hover cards draw it without each needing the
+   *  setting. Kept as the SAME array until a folder or emoji really changes:
+   *  every settings save hands back a new `settings.spaces`, and each open
+   *  note re-works its incoming links whenever this array is new — 50+ ms a
+   *  save on a real vault, for a slider tick or a switch that has nothing to do
+   *  with links (Reuben, 2026-11-01). */
+  const spaceMarksKey = JSON.stringify(
+    settings.spaces.map((sp) => ({ folder: sp.folder, emoji: shownEmoji(sp.emoji, settings.emojiStyle) }))
+  )
+  const spaceMarks = useMemo(() => JSON.parse(spaceMarksKey) as LinkEnv['spaces'], [spaceMarksKey])
+
   /** What the editors need to know about the vault. Per-pane `path` is added by
    *  the pane itself — a link resolves relative to the note it is written in. */
   const linkEnvBase = useMemo(
     (): Omit<LinkEnv, 'path' | 'blocks' | 'headings'> => ({
       notes: vaultNotes,
-      // already in the chosen emoji style, so the path bar, link chips and
-      // link hover cards draw it without each needing the setting
-      spaces: settings.spaces.map((sp) => ({ folder: sp.folder, emoji: shownEmoji(sp.emoji, settings.emojiStyle) })),
+      spaces: spaceMarks,
       // how far a voice note's skip buttons jump — arriving with the rest of
       // this is what redraws every voice note on screen when one is changed
       voiceSkip: settings.voiceSkip
     }),
-    [vaultNotes, settings.spaces, settings.emojiStyle, settings.voiceSkip]
+    [vaultNotes, spaceMarks, settings.voiceSkip]
   )
 
   const linkHandlers = useMemo(
