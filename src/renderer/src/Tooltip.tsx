@@ -15,8 +15,11 @@ import { createPortal } from 'react-dom'
 //  3. **It is a box.** A native tooltip is an opaque panel the app can't style,
 //     and it reads as heavier than the thing it describes.
 //
-// So: plain text, directly under whatever you're pointing at, re-read from the
-// DOM every time — including after a click, which is what fixes (1).
+// So: our own small plaque, directly under whatever you're pointing at, re-read
+// from the DOM every time — including after a click, which is what fixes (1).
+// The plaque is the link card's (HoverCard.tsx): a mostly-solid grey ground with
+// the page blurred behind it. It started as bare text with a paper-coloured
+// shadow, which was hard to read over a note's own words (Reuben, 2026-10-31).
 
 /** ms of hovering before the text appears. Long enough not to flicker as the
  *  pointer crosses a row of buttons, short enough to feel like an answer. */
@@ -30,8 +33,6 @@ interface Tip {
   right: number
   top: number
   bottom: number
-  /** a "?" help mark's tip: drawn on a solid panel (see HelpTip) */
-  panel: boolean
   /** true when the anchor is in the right-hand third — the text is then aligned
    *  to its right edge, so a long tip doesn't shoot off the window */
   fromRight: boolean
@@ -45,7 +46,6 @@ export function HelpTip({ text }: { text: string }): React.JSX.Element {
   return (
     <span
       data-tip={text}
-      data-tip-panel=""
       aria-label={text}
       className="inline-flex h-3.5 w-3.5 shrink-0 select-none items-center justify-center rounded-full border border-ink-300/40 text-[9px] font-semibold leading-none text-ink-400"
     >
@@ -112,7 +112,6 @@ export function Tooltip(): React.JSX.Element | null {
         right: r.right,
         top: r.top,
         bottom: r.bottom,
-        panel: 'tipPanel' in el.dataset,
         fromRight: r.left > window.innerWidth * 0.62
       }
     }
@@ -176,18 +175,11 @@ export function Tooltip(): React.JSX.Element | null {
         // Never wider than the window, whatever the 16rem cap says.
         maxWidth: 'min(16rem, calc(100vw - 16px))'
       }}
-      // Text, not a panel: no border, no background, no shadow. The drop-shadow
-      // is the only concession — it is what keeps a light tip legible where it
-      // happens to fall over the note's own text.
-      // The one exception is a "?" help mark (Reuben, 2026-10-03: easier to
-      // read on a solid background). Those tips are whole sentences, and bare
-      // text that long, laid over a settings row, was hard to read.
-      className={
-        'pointer-events-none z-[90] text-[11.5px] font-medium leading-snug ' +
-        (tip.panel
-          ? 'rounded-lg border border-ink-300/25 bg-surface px-2.5 py-1.5 text-ink-700 shadow-float'
-          : 'text-ink-600 [text-shadow:0_1px_0_rgb(var(--paper)),0_0_6px_rgb(var(--paper))]')
-      }
+      // The link card's plaque (HoverCard.tsx), so the two read as one family:
+      // `bg-surface/95` + `backdrop-blur` greys the page out and blurs the words
+      // underneath. Bare text over a note was hard to read (Reuben, 2026-10-31);
+      // the "?" help marks had already moved onto a solid panel (2026-10-03).
+      className="pointer-events-none z-[90] rounded-lg border border-ink-300/30 bg-surface/95 px-2.5 py-1.5 text-[11.5px] font-medium leading-snug text-ink-700 shadow-float backdrop-blur"
       role="tooltip"
     >
       {tip.text}
