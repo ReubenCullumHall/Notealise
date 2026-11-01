@@ -652,6 +652,64 @@ export function swapPanes(l: TabLayout, a: number, b: number): TabLayout {
   return { ...l, panes, focus: b }
 }
 
+/** The three fields that describe a row of columns — the split on screen is a
+ *  `TabLayout`, a parked one is a `Split`, and both carry exactly these. */
+type Columns = Pick<TabLayout, 'panes' | 'focus' | 'sizes'>
+
+/** Run `op` on whichever split holds `path` — the one on screen or a parked one —
+ *  and put the result back. `op` answers null when there is nothing to do, and
+ *  then the SAME layout comes back, so callers can tell a no-op by identity. */
+function inSplit(l: TabLayout, path: string, op: (c: Columns) => Columns | null): TabLayout {
+  if (l.panes.includes(path)) {
+    const next = l.panes.length > 1 ? op(l) : null
+    return next ? { ...l, ...next } : l
+  }
+  const at = parkedIndex(l, path)
+  if (at === -1) return l
+  const next = op(l.parked![at])
+  return next ? withParked(l, l.parked!.map((g, i) => (i === at ? { ...g, ...next } : g))) : l
+}
+
+/** Move the column showing `path` one place along its split — `-1` left, `+1`
+ *  right: the arrows in a column's top bar and "Move … left/right" on its piece
+ *  of the joined tab (Reuben, 2026-11-01). It trades places with its neighbour
+ *  and the widths stay with the places, exactly as the old swap button did; what
+ *  changes is that focus stays on the same NOTE, so the column you pressed is
+ *  still the lit one wherever it lands. Works on a parked split too, which is
+ *  why it is keyed by note rather than by column number. */
+export function nudgePane(l: TabLayout, path: string, dir: -1 | 1): TabLayout {
+  return inSplit(l, path, (c) => {
+    const i = c.panes.indexOf(path)
+    const j = i + dir
+    if (i === -1 || j < 0 || j >= c.panes.length) return null
+    const panes = [...c.panes]
+    panes[i] = c.panes[j]
+    panes[j] = path
+    return { ...c, panes, focus: c.focus === i ? j : c.focus === j ? i : c.focus }
+  })
+}
+
+/** Drop one piece of a joined tab ANYWHERE on another piece of the same split:
+ *  it takes that piece's place and the ones in between shuffle along. Next door
+ *  that is a plain swap; three columns apart it is the note walking to the far
+ *  end. The column travels, so its width travels with it (like dragging it by its
+ *  top edge, `movePane`). Not the same split — or the same piece — is a no-op:
+ *  leaving the split is a different gesture, a drop away from the joined tab. */
+export function moveWithinSplit(l: TabLayout, dragged: string, target: string): TabLayout {
+  if (dragged === target) return l
+  return inSplit(l, dragged, (c) => {
+    const i = c.panes.indexOf(dragged)
+    const j = c.panes.indexOf(target)
+    if (i === -1 || j === -1) return null
+    const rest = withoutAt(c.panes, i)
+    return {
+      panes: [...rest.slice(0, j), dragged, ...rest.slice(j)],
+      focus: j,
+      sizes: sizesReinsert({ tabs: [], ...c }, i, j)
+    }
+  })
+}
+
 /** How the strip reads when notes are sharing the screen: the panes collapse
  *  into ONE item, so a split looks like a split before you have opened it.
  *  Everything else is a lone tab, in strip order.

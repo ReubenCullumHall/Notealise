@@ -40,6 +40,12 @@ interface Props {
   /** move a whole group — `members`, on screen or parked — to sit before
    *  `before` (null = last) */
   onMoveGroup: (before: string | null, members: string[]) => void
+  /** a piece of a joined tab dropped on another piece of the SAME joined tab:
+   *  it takes that piece's place (the columns swap). Anywhere on the piece
+   *  counts — leaving the split is a drop somewhere else. */
+  onMoveWithinSplit: (dragged: string, target: string) => void
+  /** move `path`'s column one place left or right along its split */
+  onNudge: (path: string, dir: -1 | 1) => void
   /** take one note out of the split — its column closes, the tab stays open */
   onTakeOutOfSplit: (path: string) => void
   /** end the split `path` is in: on screen, one column with everything else
@@ -467,6 +473,8 @@ export function TabStrip({
   onReorder,
   onSplitWith,
   onMoveGroup,
+  onMoveWithinSplit,
+  onNudge,
   onTakeOutOfSplit,
   onUngroup,
   onDragTab,
@@ -485,6 +493,11 @@ export function TabStrip({
   // the same time as `before` — a drop is one gesture or the other, decided by
   // where in the target tab the pointer is.
   const [splitOn, setSplitOn] = useState<string | null>(null)
+  // The piece of a joined tab a dragged piece of the SAME joined tab would swap
+  // with — set instead of `before`/`splitOn` whenever the pointer is over one,
+  // wherever on it (Reuben, 2026-11-01). Only dropping somewhere ELSE takes the
+  // note out of the split.
+  const [swapOn, setSwapOn] = useState<string | null>(null)
   // A group being dragged along the strip. Local, not App's `drag`: a group has
   // no meaning to a pane, and leaving App's state null is what keeps the panes'
   // drop zones from lighting up for a gesture they cannot answer.
@@ -646,6 +659,7 @@ export function TabStrip({
   const clear = (): void => {
     setBefore(undefined)
     setSplitOn(null)
+    setSwapOn(null)
   }
 
   const over = (e: React.DragEvent, path: string | null): void => {
@@ -658,8 +672,24 @@ export function TabStrip({
     if (path === null) {
       setBefore(null)
       setSplitOn(null)
+      setSwapOn(null)
       return
     }
+    // A piece of a joined tab over another piece of the SAME joined tab: this is
+    // rearranging that split, so the whole piece is the target — no thirds, no
+    // caret. (The thirds made the edge of a neighbour mean "leave the split",
+    // and a piece is only ~47px wide: the middle was a 19px sliver.)
+    if (dragging?.kind === 'tab' && dragging.path !== path && groupOf(dragging.path)?.includes(path)) {
+      setSwapOn(path)
+      setSplitOn(null)
+      setBefore(undefined)
+      return
+    }
+    if (dragging?.kind === 'tab' && dragging.path === path && groupOf(path)) {
+      clear() // over its own piece: nothing would happen, so say nothing
+      return
+    }
+    setSwapOn(null)
     // A group travels whole, so there is no half of it to split against and no
     // sense in dropping it inside itself — only the caret is offered.
     if (groupDrag) {
@@ -695,7 +725,8 @@ export function TabStrip({
     if (groupDrag) {
       if (before !== undefined) onMoveGroup(before, groupDrag)
     } else if (dragging?.kind === 'tab') {
-      if (splitOn !== null) onSplitWith(splitOn, dragging.path)
+      if (swapOn !== null) onMoveWithinSplit(dragging.path, swapOn)
+      else if (splitOn !== null) onSplitWith(splitOn, dragging.path)
       else if (before !== undefined) {
         // Dragged OUT of the group and dropped on the strip: leaving the split
         // is the gesture, and the strip position is where it lands. Two steps
@@ -767,6 +798,11 @@ export function TabStrip({
     onDragOver: (e) => over(e, path),
     onDrop: drop
   })
+
+  // Where the right-clicked piece sits in its joined tab — which is its place in
+  // the split, since the strip draws a joined tab in column order.
+  const menuGroup = menu ? groupOf(menu.path) : undefined
+  const menuAt = menu && menuGroup ? menuGroup.indexOf(menu.path) : -1
 
   return (
     <>
@@ -861,6 +897,15 @@ export function TabStrip({
                       (dragging?.path === path ? 'opacity-40 ' : '')
                     }
                   >
+                    {/* What a drop here would do, drawn on the piece itself:
+                        it swaps places with the piece being dragged. The same
+                        accent edge the lone tab and the panes use. */}
+                    {swapOn === path && (
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 rounded-md border-2 border-brand-400 bg-brand-500/20"
+                      />
+                    )}
                     <span
                       data-seg-title
                       className={
@@ -976,7 +1021,11 @@ export function TabStrip({
         path={menu.path}
         grouped={!!groupOf(menu.path)}
         canTakeOut={!!groupOf(menu.path)}
+        canMoveLeft={menuAt > 0}
+        canMoveRight={!!menuGroup && menuAt < menuGroup.length - 1}
         archived={isArchived(menu.path)}
+        onMoveLeft={() => onNudge(menu.path, -1)}
+        onMoveRight={() => onNudge(menu.path, 1)}
         onTakeOut={() => onTakeOutOfSplit(menu.path)}
         onUngroup={() => onUngroup(menu.path)}
         onArchive={() => onArchive(menu.path)}
@@ -997,7 +1046,11 @@ function TabGroupMenu({
   path,
   grouped,
   canTakeOut,
+  canMoveLeft,
+  canMoveRight,
   archived,
+  onMoveLeft,
+  onMoveRight,
   onTakeOut,
   onUngroup,
   onArchive,
@@ -1011,7 +1064,12 @@ function TabGroupMenu({
   /** a piece of a joined tab (a split), not a lone tab */
   grouped: boolean
   canTakeOut: boolean
+  /** there is a piece to its left / right to trade places with */
+  canMoveLeft: boolean
+  canMoveRight: boolean
   archived: boolean
+  onMoveLeft: () => void
+  onMoveRight: () => void
   onTakeOut: () => void
   onUngroup: () => void
   onArchive: () => void
@@ -1021,6 +1079,8 @@ function TabGroupMenu({
 }): React.JSX.Element {
   const name = titleOf(path)
   const items = [
+    ...(grouped && canMoveLeft ? [{ label: `Move ${name} left`, onClick: onMoveLeft }] : []),
+    ...(grouped && canMoveRight ? [{ label: `Move ${name} right`, onClick: onMoveRight }] : []),
     ...(grouped && canTakeOut ? [{ label: `Take ${name} out of the split`, onClick: onTakeOut }] : []),
     ...(grouped ? [{ label: 'Split them all apart', onClick: onUngroup }] : []),
     // The sidebar's own words for the same two actions.

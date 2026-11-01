@@ -66,3 +66,5 @@ returns nothing — build it from the process you started instead (`Keys.__new__
 its one-line form `<details><summary>Title</summary>`. CDP keys don't reach menu accelerators (Ctrl+N), but Ctrl+F does
 reach the editor. A real screen grab only works while the app is in front (`raise_window` before each) and only for rows
 inside the window — scroll the line into view first.
+
+Split-view pass (2026-11-01, `../split-check/`): **make a brand-new practice vault for every scenario** — the app saves the open tabs and splits INSIDE the vault (`.mdnotes/settings.json`), so a reused vault restores the last scenario's layout and the next check starts from the wrong picture (a false FAIL, caught by re-running clean). A mid-drag screenshot needs a 1px nudge first (a still pointer may not get its last `dragover`, so a hover outline reads as missing). One-letter note names make a tab piece ~27px wide and the hover × (laid over the name by design) covers all of it — click such a piece with Enter on the focused piece, not a mouse click. And match menu items by their exact label: `'move' in item` matched "Move to archive" and passed a check that should have failed.

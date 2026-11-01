@@ -10,6 +10,8 @@ import {
   MAX_PANES,
   movePane,
   moveTab,
+  moveWithinSplit,
+  nudgePane,
   openTab,
   renamePath,
   replaceActive,
@@ -326,6 +328,105 @@ describe('rearranging the columns', () => {
     invariants(l)
     const same = three()
     expect(swapPanes(same, 1, 1)).toBe(same)
+  })
+})
+
+describe('moving a column one place along its split (Reuben, 2026-11-01)', () => {
+  const three = (): TabLayout =>
+    splitAt(splitAt(opened('a.md', 'b.md'), 'a.md', 0), 'c.md', 2) // a | b | c
+  /** a | b | c parked behind z */
+  const parkedThree = (): TabLayout => showTab(addTab(three(), 'z.md'), 'z.md')
+
+  it('trades places with the neighbour, in either direction, and the strip order is untouched', () => {
+    const right = nudgePane(three(), 'a.md', 1)
+    expect(right.panes).toEqual(['b.md', 'a.md', 'c.md'])
+    expect(right.tabs).toEqual(three().tabs)
+    invariants(right)
+    expect(nudgePane(three(), 'c.md', -1).panes).toEqual(['a.md', 'c.md', 'b.md'])
+  })
+
+  it('keeps focus on the same NOTE, wherever it lands', () => {
+    const l = { ...three(), focus: 1 } // b is the lit column
+    expect(nudgePane(l, 'b.md', 1).focus).toBe(2) // b moved right, still lit
+    expect(nudgePane(l, 'a.md', 1).focus).toBe(0) // a swapped with the lit b: b moved to 0
+    expect(nudgePane(l, 'c.md', -1).focus).toBe(2) // b was swapped to the right
+    invariants(nudgePane(l, 'b.md', 1))
+  })
+
+  it('does nothing past either end, or for a note that is not in a split', () => {
+    const l = three()
+    expect(nudgePane(l, 'a.md', -1)).toBe(l)
+    expect(nudgePane(l, 'c.md', 1)).toBe(l)
+    expect(nudgePane(l, 'nope.md', 1)).toBe(l)
+    const one = opened('a.md')
+    expect(nudgePane(one, 'a.md', 1)).toBe(one)
+  })
+
+  it('the widths stay with the places, as the old swap button left them', () => {
+    const l = dragged(3, 1) // 75% | 25%
+    const moved = nudgePane(l, 'a.md', 1)
+    expect(moved.panes).toEqual(['b.md', 'a.md'])
+    expect(moved.sizes).toEqual(l.sizes)
+    invariants(moved)
+  })
+
+  it('works on a split you have stepped out of, leaving the screen alone', () => {
+    const away = parkedThree()
+    expect(away.panes).toEqual(['z.md'])
+    const l = nudgePane(away, 'b.md', 1)
+    expect(l.parked?.[0].panes).toEqual(['a.md', 'c.md', 'b.md'])
+    expect(l.panes).toEqual(['z.md'])
+    invariants(l)
+    expect(nudgePane(away, 'a.md', -1)).toBe(away) // already first in its split
+  })
+})
+
+describe('dropping a piece of the joined tab on another piece', () => {
+  const three = (): TabLayout =>
+    splitAt(splitAt(opened('a.md', 'b.md'), 'a.md', 0), 'c.md', 2) // a | b | c
+
+  it('next door it is a swap, wherever on the neighbour it lands', () => {
+    const l = moveWithinSplit(three(), 'a.md', 'b.md')
+    expect(l.panes).toEqual(['b.md', 'a.md', 'c.md'])
+    expect(l.focus).toBe(1) // the note you dragged
+    invariants(l)
+  })
+
+  it('further away the note takes that place and the ones between shuffle along', () => {
+    expect(moveWithinSplit(three(), 'a.md', 'c.md').panes).toEqual(['b.md', 'c.md', 'a.md'])
+    expect(moveWithinSplit(three(), 'c.md', 'a.md').panes).toEqual(['c.md', 'a.md', 'b.md'])
+  })
+
+  it('the column travels, so its width travels with it', () => {
+    const l = moveWithinSplit(dragged(3, 1), 'a.md', 'b.md') // a was 75%
+    expect(l.panes).toEqual(['b.md', 'a.md'])
+    expect(l.sizes).toEqual([0.25, 0.75])
+    invariants(l)
+  })
+
+  it('opens and closes nothing: the strip keeps its order and no tab is added or lost', () => {
+    const l = moveWithinSplit(addTab(three(), 'z.md'), 'a.md', 'c.md')
+    expect(l.tabs).toEqual(['a.md', 'b.md', 'c.md', 'z.md'])
+    invariants(l)
+  })
+
+  it('onto itself, or a note that is not in the same split, is no gesture at all', () => {
+    const l = three()
+    expect(moveWithinSplit(l, 'a.md', 'a.md')).toBe(l)
+    expect(moveWithinSplit(l, 'a.md', 'z.md')).toBe(l)
+    const one = addTab(addTab(twoCols(), 'c.md'), 'd.md')
+    const two = splitAt(showTab(one, 'c.md'), 'd.md', 1) // c | d on screen, a | b parked
+    expect(moveWithinSplit(two, 'c.md', 'a.md')).toBe(two)
+    expect(moveWithinSplit(two, 'a.md', 'c.md')).toBe(two)
+  })
+
+  it('works inside a split you have stepped out of', () => {
+    const away = showTab(addTab(three(), 'z.md'), 'z.md')
+    const l = moveWithinSplit(away, 'c.md', 'a.md')
+    expect(l.parked?.[0].panes).toEqual(['c.md', 'a.md', 'b.md'])
+    expect(l.parked?.[0].focus).toBe(0)
+    expect(l.panes).toEqual(['z.md'])
+    invariants(l)
   })
 })
 

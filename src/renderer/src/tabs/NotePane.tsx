@@ -121,6 +121,10 @@ interface Props {
    *  Redundant with dragging the column by its top edge (`onReorder`), and
    *  deliberately so: the button is the route a keyboard can reach. */
   onSwapLeft?: () => void
+  /** the same, towards the RIGHT — undefined for the rightmost column
+   *  (Reuben, 2026-11-01: the left arrow alone made a column's way back a
+   *  walk round the others). */
+  onSwapRight?: () => void
   /** move THIS column to position `to` — the drag along its top edge (only
    *  offered in a split — one column has no order to rearrange) */
   onReorder: (to: number) => void
@@ -214,6 +218,7 @@ export function NotePane({
   canSplit,
   onClosePane,
   onSwapLeft,
+  onSwapRight,
   onReorder,
   dragging,
   edgeDrops,
@@ -496,7 +501,17 @@ export function NotePane({
               aria-label="Move this column to the left"
               onClick={onSwapLeft}
             >
-              <Icon name="swapColumns" className="h-4 w-4" />
+              <Icon name="moveLeft" className="h-4 w-4" />
+            </button>
+          )}
+          {onSwapRight && (
+            <button
+              className={ROW_BTN}
+              data-tip="Move this column to the right  ·  or drag its top edge"
+              aria-label="Move this column to the right"
+              onClick={onSwapRight}
+            >
+              <Icon name="moveRight" className="h-4 w-4" />
             </button>
           )}
           {/* Hidden rather than disabled at the cap: in a split the row is
@@ -796,28 +811,17 @@ export function NotePane({
           </HoverCard>
         )}
 
-        {dragging && (
-          <div
-            className="absolute inset-0 z-30"
-            onDragOver={overZone}
-            onDragLeave={() => setZone(null)}
-            onDrop={(e) => {
-              e.preventDefault()
-              setZone(null)
-              onDropTab(zoneAt(e))
-            }}
-          >
-            {zone && (
-              <div
-                className={
-                  // Solid accent edge, not a tint: on the dark themes `brand` is
-                  // a muted grey-lavender, and a 10% wash of it over the page is
-                  // very nearly invisible — the border is what reads.
-                  'pointer-events-none absolute rounded-xl border-2 border-brand-400 bg-brand-500/20 shadow-float ' +
-                  zoneBox[zone]
-                }
-              />
-            )}
+        {dragging && zone && (
+          <div className="pointer-events-none absolute inset-0 z-30">
+            <div
+              className={
+                // Solid accent edge, not a tint: on the dark themes `brand` is
+                // a muted grey-lavender, and a 10% wash of it over the page is
+                // very nearly invisible — the border is what reads.
+                'pointer-events-none absolute rounded-xl border-2 border-brand-400 bg-brand-500/20 shadow-float ' +
+                zoneBox[zone]
+              }
+            />
           </div>
         )}
       </div>
@@ -832,6 +836,24 @@ export function NotePane({
           onCreate={(suggested, how) => onCreateLink(dirName(suggested), titleOf(suggested), how)}
           onDrag={onDragLink}
           onInspect={onInspect}
+        />
+      )}
+
+      {/* The layer that catches a dropped note covers the WHOLE column, not just
+          the page: a note let go over the top bar used to land on nothing
+          (Reuben, 2026-11-01). It sits over the buttons only while a drag is in
+          flight, which is the one time nothing there can be clicked anyway. The
+          accent edge showing where it would land stays inside the page, above. */}
+      {dragging && (
+        <div
+          className="absolute inset-0 z-30"
+          onDragOver={overZone}
+          onDragLeave={() => setZone(null)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setZone(null)
+            onDropTab(zoneAt(e))
+          }}
         />
       )}
     </section>

@@ -53,7 +53,8 @@ import {
   splitAt,
   splitBlank,
   splitWith,
-  swapPanes,
+  nudgePane,
+  moveWithinSplit,
   takeOutOfSplit,
   ungroupPanes,
   moveGroup,
@@ -4310,6 +4311,10 @@ export default function App(): React.JSX.Element {
           // Notes sharing the screen share one tab (tabs/model.ts's
           // `stripGroups`). These three are what you can do to that tab.
           onMoveGroup={(before, members) => applyLayout(moveGroup(layoutRef.current, before, members))}
+          // One piece of a joined tab dropped on another piece of the SAME one,
+          // and the right-click "Move … left / right" on a piece.
+          onMoveWithinSplit={(dragged, target) => applyLayout(moveWithinSplit(layoutRef.current, dragged, target))}
+          onNudge={(p, dir) => applyLayout(nudgePane(layoutRef.current, p, dir))}
           onTakeOutOfSplit={(p) => applyLayout(takeOutOfSplit(layoutRef.current, p))}
           onUngroup={(p) => applyLayout(ungroupPanes(layoutRef.current, p))}
           onDragTab={(path) => setDrag(path === null ? null : { kind: 'tab', path })}
@@ -4458,7 +4463,10 @@ export default function App(): React.JSX.Element {
                   // Leftmost column has nothing to trade with; every other one
                   // can walk left a step at a time. Same op the drag performs
                   // when a column is dropped on its neighbour's middle.
-                  onSwapLeft={i > 0 ? () => applyLayout(swapPanes(layoutRef.current, i - 1, i)) : undefined}
+                  onSwapLeft={i > 0 ? () => applyLayout(nudgePane(layoutRef.current, p, -1)) : undefined}
+                  onSwapRight={
+                    i < layout.panes.length - 1 ? () => applyLayout(nudgePane(layoutRef.current, p, 1)) : undefined
+                  }
                   onReorder={(to) => applyLayout(movePane(layoutRef.current, i, to > i ? to + 1 : to))}
                   dragging={drag}
                   edgeDrops={canSplit || layout.panes.includes(drag?.path ?? '')}
