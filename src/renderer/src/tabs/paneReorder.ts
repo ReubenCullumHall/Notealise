@@ -14,7 +14,7 @@ import { motionOn } from './tabStyles'
  *  swapping content and dropping their transforms land on exactly the pixels
  *  already on screen.
  *
- *  `movePane`, not `swapPanes`: the column travels, so its width travels with
+ *  `movePane`, not a swap (`nudgePane`): the column travels, so its width travels with
  *  it — which is also the only way the preview and the committed layout agree
  *  in a three-way split with uneven widths. */
 

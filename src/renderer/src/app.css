@@ -4562,6 +4562,19 @@ body.pane-reordering * {
 .pane-col.pane-lifted .pane-grip {
   opacity: 1;
 }
+/* A split column's move arrows (NotePane), at the two ends of the strip along
+   its top edge. Out of sight until the pointer is on THAT column's top bar — the
+   button row, the strip, or an arrow itself — or one has keyboard focus. They
+   are siblings of the row, so a class on the arrow cannot see the row being
+   hovered; the column can. (They sat in the button row until 2026-11-01, where
+   the middle of three columns lost its colour button to them.) */
+.pane-arrow {
+  opacity: 0;
+}
+.pane-col:has(> .pane-row:hover, > .pane-grab:hover, > .pane-arrow:hover) > .pane-arrow,
+.pane-arrow:focus-visible {
+  opacity: 1;
+}
 .pane-divider {
   transition: opacity 0.15s ease;
 }

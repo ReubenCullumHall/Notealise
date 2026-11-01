@@ -115,11 +115,12 @@ interface Props {
    *  tab — keeping it open is a drag of its tab out of the split (Reuben,
    *  2026-09-27) */
   onClosePane: () => void
-  /** swap this column with the one on its LEFT — the button beside the split
-   *  control. Undefined for the leftmost column, which has nothing to its left
-   *  to trade with; every other column can reach any position by repeating it.
-   *  Redundant with dragging the column by its top edge (`onReorder`), and
-   *  deliberately so: the button is the route a keyboard can reach. */
+  /** swap this column with the one on its LEFT — the arrow at the left end of
+   *  the strip along the column's top edge. Undefined for the leftmost column,
+   *  which has nothing to its left to trade with; every other column can reach
+   *  any position by repeating it. Redundant with dragging the column by that
+   *  same strip (`onReorder`), and deliberately so: the arrow is the route a
+   *  keyboard can reach. */
   onSwapLeft?: () => void
   /** the same, towards the RIGHT — undefined for the rightmost column
    *  (Reuben, 2026-11-01: the left arrow alone made a column's way back a
@@ -164,6 +165,12 @@ export const ROW_CLASS =
 // like the sidebar's own collapse control, which is the pair this reads with.
 export const ROW_BTN =
   'press flex shrink-0 items-center justify-center rounded-lg border-none bg-transparent p-1.5 text-ink-400 outline-none transition duration-200 hover:bg-ink-300/15 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300'
+// A column's move arrows in the 10px strip along its top edge — as tall as the
+// strip and no taller, so they sit over padding and never over a button. Their
+// hide-until-hovered lives in app.css (`.pane-arrow`): it hangs on the ROW being
+// hovered, which a class on the arrow itself cannot see.
+const ARROW_BTN =
+  'pane-arrow absolute top-0 z-30 flex h-[10px] w-8 items-center justify-center rounded-md border-none bg-transparent p-0 text-ink-400 outline-none transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300 '
 
 /** One column of the editor area: its title, its commands and its CodeMirror.
  *
@@ -405,21 +412,50 @@ export function NotePane({
           "Nothing covers a control"). This replaced dragging the whole row,
           which lived in the gaps between buttons nobody could find. */}
       {split && !headerHidden && (
-        <div
-          aria-hidden
-          className="pane-grab group absolute inset-x-[10px] top-0 z-20 flex h-[10px] cursor-grab touch-none items-center justify-center"
-          onPointerDown={(e) => col.current && startPaneReorder(e, col.current, onReorder)}
-        >
-          <Icon
-            name="grip"
-            className="pane-grip h-3.5 w-3.5 rotate-90 text-ink-400 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-          />
-        </div>
+        <>
+          <div
+            aria-hidden
+            className="pane-grab group absolute inset-x-[10px] top-0 z-20 flex h-[10px] cursor-grab touch-none items-center justify-center"
+            onPointerDown={(e) => col.current && startPaneReorder(e, col.current, onReorder)}
+          >
+            <Icon
+              name="grip"
+              className="pane-grip h-3.5 w-3.5 rotate-90 text-ink-400 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+            />
+          </div>
+          {/* The column's move arrows, one at each end of that strip (Reuben,
+              2026-11-01). In the button row they cost the middle of three
+              columns its colour button; here they take no room, cover no
+              button and stay inside the strip's 10px insets, clear of the
+              divider. Out of sight until the pointer is on this column's top
+              bar (app.css `.pane-arrow`). Siblings of the strip, not children:
+              a press inside it would start a column drag. */}
+          {onSwapLeft && (
+            <button
+              className={ARROW_BTN + 'left-[10px]'}
+              data-tip="Move this column to the left  ·  or drag its top edge"
+              aria-label="Move this column to the left"
+              onClick={onSwapLeft}
+            >
+              <Icon name="moveLeft" className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {onSwapRight && (
+            <button
+              className={ARROW_BTN + 'right-[10px]'}
+              data-tip="Move this column to the right  ·  or drag its top edge"
+              aria-label="Move this column to the right"
+              onClick={onSwapRight}
+            >
+              <Icon name="moveRight" className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </>
       )}
       <div
         className={
           ROW_CLASS +
-          ' transition-[opacity,transform] duration-150' +
+          ' pane-row transition-[opacity,transform] duration-150' +
           (headerHidden ? ' pointer-events-none -translate-y-1 opacity-0' : ' translate-y-0 opacity-100') +
           // In a split, the accent line is how you can see which column the
           // keyboard is pointing at. A single pane has nothing to distinguish
@@ -491,29 +527,6 @@ export function NotePane({
               left of the split-view button — which is what put them "next to
               the split view". They are now at the other end of the row; see the
               spacer above. */}
-          {/* Only in a split, and never on the leftmost column. Same reasoning
-              as the cap-hidden split button below: a control that can do
-              nothing is dead weight in a row this narrow. */}
-          {onSwapLeft && (
-            <button
-              className={ROW_BTN}
-              data-tip="Move this column to the left  ·  or drag its top edge"
-              aria-label="Move this column to the left"
-              onClick={onSwapLeft}
-            >
-              <Icon name="moveLeft" className="h-4 w-4" />
-            </button>
-          )}
-          {onSwapRight && (
-            <button
-              className={ROW_BTN}
-              data-tip="Move this column to the right  ·  or drag its top edge"
-              aria-label="Move this column to the right"
-              onClick={onSwapRight}
-            >
-              <Icon name="moveRight" className="h-4 w-4" />
-            </button>
-          )}
           {/* Hidden rather than disabled at the cap: in a split the row is
               ~80px of commands wide, and a button that can do nothing is dead
               weight taking space Bold and Italic need. A blank column has

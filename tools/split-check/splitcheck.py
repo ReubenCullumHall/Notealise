@@ -240,6 +240,32 @@ def arrows(pg):
     two = [len(x) for x in move_btns(pg)]
     R.add("3g strip stays one joined tab and shows the new order", s["strip"] == ["[A|C|B]"], str(s["strip"]))
 
+def arrows_hover(pg):
+    """the arrows live at the two ends of the strip along a column's top edge, out of sight until you point at
+    that column's top bar (2026-11-01, Reuben: 'only while you hover a column's top bar, so the middle column
+    keeps all its buttons')"""
+    build_split(pg, ["A", "B", "C"])
+    pg.mouse.move(150, 600); time.sleep(0.6)                      # park the pointer over the sidebar
+    op = lambda: pg.evaluate("[...document.querySelectorAll('section.pane-col')].map(s => [...s.querySelectorAll(':scope > .pane-arrow')].map(b => getComputedStyle(b).opacity))")
+    rest = op()
+    R.add("3k arrows are out of sight until you point at a top bar", [len(c) for c in rest] == [1, 2, 1] and all(o == '0' for c in rest for o in c), str(rest))
+    pg.locator('section.pane-col').nth(1).locator('button[data-tip^="Bold"]').hover(); time.sleep(0.6)
+    hov = op()
+    R.add("3k pointing at the middle column's top bar shows ITS two arrows and no others", hov[1] == ['1', '1'] and hov[0] == ['0'] and hov[2] == ['0'], str(hov))
+    b = pane_box(pg, 1); pg.mouse.move(b['x'] + b['width'] / 2, b['y'] + 4); time.sleep(0.6)
+    strip = op()
+    R.add("3k ...and they stay while the pointer is on the strip along its top edge", strip[1] == ['1', '1'], str(strip))
+    hits = pg.evaluate("""[...document.querySelectorAll('.pane-arrow')].map(a => { const r = a.getBoundingClientRect()
+        const h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return a.contains(h) })""")
+    R.add("3k a click on an arrow lands on the arrow, not on the drag strip", len(hits) == 4 and all(hits), str(hits))
+    over = pg.evaluate("""[...document.querySelectorAll('.pane-arrow')].map(a => { const r = a.getBoundingClientRect()
+        const row = a.parentElement.querySelector(':scope > .pane-row')
+        return [...row.querySelectorAll('button')].some(q0 => { const q = q0.getBoundingClientRect()
+          return q.width > 0 && r.left < q.right && r.right > q.left && r.top < q.bottom && r.bottom > q.top }) })""")
+    R.add("3k no arrow overlaps a button in the top bar", len(over) == 4 and not any(over), str(over))
+    fit = pg.evaluate("""[...document.querySelectorAll('section.pane-col')].map(s => { const t = s.querySelector('.toolbar-scroll'); return t ? [t.scrollWidth, t.clientWidth] : null })""")
+    R.add("3k every column of three keeps its whole format bar (no sideways scroll, the colour button shows)", all(f and f[0] <= f[1] + 1 for f in fit), str(fit))
+
 def menu_on_screen(pg):
     build_split(pg, ["A", "B", "C"])
     seg(pg, "A").click(button='right'); time.sleep(0.5); first = menu_items(pg); pg.keyboard.press('Escape'); time.sleep(0.3)
@@ -281,6 +307,13 @@ def frames(pg):
     pg.mouse.move(5, 5); time.sleep(0.3)
     tb = pg.locator('[role=tablist]').bounding_box(); b0 = pane_box(pg, 0); b1 = pane_box(pg, 1)
     shot(pg, "1-three-columns", clip={'x': b0['x'], 'y': tb['y'], 'width': 1084 - b0['x'], 'height': 120})
+    pg.locator('section.pane-col').nth(1).locator('button[data-tip^="Bold"]').hover(); time.sleep(0.6)
+    shot(pg, "1b-three-columns-pointing-at-the-middle", clip={'x': b0['x'], 'y': tb['y'], 'width': 1084 - b0['x'], 'height': 120})
+    from PIL import Image as _I
+    _im = _I.open(J(SHOTS, "1b-three-columns-pointing-at-the-middle.png"))
+    _mid = pane_box(pg, 1); _ox = _mid['x'] - b0['x']
+    _im.crop((int(_ox), 40, int(_ox + _mid['width']), 115)).resize((int(_mid['width']) * 3, 225), _I.NEAREST).save(J(SHOTS, "1c-middle-top-bar-x3.png"))
+    pg.mouse.move(5, 5); time.sleep(0.4)
     # mid-drag: a piece of the joined tab hovering over another piece (a NON-lit one, so the outline can be seen)
     from PIL import Image
     ax, ay, _ = centre(seg(pg, "A")); bx, by, bb = centre(seg(pg, "B"))
@@ -306,7 +339,7 @@ PLAN = {
     "bug2": [edge('right'), edge('left'), centre_drop, strip_piece, strip_lone, strip_empty, divider,
              topbar('right'), topbar('centre'), behind_sidebar, behind_strip, no_overlay_after],
     "bug3": [piece_middle, piece_far_edge, piece_near_edge, piece_three, piece_leaves, column_grab,
-             arrows, menu_on_screen, menu_parked, piece_parked],
+             arrows, arrows_hover, menu_on_screen, menu_parked, piece_parked],
     "frames": [frames],
 }
 

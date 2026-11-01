@@ -22,7 +22,6 @@ import {
   splitBlank,
   splitWith,
   stripGroups,
-  swapPanes,
   takeOutOfSplit,
   ungroupPanes,
   moveGroup,
@@ -321,14 +320,6 @@ describe('rearranging the columns', () => {
     expect(movePane(l, 1, 1)).toBe(l)
     expect(movePane(l, 1, 2)).toBe(l)
   })
-
-  it('swaps two columns when one is dropped on the middle of another', () => {
-    const l = swapPanes(three(), 0, 2)
-    expect(l.panes).toEqual(['c.md', 'b.md', 'a.md']) // b never moved
-    invariants(l)
-    const same = three()
-    expect(swapPanes(same, 1, 1)).toBe(same)
-  })
 })
 
 describe('moving a column one place along its split (Reuben, 2026-11-01)', () => {
@@ -612,12 +603,13 @@ describe('column widths', () => {
     expect(moved.panes).toEqual(['b.md', 'c.md', 'a.md'])
     expect(paneSizes(moved)).toEqual([0.2, 0.3, 0.5])
     invariants(moved)
-    // swapPanes: two NOTES trade columns and the columns stay where they are,
-    // which is what makes "nothing else on screen moves" literally true.
-    const swapped = swapPanes(l, 0, 2)
-    expect(swapped.panes).toEqual(['c.md', 'b.md', 'a.md'])
-    expect(paneSizes(swapped)).toEqual([0.5, 0.2, 0.3])
-    invariants(swapped)
+    // nudgePane (the column arrows): two NOTES trade columns and the columns
+    // stay where they are, which is what makes "nothing else on screen moves"
+    // literally true.
+    const nudged = nudgePane(l, 'a.md', 1)
+    expect(nudged.panes).toEqual(['b.md', 'a.md', 'c.md'])
+    expect(paneSizes(nudged)).toEqual([0.5, 0.2, 0.3])
+    invariants(nudged)
   })
 
   it('resets to even by dropping the array, so a reset layout equals a fresh one', () => {
@@ -743,7 +735,7 @@ describe('the strip when notes are sharing the screen', () => {
   it('reads the group in PANE order, not strip order', () => {
     // The point of the group is to show the arrangement on screen, so a split
     // whose columns were swapped reads swapped in the strip too.
-    const l = swapPanes(splitAt(opened('a.md', 'b.md', 'c.md'), 'a.md', 0), 0, 1)
+    const l = nudgePane(splitAt(opened('a.md', 'b.md', 'c.md'), 'a.md', 0), 'a.md', 1)
     expect(l.panes).toEqual(['c.md', 'a.md'])
     expect(stripGroups(l)[0]).toEqual(['c.md', 'a.md'])
   })

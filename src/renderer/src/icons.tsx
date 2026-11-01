@@ -31,7 +31,6 @@ export type IconName =
   | 'sun'
   | 'panelLeft'
   | 'splitView'
-  | 'swapColumns'
   | 'moveLeft'
   | 'moveRight'
   | 'flag'
@@ -211,21 +210,12 @@ const PATHS: Record<IconName, React.JSX.Element> = {
       <path d="M12 3v18" />
     </>
   ),
-  // The pane header's "put this column on the other side" button. Deliberately
-  // NOT a variant of splitView above: that one is about how many columns there
-  // are, this one is about which order they are in.
-  swapColumns: (
-    <>
-      <path d="M8 4 4 8l4 4" />
-      <path d="M4 8h16" />
-      <path d="M16 20l4-4-4-4" />
-      <path d="M20 16H4" />
-    </>
-  ),
-  // The pane header's "move this column one place" pair: an arrow running to a
-  // wall. A matched pair on purpose — the swap icon above is the same shape
-  // whichever way it points, so two of them side by side could not say which
-  // button goes which way.
+  // A column's "move one place" pair, at the two ends of the strip along its
+  // top edge (NotePane): an arrow running to a wall. A matched pair on purpose —
+  // the ⇆ swap glyph they replaced is the same shape whichever way it points, so
+  // two side by side could not say which goes which way. Deliberately NOT a
+  // variant of splitView above: that one is about how many columns there are,
+  // these about which order they are in.
   moveLeft: (
     <>
       <path d="M5 5v14" />

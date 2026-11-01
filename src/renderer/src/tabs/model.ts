@@ -633,25 +633,6 @@ export function movePane(l: TabLayout, from: number, to: number): TabLayout {
   return { ...l, panes, focus: at, sizes: sizesReinsert(l, from, at) }
 }
 
-/** Exchange two columns — a pane dropped on the MIDDLE of another. Chosen over
- *  "insert here and push the rest along" because dropping onto a column reads as
- *  "these two swap places", and it is the one arrangement where nothing else on
- *  screen moves.
- *
- *  The widths deliberately do NOT swap with the notes (`sizes` rides the spread
- *  untouched): a swap is two notes trading columns, so the columns — and the
- *  sizes you dragged them to — stay exactly where they are. That is what keeps
- *  "nothing else on screen moves" literally true. Contrast `movePane`, where the
- *  column itself travels and takes its width along. */
-export function swapPanes(l: TabLayout, a: number, b: number): TabLayout {
-  const n = l.panes.length
-  if (a === b || a < 0 || b < 0 || a >= n || b >= n) return l
-  const panes = [...l.panes]
-  panes[a] = l.panes[b]
-  panes[b] = l.panes[a]
-  return { ...l, panes, focus: b }
-}
-
 /** The three fields that describe a row of columns — the split on screen is a
  *  `TabLayout`, a parked one is a `Split`, and both carry exactly these. */
 type Columns = Pick<TabLayout, 'panes' | 'focus' | 'sizes'>
@@ -671,12 +652,16 @@ function inSplit(l: TabLayout, path: string, op: (c: Columns) => Columns | null)
 }
 
 /** Move the column showing `path` one place along its split — `-1` left, `+1`
- *  right: the arrows in a column's top bar and "Move … left/right" on its piece
- *  of the joined tab (Reuben, 2026-11-01). It trades places with its neighbour
- *  and the widths stay with the places, exactly as the old swap button did; what
- *  changes is that focus stays on the same NOTE, so the column you pressed is
- *  still the lit one wherever it lands. Works on a parked split too, which is
- *  why it is keyed by note rather than by column number. */
+ *  right: the arrows at the ends of a column's top edge and "Move … left/right"
+ *  on its piece of the joined tab (Reuben, 2026-11-01). It trades places with
+ *  its neighbour, and the widths deliberately stay with the PLACES: two notes
+ *  trade columns, so the columns — and the sizes you dragged them to — stay
+ *  exactly where they are, and nothing else on screen moves. Contrast
+ *  `movePane`, where the column itself travels and takes its width along.
+ *  Focus stays on the same NOTE, so the column you pressed is still the lit one
+ *  wherever it lands. Works on a parked split too, which is why it is keyed by
+ *  note rather than by column number. (It replaced `swapPanes`, which swapped
+ *  by column number and left the focus on the place the column had left.) */
 export function nudgePane(l: TabLayout, path: string, dir: -1 | 1): TabLayout {
   return inSplit(l, path, (c) => {
     const i = c.panes.indexOf(path)
