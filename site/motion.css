@@ -1,0 +1,77 @@
+/* Smooth motion — the styles for motion.js, on every page (Reuben, 2026-10-31:
+   "smooth animation on the toggles, a smooth scroll, and a cursor that flows").
+   Loaded after the page's own sheets so its few overrides win. Without
+   JavaScript, with reduced motion, or on a touch screen, none of this applies
+   and the page behaves exactly as before. */
+
+/* ── 1. Scrolling ────────────────────────────────────────────────────────
+   motion.js moves the page itself, a little behind the wheel. The page's own
+   `scroll-behavior: smooth` has to stand down or the two fight each frame. */
+html.mo-scroll { scroll-behavior: auto !important; }
+
+/* ── 2. Open-and-shut boxes ──────────────────────────────────────────────
+   motion.js animates the box's height, so everything under it (the next
+   question, the footer) moves down with it. A box that is closing keeps its
+   `open` attribute until it has finished, and the page's own rules key every
+   open-state look off that attribute, so each one is handed back here the
+   moment the closing starts: the + turns back, the chevron turns back, the
+   card tilts back. */
+.faq details.is-closing[open] summary::after { transform: none; }
+.st-q.is-closing[open] summary::before { rotate: 0deg; }
+.tshoot.is-closing[open] .tshoot-chev { transform: none; }
+.st-page .faq details.is-closing[open]:nth-child(odd)  { transform: rotate(-0.4deg); }
+.st-page .faq details.is-closing[open]:nth-child(even) { transform: rotate(0.35deg); }
+
+/* The home page's open question gets a small yellow square before its title.
+   It used to appear all at once and push the title across; it now grows in
+   (and shrinks away on closing), the title sliding over with it. The negative
+   margin cancels the row's 24px gap while the square is still 0 wide. */
+.stop-faq .faq details[open] summary::before {
+  animation: mo-mark-in .4s var(--hv-ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+.stop-faq .faq details.is-closing[open] summary::before {
+  animation: mo-mark-out .34s var(--hv-ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
+}
+@keyframes mo-mark-in  { from { width: 0; margin-right: -24px; opacity: 0; } }
+@keyframes mo-mark-out { to   { width: 0; margin-right: -24px; opacity: 0; } }
+
+/* ── 3. The cursor ───────────────────────────────────────────────────────
+   A thin-lined arrow, and a pointing hand over anything clickable, drawn by
+   motion.js after the line-icon sheet Reuben sent (2026-10-31): ink outline,
+   paper inside, soft corners. One touch of the page's highlighter colour
+   (--accent: crayon yellow, sky on Tutorials, sage on What's new) peeks out
+   behind, as the highlighter sits behind ink everywhere else on the site. A
+   thin paper rim round the ink keeps the line readable on a dark page or a
+   picture. They glide after the mouse; the real cursor is only turned off once
+   the first mouse movement has put this one on screen. */
+html.mo-cursor-on, html.mo-cursor-on *, html.mo-cursor-on ::backdrop { cursor: none !important; }
+html.mo-cursor-on input:not([type="range"]), html.mo-cursor-on textarea,
+html.mo-cursor-on [contenteditable] { cursor: auto !important; }
+
+/* It is a popover so it sits in the top layer, above a pop-up that is open as
+   a modal (What's new, the Mac chooser) as well as above the page. The popover
+   defaults (centred, bordered, scrolling box) are all put back to nothing. The
+   ink and paper are its own and do not flip with the page's light/dark, so the
+   outline is the same dark line on every page. */
+.mo-cur {
+  --mo-ink: oklch(24% 0.02 50);
+  --mo-paper: oklch(99% 0.005 80);
+  position: fixed; inset: auto; left: 0; top: 0; width: 0; height: 0;
+  margin: 0; padding: 0; border: 0; background: none; overflow: visible;
+  pointer-events: none;
+}
+.mo-pos { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; transition: opacity .2s ease; }
+.mo-pos svg { position: absolute; display: none; overflow: visible; pointer-events: none; }
+
+.mo-sh   { fill: var(--accent, #f5c518); }
+.mo-rim  { fill: var(--mo-paper); stroke: var(--mo-paper); stroke-width: 2.7; stroke-linejoin: round; }
+.mo-ink  { fill: var(--mo-paper); stroke: var(--mo-ink); stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+.mo-ln   { fill: none; stroke: var(--mo-ink); stroke-width: 1.15; stroke-linecap: round; }
+
+/* which one shows: the arrow, the hand over anything clickable, side-to-side
+   arrows over the picture slider */
+.mo-cur[data-state=""] .mo-arrow, .mo-cur[data-state="link"] .mo-hand, .mo-cur[data-state="drag"] .mo-size { display: block; }
+
+/* out of the window, or over a text box (which keeps the real I-beam) */
+.mo-cur.is-out .mo-pos { opacity: 0; }
+.mo-cur[data-state="text"] .mo-pos { display: none; }

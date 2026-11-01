@@ -1747,3 +1747,39 @@ drifted across the card's printed lines (now 22px steps on the 22px rules); the 
 arrow floated between two wrapped lines. **Check the phone version with a phone browser or
 `?device=phone`, not a narrow desktop window** — the download ending and the Try it window differ by
 device, not by width.
+
+## The motion layer (2026-10-31 → 2026-11-01)
+
+Reuben asked for three things: "smooth animation on the toggles" (with the footer moving with them),
+"a smooth scroll", and "a cursor that has a smooth flow … not as sharp as the native cursor". Then, of
+the animations: "they are great, keep them as they are". Two shared files, `motion.js` + `motion.css`,
+linked on every live page (after `hover.js` / `highlights.css`; **bump `?v=` on both when either
+changes**). No library, no outside request — the Privacy page lists every outside service.
+
+- **Open-and-shut questions.** Every `<details>` question animates its own height (home page, Students
+  incl. "Test yourself", the install guides' "What worked for me"), so everything below, the footer
+  included, moves because the box is in normal flow. A closing box keeps `[open]` until it has
+  finished and takes `.is-closing`, which hands the page's open-state looks back (the + turning back,
+  the chevron, the card's tilt). Measure these heights with `offsetHeight` — the cards are tilted and
+  `getBoundingClientRect` lies. With reduced motion the native toggle stays.
+- **Smooth scroll.** Wheel only: a target and a glide (about 130 ms). It stands down for modifier
+  keys, reduced motion, locked pages (`overflow-y: hidden`: the loading gate, the What's new pop-up,
+  the Mac chooser), inner scrollers and sideways swipes; keyboard, scrollbar and find-in-page stay
+  native. `html.mo-scroll` switches off the pages' own `scroll-behavior: smooth`, or the two fight.
+- **The cursor — decided 2026-11-01.** A thin ink line (about 1.4px), paper-white inside, soft
+  corners; a small edge of the page's own `--accent` peeks out behind it (crayon yellow; sky on
+  Tutorials, sage on What's new). Arrow by default; a pointing hand over anything the page's own CSS
+  marks `cursor: pointer`; a side-to-side double arrow over the picture slider; the real I-beam over
+  text boxes. It glides 40 ms behind the mouse. Mouse only (`hover: hover` + `pointer: fine`), never
+  with reduced motion or forced colours, so phones and touch keep the system pointer. It is SVG in a
+  `popover="manual"` so it stays above the modal `<dialog>`s (What's new, the Mac chooser), re-raised
+  whenever one opens. **Reuben chose it from ten drawings** (plain line, crayon fill, highlighter
+  swipe, soft and round, hand-drawn, pencil and highlighter, sticky note, ruled paper, ink pebble,
+  dot and ring — the artifact "Cursor options"): "I like it like that, I think it's the best fit".
+  Don't reopen the shape unless he does. The earlier tries — a ring and dot, and a pixel arrow traced
+  from his screenshot — are gone.
+- **Checking it:** real-mouse tests need the loading gate skipped (`sessionStorage 'nl-seen-gate'`);
+  assert the pop-up is really open before judging the cursor above it (the first run "passed" with the
+  dialog shut).
+- **Not tried:** Firefox, Safari, a Mac trackpad, a real iPhone, in-app browsers, real 125%/150%
+  Windows scaling. The design checker could not run (it couldn't download its engine).
