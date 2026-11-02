@@ -304,9 +304,11 @@ html.wm-motion .hero-stats.lines-in::after { transition-delay: .26s; }
 .nl { box-shadow: var(--nl-edge-light); }
 .nl[data-theme="dark"] { box-shadow: var(--nl-edge-dark); }
 .nl-wrap.reveal.is-in { animation-name: scanInWide; }
+/* 160px, not 90: the light window's glow on the dark page reaches ~104px
+   out, and a 90px box left a hard edge across it (Reuben, 2026-11-02). */
 @keyframes scanInWide {
-  from { clip-path: inset(-90px -90px 100% -90px); }
-  to   { clip-path: inset(-90px -90px -90px -90px); }
+  from { clip-path: inset(-160px -160px 100% -160px); }
+  to   { clip-path: inset(-160px -160px -160px -160px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

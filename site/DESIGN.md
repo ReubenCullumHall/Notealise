@@ -1783,3 +1783,17 @@ changes**). No library, no outside request — the Privacy page lists every outs
   dialog shut).
 - **Not tried:** Firefox, Safari, a Mac trackpad, a real iPhone, in-app browsers, real 125%/150%
   Windows scaling. The design checker could not run (it couldn't download its engine).
+
+## Glows, reveal boxes and the phone download spot (2026-11-02)
+
+- **A slide-in reveal clips with `clip-path: inset(...)` and keeps it after it finishes** (the keyframes are
+  `both`-filled). Any shadow or glow inside must fit in that box or it ends in a hard line. The Try it
+  window's glow on the dark page reaches ~104px out (blur 110px, spread −6px); the box was 90px, which
+  Reuben called "cheap". `scanInWide` in `home.css` is now 160px. Changing a shadow on anything inside
+  a `.reveal` means checking its reach (offset + blur + spread) against that block's inset.
+- **There are two `.nl` elements on the home page** — the real one (`#tryApp`) and a hidden measuring
+  copy (`.nl-measure`). `querySelector('.nl')` finds the hidden one; scripts must use `#tryApp`.
+- **Phone ending:** on a phone `#download` is the plain "Built for Mac, Windows and Linux." line, and
+  arriving at `index.html#download` (Students' Download it free) lands with it in the middle of the
+  screen below the top bar — `scroll-margin-top` on `.walk.unavailable` in `landing.css`. It assumes the
+  line wraps to two lines, which it does at phone widths.

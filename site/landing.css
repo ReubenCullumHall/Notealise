@@ -317,6 +317,13 @@
    for vertical centering, so one short line ends up alone in a wall of
    blank space — the same "empty screen" problem this is meant to fix. */
 .walk.unavailable { min-height: 0; }
+/* Arriving at #download on a phone (e.g. Students' "Download it free"): land
+   with "Built for Mac, Windows and Linux." in the middle of the screen below
+   the top bar, not tucked under it (Reuben, 2026-11-02). Section top + its
+   top padding + half the two-line heading = the heading's middle. */
+.walk.unavailable {
+  scroll-margin-top: calc(50svh + var(--topbar-h, 56px) / 2 - clamp(64px, 12vh, 130px) - var(--display));
+}
 /* A zero-size inline box sitting on the text baseline, right after "path".
    Its rect gives the exact x at the end of the h and the exact baseline y —
    the h's right leg ends there, so that is where the ink line leaves it.
