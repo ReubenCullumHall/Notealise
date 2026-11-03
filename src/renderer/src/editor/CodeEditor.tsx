@@ -210,7 +210,9 @@ export function CodeEditor({
       return
     }
     const rect = box.getBoundingClientRect()
-    const width = 260
+    // The bar's measured width (swatch row, 2026-11-03). It was 260 until the colour row grew, so
+    // a selection near the right edge pushed the bar off the window.
+    const width = 353
     const height = 40
     const centerX = (Math.min(a.left, b.left) + Math.max(a.right, b.right)) / 2
     const left = Math.max(6, Math.min(centerX - rect.left - width / 2, rect.width - width - 6))

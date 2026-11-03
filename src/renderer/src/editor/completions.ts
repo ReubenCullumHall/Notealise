@@ -13,7 +13,7 @@ import {
 import { Prec, type EditorState, type Extension } from '@codemirror/state'
 import { keymap, type EditorView } from '@codemirror/view'
 import { baseName, resolveLink, titleOf } from '../../../shared/links'
-import { matchesQuery, SLASH_COMMANDS } from './commands'
+import { slashMatches } from './commands'
 import { linkEnv, linkHandlersFacet, type LinkEnv, type LinkHandlers } from './linkEnv'
 import { headingAnchor, linkTargets, stateForText } from './blockIds'
 import { optionsOpen, pasteOptionsSource } from './pasteLink'
@@ -45,7 +45,7 @@ function slashSource(context: CompletionContext): CompletionResult | null {
   const slashIdx = m.text.indexOf('/')
   const from = m.from + slashIdx
   const typed = m.text.slice(slashIdx + 1).toLowerCase()
-  const options: Completion[] = SLASH_COMMANDS.filter((c) => matchesQuery(c, typed)).map((c) => ({
+  const options: Completion[] = slashMatches(typed).map((c) => ({
     label: c.label,
     detail: c.hint,
     type: 'keyword',

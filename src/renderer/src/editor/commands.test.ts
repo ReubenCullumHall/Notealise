@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EditorState, type TransactionSpec } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
-import { ACTION_GROUPS, EDITOR_COMMANDS, findAction, matchesQuery, SLASH_COMMANDS } from './commands'
+import { ACTION_GROUPS, EDITOR_COMMANDS, findAction, matchesQuery, slashMatches, SLASH_COMMANDS } from './commands'
 
 // The registry is a `.tsx` holding JSX glyphs, but nothing here renders one — a
 // command's `run` is plain CodeMirror arithmetic, and CodeMirror's EditorState is
@@ -152,6 +152,20 @@ describe('matchesQuery', () => {
     expect(first('divider')).toBe('rule')
     // The recording formats find the picker, since there is nothing to record.
     for (const ext of ['m4a', 'mp3', 'wav', 'wma', 'opus']) expect(first(ext), `/${ext}`).toBe('voiceFile')
+  })
+
+  it('puts the command that owns the typed word first, not one that merely contains it', () => {
+    // Found 2026-10-06: "/hr" + Enter inserted a Web link ("href" contains "hr"),
+    // and "/latex" an inline formula. What Enter picks is slashMatches()[0].
+    expect(slashMatches('hr')[0].id).toBe('rule')
+    expect(slashMatches('latex')[0].id).toBe('math')
+    expect(slashMatches('tex')[0].id).toBe('math')
+    // …and the words that already landed still do.
+    expect(slashMatches('inline')[0].id).toBe('mathInline')
+    expect(slashMatches('ul')[0].id).toBe('bullet')
+    expect(slashMatches('link')[0].id).toBe('wikilink')
+    expect(slashMatches('voice').map((c) => c.id)).toEqual(['voice', 'voiceFile'])
+    expect(slashMatches('').map((c) => c.id)).toEqual(SLASH_COMMANDS.map((c) => c.id))
   })
 
   it('offers everything for an empty query', () => {

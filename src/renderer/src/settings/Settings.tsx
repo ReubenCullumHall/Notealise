@@ -1054,21 +1054,25 @@ function SettingsWindow({
             </>
           )}
           {section === 'tutorials' && (
-            <Tutorials
-              openGuide={openTutorial}
-              // Try it hands App the card's text and closes this window, so the
-              // practice note is there to type in rather than behind it — and keeps
-              // where you were for the next opening (`resume`, above).
-              onTryIt={
-                onTryIt
-                  ? (text, guide) => {
-                      onComeBack({ guide, scrollTop: pageRef.current?.scrollTop ?? 0 })
-                      onTryIt(text)
-                      onClose()
-                    }
-                  : undefined
-              }
-            />
+            // One <div> so the page's flex gap sits between the Tutorials page and the rest, not between each of
+            // its own headings and their text (a bare fragment's children each become a flex item).
+            <div>
+              <Tutorials
+                openGuide={openTutorial}
+                // Try it hands App the card's text and closes this window, so the
+                // practice note is there to type in rather than behind it — and keeps
+                // where you were for the next opening (`resume`, above).
+                onTryIt={
+                  onTryIt
+                    ? (text, guide) => {
+                        onComeBack({ guide, scrollTop: pageRef.current?.scrollTop ?? 0 })
+                        onTryIt(text)
+                        onClose()
+                      }
+                    : undefined
+                }
+              />
+            </div>
           )}
           {section === 'archive' && (
             <ArchiveSettings

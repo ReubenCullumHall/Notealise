@@ -341,5 +341,20 @@ export function matchesQuery(c: EditorCommand, typed: string): boolean {
   return c.label.toLowerCase().includes(q) || c.terms.some((t) => t.includes(q))
 }
 
+/** The "/" commands a typed word finds, in the order the menu lists them (Enter
+ *  takes the first). The catalogue's order breaks ties, but a command with the
+ *  word as one of its terms outright comes before one that merely contains it
+ *  ("/hr" is Divider's term; Web link only has "href"), and then one with the
+ *  word in its label comes first ("/latex" is LaTeX formula, not Inline formula). */
+export function slashMatches(typed: string): EditorCommand[] {
+  const q = typed.toLowerCase()
+  const rank = (c: EditorCommand): number =>
+    (q && c.terms.includes(q) ? 0 : 2) + (q && c.label.toLowerCase().includes(q) ? 0 : 1)
+  return SLASH_COMMANDS.filter((c) => matchesQuery(c, typed))
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i)
+    .map((x) => x.c)
+}
+
 /** Where each slot sits, for the labels in Settings. */
 export const SLOT_LABELS = ['Far left', 'Left', 'Right', 'Far right']

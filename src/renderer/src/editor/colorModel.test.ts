@@ -183,3 +183,31 @@ describe('links take no colour (Reuben, 2026-09-29)', () => {
     expect(r.insert).toBe('see [[Waves]]')
   })
 })
+
+describe('clearing one layer when the other sits inside it', () => {
+  // Highlight first, then a text colour on the same word, writes
+  // <mark>…<span>word</span>…</mark>. Clearing the highlight used to treat the
+  // span's own tags as plain text inside the mark and leave them behind, in the
+  // wrong order (found 2026-10-06, the Colours tutorial).
+  const nested = M('amber', S('sky', 'words'))
+
+  it('clears the outer highlight without breaking the text colour', () => {
+    expect(applyTo(nested, ...sel(nested, 'words'), null, 'mark')).toBe(S('sky', 'words'))
+  })
+
+  it('clears both layers, in the order Remove colour runs them, leaving plain text', () => {
+    const afterHighlight = applyTo(nested, ...sel(nested, 'words'), null, 'mark')
+    expect(applyTo(afterHighlight, ...sel(afterHighlight, 'words'), null, 'span')).toBe('words')
+  })
+
+  it('recolours the outer highlight without breaking the text colour', () => {
+    expect(applyTo(nested, ...sel(nested, 'words'), 'rose', 'mark')).toBe(M('rose', S('sky', 'words')))
+  })
+
+  it('keeps the selection on the words, not on the tags around them', () => {
+    const [f, t] = sel(nested, 'words')
+    const r = recolor(nested, f, t, 'mark', null)
+    const out = nested.slice(0, r.from) + r.insert + nested.slice(r.to)
+    expect(out.slice(r.selFrom, r.selTo)).toBe('words')
+  })
+})

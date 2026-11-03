@@ -1564,7 +1564,7 @@ export function SpaceShortcuts({ space, onChange }: SpaceProps): React.JSX.Eleme
       <h3>Custom buttons</h3>
       <p className="hint">
         Two buttons on each side of the format bar above a note, for the commands you reach for most.
-        Empty ones show a <span className="font-semibold">?</span> — click one there or here to programme
+        Empty ones show a dashed outline — click one there or here to programme
         it. These belong to this space, so each one can have its own set.
       </p>
 

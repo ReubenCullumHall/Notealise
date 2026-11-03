@@ -131,7 +131,43 @@ while (queue.length > 0) {
   }
 }
 
-const list = [...seen.values()].sort((a, b) => a.name.localeCompare(b.name))
+// Things that ship but are not npm packages, so the lockfile walk above can't
+// see them: the five bundled font files and the emoji names list. The copyright
+// lines are the ones inside each font file's own name table (and OpenDyslexic's
+// carries its Reserved Font Name); every font here is SIL OFL 1.1, whose full
+// text is kept beside the Noto Emoji font. Add a line here when a font is bundled.
+const FONTS_DIR = path.join(ROOT, 'src/renderer/src/assets/fonts')
+const ofl = readFileSync(path.join(FONTS_DIR, 'noto-emoji/OFL.txt'), 'utf8').trim()
+const oflBody = ofl.slice(ofl.indexOf('This Font Software'))
+const fontEntry = (name, version, copyright) => ({
+  name: `${name} (font)`,
+  version,
+  license: 'OFL-1.1',
+  licenseText: `${copyright}\n\n${oflBody}`
+})
+const bundledAssets = [
+  fontEntry('Inter', '4.001', 'Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)'),
+  fontEntry('Fraunces', '1.000', 'Copyright 2020 The Fraunces Project Authors (github.com/undercasetype/Fraunces)'),
+  fontEntry(
+    'JetBrains Mono',
+    '2.211',
+    'Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)'
+  ),
+  fontEntry(
+    'OpenDyslexic',
+    '0.920',
+    'Copyright (c) 2019-07-29, Abbie Gonzalez (https://abbiecod.es|support@abbiecod.es),\nwith Reserved Font Name OpenDyslexic.\nCopyright (c) 12/2012 - 2019'
+  ),
+  { name: 'Noto Emoji (font)', version: '3.006', license: 'OFL-1.1', licenseText: ofl },
+  {
+    name: 'emojibase-data (emoji names)',
+    version: '17.0.0',
+    license: 'MIT',
+    licenseText: readFileSync(path.join(ROOT, 'tools/licenses/emojibase-data-LICENSE.txt'), 'utf8').trim()
+  }
+]
+
+const list = [...seen.values(), ...bundledAssets].sort((a, b) => a.name.localeCompare(b.name))
 
 const withoutText = list.filter((p) => !p.licenseText)
 if (withoutText.length > 0) {

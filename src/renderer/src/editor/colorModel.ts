@@ -103,6 +103,26 @@ export function recolor(
 ): RegionChange {
   const spans = parseSpans(text, tag)
 
+  // The words as picked, kept for the selection handed back. Below, `selFrom`/`selTo`
+  // may grow to take in the OTHER layer's tags around them: with a text colour sitting
+  // inside a highlight (<mark><span>words</span></mark>) and just the words selected,
+  // the span's tags are part of the highlight's content but not of the selection, so
+  // they stayed behind on their own, out of order (found 2026-10-06).
+  const pickedFrom = selFrom
+  const pickedTo = selTo
+  const otherOpen = new RegExp(
+    '<(' + (tag === 'mark' ? 'span' : 'mark') + ') (?:class="(?:hl|tc)-[a-z]+"|style="(?:background-)?color: *#[0-9a-fA-F]{3,8} *;?")>$'
+  )
+  const m = otherOpen.exec(text.slice(Math.max(0, selFrom - 80), selFrom))
+  if (m && text.startsWith('</' + m[1] + '>', selTo)) {
+    const openAt = selFrom - m[0].length
+    const closeEnd = selTo + m[1].length + 3
+    if (spans.some((s) => s.contentStart <= openAt && closeEnd <= s.contentEnd)) {
+      selFrom = openAt
+      selTo = closeEnd
+    }
+  }
+
   // Grow the working region to fully contain any span touching the selection.
   let regionStart = selFrom
   let regionEnd = selTo
@@ -118,10 +138,18 @@ export function recolor(
 
   // Flatten the region to content characters, each tagged with its current
   // colour and whether it's inside the selection. Tag characters are dropped.
-  const chars: { ch: string; colour: string | null; sel: boolean; bare: boolean }[] = []
+  const chars: { ch: string; colour: string | null; sel: boolean; picked: boolean; bare: boolean }[] = []
   const isBare = (p: number): boolean => bare.some((b) => p >= b.from && p < b.to)
   const pushRange = (from: number, to: number, colour: string | null): void => {
-    for (let p = from; p < to; p++) chars.push({ ch: text[p], colour, sel: p >= selFrom && p < selTo, bare: isBare(p) })
+    for (let p = from; p < to; p++) {
+      chars.push({
+        ch: text[p],
+        colour,
+        sel: p >= selFrom && p < selTo,
+        picked: p >= pickedFrom && p < pickedTo,
+        bare: isBare(p)
+      })
+    }
   }
   let cursor = regionStart
   for (const s of regionSpans) {
@@ -156,10 +184,10 @@ export function recolor(
     i = j
   }
 
-  const firstSel = chars.findIndex((c) => c.sel)
+  const firstSel = chars.findIndex((c) => c.picked)
   let lastSel = -1
   for (let k = chars.length - 1; k >= 0; k--) {
-    if (chars[k].sel) {
+    if (chars[k].picked) {
       lastSel = k
       break
     }

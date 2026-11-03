@@ -124,6 +124,11 @@ export const videoPass: Pass = (view, _active, push) => {
         }
         if (!CLOSE.test(text) || !stack.length) return
         const open = stack.pop()!
+        // Open and close on ONE line, as the app writes it. A pair split across
+        // lines stays text: a plugin may not replace a line break, and trying
+        // stopped the whole editing area working (found 2026-10-14). Same rule
+        // as imagePass and audioPass.
+        if (view.state.doc.lineAt(open.from).number !== view.state.doc.lineAt(node.to).number) return
         // Same reveal contract as every other widget pass: off the cursor
         // line it's a picture (here: a player); on it, the raw HTML shows.
         // See imagePass's copy: an exact cover is "selected", not reveal-to-edit.
