@@ -11,7 +11,7 @@ import { practiceText } from './tryIt'
 export function LinkingGuide(): React.JSX.Element {
   return (
     <>
-      <Heading first>Linking notes</Heading>
+      <Heading first>Linking your notes</Heading>
       <Text>
         Type <code className="font-mono text-ink-700">[[</code> anywhere in a note to connect it to
         another one, and pick from the list.
