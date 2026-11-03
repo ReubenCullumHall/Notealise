@@ -48,6 +48,9 @@ export const CH = {
   exportTransfer: 'transfer:export',
   importTransfer: 'transfer:import',
   transferInventory: 'transfer:inventory',
+  /** renderer -> main: a note, already turned into a page (shared/printNote.ts),
+   *  to save as a PDF or send to the printer. See main/printNote.ts. */
+  printNote: 'note:print',
   /** renderer -> main: fonts downloaded or imported on THIS install
    *  (userData/fonts/) — see shared/fonts.ts and main/fonts.ts */
   listInstalledFonts: 'fonts:listInstalled',

@@ -39,6 +39,7 @@ const api: VaultApi = {
   exportTransfer: () => ipcRenderer.invoke(CH.exportTransfer),
   importTransfer: (text) => ipcRenderer.invoke(CH.importTransfer, text),
   transferInventory: () => ipcRenderer.invoke(CH.transferInventory),
+  printNote: (req) => ipcRenderer.invoke(CH.printNote, req),
   listInstalledFonts: () => ipcRenderer.invoke(CH.listInstalledFonts),
   downloadFont: (id) => ipcRenderer.invoke(CH.downloadFont, id),
   importCustomFont: () => ipcRenderer.invoke(CH.importCustomFont),

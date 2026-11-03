@@ -10,6 +10,8 @@ import {
   vaultLooksEstablished
 } from './config'
 import { exportTransfer, importTransfer, transferInventory } from './transfer'
+import { printNote } from './printNote'
+import type { PrintNoteRequest } from '../shared/printNote'
 import { ensureMdnotes } from './mdnotes'
 import { getSettings, readThemeCacheSync, setSettings } from './settings'
 import {
@@ -345,6 +347,7 @@ export function registerIpc(window: BrowserWindow): void {
   )
   ipcMain.handle(CH.linkThumb, (_e, url: string) => readLinkThumb(url))
   ipcMain.handle(CH.exportTransfer, () => exportTransfer(activeWindow()))
+  ipcMain.handle(CH.printNote, (_e, req: PrintNoteRequest) => printNote(activeWindow(), req))
   ipcMain.handle(CH.importTransfer, (_e, text?: string) => importTransfer(activeWindow(), text))
   ipcMain.handle(CH.transferInventory, () => transferInventory())
   ipcMain.handle(CH.vaultEstablished, () => (getVaultRoot() ? establishedWhenOpened : false))

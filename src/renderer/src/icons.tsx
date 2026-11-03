@@ -59,6 +59,9 @@ export type IconName =
   | 'arrowUpRight'
   | 'volume'
   | 'volumeOff'
+  // the Save as window (print/SaveAs.tsx)
+  | 'globe'
+  | 'printer'
 
 // Each entry is the inner SVG for a 24×24 viewBox. Stroke icons inherit the
 // wrapper's stroke; filled marks set their own fill and clear the stroke.
@@ -176,6 +179,19 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     </>
   ),
   text: <path d="M4 6h16M4 11h16M4 16h9" />,
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9c-2.4-2.6-3.6-5.6-3.6-9S9.6 5.6 12 3z" />
+    </>
+  ),
+  printer: (
+    <>
+      <path d="M7 9V4h10v5" />
+      <rect x="3" y="9" width="18" height="8" rx="2" />
+      <path d="M7 14h10v6H7z" />
+    </>
+  ),
   sort: (
     <>
       <path d="M4 6h9M4 12h6M4 18h3" />

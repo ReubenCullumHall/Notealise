@@ -70,6 +70,8 @@ interface Props {
   isArchived: (path: string) => boolean
   /** right-click → "Move to archive" (the sidebar's, for the note you're in) */
   onArchive: (path: string) => void
+  /** Save as… / Print… for a note — App opens the Save as window. */
+  onSaveAs: (path: string, mode: 'save' | 'print') => void
   /** right-click → "Put back…": Put back's own menu, opened where you clicked */
   onPutBack: (path: string, x: number, y: number) => void
 }
@@ -484,6 +486,7 @@ export function TabStrip({
   hidden,
   isArchived,
   onArchive,
+  onSaveAs,
   onPutBack
 }: Props): React.JSX.Element {
   // The gap the dragged tab would land in: the path it goes before, or null for
@@ -1029,6 +1032,7 @@ export function TabStrip({
         onTakeOut={() => onTakeOutOfSplit(menu.path)}
         onUngroup={() => onUngroup(menu.path)}
         onArchive={() => onArchive(menu.path)}
+        onSaveAs={(mode) => onSaveAs(menu.path, mode)}
         onPutBack={() => onPutBack(menu.path, menu.x, menu.y)}
         onClose={() => onClose(menu.path)}
         onDismiss={() => setMenu(null)}
@@ -1054,6 +1058,7 @@ function TabGroupMenu({
   onTakeOut,
   onUngroup,
   onArchive,
+  onSaveAs,
   onPutBack,
   onClose,
   onDismiss
@@ -1073,6 +1078,7 @@ function TabGroupMenu({
   onTakeOut: () => void
   onUngroup: () => void
   onArchive: () => void
+  onSaveAs: (mode: 'save' | 'print') => void
   onPutBack: () => void
   onClose: () => void
   onDismiss: () => void
@@ -1085,6 +1091,8 @@ function TabGroupMenu({
     ...(grouped ? [{ label: 'Split them all apart', onClick: onUngroup }] : []),
     // The sidebar's own words for the same two actions.
     archived ? { label: 'Put back…', onClick: onPutBack } : { label: 'Move to archive', onClick: onArchive },
+    { label: 'Save as…', onClick: () => onSaveAs('save') },
+    { label: 'Print…', onClick: () => onSaveAs('print') },
     { label: `Close ${name}`, onClick: onClose, danger: true }
   ]
   // Escape closes it, like the sidebar's right-click menu — now that every tab

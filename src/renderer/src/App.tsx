@@ -4,6 +4,8 @@ import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import type { EditorView } from '@codemirror/view'
 import { ContextMenu, type MenuItem } from './ContextMenu'
+import type { PrintMode } from './print/page'
+import { SaveAs, type SaveAsMode } from './print/SaveAs'
 import { clearAssetCaches } from './editor/assetCache'
 import { checkMainIsCurrent } from './boot'
 import { encodeTarget, indexEmbeds, kindForFilename, repointFileLinks, resolveVaultPath } from '../../shared/attachments'
@@ -3034,6 +3036,24 @@ export default function App(): React.JSX.Element {
   /** Archive the note you're in — its tab's right-click menu, or Cmd/Ctrl+Shift+A
    *  (File → Move to Archive). The sidebar's Move to archive, from where you are
    *  reading (Reuben, 2026-10-26). */
+  /** Save as… / Print… for a note (print/SaveAs.tsx). The format and look last
+   *  chosen open next time, for as long as the app is open. */
+  const [saveAs, setSaveAs] = useState<{ path: string; mode: SaveAsMode } | null>(null)
+  const saveChoice = useRef<{ format: 'pdf' | 'html'; look: PrintMode }>({ format: 'pdf', look: 'plain' })
+  const openSaveAs = (p: string | null, mode: SaveAsMode): void => {
+    if (!p || !/\.md$/i.test(p)) {
+      flash('Open a note first.')
+      return
+    }
+    setSaveAs({ path: p, mode })
+  }
+  // The open copy first: a note typed into a moment ago is not on disk yet.
+  const saveAsPath = saveAs?.path ?? null
+  const readSaveAsText = useCallback(
+    async (): Promise<string> => (saveAsPath ? (docsRef.current.get(saveAsPath) ?? (await window.api.readNote(saveAsPath))) : ''),
+    [saveAsPath]
+  )
+
   const archiveOpenNote = (p: string | null): void => {
     if (!p) return
     if (inArchiveFolder(p)) {
@@ -3768,6 +3788,13 @@ export default function App(): React.JSX.Element {
                 label: targets && targets.length > 1 ? `Archive ${targets.length} items` : 'Move to archive',
                 onClick: () => void archiveEntries(targets ?? [node.path])
               },
+          // A note only (a folder has nothing to print).
+          ...(node.type === 'file' && /\.md$/i.test(node.path)
+            ? [
+                { label: 'Save as…', onClick: () => openSaveAs(node.path, 'save') },
+                { label: 'Print…', onClick: () => openSaveAs(node.path, 'print') }
+              ]
+            : []),
           { label: 'Move to bin', danger: true, onClick: () => trash([node.path]) }
         ]
       : [
@@ -3815,13 +3842,16 @@ export default function App(): React.JSX.Element {
       return
     }
     const covered = !!document.querySelector('[aria-modal="true"]')
-    if (covered && ['new-note', 'new-folder', 'split-pane', 'archive-note', 'quick-open'].includes(cmd)) return
+    if (covered && ['new-note', 'new-folder', 'split-pane', 'archive-note', 'quick-open', 'save-as', 'print-note'].includes(cmd)) return
     if (cmd === 'new-note') void newNote('')
     else if (cmd === 'new-folder') void newFolder('')
     else if (cmd === 'import-notes') setSettingsJumpTo('import')
     else if (cmd === 'toggle-sidebar') collapseSidebarRef.current?.()
     else if (cmd === 'split-pane') applyLayout(splitBlank(layoutRef.current))
     else if (cmd === 'archive-note') archiveOpenNote(activePath(layoutRef.current) || null)
+    else if (cmd === 'save-as' || cmd === 'print-note') {
+      openSaveAs(activePath(layoutRef.current) || null, cmd === 'save-as' ? 'save' : 'print')
+    }
     else if (cmd === 'quick-open' && hasOnboardedRef.current) {
       setJumpKey((k) => k + 1)
       setJumpClosing(false)
@@ -4480,6 +4510,7 @@ export default function App(): React.JSX.Element {
           onNewTab={() => applyLayout(newBlankTab(layoutRef.current))}
           isArchived={(p) => !!p && inArchiveFolder(p)}
           onArchive={(p) => archiveOpenNote(p)}
+          onSaveAs={(p, mode) => openSaveAs(p, mode)}
           onPutBack={(p, x, y) => putBackMenu([p], x, y)}
           dragging={drag}
           // One island per space, and only once there is a vault to hold one —
@@ -4823,6 +4854,22 @@ export default function App(): React.JSX.Element {
           activePath={openPath}
           onOpen={openJumpNote}
           onClose={closeJump}
+        />
+      )}
+      {saveAs && (
+        <SaveAs
+          key={saveAs.path + saveAs.mode}
+          path={saveAs.path}
+          mode={saveAs.mode}
+          readText={readSaveAsText}
+          format={saveChoice.current.format}
+          look={saveChoice.current.look}
+          onChoose={(format, look) => (saveChoice.current = { format, look })}
+          onDone={(r) => {
+            setSaveAs(null)
+            if ('saved' in r) flash(`Saved ${baseName(r.saved)}.`)
+          }}
+          onClose={() => setSaveAs(null)}
         />
       )}
 

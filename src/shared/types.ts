@@ -21,6 +21,7 @@ import type {
   TransferImportResult,
   TransferInventory
 } from './transfer'
+import type { PrintNoteRequest, PrintNoteResult } from './printNote'
 
 /** A node in the vault file tree. `path` is always vault-relative, POSIX-style
  *  ("/" separators), and "" denotes the vault root. */
@@ -168,6 +169,11 @@ export interface VaultApi {
   importTransfer(text?: string): Promise<TransferImportResult>
   /** Live counts for the "on this machine now" panel. */
   transferInventory(): Promise<TransferInventory>
+
+  // --- print / save as PDF (shared/printNote.ts) -----------------------------
+  /** Send a note, already turned into a page, to the printer or a PDF file.
+   *  Main builds the sealed page, asks where to save (PDF) and does the job. */
+  printNote(req: PrintNoteRequest): Promise<PrintNoteResult>
 
   // --- fonts: downloaded or user-imported on THIS install (userData/fonts/) -
   // Bundled fonts (Inter/OpenDyslexic/JetBrains Mono/Fraunces) need none of

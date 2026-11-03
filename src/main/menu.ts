@@ -79,6 +79,12 @@ export function installMenu(): void {
         { type: 'separator' },
         { label: 'Import notes…', click: () => sendMenuCommand('import-notes') },
         { type: 'separator' },
+        // The note you're in (App.tsx `openSaveAs`, the Save as window), same as
+        // the right-click on its tab or its sidebar row. No accelerators: Cmd/Ctrl+P
+        // is Go to Note.
+        { label: 'Save as…', click: () => sendMenuCommand('save-as') },
+        { label: 'Print…', click: () => sendMenuCommand('print-note') },
+        { type: 'separator' },
         ...(isMac ? [] : [checkForUpdates, { type: 'separator' } as MenuItemConstructorOptions]),
         isMac ? closeWindow : { role: 'quit' }
       ]

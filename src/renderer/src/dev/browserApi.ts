@@ -289,6 +289,7 @@ const api: VaultApi = {
   exportPresets: async () => null,
   importPresets: async () => ({ added: 0, found: 0, cancelled: true, presets: [] }),
   exportTransfer: async () => null,
+  printNote: async () => ({ ok: 'cancelled' as const }),
   importTransfer: async () => ({
     cancelled: true,
     presetsAdded: 0,
