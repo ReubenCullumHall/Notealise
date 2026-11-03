@@ -55,13 +55,16 @@
     window.scrollTo(0, S.pos);
     busy(120);
     if (S.pos !== S.target) S.raf = requestAnimationFrame(step);
-    else S.on = false;
+    else { S.on = false; root.classList.remove("mo-scroll"); }
   }
+  // mo-scroll is on only while a wheel glide runs, so a link to #download or
+  // #faq still slides there with the page's own smooth scrolling.
   function run() {
     if (S.on) return;
+    root.classList.add("mo-scroll");
     S.on = true; S.t0 = performance.now(); S.raf = requestAnimationFrame(step);
   }
-  function stop() { cancelAnimationFrame(S.raf); S.on = false; }
+  function stop() { cancelAnimationFrame(S.raf); S.on = false; root.classList.remove("mo-scroll"); }
 
   window.addEventListener("wheel", function (e) {
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return; // ctrl = zoom
@@ -86,8 +89,6 @@
     if (S.on && Math.abs(window.scrollY - S.ours) > 2) { stop(); S.pos = S.target = window.scrollY; }
     if (!S.on) S.pos = S.target = window.scrollY;
   }, { passive: true });
-
-  root.classList.add("mo-scroll");
 
   /* ── 2. Open-and-shut boxes ─────────────────────────────────────────────
      The box's height is animated between its shut and open sizes, so what is

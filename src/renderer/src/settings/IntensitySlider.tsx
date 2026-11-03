@@ -52,10 +52,25 @@ export function IntensitySlider({
       setDraft(n)
     },
     () => {
+      if (!dragging.current) return // already saved by the unmount below
       dragging.current = false
       if (latest.current === saved.current) setDraft(null)
       else onChange(latest.current)
     }
+  )
+
+  // Settings closed (Esc) or the page changed mid-drag: the slider is gone before
+  // the pointer lets go, so its release never comes. Save where the drag got to
+  // (2026-11-03).
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+  useEffect(
+    () => () => {
+      if (!dragging.current) return
+      dragging.current = false
+      if (latest.current !== saved.current) onChangeRef.current(latest.current)
+    },
+    []
   )
 
   // Hand the handle back to the saved value once the save comes back with the

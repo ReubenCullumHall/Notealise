@@ -215,7 +215,13 @@ export function CodeEditor({
     const width = 353
     const height = 40
     const centerX = (Math.min(a.left, b.left) + Math.max(a.right, b.right)) / 2
-    const left = Math.max(6, Math.min(centerX - rect.left - width / 2, rect.width - width - 6))
+    // A split column can be narrower than the bar (320px at its smallest): then the
+    // bar keeps its right end at the column's right edge and reaches left over the
+    // next column, staying inside the window (2026-11-03).
+    const room = rect.width >= width + 12
+    const minLeft = room ? 6 : 6 - rect.left
+    const maxLeft = (room ? rect.width : Math.min(rect.width, window.innerWidth - rect.left)) - width - 6
+    const left = Math.max(minLeft, Math.min(centerX - rect.left - width / 2, maxLeft))
     const above = a.top - rect.top - height - 8
     const top = above < 4 ? b.bottom - rect.top + 8 : above // flip below if no room
     const at = { left, top }

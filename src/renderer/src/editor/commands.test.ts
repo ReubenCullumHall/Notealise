@@ -168,6 +168,25 @@ describe('matchesQuery', () => {
     expect(slashMatches('').map((c) => c.id)).toEqual(SLASH_COMMANDS.map((c) => c.id))
   })
 
+  it('changes what Enter picks only for the words that were wrong, and nothing else', () => {
+    // Found 2026-11-03: the first version of the fix above also moved "/file" to
+    // Voice note from a file, "/block" to Code block and "/t" to Bulleted list —
+    // any command with the typed letters in its name jumped ahead. Every piece of
+    // every name and search word is tried; only these may differ from the menu's
+    // own order (what Enter picked before the fix).
+    const moved: Record<string, string> = { hr: 'rule', latex: 'math', tex: 'math', line: 'rule', block: 'codeBlock' }
+    const words = new Set<string>()
+    for (const c of SLASH_COMMANDS)
+      for (const w of [c.label.toLowerCase(), ...c.terms])
+        for (let i = 0; i < w.length; i++) for (let j = i + 1; j <= w.length; j++) words.add(w.slice(i, j))
+    for (const q of words) {
+      const before = SLASH_COMMANDS.find((c) => matchesQuery(c, q))
+      if (!before) continue
+      expect(slashMatches(q)[0].id, `/${q}`).toBe(moved[q] ?? before.id)
+    }
+    expect(slashMatches('file')[0].id).toBe('attach')
+  })
+
   it('offers everything for an empty query', () => {
     expect(SLASH_COMMANDS.filter((c) => matchesQuery(c, ''))).toEqual(SLASH_COMMANDS)
   })

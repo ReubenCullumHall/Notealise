@@ -344,12 +344,17 @@ export function matchesQuery(c: EditorCommand, typed: string): boolean {
 /** The "/" commands a typed word finds, in the order the menu lists them (Enter
  *  takes the first). The catalogue's order breaks ties, but a command with the
  *  word as one of its terms outright comes before one that merely contains it
- *  ("/hr" is Divider's term; Web link only has "href"), and then one with the
- *  word in its label comes first ("/latex" is LaTeX formula, not Inline formula). */
+ *  ("/hr" is Divider's term; Web link only has "href"). Among those, the one
+ *  command NAMED after the word comes first ("/latex" and "/tex" are LaTeX
+ *  formula, not Inline formula) — only when its name's first word holds it and
+ *  no other has it in its name, so "/file" stays Photo or video (not Voice note
+ *  from a file), "/code" Inline code and "/list" Bulleted list (2026-11-03). */
 export function slashMatches(typed: string): EditorCommand[] {
   const q = typed.toLowerCase()
-  const rank = (c: EditorCommand): number =>
-    (q && c.terms.includes(q) ? 0 : 2) + (q && c.label.toLowerCase().includes(q) ? 0 : 1)
+  const exact = q ? SLASH_COMMANDS.filter((c) => c.terms.includes(q)) : []
+  const named = exact.filter((c) => c.label.toLowerCase().includes(q))
+  const lead = named.length === 1 && named[0].label.toLowerCase().split(' ')[0].includes(q) ? named[0] : null
+  const rank = (c: EditorCommand): number => (c === lead ? 0 : exact.includes(c) ? 1 : 2)
   return SLASH_COMMANDS.filter((c) => matchesQuery(c, typed))
     .map((c, i) => ({ c, i }))
     .sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i)

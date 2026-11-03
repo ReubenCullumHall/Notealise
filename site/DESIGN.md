@@ -1765,7 +1765,8 @@ changes**). No library, no outside request — the Privacy page lists every outs
 - **Smooth scroll.** Wheel only: a target and a glide (about 130 ms). It stands down for modifier
   keys, reduced motion, locked pages (`overflow-y: hidden`: the loading gate, the What's new pop-up,
   the Mac chooser), inner scrollers and sideways swipes; keyboard, scrollbar and find-in-page stay
-  native. `html.mo-scroll` switches off the pages' own `scroll-behavior: smooth`, or the two fight.
+  native. `html.mo-scroll` switches off the pages' own `scroll-behavior: smooth`, or the two fight —
+  only while a wheel glide runs (2026-11-03), so a link to `#download` or `#faq` still slides there.
 - **The cursor — decided 2026-11-01.** A thin ink line (about 1.4px), paper-white inside, soft
   corners; a small edge of the page's own `--accent` peeks out behind it (crayon yellow; sky on
   Tutorials, sage on What's new). Arrow by default; a pointing hand over anything the page's own CSS
