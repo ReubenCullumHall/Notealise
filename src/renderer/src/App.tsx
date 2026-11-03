@@ -3800,7 +3800,7 @@ export default function App(): React.JSX.Element {
                 label: targets && targets.length > 1 ? `Archive ${targets.length} items` : 'Move to archive',
                 onClick: () => void archiveEntries(targets ?? [node.path])
               },
-          // A note only (a folder has nothing to print).
+          // A note only (a folder has nothing to print, or to look back on).
           ...(node.type === 'file' && /\.md$/i.test(node.path)
             ? [
                 { label: 'Earlier versions…', onClick: () => setHistoryFor(node.path) },
