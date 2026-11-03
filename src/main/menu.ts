@@ -61,6 +61,14 @@ export function installMenu(): void {
           click: () => sendMenuCommand('new-folder')
         },
         { type: 'separator' },
+        // Type part of a note's name, arrows, Enter (App.tsx `JumpToNote`). In the
+        // menu so the key is findable, and so a second press closes it again.
+        {
+          label: 'Go to Note…',
+          accelerator: 'CommandOrControl+P',
+          click: () => sendMenuCommand('quick-open')
+        },
+        { type: 'separator' },
         // The note you're in (App.tsx `archiveOpenNote`); the same as its tab's
         // right-click "Move to archive".
         {

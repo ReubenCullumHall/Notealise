@@ -78,7 +78,7 @@ export function ArchiveSearchBar({ query, onQuery, onStep, onEnter, activeId, in
 }
 
 /** `text` with the stretches in `marks` highlighted. */
-function Marked({ text, marks }: { text: string; marks: Mark[] }): React.JSX.Element {
+export function Marked({ text, marks }: { text: string; marks: Mark[] }): React.JSX.Element {
   if (!marks.length) return <>{text}</>
   const out: React.ReactNode[] = []
   let at = 0

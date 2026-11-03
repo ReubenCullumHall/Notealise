@@ -117,6 +117,8 @@ import {
 } from '../../shared/presets'
 import { Sidebar } from './Sidebar'
 import type { SearchHit } from './Search'
+import { JumpToNote } from './JumpToNote'
+import type { JumpNote } from './jumpMatch'
 import { MAC_INSTALL_GUIDE_URL, type UpdateStatus } from '../../shared/update'
 import { UpdateToast } from './update/UpdateToast'
 import { Icon } from './icons'
@@ -3779,6 +3781,23 @@ export default function App(): React.JSX.Element {
   // notes…), bypassing the gear. Sidebar/SettingsButton clear it once opened.
   const [settingsJumpTo, setSettingsJumpTo] = useState<SectionId | null>(null)
 
+  // Go to a note (Cmd/Ctrl+P, File menu). Every note in every space, except the
+  // archive (it has its own search) — a name is the same wherever it lives, and
+  // opening one from another space switches you there first, as a Search result does.
+  const [jumpOpen, setJumpOpen] = useState(false)
+  // Playing its way out (JumpToNote's `closing`); `jumpKey` gives each opening a
+  // fresh pop-up, so one asked for mid-close starts empty rather than reviving it.
+  const [jumpClosing, setJumpClosing] = useState(false)
+  const [jumpKey, setJumpKey] = useState(0)
+  const closeJump = useCallback(() => setJumpClosing(true), [])
+  const jumpClosed = useCallback(() => {
+    setJumpOpen(false)
+    setJumpClosing(false)
+  }, [])
+  const jumpOpenRef = useRef(false)
+  jumpOpenRef.current = jumpOpen && !jumpClosing
+  const jumpNotesRef = useRef<JumpNote[]>([])
+
   // Route application-menu commands (New Note / New Folder) to the current
   // handlers via a ref, so the subscription mounts once but never goes stale.
   const menuHandler = useRef<(cmd: string) => void>(() => {})
@@ -3790,14 +3809,24 @@ export default function App(): React.JSX.Element {
     if (mediaConfirmRef.current) return
     // Nor behind Settings or another window over the notes (bug scan 2026-10-27):
     // a note made, split or archived there happens where you can't see it.
+    // Go to a note: a second press of the key puts it away again.
+    if (cmd === 'quick-open' && jumpOpenRef.current) {
+      closeJump()
+      return
+    }
     const covered = !!document.querySelector('[aria-modal="true"]')
-    if (covered && ['new-note', 'new-folder', 'split-pane', 'archive-note'].includes(cmd)) return
+    if (covered && ['new-note', 'new-folder', 'split-pane', 'archive-note', 'quick-open'].includes(cmd)) return
     if (cmd === 'new-note') void newNote('')
     else if (cmd === 'new-folder') void newFolder('')
     else if (cmd === 'import-notes') setSettingsJumpTo('import')
     else if (cmd === 'toggle-sidebar') collapseSidebarRef.current?.()
     else if (cmd === 'split-pane') applyLayout(splitBlank(layoutRef.current))
     else if (cmd === 'archive-note') archiveOpenNote(activePath(layoutRef.current) || null)
+    else if (cmd === 'quick-open' && hasOnboardedRef.current) {
+      setJumpKey((k) => k + 1)
+      setJumpClosing(false)
+      setJumpOpen(true)
+    }
   }
   useEffect(() => window.api.onMenuCommand((cmd) => menuHandler.current(cmd)), [])
 
@@ -3986,24 +4015,30 @@ export default function App(): React.JSX.Element {
     return out
   }, [allSpaces, tree, spaceTree, looseNotes, workspace, archiveFolder])
 
+  /** Read the notes whose text isn't cached yet, into the cache. True when there
+   *  was anything to read. Shared by the sidebar search and Go to a note. */
+  const readMissing = async (notes: { path: string }[]): Promise<boolean> => {
+    const missing = notes.filter((n) => !contentCache.current.has(n.path))
+    if (missing.length === 0) return false
+    await Promise.all(
+      missing.map(async (n) => {
+        try {
+          contentCache.current.set(n.path, await window.api.readNote(n.path))
+        } catch {
+          /* unreadable note — skip it */
+        }
+      })
+    )
+    return true
+  }
+
   // Deep search reads every note's contents once (lazily, cached), then bumps a
   // version so the hit list recomputes. Titles are always searched instantly.
   useEffect(() => {
     if (!deep || !query.trim()) return
     let cancelled = false
     void (async () => {
-      const missing = allNotes.filter((n) => !contentCache.current.has(n.path))
-      if (missing.length === 0) return
-      await Promise.all(
-        missing.map(async (n) => {
-          try {
-            contentCache.current.set(n.path, await window.api.readNote(n.path))
-          } catch {
-            /* unreadable note — skip it */
-          }
-        })
-      )
-      if (!cancelled) setCacheVersion((v) => v + 1)
+      if ((await readMissing(allNotes)) && !cancelled) setCacheVersion((v) => v + 1)
     })()
     return () => {
       cancelled = true
@@ -4063,6 +4098,62 @@ export default function App(): React.JSX.Element {
   // Shown in the results header so the reordering isn't invisible — only when
   // it actually did something (an open note outside the space root).
   const searchContextLabel = openPath ? nameOf(parentOf(openPath)) || null : null
+
+  // The notes the sidebar Search can reach with its current "this space / every
+  // space" toggle (`allNotes`), less the archived ones — and, with its "contents"
+  // toggle on, their text as a reader sees it, for whichever have been read.
+  const jumpNotes = useMemo<JumpNote[]>(() => {
+    if (!jumpOpen) return []
+    void cacheVersion // recompute when the content cache fills
+    const out: JumpNote[] = []
+    for (const n of allNotes) {
+      if (n.archived) continue
+      const owner = n.spaceFolder ?? ''
+      const sp = settings.spaces.find((x) => x.folder === owner)
+      // Folders between the space and the note: "Physics › Waves".
+      const within = (sp ? n.path.slice(owner.length + 1) : n.path).split('/').slice(0, -1)
+      // A note loose at the root shows in every space's sidebar, so it is "here" in all of them.
+      const here = owner === space.folder || owner === ''
+      const raw = deep ? contentCache.current.get(n.path) : undefined
+      out.push({
+        path: n.path,
+        title: n.title,
+        where: within.join(' › '),
+        spaceFolder: owner,
+        here,
+        text: raw === undefined ? undefined : searchableText(raw),
+        // Same as a Search result: the space is named only when it isn't the one you're in.
+        ...(here
+          ? {}
+          : {
+              spaceTag: owner || 'Loose notes',
+              spaceEmoji: owner && sp?.emoji ? shownEmoji(sp.emoji, settings.emojiStyle) : undefined
+            })
+      })
+    }
+    return out
+  }, [jumpOpen, allNotes, deep, cacheVersion, settings.spaces, settings.emojiStyle, space.folder])
+  jumpNotesRef.current = jumpNotes
+  const wantJumpText = useCallback(() => {
+    void readMissing(jumpNotesRef.current).then((read) => {
+      if (read) setCacheVersion((v) => v + 1)
+    })
+  }, [])
+  const openJumpNote = (n: JumpNote, newTab: boolean, words: string): void => {
+    closeJump()
+    void (async () => {
+      const owner = n.spaceFolder
+      if (owner && owner !== space.folder && settings.spaces.some((s) => s.folder === owner)) {
+        await switchSpace(owner)
+      }
+      await openNote(n.path, newTab)
+      // A match in the note's text: go to the words, as a Search result does.
+      if (words) {
+        setPendingText(null)
+        requestAnimationFrame(() => setPendingText({ path: n.path, text: words }))
+      }
+    })()
+  }
 
   // --- the archive's search ------------------------------------------------
   // Everything in the archive, notes and folders, with the folders each sits
@@ -4716,6 +4807,23 @@ export default function App(): React.JSX.Element {
             </button>
           )}
         </div>
+      )}
+
+      {jumpOpen && (
+        <JumpToNote
+          key={jumpKey}
+          closing={jumpClosing}
+          onClosed={jumpClosed}
+          notes={jumpNotes}
+          deep={deep}
+          onToggleDeep={() => setDeep((d) => !d)}
+          allSpaces={allSpaces}
+          onToggleAllSpaces={() => setAllSpaces((a) => !a)}
+          onWantText={wantJumpText}
+          activePath={openPath}
+          onOpen={openJumpNote}
+          onClose={closeJump}
+        />
       )}
 
       {mediaConfirm && (

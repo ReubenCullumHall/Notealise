@@ -31,7 +31,7 @@ interface Props {
 }
 
 /** One filter toggle inside the pill (legacy's `SearchToggle`). */
-function SearchToggle({
+export function SearchToggle({
   on,
   onClick,
   title,

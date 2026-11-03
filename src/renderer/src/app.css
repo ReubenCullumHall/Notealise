@@ -3055,6 +3055,90 @@ button.look-card:hover {
   from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   to { opacity: 0; transform: translate(-50%, -50%) scale(0.97); }
 }
+/* Go to a note (JumpToNote.tsx, Cmd/Ctrl+P): the confirm window's frame, wider
+   and sitting higher — a search you read down, not a question you answer. The
+   list scrolls inside it. .prompt would centre it on 40%; the keyframes restate
+   the translateX for the same reason .confirm's do. */
+.jump {
+  position: fixed;
+  left: 50%;
+  top: 16%;
+  width: min(600px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  /* Spotlight's glass (Reuben, 2026-11-03: "a rounded nice search"): the page
+     shows through, softened. Its corner is half the bare field's height, so with
+     nothing typed it is a capsule; it follows the Corners setting like every
+     other corner (Sharp makes it square). */
+  background: rgb(var(--surface) / 0.86);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+  color: rgb(var(--ink-900));
+  border: 1px solid rgb(var(--wash) / 0.12);
+  border-radius: calc(28px * var(--r-k));
+  overflow: hidden;
+  box-shadow: var(--shadow-float);
+  /* Spotlight's arrival, softer (Reuben, 2026-11-03: "like spotlight search on
+     mac but smoother"): it grows out of a slightly smaller, slightly soft copy of
+     itself while it fades in, on a long-settling curve with no overshoot.
+     `backwards`, not `both`: at rest it carries no animation, so no lingering
+     filter or scale (a resting transform/filter makes it a layer of its own —
+     see "A resting 3D transform costs Windows its sharp text" in CLAUDE.md). */
+  transform-origin: 50% 0;
+  animation: jump-open 480ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.jump:focus { outline: none; }
+/* Closing: quicker than opening and shrinking only a touch, so it gets out of
+   the way rather than performing. The backdrop fades on the same clock. */
+.jump.closing {
+  animation: jump-close 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+/* Behind it the page stays as it is — no dimming, no blur — so you can keep
+   reading the note while you work out what to search for (Reuben, 2026-11-03).
+   The blur lives only in the glass right behind the box. The backdrop is still
+   there, clear, to catch the click that closes it. */
+.confirm-backdrop.jump-backdrop {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  animation: none;
+}
+.confirm-backdrop.jump-backdrop.closing { pointer-events: none; }
+/* The results grow and shrink smoothly as they change, instead of the window
+   snapping to each new height (JumpToNote.tsx measures the list into --jump-h).
+   The list itself scrolls once it reaches its cap. */
+.jump-grow {
+  height: var(--jump-h, auto);
+  overflow: hidden;
+  transition: height 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.jump-list {
+  max-height: min(400px, 58vh);
+  overflow-y: auto;
+}
+/* Rows sit inset from the glass so their own rounded highlight never meets its edge. */
+.jump-list-on {
+  border-top: 1px solid rgb(var(--ink-300) / 0.15);
+  padding: 4px 8px 8px;
+}
+/* Floating in: it drifts down into place from a little above, growing as it
+   comes, sharpening from soft, and settles with a 2px give before resting —
+   the open/close exception to the no-overshoot rule (CLAUDE.md "Motion"). */
+@keyframes jump-open {
+  0% { opacity: 0; transform: translate(-50%, -22px) scale(0.92); filter: blur(6px); }
+  55% { opacity: 1; filter: blur(0); }
+  72% { transform: translate(-50%, 2px) scale(1.004); }
+  100% { opacity: 1; transform: translate(-50%, 0) scale(1); filter: blur(0); }
+}
+@keyframes jump-close {
+  from { opacity: 1; transform: translate(-50%, 0) scale(1); filter: blur(0); }
+  to { opacity: 0; transform: translate(-50%, -10px) scale(0.96); filter: blur(2px); }
+}
+/* Kept for Earlier versions (.history below), which opens on it. */
+@keyframes jump-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
 /* Full-width actions, scoped to .confirm — NOT to .prompt-actions generally,
    which the rename prompt also uses and where right-aligned Cancel/OK is right.
    Here the two buttons ARE the question, so they get equal weight and the whole
