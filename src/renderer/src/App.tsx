@@ -120,11 +120,12 @@ import {
 import { Sidebar } from './Sidebar'
 import type { SearchHit } from './Search'
 import { JumpToNote } from './JumpToNote'
+import { EarlierVersions } from './history/EarlierVersions'
 import type { JumpNote } from './jumpMatch'
 import { MAC_INSTALL_GUIDE_URL, type UpdateStatus } from '../../shared/update'
 import { UpdateToast } from './update/UpdateToast'
 import { Icon } from './icons'
-import { formatDate } from './intl'
+import { formatDate, formatWhenShort } from './intl'
 import {
   ARCHIVE_ASK_MONTHS,
   archivedRoots,
@@ -531,6 +532,9 @@ export default function App(): React.JSX.Element {
   // buffer per dirty note, so a pane you last typed in ten seconds ago still
   // gets written when a pane you are typing in now triggers the flush.
   const dirtyRef = useRef<Map<string, string>>(new Map())
+  /** Every note typed in since the app opened — what Earlier versions' "When you
+   *  close the app" keeps a copy of as the app quits, open or not. */
+  const changedRef = useRef<Set<string>>(new Set())
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // A note being renamed from its title row: Enter drops you into the note while
   // the rename is still on its way, so typing in that gap is held here rather
@@ -608,6 +612,7 @@ export default function App(): React.JSX.Element {
     (typedPath: string, text: string): void => {
       const path = movedToRef.current.get(typedPath) ?? typedPath
       dirtyRef.current.set(path, text)
+      changedRef.current.add(path)
       // Keep the loaded copy current too: a pane that shows this note again
       // later re-seeds from here, and stale text would look like lost edits.
       docsRef.current.set(path, text)
@@ -793,6 +798,13 @@ export default function App(): React.JSX.Element {
         written = window.api
           .writeNote(path, pending)
           .catch((e: Error) => flash(`Save failed: ${e.message}`))
+      }
+      // Earlier versions on "When you close the note" (the default): keep the note
+      // as it leaves the screen — after its last typing is written. A note that
+      // left because it was binned or deleted has nothing to keep; that refusal is
+      // expected, so it is not reported.
+      if (settingsRef.current.versionEvery === 'close') {
+        written = written.then(() => window.api.keepVersionNow(path)).catch(() => {})
       }
       docsRef.current.delete(path)
       // And re-read what it says, because until now nothing did.
@@ -3791,6 +3803,7 @@ export default function App(): React.JSX.Element {
           // A note only (a folder has nothing to print).
           ...(node.type === 'file' && /\.md$/i.test(node.path)
             ? [
+                { label: 'Earlier versions…', onClick: () => setHistoryFor(node.path) },
                 { label: 'Save as…', onClick: () => openSaveAs(node.path, 'save') },
                 { label: 'Print…', onClick: () => openSaveAs(node.path, 'print') }
               ]
@@ -3821,6 +3834,52 @@ export default function App(): React.JSX.Element {
     setJumpOpen(false)
     setJumpClosing(false)
   }, [])
+
+  // Earlier versions of a note (right-click a tab or a note). The box is
+  // history/EarlierVersions.tsx; the plan docs/plans/note-versions.md.
+  const [historyFor, setHistoryFor] = useState<string | null>(null)
+  /** The note's text as it is now: the open tab's, unsaved typing included. */
+  const readHistoryNow = useCallback(async (): Promise<string> => {
+    if (!historyFor) return ''
+    return docsRef.current.get(historyFor) ?? window.api.readNote(historyFor)
+  }, [historyFor])
+  /** Restore or Put back. The note is saved and kept as a version FIRST, so the
+   *  change can itself be taken back from the same box; if either fails, nothing
+   *  is changed. An open note takes the new text the way a link fix does —
+   *  through the typing path, so the autosave writes it. */
+  const replaceNoteText = useCallback(
+    async (p: string, next: string): Promise<boolean> => {
+      try {
+        await flush()
+        if (dirtyRef.current.has(p)) throw new Error('the note could not be saved first.')
+        await window.api.keepVersionNow(p)
+      } catch (e) {
+        flash(`Nothing was changed: ${(e as Error).message}`)
+        return false
+      }
+      if (docsRef.current.has(p)) {
+        docsRef.current.set(p, next)
+        setVersions((v) => ({ ...v, [p]: (v[p] ?? 0) + 1 }))
+        onDocChange(p, next)
+      } else {
+        try {
+          await window.api.writeNote(p, next)
+          if (contentCache.current.has(p)) contentCache.current.set(p, next)
+        } catch (e) {
+          flash(`Save failed: ${(e as Error).message}`)
+          return false
+        }
+      }
+      return true
+    },
+    [flush, flash, onDocChange]
+  )
+  /** The note view's link context for the copy being shown — links and pictures
+   *  resolve from the note's own folder, as in its tab. */
+  const historyEnv = useMemo(
+    (): LinkEnv => ({ ...linkEnvBase, path: historyFor ?? '' }),
+    [linkEnvBase, historyFor]
+  )
   const jumpOpenRef = useRef(false)
   jumpOpenRef.current = jumpOpen && !jumpClosing
   const jumpNotesRef = useRef<JumpNote[]>([])
@@ -3978,6 +4037,20 @@ export default function App(): React.JSX.Element {
           for (const [path, text] of dirtyRef.current) {
             const name = path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '')
             await window.api.writeNote(`Recovered - ${name} ${Date.now()}.md`, text).catch(() => {})
+          }
+          // Earlier versions. "When you close the note": quitting closes every open
+          // note, so each is kept as it is now. "When you close the app": every
+          // note typed in since the app opened, open or not. After the "Recovered"
+          // notes above, which matter more — the quit only waits so long — and
+          // never for a note whose save failed (that typing is in its Recovered
+          // note). A note since renamed or binned is refused, and skipped.
+          const every = settingsRef.current.versionEvery
+          if (every === 'close' || every === 'quit') {
+            const keep = new Set(docsRef.current.keys())
+            if (every === 'quit') for (const p of changedRef.current) keep.add(p)
+            for (const p of keep) {
+              if (!dirtyRef.current.has(p)) await window.api.keepVersionNow(p).catch(() => {})
+            }
           }
         })
         .finally(() => window.api.notifyFlushed())
@@ -4512,6 +4585,7 @@ export default function App(): React.JSX.Element {
           onArchive={(p) => archiveOpenNote(p)}
           onSaveAs={(p, mode) => openSaveAs(p, mode)}
           onPutBack={(p, x, y) => putBackMenu([p], x, y)}
+          onEarlierVersions={(p) => setHistoryFor(p)}
           dragging={drag}
           // One island per space, and only once there is a vault to hold one —
           // during the splash and onboarding there is no space for it to belong
@@ -4854,6 +4928,25 @@ export default function App(): React.JSX.Element {
           activePath={openPath}
           onOpen={openJumpNote}
           onClose={closeJump}
+        />
+      )}
+      {historyFor && (
+        <EarlierVersions
+          key={historyFor}
+          path={historyFor}
+          env={historyEnv}
+          title={stripMd(nameOf(historyFor))}
+          dateFormat={settings.dateFormat}
+          timezone={settings.timezone}
+          readNow={readHistoryNow}
+          replace={(next) => replaceNoteText(historyFor, next)}
+          onRestored={(at) => {
+            setHistoryFor(null)
+            flash(
+              `Restored the version from ${formatWhenShort(at, settings.dateFormat, settings.timezone)}. The text it replaced is in Earlier versions.`
+            )
+          }}
+          onClose={() => setHistoryFor(null)}
         />
       )}
       {saveAs && (

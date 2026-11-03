@@ -74,6 +74,8 @@ interface Props {
   onSaveAs: (path: string, mode: 'save' | 'print') => void
   /** right-click → "Put back…": Put back's own menu, opened where you clicked */
   onPutBack: (path: string, x: number, y: number) => void
+  /** right-click → "Earlier versions…" (docs/plans/note-versions.md) */
+  onEarlierVersions: (path: string) => void
 }
 
 const nameOf = (p: string): string => p.slice(p.lastIndexOf('/') + 1)
@@ -487,7 +489,8 @@ export function TabStrip({
   isArchived,
   onArchive,
   onSaveAs,
-  onPutBack
+  onPutBack,
+  onEarlierVersions
 }: Props): React.JSX.Element {
   // The gap the dragged tab would land in: the path it goes before, or null for
   // "the end". `undefined` means no indicator at all (not over the strip).
@@ -1034,6 +1037,7 @@ export function TabStrip({
         onArchive={() => onArchive(menu.path)}
         onSaveAs={(mode) => onSaveAs(menu.path, mode)}
         onPutBack={() => onPutBack(menu.path, menu.x, menu.y)}
+        onEarlierVersions={() => onEarlierVersions(menu.path)}
         onClose={() => onClose(menu.path)}
         onDismiss={() => setMenu(null)}
       />
@@ -1060,6 +1064,7 @@ function TabGroupMenu({
   onArchive,
   onSaveAs,
   onPutBack,
+  onEarlierVersions,
   onClose,
   onDismiss
 }: {
@@ -1080,6 +1085,7 @@ function TabGroupMenu({
   onArchive: () => void
   onSaveAs: (mode: 'save' | 'print') => void
   onPutBack: () => void
+  onEarlierVersions: () => void
   onClose: () => void
   onDismiss: () => void
 }): React.JSX.Element {
@@ -1091,6 +1097,8 @@ function TabGroupMenu({
     ...(grouped ? [{ label: 'Split them all apart', onClick: onUngroup }] : []),
     // The sidebar's own words for the same two actions.
     archived ? { label: 'Put back…', onClick: onPutBack } : { label: 'Move to archive', onClick: onArchive },
+    // The sidebar's words for the same thing. A blank tab has no note to look back on.
+    ...(path !== BLANK ? [{ label: 'Earlier versions…', onClick: onEarlierVersions }] : []),
     { label: 'Save as…', onClick: () => onSaveAs('save') },
     { label: 'Print…', onClick: () => onSaveAs('print') },
     { label: `Close ${name}`, onClick: onClose, danger: true }

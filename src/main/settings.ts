@@ -3,6 +3,8 @@ import { promises as fs, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { getVaultRoot, renameWithRetry } from './vault'
+import { setVersionCadence } from './noteVersions'
+import { versionEveryMs } from '../shared/noteVersions'
 import {
   activeSpace,
   type AppSettings,
@@ -61,7 +63,11 @@ async function readSettingsFrom(root: string | null): Promise<AppSettings> {
 /** Full settings for the active vault. With no vault (or no file yet) this
  *  reflects the userData theme/density cache so the picker matches last use. */
 export async function getSettings(): Promise<AppSettings> {
-  return readSettingsFrom(getVaultRoot())
+  const root = getVaultRoot()
+  const s = await readSettingsFrom(root)
+  // Earlier versions follow the open vault's choice (noteVersions.ts keeps them).
+  if (root === getVaultRoot()) setVersionCadence(versionEveryMs(s.versionEvery))
+  return s
 }
 
 // Serialise writes: each setSettings does read-modify-write, so overlapping
@@ -98,6 +104,7 @@ async function applyWrite(root: string | null, partial: Partial<AppSettings>): P
   // sidebar shows spaces that don't exist there.
   const current = await readSettingsFrom(root)
   const next = normalizeSettings({ ...current, ...partial })
+  if (root === getVaultRoot()) setVersionCadence(versionEveryMs(next.versionEvery))
   const p = settingsPathFor(root)
   if (p) {
     await fs.mkdir(path.dirname(p), { recursive: true })

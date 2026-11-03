@@ -22,6 +22,7 @@ import type {
   TransferInventory
 } from './transfer'
 import type { PrintNoteRequest, PrintNoteResult } from './printNote'
+import type { NoteVersion } from './noteVersions'
 
 /** A node in the vault file tree. `path` is always vault-relative, POSIX-style
  *  ("/" separators), and "" denotes the vault root. */
@@ -102,6 +103,12 @@ export interface VaultApi {
    *  chosen file into `dirPath` in one round trip. Null if cancelled. */
   pickAttachment(dirPath: string): Promise<{ path: string; kind: 'image' | 'video' }[] | null>
   writeNote(path: string, content: string): Promise<void>
+  /** Earlier versions of a note, newest first (docs/plans/note-versions.md). */
+  listVersions(path: string): Promise<NoteVersion[]>
+  /** The text of one earlier version — `token` from `listVersions`. */
+  readVersion(path: string, token: string): Promise<string>
+  /** Keep the note as it is on disk now as a version, before a restore replaces it. */
+  keepVersionNow(path: string): Promise<void>
   /** Create `<dirPath>/<name>.md` ("" = vault root, name defaults to "Untitled"),
    *  or "<name> (2).md" etc. if that name's taken. The name is sanitised, so
    *  ALWAYS use the vault-relative path this returns rather than the one asked

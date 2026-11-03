@@ -99,7 +99,11 @@ import {
   notesMentioning,
   setVaultRoot,
   writeAssetUnique,
-  writeNote
+  writeNote,
+  listVersions,
+  readVersion,
+  keepVersionNow,
+  sweepVersions
 } from './vault'
 
 registerImporter('notion', notionZipImporter)
@@ -191,6 +195,23 @@ export function activateVault(root: string): void {
   startWatching(root, (change) => {
     sendToWindow(CH.changed, change)
   })
+  scheduleVersionSweep()
+}
+
+/** Earlier versions age out (a week of every copy, then one a day to 30 days).
+ *  Tidied a little after a vault opens — not in the middle of the launch — and
+ *  then twice a day for an app left open. */
+let versionSweepSoon: ReturnType<typeof setTimeout> | null = null
+let versionSweepTimer: ReturnType<typeof setInterval> | null = null
+function scheduleVersionSweep(): void {
+  const run = (): void => void sweepVersions().catch((e) => console.error('version tidy-up failed', e))
+  if (versionSweepSoon) clearTimeout(versionSweepSoon)
+  versionSweepSoon = setTimeout(run, 15_000)
+  versionSweepSoon.unref?.()
+  if (!versionSweepTimer) {
+    versionSweepTimer = setInterval(run, 12 * 60 * 60 * 1000)
+    versionSweepTimer.unref?.()
+  }
 }
 
 export function registerIpc(window: BrowserWindow): void {
@@ -259,6 +280,9 @@ export function registerIpc(window: BrowserWindow): void {
     return out
   })
   ipcMain.handle(CH.writeNote, (_e, p: string, content: string) => writeNote(p, content))
+  ipcMain.handle(CH.listVersions, (_e, p: string) => listVersions(p))
+  ipcMain.handle(CH.readVersion, (_e, p: string, token: string) => readVersion(p, token))
+  ipcMain.handle(CH.keepVersionNow, (_e, p: string) => keepVersionNow(p))
   ipcMain.handle(CH.createNote, (_e, dir: string, name?: string) => createNote(dir, name))
   ipcMain.handle(CH.createFolder, (_e, dir: string, name?: string) => createFolder(dir, name))
   // Rename and re-key together: the filesystem move happens first (it's the part

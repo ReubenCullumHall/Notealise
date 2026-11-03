@@ -993,3 +993,15 @@ describe('the archive, round 2', () => {
     expect(withSpaceBack(full, 'Archive/Old', 'Old')).toEqual({})
   })
 })
+
+describe('normalizeSettings — how often an earlier version is kept', () => {
+  it('starts on "when you close the note", for a new file and an old one', () => {
+    expect(DEFAULT_SETTINGS.versionEvery).toBe('close')
+    expect(normalizeSettings({}).versionEvery).toBe('close')
+  })
+  it('keeps every real choice and drops anything else', () => {
+    for (const v of ['close', 'quit', '1', '5', '15'] as const) expect(normalizeSettings({ versionEvery: v }).versionEvery).toBe(v)
+    expect(normalizeSettings({ versionEvery: '30' }).versionEvery).toBe('close')
+    expect(normalizeSettings({ versionEvery: 5 }).versionEvery).toBe('close')
+  })
+})

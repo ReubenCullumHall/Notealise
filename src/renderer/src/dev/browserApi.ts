@@ -187,6 +187,12 @@ const api: VaultApi = {
     store.files[path] = content
     save()
   },
+  // Earlier versions are kept by main, on disk; the preview keeps none.
+  listVersions: async () => [],
+  readVersion: async () => {
+    throw new Error('No earlier versions in browser preview')
+  },
+  keepVersionNow: async () => {},
   createNote: async (dirPath, name) => {
     const path = unique(dirPath, (name ? stripMd(name) : 'Untitled') + '.md')
     store.files[path] = ''

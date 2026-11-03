@@ -138,6 +138,7 @@ export const SEARCH_INDEX: SearchEntry[] = [
 
   { section: 'sourceFolder', label: 'Source folder', hint: 'Where your vault lives on disk, and switching to a different one.', keywords: 'data vault folder location switch change move disk path sync synced onedrive dropbox icloud google drive cloud saved stored' },
   { section: 'recovery', label: 'Recovery', hint: 'A 7-day safety net for anything deleted — restore or purge it.', keywords: 'data trash bin recycle bin deleted restore undo delete recover backup lost missing gone accidentally retrieve' },
+  { section: 'versions', label: 'Earlier versions', hint: 'How often a copy of each note is kept, so you can take back what you deleted.', keywords: 'data versions version history history snapshot snapshots backup backups earlier older previous restore undo deleted paragraph lost text rollback revert autosave copies keep a copy how often' },
   { section: 'import', label: 'Import', anchor: 'Import data', hint: 'Bring notes in from Notion, Word, Google Keep, Apple Notes, HTML or Markdown.', keywords: 'data notion word docx google keep apple notes html markdown migrate transfer evernote onenote obsidian bring in' },
   { section: 'transferData', label: 'Transfer data', hint: 'Move your presets, custom fonts and update setting to another computer.', keywords: 'data transfer move migrate new mac new computer switch backup restore export import presets custom fonts app cleaner lost settings preferences device windows mac' },
 

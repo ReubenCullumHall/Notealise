@@ -6,6 +6,10 @@ export const CH = {
   listTree: 'vault:listTree',
   readNote: 'vault:readNote',
   writeNote: 'vault:writeNote',
+  /** Earlier versions of a note (docs/plans/note-versions.md) */
+  listVersions: 'vault:listVersions',
+  readVersion: 'vault:readVersion',
+  keepVersionNow: 'vault:keepVersionNow',
   createNote: 'vault:createNote',
   createFolder: 'vault:createFolder',
   renameEntry: 'vault:renameEntry',

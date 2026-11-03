@@ -16,6 +16,7 @@ import { OssLicenses } from './OssLicenses'
 import { SourceFolder } from './SourceFolder'
 import { TransferData } from './TransferData'
 import { Recovery } from './Recovery'
+import { NoteVersions } from './NoteVersions'
 import { ImportPanel } from '../import/ImportPanel'
 import { motionOn } from '../tabs/tabStyles'
 import { DATE_FORMATS, NUMBER_FORMATS, formatDate, localZone, timezones } from '../intl'
@@ -67,6 +68,7 @@ export type SectionId =
   | 'collection'
   | 'tutorials'
   | 'sourceFolder'
+  | 'versions'
   | 'recovery'
   | 'import'
   | 'transferData'
@@ -134,10 +136,12 @@ const GROUPS: Group[] = [
     label: 'Data',
     icon: 'folder',
     // Source folder first: it is where the notes themselves are. Then the
-    // safety net, then the two ways things come in from elsewhere — Import
-    // for notes, Transfer data for the app's own settings.
+    // two safety nets — earlier versions of a note, and Recovery for what was
+    // deleted — then the two ways things come in from elsewhere: Import for
+    // notes, Transfer data for the app's own settings.
     pages: [
       { id: 'sourceFolder', label: 'Source folder' },
+      { id: 'versions', label: 'Earlier versions' },
       { id: 'recovery', label: 'Recovery' },
       { id: 'import', label: 'Import' },
       { id: 'transferData', label: 'Transfer data' }
@@ -1023,6 +1027,7 @@ function SettingsWindow({
               }}
             />
           )}
+          {section === 'versions' && <NoteVersions settings={settings} onChange={onChange} />}
           {section === 'recovery' && (
             <Recovery
               items={recovery}

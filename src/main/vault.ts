@@ -10,6 +10,8 @@ import { indexEmbeds, isDocFilename } from '../shared/attachments'
 import { isRecordingName } from './voice'
 import { indexBlocks, indexHeadings } from '../shared/blocks'
 import { heldPath, RECOVERY_DIR, TRASH_DIR } from '../shared/workspace'
+import type { NoteVersion } from '../shared/noteVersions'
+import * as versions from './noteVersions'
 
 // ---------------------------------------------------------------------------
 // Vault state. This module is the ONLY place in the app that touches `fs`.
@@ -473,6 +475,8 @@ export async function writeNote(relPath: string, content: string): Promise<void>
   // Windows, which is the exact case the check exists to prevent (rule 7).
   assertPathLength(abs)
   const data = applyEol(content, await resolveEol(abs))
+  // Earlier versions: what is on disk now may be kept before it is replaced.
+  await keepVersionBefore(abs, data)
   const dir = path.dirname(abs)
   const tmp = path.join(dir, `.${path.basename(abs)}.${randomBytes(6).toString('hex')}.tmp`)
   const fh = await fs.open(tmp, 'w')
@@ -681,6 +685,7 @@ export async function renameEntry(fromPath: string, toPath: string): Promise<str
     crlfByPath.set(key(toAbs), crlfByPath.get(fk) as boolean)
     crlfByPath.delete(fk)
   }
+  await versionsFollow(fromAbs, toAbs)
   return toRel(toAbs)
 }
 
@@ -729,6 +734,7 @@ export async function moveEntryInto(fromPath: string, toDir: string): Promise<st
     crlfByPath.set(key(toAbs), crlfByPath.get(fk) as boolean)
     crlfByPath.delete(fk)
   }
+  await versionsFollow(fromAbs, toAbs)
   return toRel(toAbs)
 }
 
@@ -794,6 +800,7 @@ export async function trashEntry(
   markWrite(abs)
   markWrite(dest)
   await renameWithRetry(abs, dest)
+  await versionsFollow(abs, dest)
   return { id, type: stat.isDirectory() ? 'dir' : 'file', name }
 }
 
@@ -819,6 +826,7 @@ async function restoreHeldEntry(src: string, name: string, to: string): Promise<
   markWrite(src)
   markWrite(candidate)
   await renameWithRetry(src, candidate)
+  await versionsFollow(src, candidate)
   return toRel(candidate)
 }
 
@@ -852,6 +860,7 @@ export async function purgeTrashItem(id: string, name: string): Promise<boolean>
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false
     throw e
   }
+  await versionsFollow(src, dest)
   return true
 }
 
@@ -946,4 +955,70 @@ export async function purgeRecoveryItem(id: string, name: string): Promise<void>
   }
   markWrite(abs)
   await fs.rm(abs, { recursive: true, force: true })
+  // Gone for good, so its earlier versions go too.
+  await versions.forget(versionsCtx(), toRel(abs)).catch((e) => console.error('could not remove earlier versions', e))
+}
+
+// ---------------------------------------------------------------------------
+// Earlier versions of a note (main/noteVersions.ts, docs/plans/note-versions.md).
+// Copies live in <vault>/.mdnotes/versions/ and are kept from `writeNote`, the
+// one step every note's text is saved through. All of it is a safety net: a
+// failure is logged, never thrown into a save or a move.
+// ---------------------------------------------------------------------------
+function versionsCtx(): versions.Ctx {
+  return { root: requireVault(), fold: foldCase }
+}
+
+/** Before `writeNote` replaces a note: hand what is on disk now to the keeper,
+ *  which decides whether this one is worth a copy. */
+async function keepVersionBefore(abs: string, next: string): Promise<void> {
+  try {
+    let before: string | null = null
+    try {
+      before = await fs.readFile(abs, 'utf8')
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+    }
+    await versions.keepBeforeSave(versionsCtx(), toRel(abs), before, next)
+  } catch (e) {
+    console.error('could not keep an earlier version', e)
+  }
+}
+
+/** A note or folder moved; its copies follow it. */
+async function versionsFollow(fromAbs: string, toAbs: string): Promise<void> {
+  try {
+    await versions.followMove(versionsCtx(), toRel(fromAbs), toRel(toAbs))
+  } catch (e) {
+    console.error('could not move earlier versions', e)
+  }
+}
+
+/** Every earlier version of a note, newest first. */
+export async function listVersions(relPath: string): Promise<NoteVersion[]> {
+  const abs = await resolveReal(relPath)
+  assertNotConfig(abs)
+  return versions.list(versionsCtx(), toRel(abs))
+}
+
+/** The text of one earlier version of a note (`token` from `listVersions`). */
+export async function readVersion(relPath: string, token: string): Promise<string> {
+  const abs = await resolveReal(relPath)
+  assertNotConfig(abs)
+  return versions.read(versionsCtx(), toRel(abs), token)
+}
+
+/** Keep the note as it is on disk now, before a restore or a Put back replaces
+ *  it — so that can itself be taken back. */
+export async function keepVersionNow(relPath: string): Promise<void> {
+  const abs = await resolveReal(relPath)
+  assertNotConfig(abs)
+  const text = await fs.readFile(abs, 'utf8')
+  await versions.keepNow(versionsCtx(), toRel(abs), text)
+}
+
+/** Tidy away versions that have aged out. Safe with no vault open. */
+export async function sweepVersions(): Promise<void> {
+  if (!vaultRoot) return
+  await versions.sweep(versionsCtx())
 }

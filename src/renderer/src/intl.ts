@@ -144,6 +144,13 @@ export function formatDate(ms: number | null | undefined, fmt: DateFormatId = 'r
 export const formatTime = (ms: number, tz = 'system'): string =>
   new Intl.DateTimeFormat(userLocale, { ...zoneOpt(tz), hour: '2-digit', minute: '2-digit' }).format(new Date(ms))
 
+/** The clock time with seconds — for telling apart two things from the same minute
+ *  (Earlier versions' list). */
+export const formatTimeSeconds = (ms: number, tz = 'system'): string =>
+  new Intl.DateTimeFormat(userLocale, { ...zoneOpt(tz), hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(
+    new Date(ms)
+  )
+
 /**
  * The shortest honest answer to "when?", for the strip beside a note's word
  * count where every character competes with the format bar for width.

@@ -37,6 +37,7 @@ import {
   PAGE_LOOK_INTENSITY_DEFAULT
 } from './looks'
 import { normalizeVoiceSkip, VOICE_SKIP_DEFAULT, type VoiceSkip } from './voiceNote'
+import { DEFAULT_VERSION_EVERY, isVersionEvery, type VersionEveryId } from './noteVersions'
 
 /** 'black' is Extra dark: the dark ramp with every surface taken to (near)
  *  pitch black, for OLED panels and dim rooms. It is a VARIANT of dark, not a
@@ -498,6 +499,10 @@ export interface AppSettings {
   numberFormat: NumberFormatId
   /** an IANA zone name, or "system" to follow the OS */
   timezone: string
+  /** how often an earlier version of a note is kept (Settings → Data → Earlier
+   *  versions; shared/noteVersions.ts). Whole-vault: keeping notes safe is not a
+   *  look, so not per space. */
+  versionEvery: VersionEveryId
   /** play the wordmark clip (StartupSplash.tsx) while a vault opens. Global,
    *  like the rest of this block: it's about the app's own opening moment,
    *  not about any one space. */
@@ -675,6 +680,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   dateFormat: 'relative',
   numberFormat: 'default',
   timezone: 'system',
+  versionEvery: DEFAULT_VERSION_EVERY,
   playStartupAnimation: true,
   animationsEnabled: true,
   confirmMediaDelete: true,
@@ -979,6 +985,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       : DEFAULT_SETTINGS.numberFormat,
     // any IANA string is legal; the picker only ever offers real ones
     timezone: typeof s.timezone === 'string' && s.timezone ? s.timezone : DEFAULT_SETTINGS.timezone,
+    versionEvery: isVersionEvery(s.versionEvery) ? s.versionEvery : DEFAULT_SETTINGS.versionEvery,
     playStartupAnimation:
       typeof s.playStartupAnimation === 'boolean' ? s.playStartupAnimation : DEFAULT_SETTINGS.playStartupAnimation,
     animationsEnabled:
