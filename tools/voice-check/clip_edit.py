@@ -5,7 +5,7 @@
 Makes a spoken "three takes with pauses" clip (`say`), opens it from the scissors and from the
 right-click menu, then: trims, cuts, Keep only this, Undo/redo, Remove silences, split, zoom, speed,
 Save / Save as new clip(s), and reads back the note and the files on disk. Screenshots go to
-WORK/clip-shots. Mac only as written (afconvert, `say`)."""
+WORK/clip-shots. On Windows the clip comes from fixtures/ (no `say` there); REAL_KEYS is Mac-only."""
 import json, os, re, shutil, struct, subprocess, sys, time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
@@ -28,11 +28,21 @@ def check(name, ok, detail=''):
 def make_clip():
     if (WORK / 'takes.m4a').exists():
         return
+    if sys.platform != 'darwin':
+        # No `say` or afconvert here: the same 26-second clip, kept in fixtures/.
+        shutil.copy(Path(__file__).parent / 'fixtures' / 'takes.m4a', WORK / 'takes.m4a')
+        return
     subprocess.run(['say', '-v', 'Daniel', '-o', str(WORK / 'takes.aiff'),
                     "Um, okay. La photosynthèse... no, wait. [[slnc 2200]] Photosynthesis is how plants turn sunlight into food. "
                     "Uh, hang on. [[slnc 2600]] Take three. Photosynthesis is how plants use light, water and carbon dioxide to make "
                     "glucose, and they give off oxygen as they do it. [[slnc 1800]] Yeah, that one's good."], check=True)
     subprocess.run(['afconvert', '-f', 'm4af', '-d', 'aac', str(WORK / 'takes.aiff'), str(WORK / 'takes.m4a')], check=True)
+
+
+def media_seconds(page, rel: str) -> float:
+    """How long a recording in the vault is, decoded by the app itself (any platform)."""
+    return page.evaluate("""async (rel) => { const b = await window.api.readAsset(rel);
+      const a = await new OfflineAudioContext(1, 1, 48000).decodeAudioData(b.slice().buffer); return a.duration }""", rel)
 
 
 def duration(p: Path) -> float:
@@ -439,7 +449,7 @@ def main():
             check('text around it untouched', after.startswith('# Photosynthesis\n\nIn my own words.\n\n') and after.endswith('\n\nAfter it.\n'), repr(after[-40:]))
             files = sorted((v / 'Biology').glob('takes section *.m4a'))
             check('three .m4a files beside the note', len(files) == 3, ', '.join(f.name for f in files))
-            durs = [duration(f) for f in files]
+            durs = [media_seconds(page, f'Biology/{f.name}') for f in files]
             check('their lengths add up to the edit at 1.5×', abs(sum(durs) - L3 / 1.5) < 0.6, f'{[round(d, 2) for d in durs]} vs {L3 / 1.5:.2f}')
             ws = json.loads((v / '.mdnotes' / 'workspace.json').read_text())
             check('the original went to the bin', not (v / 'Biology' / 'takes.m4a').exists() and any(t['from'] == 'Biology/takes.m4a' for t in ws['trash']))

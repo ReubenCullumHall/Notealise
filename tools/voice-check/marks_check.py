@@ -9,7 +9,7 @@ import os, re, subprocess, sys, time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(Path(__file__).parent))
-from common import WORK, ELECTRON  # noqa: E402
+from common import WORK, ELECTRON, MOD  # noqa: E402
 from away_check import vault  # noqa: E402
 
 PORT = int(os.environ.get('PORT', '9483'))
@@ -57,7 +57,7 @@ def main():
             page.locator('.cm-line', has_text='First line.').first.click()
             page.keyboard.press('End')
             page.keyboard.type(' typing')
-            page.keyboard.press('Meta+Shift+m')
+            page.keyboard.press(f'{MOD}+Shift+m')
             time.sleep(0.3)
             check('⌘⇧M marks, without typing an M', 'M' not in (v / 'Voice' / 'A.md').read_text().split('First line.')[1].split('\n')[0] and
                   '1 mark' in page.evaluate("() => document.querySelector('.cm-voice-rec-status')?.textContent ?? ''"),

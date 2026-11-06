@@ -5,7 +5,7 @@
 Right-click the waveform → "Copy link to 0:13", paste it into a note in another folder (it must
 re-point), click it there (it must open the voice note's note and play from 0:13), click one in
 the same note, and click one whose recording is in no note. The Mac clipboard is put back after.
-Mac only as written (afconvert, `say` via clip_edit.make_clip)."""
+Runs on Windows too (the clip comes from fixtures/ there)."""
 import json, os, shutil, subprocess, sys, time
 from pathlib import Path
 from playwright.sync_api import sync_playwright

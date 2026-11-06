@@ -3,7 +3,7 @@ freezes (Chromium 'longtask' entries — any stretch over 50 ms when nothing els
 
     WORK=/some/dir ./build.sh && WORK=/some/dir PORT=9483 python3 sizes_probe.py
 
-Needs WORK/short.m4a (0.4 s), WORK/long25.m4a (25 min), WORK/long70.m4a (70 min) — see the README.
+Needs WORK/short, long25 and long70 (.m4a or .wav: 0.4 s, 25 min, 70 min) — make them with make_sizes.py.
 Prints a table; screenshots go to WORK/sizes-*.png. A probe, not a pass/fail check."""
 import json, os, shutil, subprocess, sys, time
 from pathlib import Path
@@ -25,7 +25,9 @@ def vault():
         shutil.rmtree(v)
     (v / 'Voice').mkdir(parents=True)
     (v / '.mdnotes').mkdir()
-    for name, f in [('Short', 'short.m4a'), ('Long', 'long25.m4a'), ('Lecture', 'long70.m4a')]:
+    for name, stem in [('Short', 'short'), ('Long', 'long25'), ('Lecture', 'long70')]:
+        # .m4a where make_sizes.py could convert (Mac), the .wav itself elsewhere
+        f = f'{stem}.m4a' if (WORK / f'{stem}.m4a').exists() else f'{stem}.wav'
         shutil.copy(WORK / f, v / 'Voice' / f)
         (v / 'Voice' / f'{name}.md').write_text(f'# {name}\n\n<audio controls src="{f}" data-name="{name}"></audio>\n\nAfter.\n')
     (v / '.mdnotes' / 'settings.json').write_text(json.dumps({'spaces': [{'folder': 'Voice'}], 'activeSpaceFolder': 'Voice'}))

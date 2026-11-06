@@ -6,12 +6,12 @@ Writes word times for the test recording the way Transcribe keeps them (.mdnotes
 stamped with the file's size and time), opens the editor, then: the words show; pressing a word
 selects it and moves the playhead; dragging across words selects a run; Backspace cuts it and the
 words go; Undo brings them back; the word being said is marked while it plays. A recording
-changed since (another stamp) shows no words. Mac only as written."""
+changed since (another stamp) shows no words. Mac and Windows."""
 import hashlib, json, os, re, shutil, subprocess, sys, time, unicodedata
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(Path(__file__).parent))
-from common import WORK, ELECTRON  # noqa: E402
+from common import WORK, ELECTRON, MOD  # noqa: E402
 from clip_edit import make_clip, vault  # noqa: E402
 
 PORT = int(os.environ.get('PORT', '9483'))
@@ -108,7 +108,7 @@ def main():
             check('Backspace cuts them out of the sound', total1 != total0, f'{total0} → {total1}')
             check('and the words go', 'hang' not in texts and len(texts) == len(words) - 3, ' '.join(texts[10:16]))
             page.screenshot(path=str(WORK / 'words_2.png'))
-            page.keyboard.press('Meta+z')
+            page.keyboard.press(f'{MOD}+z')
             time.sleep(0.3)
             check('Undo brings them back', page.locator('.clip-ed-word').count() == len(words))
 

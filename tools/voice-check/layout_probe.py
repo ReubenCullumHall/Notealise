@@ -9,7 +9,7 @@ import json, os, shutil, subprocess, sys, time
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 sys.path.insert(0, str(Path(__file__).parent))
-from common import WORK, ELECTRON  # noqa: E402
+from common import WORK, ELECTRON, MOD  # noqa: E402
 from clip_edit import make_clip  # noqa: E402
 
 PORT = int(os.environ.get('PORT', '9483'))
@@ -47,6 +47,25 @@ def vault():
 
 
 def resize(pid, w, h):
+    if sys.platform == 'win32':
+        # The window of this process (its top-level, visible one), then SetWindowPos.
+        import ctypes
+        from ctypes import wintypes
+        U = ctypes.windll.user32
+        found = []
+        def cb(hwnd, _):
+            p = wintypes.DWORD()
+            U.GetWindowThreadProcessId(hwnd, ctypes.byref(p))
+            if U.IsWindowVisible(hwnd) and U.GetWindowTextLengthW(hwnd) > 0:
+                found.append((hwnd, p.value))
+            return True
+        U.EnumWindows(ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)(cb), 0)
+        # Electron's window belongs to the main process or a child of it: take the first titled one of the app
+        mine = [h for h, p in found if p == pid] or [h for h, p in found if subprocess.run(['powershell', '-NoProfile', '-Command', f'(Get-CimInstance Win32_Process -Filter "ProcessId={p}").ParentProcessId'], capture_output=True, text=True).stdout.strip() == str(pid)]
+        if mine:
+            U.SetWindowPos(mine[0], 0, 40, 40, w, h, 0x0004)
+        time.sleep(0.8)
+        return
     subprocess.run(['osascript', '-e', f'tell application "System Events" to tell (first process whose unix id is {pid}) to set size of window 1 to {{{w}, {h}}}',
                     '-e', f'tell application "System Events" to tell (first process whose unix id is {pid}) to set position of window 1 to {{40, 40}}'],
                    capture_output=True)
@@ -175,7 +194,7 @@ def main():
                 time.sleep(1)
             ed = page.locator('.cm-content').last
             ed.click()
-            page.keyboard.press('Meta+ArrowDown')
+            page.keyboard.press(f'{MOD}+ArrowDown')
             page.keyboard.press('Enter')
             page.keyboard.type('/voice')
             time.sleep(0.5)
