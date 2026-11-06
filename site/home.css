@@ -161,6 +161,22 @@ body {
 
 /* ── Exhibits: square, hairline, crop marks at the corners ───────────── */
 .paper-page, .inside-card, .move-report { background-color: var(--raised); }
+/* The paper sample's colour underneath. The rule above puts the page's own
+   colour on .paper-page, which painted over the --wash the dots set (landing.js),
+   so no colour ever showed. The wash goes ON TOP of the page colour instead,
+   as an inset shadow, so it still animates. */
+.paper-page {
+  box-shadow: inset 0 0 0 999px var(--wash);
+  transition: box-shadow .35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* The ending when the Try-it note was left dark. On a dark page the band must
+   not be a solid black block (it hid the dots and sat darker than the page);
+   leave it clear so it IS the page. Light pages keep the black band: that is
+   the carried-over dark look. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"])[data-carry-theme="dark"] .walk { background-color: transparent; }
+}
+:root[data-theme="dark"][data-carry-theme="dark"] .walk { background-color: transparent; }
 .compare, .paper, .move, .insides { position: relative; }
 .compare::after, .paper::after, .move::after, .insides::after {
   --m: var(--line-2);
