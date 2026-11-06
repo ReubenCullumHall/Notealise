@@ -126,6 +126,12 @@ export const CH = {
   convertAudio: 'voice:convertAudio',
   /** renderer -> main: a native picker for recordings; returns names + bytes */
   pickAudioFiles: 'voice:pickAudioFiles',
+  /** renderer -> main: save as you record (main/vault.ts "a recording kept as it
+   *  is made") — open one, add a piece, finish it, list what a crash left */
+  recordingBegin: 'voice:recordingBegin',
+  recordingAppend: 'voice:recordingAppend',
+  recordingEnd: 'voice:recordingEnd',
+  recordingsLeft: 'voice:recordingsLeft',
   /** renderer -> main: which import formats this build supports */
   importFormats: 'import:formats',
   /** renderer -> main: notes import — open a native picker scoped by format */

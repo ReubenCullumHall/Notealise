@@ -27,11 +27,11 @@ const NOTE = ['First paragraph line one', 'first paragraph line two', '', 'A lon
 )
 
 describe('what the line grip picks up', () => {
-  it('takes the whole paragraph when nothing is selected', () => {
-    // The cursor is on line two, but a paragraph is the unit somebody means by
-    // "this bit of writing" — moving one line of it would split a sentence.
+  it('takes just the line when nothing is selected', () => {
+    // Every line its own handle (Reuben, 2026-11-06: "for ALL blocks there
+    // should be this"): a run of lines is no longer one paragraph to the grip.
     const at = NOTE.indexOf('first paragraph line two') + 3
-    expect(moved(NOTE, at)).toBe('First paragraph line one\nfirst paragraph line two')
+    expect(moved(NOTE, at)).toBe('first paragraph line two')
   })
 
   it('stops at the blank line either side, never crossing into the next paragraph', () => {
@@ -74,17 +74,31 @@ describe('what the line grip picks up', () => {
     expect(moved(doc, 1)).toBe('```\ncode\n\nmore\n```')
   })
 
-  it('takes a table whole, with no rule of its own', () => {
-    // A Markdown table cannot contain a blank line, so the paragraph rule
-    // already covers it. Asserted so that stays true if the rules are edited.
+  it('takes a table whole', () => {
     const doc = ['Before', '', '| a | b |', '| --- | --- |', '| 1 | 2 |', '', 'After'].join('\n')
     const at = doc.indexOf('| 1 | 2 |') + 2
     expect(moved(doc, at)).toBe('| a | b |\n| --- | --- |\n| 1 | 2 |')
   })
 
-  it('takes a whole list, since a list has no blank lines between its items', () => {
-    const doc = ['Heading', '', '- one', '- two', '- three', '', 'After'].join('\n')
-    expect(moved(doc, doc.indexOf('- two') + 2)).toBe('- one\n- two\n- three')
+  it('takes one list item, with the items nested under it', () => {
+    const doc = ['Heading', '', '- one', '- two', '  - two a', '  - two b', '- three', '', 'After'].join('\n')
+    expect(moved(doc, doc.indexOf('- two') + 2)).toBe('- two\n  - two a\n  - two b')
+    expect(moved(doc, doc.indexOf('- two a') + 4)).toBe('  - two a')
+    expect(moved(doc, doc.indexOf('- three') + 2)).toBe('- three')
+  })
+
+  it('takes a quote, a formula and the properties at the top whole', () => {
+    const doc = ['---', 'type: status', 'tags: x', '---', 'Text', '> quoted one', '> quoted two', '', '$$', 'x^2', '$$', 'After'].join('\n')
+    expect(moved(doc, doc.indexOf('tags') + 1)).toBe('---\ntype: status\ntags: x\n---')
+    expect(moved(doc, doc.indexOf('quoted two') + 1)).toBe('> quoted one\n> quoted two')
+    expect(moved(doc, doc.indexOf('x^2'))).toBe('$$\nx^2\n$$')
+    expect(moved(doc, doc.indexOf('Text') + 1)).toBe('Text')
+    expect(moved(doc, doc.indexOf('After') + 1)).toBe('After')
+  })
+
+  it('takes a link on its own line as just that line', () => {
+    const doc = ['Before it', '[Explain it · 0:13](memo.m4a#t=13)', 'After it'].join('\n')
+    expect(moved(doc, doc.indexOf('Explain') + 2)).toBe('[Explain it · 0:13](memo.m4a#t=13)')
   })
 
   it('returns whole-line offsets, never a partial line', () => {
@@ -94,11 +108,11 @@ describe('what the line grip picks up', () => {
     expect(s.doc.lineAt(r.to).to).toBe(r.to)
   })
 
-  it('offers no grip in a note with only one line', () => {
-    // Nothing to reorder — a grip beside the only line there is would be a
-    // control that cannot do anything.
-    expect(canMoveBlock(state('Just the one line', 0))).toBe(false)
-    expect(canMoveBlock(state('One\nTwo', 0))).toBe(true)
+  it('offers a grip in any note with something in it', () => {
+    // A one-line note still wants the grip's click (select) and right-click
+    // (copy a link); only an empty note has nothing to offer it for.
+    expect(canMoveBlock(state('', 0))).toBe(false)
+    expect(canMoveBlock(state('Just the one line', 0))).toBe(true)
   })
 })
 
@@ -111,8 +125,8 @@ describe('the line grip follows the pointer (a line other than the cursor\'s)', 
     return s.doc.sliceString(r.from, r.to)
   }
 
-  it('picks up the paragraph under the pointer, whatever the cursor is doing', () => {
-    expect(hovered(at('second line two'))).toBe('Second line one\nsecond line two')
+  it('picks up the line under the pointer, whatever the cursor is doing', () => {
+    expect(hovered(at('second line two'))).toBe('second line two')
     expect(hovered(at('Last'))).toBe('Last')
   })
 
@@ -126,7 +140,7 @@ describe('the line grip follows the pointer (a line other than the cursor\'s)', 
     const to = doc.indexOf('two') + 3
     // pointer on a selected line → the selection
     expect(hovered(at('second line two'), from, to)).toBe('Second line one\nsecond line two')
-    // pointer on another line → that line's paragraph, the selection is left alone
+    // pointer on another line → that line, the selection is left alone
     expect(hovered(at('Last'), from, to)).toBe('Last')
   })
 
@@ -173,6 +187,6 @@ describe('a voice note, photo or video on its own line is a block of its own', (
     const d = 'Look at this ![](a.png) here\nand the next line'
     const s = state(d, 0)
     const r = blockRange(s, 2)
-    expect(s.doc.sliceString(r.from, r.to)).toBe(d)
+    expect(s.doc.sliceString(r.from, r.to)).toBe('Look at this ![](a.png) here')
   })
 })

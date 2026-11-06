@@ -179,7 +179,7 @@ export function Tooltip(): React.JSX.Element | null {
       // `bg-surface/95` + `backdrop-blur` greys the page out and blurs the words
       // underneath. Bare text over a note was hard to read (Reuben, 2026-10-31);
       // the "?" help marks had already moved onto a solid panel (2026-10-03).
-      className="pointer-events-none z-[90] rounded-lg border border-ink-300/30 bg-surface/95 px-2.5 py-1.5 text-[11.5px] font-medium leading-snug text-ink-700 shadow-float backdrop-blur"
+      className="pointer-events-none z-[90] rounded-lg border border-ink-300/30 bg-surface/95 px-2.5 py-1.5 text-[11.5px] font-medium leading-snug text-ink-700 shadow-float backdrop-blur whitespace-pre-line"
       role="tooltip"
     >
       {tip.text}

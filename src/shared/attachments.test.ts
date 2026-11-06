@@ -141,6 +141,14 @@ describe('a note moves, and its links to files follow', () => {
     )
   })
 
+  it('re-points a link to a moment in a recording, keeping its time', () => {
+    expect(repointFileLinks('[Explain it · 1:23](Explain%20it.m4a#t=83)', 'A/N.md', 'B/N.md')).toBe(
+      '[Explain it · 1:23](../A/Explain%20it.m4a#t=83)'
+    )
+    // a link to a heading in a note is not a file, and stays
+    expect(repointFileLinks('[x](Other.md#t=3)', 'A/N.md', 'B/N.md')).toBe('[x](Other.md#t=3)')
+  })
+
   it('goes up and down, and out to the vault root', () => {
     expect(repointFileLinks('![](pic.png)', 'A/B/N.md', 'N.md')).toBe('![](A/B/pic.png)')
     expect(repointFileLinks('![](pic.png)', 'N.md', 'A/N.md')).toBe('![](../pic.png)')

@@ -18,6 +18,11 @@ import {
   mightBeSoundOnly,
   notConvertedMessage,
   ownLineInsert,
+  placeAgain,
+  marksLine,
+  marksWords,
+  waitingInserts,
+  applyInserts,
   platformOf,
   recorderErrorMessage,
   recordingInsert,
@@ -263,5 +268,48 @@ describe('a video that is really a recording', () => {
     expect(isoDeclaresVideo(new Uint8Array([]))).toBe(false)
     expect(isIsoMedia('a.mov')).toBe(true)
     expect(isIsoMedia('a.webm')).toBe(false)
+  })
+})
+
+describe('a recording that kept going while its note was off screen goes back where it was', () => {
+  const left = { text: 'One\nTwo three\nFour', pos: 'One\nTwo three'.length } // after "Two three"
+  it('to the same place when the note is unchanged', () => {
+    expect(placeAgain(left.text, left)).toBe(left.pos)
+  })
+  it('after the same line when the note changed around it', () => {
+    const now = 'Added above\nOne\nTwo three\nFour'
+    expect(placeAgain(now, left)).toBe(now.indexOf('Two three') + 'Two three'.length)
+  })
+  it('before the line when it sat at a line start', () => {
+    const l = { text: 'One\nTwo', pos: 4 }
+    expect(placeAgain('Zero\nOne\nTwo', l)).toBe('Zero\nOne\n'.length)
+  })
+  it('the end of the note when its line is gone, doubled or blank', () => {
+    expect(placeAgain('Something else', left)).toBeNull()
+    expect(placeAgain('Two three\nTwo three', left)).toBeNull()
+    expect(placeAgain('x', { text: 'a\n\nb', pos: 2 })).toBeNull()
+  })
+})
+
+describe('waiting voice notes go into their note', () => {
+  it('where they were recorded when the note was left mid-recording, the rest at the end', () => {
+    const text = 'One\nTwo three\nFour\n'
+    const { inserts, placed } = waitingInserts(text, [
+      { tag: '<audio controls src="a.m4a"></audio>', anchor: { text, pos: 'One\nTwo three'.length } },
+      { tag: '<audio controls src="b.m4a"></audio>' }
+    ])
+    expect(placed).toBe(1)
+    expect(applyInserts(text, inserts)).toBe(
+      'One\nTwo three\n<audio controls src="a.m4a"></audio>\n\nFour\n\n<audio controls src="b.m4a"></audio>\n'
+    )
+  })
+})
+
+describe('marks made while recording', () => {
+  it('become a line of links to each moment, under the voice note', () => {
+    expect(marksLine('Voice%20note.m4a', [])).toBe('')
+    expect(marksLine('Voice%20note.m4a', [12.7, 65])).toBe('\n[0:12](Voice%20note.m4a#t=12) · [1:05](Voice%20note.m4a#t=65)')
+    expect(marksWords(0)).toBe('')
+    expect(marksWords(2)).toBe(' · 2 marks')
   })
 })

@@ -7,7 +7,7 @@ import type { Workspace } from '../../shared/workspace'
 import { activeSpace, shownEmoji, withoutSpace, type AppSettings, type Space } from '../../shared/settings'
 import type { UpdateStatus } from '../../shared/update'
 import { UpdateBanner } from './update/UpdateBanner'
-import { SidebarDeck } from './tabs/VoiceDeck'
+import { SidebarDeck, SidebarRecorder } from './tabs/VoiceDeck'
 import { ArchiveIcon, BinIcon, Icon } from './icons'
 import { MediaTag } from './MediaBadge'
 import { heldPath, TRASH_DIR } from '../../shared/workspace'
@@ -1167,6 +1167,10 @@ export function Sidebar({
         )}
 
         <UpdateBanner status={update} />
+
+        {/* A recording that carries on while its note is off screen
+            (2026-11-06): Pause, Stop, and ↗ back to it. */}
+        <SidebarRecorder onGoTo={(note) => onGoToRecording(note, '')} />
 
         {/* The voice note playing (or last played) in a note you have moved
             away from, still playable from here — Arc's sidebar player. */}

@@ -66,6 +66,8 @@ interface Props {
   onRevealedHeading?: () => void
   /** vault path of a photo/video to scroll to — the delete dialog's jump */
   revealEmbed: string | null
+  /** with revealEmbed: play that voice note from here, in seconds (a link to a moment) */
+  revealEmbedAt?: number | null
   /** the picture jump landed — App forgets the request */
   onRevealedEmbed?: () => void
   /** words to find, select and show — a "Search notes" result was clicked */
@@ -201,6 +203,7 @@ export function NotePane({
   revealHeading,
   onRevealedHeading,
   revealEmbed,
+  revealEmbedAt,
   onRevealedEmbed,
   revealText,
   onRevealedText,
@@ -693,6 +696,7 @@ export function NotePane({
               revealHeading={revealHeading}
               onRevealedHeading={onRevealedHeading}
               revealEmbed={revealEmbed}
+              revealEmbedAt={revealEmbedAt}
               onRevealedEmbed={onRevealedEmbed}
               revealText={revealText}
               onRevealedText={onRevealedText}

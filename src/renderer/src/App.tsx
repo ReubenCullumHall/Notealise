@@ -17,7 +17,7 @@ import { PaneDivider } from './tabs/PaneDivider'
 import { markCreated, markDeleted } from './organise/arrivals'
 import { PRACTICE_HEAD, PRACTICE_TITLE } from './settings/tutorials/tryIt'
 import { focusNoteEnd } from './editor/viewRegistry'
-import { flushRecordings, recordingsPending, voiceNoteMoved } from './editor/voiceRecorder'
+import { addRecovered, flushRecordings, recordingsPending, voiceNoteMoved } from './editor/voiceRecorder'
 import { deckNoteMoved, ejectDeck } from './editor/voicePlayer'
 import { noteLayoutChange, notePaneChange } from './tabs/stripMotion'
 import { TabStrip } from './tabs/TabStrip'
@@ -121,6 +121,8 @@ import { Sidebar } from './Sidebar'
 import type { SearchHit } from './Search'
 import { JumpToNote } from './JumpToNote'
 import { EarlierVersions } from './history/EarlierVersions'
+import { ClipEditorHost } from './editor/clipEdit/ClipEditor'
+import { clipEditorTakesCommand } from './editor/clipEdit/open'
 import type { JumpNote } from './jumpMatch'
 import { MAC_INSTALL_GUIDE_URL, type UpdateStatus } from '../../shared/update'
 import { UpdateToast } from './update/UpdateToast'
@@ -454,7 +456,8 @@ export default function App(): React.JSX.Element {
    *  in it. Same shape and same job as `pendingHeading` beside it: App decides
    *  WHICH note, the pane decides WHERE in it, because only the pane has the
    *  text (see CodeEditor's `revealEmbed` effect). */
-  const [pendingEmbed, setPendingEmbed] = useState<{ path: string; file: string } | null>(null)
+  // `at`: play the voice note from there once it is on screen (a link to a moment, momentLink.ts)
+  const [pendingEmbed, setPendingEmbed] = useState<{ path: string; file: string; at?: number } | null>(null)
   /** "Search notes" result clicked: the words to find and show in that note. */
   const [pendingText, setPendingText] = useState<{ path: string; text: string } | null>(null)
   // The sidebar's "open this folder, close the rest", handed up so the path bar
@@ -1494,6 +1497,23 @@ export default function App(): React.JSX.Element {
     [enterSpace, applyLayout, loadDoc, flash]
   )
 
+  /** A link to a moment in a recording (momentLink.ts), clicked in a note that
+   *  doesn't hold it: open a note that does — the way a [[link]] opens one — and
+   *  play the voice note from `t`. */
+  const openMoment = useCallback(
+    async (file: string, t: number, how: OpenHow): Promise<void> => {
+      const live = new Set(noteRefs(treeRef.current).map((n) => n.path))
+      const note = (mediaUsageRef.current.get(file) ?? []).find((n) => live.has(n))
+      if (!note) {
+        flash("That recording isn't in any note now. It may have been edited, moved or deleted.")
+        return
+      }
+      await openLink(note, how)
+      setPendingEmbed({ path: note, file, at: t })
+    },
+    [openLink, flash]
+  )
+
   /** Clicking a `[[link]]` to a note nobody has written yet: make it, beside the
    *  note that mentioned it, and open it. The name is sanitised in main, so the
    *  path that comes back is the one to use — never the title we asked for. */
@@ -1567,6 +1587,7 @@ export default function App(): React.JSX.Element {
       open: (p, how, heading) => void openLink(p, how, heading),
       create: (dir, title, how) => void createFromLink(dir, title, how),
       jump: (heading) => requestHeading(activePath(layoutRef.current) ?? '', heading),
+      moment: (file, t, how) => void openMoment(file, t, how),
       reveal: (folder) => void reveal(folder),
       inspect: (at) => setInspect(at as Inspect | null),
       dragStart: (p) => setDrag({ kind: 'tab', path: p }),
@@ -1647,7 +1668,7 @@ export default function App(): React.JSX.Element {
       setVoiceSkip: (side, seconds) =>
         void changeSettings({ voiceSkip: { ...settingsRef.current.voiceSkip, [side]: seconds } })
     }),
-    [openLink, createFromLink, reveal, flash, showNotice, requestHeading, changeSettings]
+    [openLink, createFromLink, reveal, flash, showNotice, requestHeading, changeSettings, openMoment]
   )
 
   // Delete-then-confirm for a photo or video pulled out of a note. The editor
@@ -1709,6 +1730,34 @@ export default function App(): React.JSX.Element {
     // failure the notice channel exists for.
     if (!id) flash(`Couldn't move ${file.split('/').pop()} to the bin — it's still in your vault`)
     return id
+  }
+
+  /** The voice note editor's Save swapped a recording for its edit. The
+   *  original goes to the bin under the rule a photo's file follows: only once
+   *  nothing uses it — not another voice note in this note (`text` is the note
+   *  after the save), not another note. "Put back" on the notice puts the
+   *  original line and its recording back, and the new recordings Save made go
+   *  to the bin in their place. */
+  const binReplacedRecording = (file: string, note: string, text: string, made: string[], revert: () => boolean): void => {
+    const putBack = (id: string | null): void => {
+      if (!revert()) return void flash('Couldn’t put the original back — the note has changed since')
+      if (id) unbinMedia(id, file)
+      void window.api.trashEntries(made).then(async (ws) => {
+        setWorkspace(ws)
+        await loadTree()
+      })
+    }
+    if (indexEmbeds(text).some((t) => resolveVaultPath(t, note) === file)) return
+    if (otherNotesUsing(mediaUsageRef.current, file, note).length > 0) {
+      showNotice({
+        text: 'Saved. The original recording stays — another note still uses it.',
+        action: { label: 'Put back', run: () => putBack(null) }
+      })
+      return
+    }
+    void binMedia(file, null).then((id) => {
+      if (id) showNotice({ text: 'Saved. The original recording is in the bin.', action: { label: 'Put back', run: () => putBack(id) } })
+    })
   }
 
   /** The Undo half of a silent delete: the TEXT is put back by the editor
@@ -2252,6 +2301,29 @@ export default function App(): React.JSX.Element {
     }, 800)
     return () => clearTimeout(t)
   }, [vault, settings.spaces])
+
+  // Save as you record (voiceRecorder.ts, main/vault.ts): a recording a crash
+  // left unfinished is put back — saved beside its note by main, added to the
+  // note here — a moment after the vault opens.
+  useEffect(() => {
+    if (!vault || typeof window.api.recordingsLeft !== 'function') return
+    let stale = false
+    const t = setTimeout(() => {
+      void window.api
+        .recordingsLeft()
+        .then((list) => {
+          if (stale || !list.length) return
+          addRecovered(list, flash)
+          void loadTree()
+        })
+        .catch(() => {})
+    }, 1500)
+    return () => {
+      stale = true
+      clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vault])
 
   /** Make a space out of a saved look: a folder named after the preset, with
    *  that look already on it. The one thing the drag cannot express — there is
@@ -3883,12 +3955,14 @@ export default function App(): React.JSX.Element {
   const jumpOpenRef = useRef(false)
   jumpOpenRef.current = jumpOpen && !jumpClosing
   const jumpNotesRef = useRef<JumpNote[]>([])
-
   // Route application-menu commands (New Note / New Folder) to the current
   // handlers via a ref, so the subscription mounts once but never goes stale.
   const menuHandler = useRef<(cmd: string) => void>(() => {})
   menuHandler.current = (cmd: string): void => {
     if (!vault || splashActive) return
+    // The voice note editor open: every menu shortcut is its own — Cmd/Ctrl+S
+    // saves the clip, the rest do nothing behind it (Reuben, 2026-11-05).
+    if (clipEditorTakesCommand(cmd)) return
     // Nothing may move the note out from under a delete waiting to be
     // confirmed — the same guard the tab keyboard below applies, and it has to
     // be here too now that two layout commands arrive through the menu.
@@ -4704,6 +4778,7 @@ export default function App(): React.JSX.Element {
                     setPendingHeading((cur) => (cur && cur.path === p ? null : cur))
                   }
                   revealEmbed={pendingEmbed?.path === p ? pendingEmbed.file : null}
+                  revealEmbedAt={pendingEmbed?.path === p ? (pendingEmbed.at ?? null) : null}
                   onRevealedEmbed={() => setPendingEmbed((cur) => (cur && cur.path === p ? null : cur))}
                   revealText={pendingText?.path === p ? pendingText.text : null}
                   onRevealedText={() => setPendingText((cur) => (cur && cur.path === p ? null : cur))}
@@ -4913,6 +4988,16 @@ export default function App(): React.JSX.Element {
           )}
         </div>
       )}
+
+      <ClipEditorHost
+        onReplaced={binReplacedRecording}
+        onDiscard={(files) =>
+          void window.api.trashEntries(files).then(async (ws) => {
+            setWorkspace(ws)
+            await loadTree()
+          })
+        }
+      />
 
       {jumpOpen && (
         <JumpToNote

@@ -5,7 +5,8 @@ import { linkEnv } from './linkEnv'
 import { isRaw } from './rawView'
 import { viewsShowing } from './viewRegistry'
 import { cachedVoiceUrl, loadVoice, onVoiceReset, waveFor } from './voiceAssets'
-import { HIGH_SHELF_HZ, LIMITER, LOW_SHELF_HZ, skipTarget, toneGains } from './voiceMixer'
+import { HIGH_SHELF_HZ, LIMITER, LOW_SHELF_HZ, recordingName, skipTarget, toneGains } from './voiceMixer'
+import { titleOf } from '../../../shared/links'
 import { WAVE_MAX_BYTES, WAVE_MAX_SECONDS } from './voiceWave'
 
 // Playing a voice note: one player per recording, kept OUTSIDE the editor.
@@ -326,9 +327,11 @@ export class VoicePlayer {
       for (const other of registry.values()) if (other !== this) other.pause()
       if (!this.raf) this.raf = requestAnimationFrame(this.tick)
       setDeck(this)
+      syncMediaKeys()
       this.emit()
     })
     on('pause', () => {
+      syncMediaKeys()
       this.emit()
       idleLater()
     })
@@ -513,6 +516,7 @@ function setDeck(p: VoicePlayer | null): void {
   if (deck === p) return
   const prev = deck
   deck = p
+  syncMediaKeys()
   for (const fn of [...deckListeners]) fn()
   // The one it replaces was only being kept for the tape.
   prev?.letGoIfUnused()
@@ -537,3 +541,53 @@ export function deckNoteMoved(from: string, to: string): void {
 onVoiceReset(() => {
   for (const player of [...registry.values()]) player.release()
 })
+
+// --- the keyboard's media keys -----------------------------------------------------
+// Reuben, 2026-11-06 ("all" to the ideas): the play/pause key — and the Mac's
+// Now Playing controls, Windows' media overlay — steer the recording on the
+// tape, wherever its note is. Through the browser's Media Session, which the
+// window already has; nothing new is asked of the system.
+
+/** How far the media keys' skip goes — the tape's own setting (VoiceDeck.tsx). */
+let keySkip = { back: 10, forward: 10 }
+export function setMediaKeySkip(skip: { back: number; forward: number }): void {
+  keySkip = skip
+}
+
+type KeyAction = 'play' | 'pause' | 'stop' | 'seekbackward' | 'seekforward' | 'seekto'
+let keysWired = false
+
+function syncMediaKeys(): void {
+  const ms = typeof navigator !== 'undefined' ? navigator.mediaSession : undefined
+  if (!ms) return
+  const p = deck
+  try {
+    if (!p) {
+      ms.metadata = null
+      ms.playbackState = 'none'
+      return
+    }
+    ms.metadata = new MediaMetadata({ title: p.label || recordingName(p.rel), artist: p.note ? titleOf(p.note) : 'Notealise', album: 'Notealise' })
+    ms.playbackState = p.playing ? 'playing' : 'paused'
+    if (keysWired) return
+    keysWired = true
+    // Wired once; each reads the tape at the moment of the key.
+    const on = (a: KeyAction, fn: (d: MediaSessionActionDetails) => void): void => {
+      try {
+        ms.setActionHandler(a, fn)
+      } catch {
+        // an action this system doesn't offer
+      }
+    }
+    on('play', () => void deck?.play(deck.settings))
+    on('pause', () => deck?.pause())
+    on('stop', () => deck?.pause())
+    on('seekbackward', (d) => deck?.skip(-(d.seekOffset ?? keySkip.back)))
+    on('seekforward', (d) => deck?.skip(d.seekOffset ?? keySkip.forward))
+    on('seekto', (d) => {
+      if (d.seekTime !== undefined) deck?.seek(d.seekTime)
+    })
+  } catch {
+    // no Media Session here: the keys simply do nothing, as before
+  }
+}

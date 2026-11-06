@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Voice note editor — mockup</title>
+<style>
+:root{--ink:#1b1b1a;--mut:#6b6a66;--line:#e6e4df;--bg:#faf9f6;--card:#fff;--red:#c2410c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,system-ui,Inter,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 20px 80px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:19px;margin:40px 0 6px;padding-top:18px;border-top:1px solid var(--line)}
+.status{color:var(--mut);font-size:13px;margin-bottom:18px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+.ask{border-color:#f0c9a8;background:#fff8f2}
+figure{margin:14px 0 6px}figure img{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:8px;background:#fff}
+figcaption{font-size:13px;color:var(--mut);margin-top:6px}
+.tag{display:inline-block;font:600 11px/1 system-ui;padding:4px 7px;border-radius:999px;background:#ecebe7;color:#444;margin-right:6px;vertical-align:2px}
+.tag.new{background:#e7f0ff;color:#1d4ed8}.tag.flag{background:#ffedd5;color:var(--red)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:760px){.pair{grid-template-columns:1fr}}
+ol li,ul li{margin:4px 0}table{border-collapse:collapse;font-size:13.5px;width:100%}td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}th{color:var(--mut);font-weight:500}
+.n{font-variant-numeric:tabular-nums;white-space:nowrap}
+</style></head><body><main>
+<h1>Voice note editor — mockup</h1>
+<div class="status">Started 2026-11-04 · Status: <b>built — in your test copy (2026-11-05)</b> · Every picture is the real app (a private copy) with the new panel drawn in using the app's own colours, fonts and buttons. The recording is a fake "three takes with pauses" clip (26 seconds), and its waveform and pauses are real.</div>
+
+<div class="box ask"><b>How to mark it up:</b> screenshot any picture, draw arrows and notes on it, and send it back. The numbered questions at the bottom can be answered by number.</div>
+
+<h2>Now — the editor as built (2026-11-05)</h2>
+<p>Real pictures from the app. Top to bottom: the <b>time ruler</b> (press or drag on it to move the playhead), the <b>sections as blocks</b> (click to select, drag to move, × to delete), the <b>sound</b>, and when zoomed in, the <b>whole clip</b> as a strip underneath.</p>
+<figure><img src="img/built_3_silences.png" alt="Built: whole clip"><figcaption>One section: the dashed block says how to make more. Small marks on the bottom edge show where pauses were shortened.</figcaption></figure>
+<figure><img src="img/built_7_recording.png" alt="Built: recording a take"><figcaption><b>Recording another take:</b> the new sound arrives in red at the end, its block counts up, the playhead rides along, and the view slides like the first recording did.</figcaption></figure>
+<figure><img src="img/built_4_zoom_split.png" alt="Built: zoomed in"><figcaption>Zoomed in: blocks are cut to what's on screen, and the strip at the bottom shows the whole clip, with a box marking the part you're looking at.</figcaption></figure>
+<p style="color:var(--mut);font-size:13px">Everything below is the original mockup, kept for the record.</p>
+<h2>1 · Where you open it</h2>
+<div class="pair">
+<figure><img src="img/a_today.png" alt="Voice note today"><figcaption><span class="tag">Today</span>The voice note as it is now: play, waveform, time, back 10, forward 10, mixer.</figcaption></figure>
+<figure><img src="img/b_button.png" alt="Voice note with edit button"><figcaption><span class="tag new">New</span>A <b>scissors button</b> sits between "forward 10" and the mixer. Its hover label reads "Edit clip". It's the same size and grey as the mixer button.</figcaption></figure>
+</div>
+<figure><img src="img/c_menu.png" alt="Right-click menu" style="max-width:720px"><figcaption><span class="tag new">New</span>Right-clicking the voice note opens the real menu with <b>"Edit clip…"</b> added at the top, above "Rename voice note…" and "Remove name".</figcaption></figure>
+
+<h2>2 · The panel, open over the note</h2>
+<figure><img src="img/d_open_full.png" alt="Editor open, light"><figcaption>Same frame as Settings: same width, border, shadow and title-bar style, and the same blur and fade over the app behind it. It's shorter than Settings because it holds less. Esc or clicking outside closes it, as in Settings.</figcaption></figure>
+<figure><img src="img/dark_open_full.png" alt="Editor open, dark"><figcaption>The same panel in the dark theme.</figcaption></figure>
+<table>
+<tr><th>Part</th><th>What it is</th><th>Size (in a 1280 × 800 window)</th></tr>
+<tr><td>Panel</td><td>Settings' frame</td><td class="n">1024 × 430 (Settings: 1024 × 672)</td></tr>
+<tr><td>Waveform</td><td>The whole clip, grey bars. Already played = dark, still to play = mid-grey</td><td class="n">976 × 150</td></tr>
+<tr><td>Black handles at each end</td><td>Drag to trim the start and the end</td><td class="n">10 × 28 tab on a 2px line</td></tr>
+<tr><td>Seconds ruler</td><td>Under the waveform; labels every 5 s, ticks every 1 s (every ¼ s when zoomed)</td><td class="n">18 tall</td></tr>
+<tr><td>Speed</td><td>0.5× to 2×, saved into the file, voice keeps its pitch</td><td class="n">260 wide slider</td></tr>
+<tr><td>Bottom bar</td><td>What will be kept, then Cancel · Save as new clip · <b>Save</b></td><td></td></tr>
+</table>
+
+<h2>3 · Each tool</h2>
+<figure><img src="img/e_select.png" alt="A stretch selected"><figcaption><span class="tag">Select</span>Drag across the waveform to select a stretch (here, take 2). <b>Cut</b> (or Delete) removes it. <b>Keep only this</b> keeps just that stretch and drops everything else. Both buttons are greyed out until something is selected. The bottom bar says how long the selection is.</figcaption></figure>
+<figure><img src="img/f_trim_cut.png" alt="Trimmed and cut"><figcaption><span class="tag">Trim + cut</span>The clip trimmed at both ends, with the first pause and take 2 cut out. <b>The gap closes up</b> (your pick, 2026-11-04). A small mark on the bottom edge shows where the two pieces now join, and Undo brings the cut part back. The time counts only what's kept: 0:06.4 of 0:17.9.</figcaption></figure>
+<figure><img src="img/g_silences.png" alt="Remove silences"><figcaption><span class="tag">Remove silences</span>One press shortened the 3 pauses longer than 1 second in this real clip, <b>leaving about ⅓ second of breath</b> in each so the words don't run into each other (your pick). Each pause leaves a join mark, and Undo brings them all back. It's still a hard cut, with no fade.</figcaption></figure>
+<figure><img src="img/h_split.png" alt="Split into takes"><figcaption><span class="tag">Split</span><b>Split here</b> (or the S key) adds a dashed line where the playhead is. Each piece gets a "Take 1 / 2 / 3" label, and the new voice notes are named the same way automatically: "Photosynthesis — explain it · Take 1" and so on. You can rename them as usual (right-click → Rename voice note…). With splits in place, <b>Save</b> swaps the original for the 3 takes (the original goes to the Bin), and <b>Save as new clips</b> keeps the original and adds the takes under it.</figcaption></figure>
+<figure><img src="img/i_zoom.png" alt="Zoomed in"><figcaption><span class="tag">Zoom</span>The <b>zoom slider</b> (right of the buttons) zooms in on the playhead. Cmd-click on the waveform zooms in too, as it does on the voice note. When zoomed in, a thin strip of the whole clip appears above, with a box showing which part you're looking at. Here it's playing (the button shows pause), and Space plays and pauses too.</figcaption></figure>
+<figure><img src="img/j_speed.png" alt="Speed"><figcaption><span class="tag">Speed</span>Trimmed down to take 3 only, at 1.5×. The bottom bar shows the length after speeding up. After a sped-up Save, the voice note's own mixer speed goes back to 1× so the two don't stack (your yes, 2026-11-04).</figcaption></figure>
+
+<h2>Known problems, left visible</h2>
+<ul>
+<li><span class="tag flag">Fix in build</span>The selection colour comes from the accent colour. With the default accent it's grey, so a selection is a grey wash. With a coloured accent it will be that colour.</li>
+<li><span class="tag flag">New icon</span>The app has no scissors icon yet. This one is drawn to match the others (same line weight), but it's new.</li>
+<li><span class="tag flag">Not shown</span>The opening and closing motion: the plan is Settings' own open and close. Hover states and Windows text haven't been checked either.</li>
+</ul>
+
+<h2>Decided on this page</h2>
+<ul>
+<li>2026-11-04 — A cut closes up, with a join mark. It isn't left striped.</li>
+<li>2026-11-04 — With splits, Save swaps the original for the takes, and "Save as new clips" keeps it and adds the takes under it.</li>
+<li>2026-11-04 — Remove silences leaves about ⅓ second of breath in each pause longer than 1 second. Still a hard cut, no fade.</li>
+<li>2026-11-04 — Takes are named "&lt;name&gt; · Take 1, 2…" automatically, and can be renamed as usual.</li>
+<li>2026-11-04 — No fade or click-smoothing anywhere: "if there is a noise that is harshly cut, keep it".</li>
+</ul>
+</main></body></html>

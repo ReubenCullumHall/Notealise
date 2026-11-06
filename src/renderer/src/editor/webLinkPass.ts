@@ -4,7 +4,8 @@ import { cursorWithin, type Pass } from './livePreview'
 import { clickOrDrag } from './clickOrDrag'
 import { docLinkTarget, isDocFilename } from '../../../shared/attachments'
 import { parseVideoUrl } from '../../../shared/embeds'
-import { linkEnv, notifyUser } from './linkEnv'
+import { linkEnv, linkHandlersFacet, notifyUser } from './linkEnv'
+import { followMoment, isMomentHref } from './momentLink'
 
 // Web links you can actually click. `[text](url)`, `<https://…>` and a bare
 // `https://…` all get a `.cm-weblink` span carrying the target, and clicking
@@ -53,7 +54,9 @@ function linkMark(url: string, labelled = false): Decoration {
     // a second class so it can look like a file rather than a web page.
     const video = labelled ? parseVideoUrl(url) : null
     d = Decoration.mark({
-      class: isFileHref(url)
+      class: isMomentHref(url)
+        ? 'cm-weblink cm-filelink cm-momentlink'
+        : isFileHref(url)
         ? 'cm-weblink cm-filelink'
         : video
           ? `cm-weblink cm-weblink-video cm-weblink-${video.provider}`
@@ -132,6 +135,17 @@ export const webLinkGestures = EditorView.domEventHandlers({
       return true
     }
     if (event.button !== 0) return false
+    // A link to a moment in a voice note (momentLink.ts): play it from there —
+    // here if the recording is in this note, else in a note that holds it,
+    // opened the way a click on a [[link]] opens one.
+    if (isMomentHref(href)) {
+      const how = event.metaKey || event.ctrlKey ? 'background' : event.altKey ? 'split' : 'tab'
+      clickOrDrag(event, view, () => {
+        const h = view.state.facet(linkHandlersFacet)?.current
+        followMoment(view, href, h?.moment ? (file, t) => h.moment?.(file, t, how) : undefined)
+      })
+      return true
+    }
     // Opens on a click; a drag starting here selects the text instead.
     const file = docLinkTarget(href, view.state.field(linkEnv, false)?.path ?? '')
     if (file) {

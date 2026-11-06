@@ -3,7 +3,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorState, type ChangeSpec } from '@codemirror/state'
 import { toggleMarkdown } from './toggleModel'
-import { isVoiceTarget, nameChange, retargetChange, settingsChange, voiceNotesIn, voiceSpanAt } from './audioPass'
+import { clipChange, isVoiceTarget, nameChange, retargetChange, settingsChange, voiceNotesIn, voiceSpanAt } from './audioPass'
 import { selectionIsEmbed, embedSpanAt, attachmentFileOf } from './attachSelect'
 import { VOICE_DEFAULTS } from '../../../shared/voiceNote'
 
@@ -210,5 +210,62 @@ describe('undo after naming a voice note and then moving its mixer (bug scan 202
     expect(text.match(/<audio/g)?.length).toBe(1)
     expect(text).not.toContain('data-name')
     expect(text).toContain('data-volume="1.1"')
+  })
+})
+
+// --- the voice note editor's Save (clipEdit/, docs/plans/voice-editor.md) ---------------------
+describe('clipChange — writing a saved clip into the note', () => {
+  const doc = 'Before.\n\n<audio controls src="memo.m4a" data-volume="1.5" data-speed="1.25" data-name="Explain it"></audio>\n\nAfter.\n'
+  const applied = (result: Parameters<typeof clipChange>[1]): string => {
+    const state = stateOf(doc)
+    const span = voiceSpanAt(state, doc.indexOf('<audio'))!
+    return state.update({ changes: clipChange(span, result, 'Bio/Note.md') }).state.doc.toString()
+  }
+  it('Save puts the edit where the original was, keeping volume, tone and speed', () => {
+    const out = applied({ files: [{ rel: 'Bio/memo (edited).m4a', name: 'Explain it' }], replace: true, speedSaved: false })
+    expect(out).toBe('Before.\n\n<audio controls src="memo%20%28edited%29.m4a" data-volume="1.5" data-speed="1.25" data-name="Explain it"></audio>\n\nAfter.\n')
+  })
+  it('a speed saved into the file takes the mixer back to 1×, so the two never stack', () => {
+    const out = applied({ files: [{ rel: 'Bio/memo (edited).m4a', name: 'Explain it' }], replace: true, speedSaved: true })
+    expect(out).toContain('data-volume="1.5"')
+    expect(out).not.toContain('data-speed')
+  })
+  it('sections are one voice note each, on consecutive lines, in place of the original', () => {
+    const out = applied({ files: [1, 2].map((k) => ({ rel: `Bio/memo section ${k}.m4a`, name: `Explain it · Section ${k}` })), replace: true, speedSaved: false })
+    const lines = out.split('\n')
+    expect(lines[2]).toContain('src="memo%20section%201.m4a"')
+    expect(lines[2]).toContain('data-name="Explain it · Section 1"')
+    expect(lines[3]).toContain('data-name="Explain it · Section 2"')
+    // each still reads as its own voice note
+    expect(voiceNotesIn(stateOf(out), 0, out.length)).toHaveLength(2)
+    expect(out.endsWith('</audio>\n\nAfter.\n')).toBe(true)
+    expect(out).not.toContain('src="memo.m4a"')
+  })
+  it('Save as new clip keeps the original and puts the edit under it', () => {
+    const out = applied({ files: [{ rel: 'Bio/memo (edited).m4a', name: 'Explain it (edited)' }], replace: false, speedSaved: false })
+    expect(out.indexOf('src="memo.m4a"')).toBeLessThan(out.indexOf('src="memo%20%28edited%29.m4a"'))
+    // on the very next line, not a blank line between (Reuben, 2026-11-04)
+    expect(out).toContain('data-name="Explain it"></audio>\n<audio controls src="memo%20%28edited%29.m4a"')
+    expect(voiceNotesIn(stateOf(out), 0, out.length)).toHaveLength(2)
+    expect(out).toContain('data-name="Explain it (edited)"')
+  })
+  it('a transcript folded under the voice note stays with it: new lines go after the fold', () => {
+    const d = 'A\n<audio controls src="memo.m4a"></audio>\n<details data-transcript="memo.m4a"><summary>Transcript</summary>\n\nHello there.\n\n</details>\nB\n'
+    const state = stateOf(d)
+    const span = voiceSpanAt(state, d.indexOf('<audio'))!
+    const add = state.update({ changes: clipChange(span, { files: [{ rel: 'Bio/memo (edited).m4a', name: '' }], replace: false, speedSaved: false }, 'Bio/Note.md', state.doc) }).state.doc.toString()
+    expect(add).toContain('</details>\n<audio controls src="memo%20%28edited%29.m4a"></audio>\nB')
+    const two = [1, 2].map((k) => ({ rel: `Bio/memo section ${k}.m4a`, name: '' }))
+    const rep = state.update({ changes: clipChange(span, { files: two, replace: true, speedSaved: false }, 'Bio/Note.md', state.doc) }).state.doc.toString()
+    // section 1 where the original was, its (now stale) fold still under it; section 2 after the fold
+    expect(rep).toContain('A\n<audio controls src="memo%20section%201.m4a"></audio>\n<details data-transcript="memo.m4a">')
+    expect(rep).toContain('</details>\n<audio controls src="memo%20section%202.m4a"></audio>\nB')
+  })
+  it('a name with quotes or angle brackets cannot break out of the tag', () => {
+    const out = applied({ files: [{ rel: 'Bio/x.m4a', name: 'a" src="evil.m4a' }], replace: true, speedSaved: false })
+    const state = stateOf(out)
+    const spans = voiceNotesIn(state, 0, out.length)
+    expect(spans).toHaveLength(1)
+    expect(spans[0].src).toBe('x.m4a')
   })
 })

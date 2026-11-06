@@ -12,6 +12,7 @@ import { linkEdges } from './linkEdges'
 import { imageClick } from './imagePass'
 import { attachInput } from './attachInput'
 import { pasteLink } from './pasteLink'
+import { momentPasteFilter } from './momentLink'
 import { attachDeleteKeys, embedSelectionAttr } from './attachSelect'
 import { scrollbarReveal } from './scrollbarReveal'
 import { webLinkGestures } from './webLinkPass'
@@ -153,6 +154,9 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // A pasted web address becomes its title or a player, with a bar to pick
     // the other (pasteLink.ts). After attachInput, which claims file pastes.
     pasteLink,
+    // A link to a moment, copied from a voice note, re-pointed for the note it
+    // is pasted into (momentLink.ts).
+    momentPasteFilter,
     webLinkGestures,
     taskClick,
     // Toggle lists: the arrow, the indent and the hidden lines (toggleList.ts).

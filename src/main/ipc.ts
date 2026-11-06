@@ -100,6 +100,10 @@ import {
   setVaultRoot,
   writeAssetUnique,
   writeNote,
+  recordingAppend,
+  recordingBegin,
+  recordingEnd,
+  recordingsLeft,
   listVersions,
   readVersion,
   keepVersionNow,
@@ -405,6 +409,12 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.microphoneAccess, () => microphoneAccess())
   ipcMain.handle(CH.convertAudio, (_e, filename: unknown, data: unknown) => convertAudio(filename, data))
   ipcMain.handle(CH.pickAudioFiles, () => pickAudioFiles(activeWindow()))
+  // Save as you record (vault.ts): only ever into .mdnotes/recording/, under a
+  // checked id; the recovered file goes beside its note like any recording.
+  ipcMain.handle(CH.recordingBegin, (_e, id: unknown, info: unknown) => recordingBegin(id, info))
+  ipcMain.handle(CH.recordingAppend, (_e, id: unknown, data: unknown) => recordingAppend(id, data))
+  ipcMain.handle(CH.recordingEnd, (_e, id: unknown) => recordingEnd(id))
+  ipcMain.handle(CH.recordingsLeft, () => recordingsLeft())
   // MAIN_STARTED_AT is module-level, so it is the moment this process booted —
   // not the moment the window asked.
   ipcMain.handle(CH.bootInfo, () => ({ startedAt: MAIN_STARTED_AT, version: app.getVersion() }))

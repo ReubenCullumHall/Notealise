@@ -62,6 +62,24 @@ export type MicAccess =
   | { ok: true }
   | { ok: false; reason: 'denied' | 'restricted' | 'unavailable'; platform: VoicePlatform }
 
+/** What a recording kept as it is made says about itself. */
+export interface RecordingInfo {
+  /** the note it is being recorded into (vault path) */
+  note: string
+  /** when Start was pressed, ISO */
+  startedAt: string
+  /** the file type it will be saved as: 'm4a' */
+  ext: string
+}
+
+/** A recording an earlier run left unfinished, now saved beside its note. */
+export interface RecoveredRecording {
+  note: string
+  /** the recovered file (vault path) */
+  file: string
+  startedAt: string
+}
+
 /** `convertAudio()`'s answer. `unsupported` — this computer has no converter that
  *  reads this kind of file (a .wma on a Mac, anything on Linux without ffmpeg);
  *  `failed` — the converter ran and gave up (a damaged file); `too-big` — over
@@ -327,6 +345,16 @@ export interface VaultApi {
    *  (nothing is written to the vault — the voice-note path checks and saves
    *  them), or null if the picker was cancelled. */
   pickAudioFiles(): Promise<PickedAudio | null>
+  /** Save as you record (Reuben, 2026-11-06): the recording's pieces are kept in
+   *  `.mdnotes/recording/` as they arrive, so a crash mid-recording loses at most
+   *  the last second. `recordingEnd` throws them away once the recording is safely
+   *  saved (or discarded). `recordingsLeft` answers what an earlier run left
+   *  unfinished — each moved beside its note as a recovered recording (the saved
+   *  path is in `file`), or null for none. */
+  recordingBegin(id: string, info: RecordingInfo): Promise<boolean>
+  recordingAppend(id: string, data: Uint8Array): Promise<boolean>
+  recordingEnd(id: string): Promise<void>
+  recordingsLeft(): Promise<RecoveredRecording[]>
   /** Subscribe to update state changes; returns an unsubscribe function. */
   onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
 

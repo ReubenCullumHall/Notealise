@@ -111,6 +111,9 @@ export interface LinkHandlers {
   ) => void
   /** Set how far one of a voice note's skip buttons jumps (right-click it). */
   setVoiceSkip: (side: keyof VoiceSkip, seconds: VoiceSkipSeconds) => void
+  /** A link to a moment in a recording that isn't in this note (momentLink.ts):
+   *  open a note that holds it and play from `t` seconds. */
+  moment?: (file: string, t: number, how: OpenHow) => void
 }
 
 /** What `confirmMediaDelete` is given. A named type because three layers pass it

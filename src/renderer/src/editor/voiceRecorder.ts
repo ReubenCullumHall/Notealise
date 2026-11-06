@@ -1,21 +1,27 @@
-import { StateEffect, StateField, type Extension } from '@codemirror/state'
+import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin, WidgetType, type ViewUpdate } from '@codemirror/view'
 import { dirName, titleOf } from '../../../shared/links'
-import { encodeTarget } from '../../../shared/attachments'
+import { encodeTarget, relativeTarget } from '../../../shared/attachments'
 import { audioTag, voiceFileName } from '../../../shared/voiceNote'
 import type { MicAccess } from '../../../shared/types'
 import { linkEnv, linkHandlersFacet, notifyError, notifyUser } from './linkEnv'
+import { chosenMic, listMics, openMic, setChosenMic } from './micChoice'
 import { notePathOf, onNoteShown, viewsShowing } from './viewRegistry'
 import { motionOn } from '../tabs/tabStyles'
 import { liveStart, stripAt, LIVE_SECONDS } from './voiceMixer'
 import { BARS, MIN_BAR } from './voiceWave'
 import {
   addedAtEnd,
+  addedWhereRecorded,
+  marksLine,
+  marksWords,
+  applyInserts,
+  placeAgain,
+  waitingInserts,
   addedWhenOpened,
   baseNameOf,
   blockPlacement,
   chooseRecording,
-  endInsert,
   extForRecordedMime,
   formatElapsed,
   micAccessMessage,
@@ -74,6 +80,8 @@ const QUIT_BUDGET_MS = 1100
  *  player's bars. */
 const LIVE_SLOT = LIVE_SECONDS / BARS
 
+/** How the mark key is written on this computer. */
+const MARK_KEY = /Mac/.test(navigator.userAgent) ? '⌘⇧M' : 'Ctrl+Shift+M'
 const UNEXPECTED_STOP = 'Recording stopped unexpectedly — saving what was recorded.'
 
 // --- where the block is ------------------------------------------------------------
@@ -123,24 +131,38 @@ const recorderBlock = EditorView.decorations.compute([recorderSpot], (state) => 
   return Decoration.set([Decoration.widget({ widget: new RecorderWidget(spot.id), block: true, side }).range(at)])
 })
 
-/** Stops and saves the recording when its editor moves to another note or goes
- *  away. Never dispatches from inside the update (CodeMirror forbids it): the
- *  save starts a moment later, which is also after the document swap is done. */
+/** When the recording's editor moves to another note or goes away, the
+ *  recording carries on without it (Reuben, 2026-11-06: switching notes used to
+ *  stop and save it) — steered from the sidebar (`SidebarRecorder`), and back
+ *  in its note when the note is shown again (`tryAttach`). Never dispatches from
+ *  inside the update (CodeMirror forbids it): it moves a moment later, after
+ *  the document swap is done. */
 const recorderWatch = ViewPlugin.fromClass(
   class {
     constructor(readonly view: EditorView) {}
     update(u: ViewUpdate): void {
       const rec = live
-      if (!rec || rec.view !== u.view || rec.leaving) return
+      if (!rec || rec.view !== u.view || rec.away) return
+      // Switching notes swaps the TEXT first (the whole document replaced) and
+      // says which note it is a moment later (CodeEditor.tsx) — so the note as
+      // it was is the state before that swap, not before the note changed.
+      if (u.docChanged) {
+        let whole = false
+        u.changes.iterChangedRanges((fromA, toA) => {
+          if (fromA === 0 && toA === u.startState.doc.length) whole = true
+        })
+        rec.beforeSwap = whole ? u.startState : null
+      }
       if ((u.state.field(linkEnv, false)?.path ?? '') === rec.notePath) return
-      rec.leaving = true
-      queueMicrotask(() => void rec.finish())
+      const before = rec.beforeSwap ?? u.startState
+      rec.beforeSwap = null
+      queueMicrotask(() => rec.leave(before))
     }
     destroy(): void {
       const rec = live
-      if (!rec || rec.view !== this.view) return
+      if (!rec || rec.view !== this.view || rec.away) return
       rec.viewGone = true
-      void rec.finish()
+      rec.leave(this.view.state)
     }
   }
 )
@@ -160,6 +182,10 @@ interface RecorderUi {
   root: HTMLElement
   /** Start recording — the panel's one button until it is pressed */
   start: HTMLButtonElement
+  /** which microphone, beside Start (only before it is pressed) */
+  mic: HTMLSelectElement
+  /** Mark this moment (while recording or paused) */
+  mark: HTMLButtonElement
   /** the dot, what it is doing and the time: there once it has started */
   state: HTMLElement
   status: HTMLElement
@@ -234,6 +260,30 @@ function buildUi(): RecorderUi {
   const start = button('is-record')
   face(start, 'record', 'Start recording', 'Start recording', 'Start recording — the microphone turns on now')
 
+  // Which microphone (micChoice.ts) — only when there is more than one to pick.
+  const mic = document.createElement('select')
+  mic.className = 'cm-voice-rec-mic'
+  mic.setAttribute('aria-label', 'Microphone')
+  mic.dataset.tip = 'Which microphone records'
+  mic.hidden = true
+  void listMics().then((mics) => {
+    if (mics.length < 2) return
+    const chosen = chosenMic()
+    const def = document.createElement('option')
+    def.value = ''
+    def.textContent = 'Default microphone'
+    mic.append(def)
+    for (const m of mics) {
+      const o = document.createElement('option')
+      o.value = m.id
+      o.textContent = m.label
+      mic.append(o)
+    }
+    mic.value = chosen && mics.some((m) => m.id === chosen) ? chosen : ''
+    mic.hidden = false
+  })
+  mic.addEventListener('change', () => setChosenMic(mic.value || null))
+
   const state = document.createElement('span')
   state.className = 'cm-voice-rec-state'
   const dot = document.createElement('span')
@@ -260,10 +310,12 @@ function buildUi(): RecorderUi {
 
   const actions = document.createElement('span')
   actions.className = 'cm-voice-rec-actions'
+  const mark = button('')
+  face(mark, null, 'Mark', 'Mark this moment', `Mark this moment (${MARK_KEY}) — a link to it goes under the voice note`)
   const pause = button('')
   const stop = button('is-primary')
   const discard = button('is-quiet')
-  actions.append(pause, stop, discard)
+  actions.append(mark, pause, stop, discard)
 
   const ask = document.createElement('span')
   ask.className = 'cm-voice-rec-actions cm-voice-rec-ask'
@@ -274,10 +326,11 @@ function buildUi(): RecorderUi {
   face(askNo, null, 'Keep', 'No, keep the recording', 'Keep it')
   ask.append(askYes, askNo)
 
-  root.append(start, state, box, actions, ask)
+  root.append(start, mic, state, box, actions, ask)
   return {
     root,
     start,
+    mic,
     state,
     status,
     time,
@@ -286,6 +339,7 @@ function buildUi(): RecorderUi {
     shownBars: bars.map(() => '?'), // nothing drawn yet: the first paint sets every bar
     shownShift: '',
     actions,
+    mark,
     pause,
     stop,
     discard,
@@ -353,8 +407,80 @@ class Recording {
   phase: Phase = 'ready'
   /** set once its editor has been destroyed — nothing may be dispatched to it */
   viewGone = false
-  /** set once its editor has moved to another note — the save is under way */
-  leaving = false
+  /** its note is off screen (another note in its editor, or the editor gone):
+   *  the note's text when it was left and where the recorder sat in it — where
+   *  the voice note goes back to (`placeAgain`) */
+  away: { text: string; pos: number } | null = null
+  /** scroll to it once it is back on screen (the sidebar's ↗) */
+  revealOnReturn = false
+  /** the editor's state just before its whole text was last replaced — what a
+   *  note switch looks like before the note's path changes (recorderWatch) */
+  beforeSwap: EditorState | null = null
+  /** marked moments, seconds into the recording (pauses left out) */
+  marks: number[] = []
+  /** save as you record (main/vault.ts): each second goes to disk as it arrives,
+   *  under this id, in order; off once a piece fails to go */
+  private readonly keepId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+  private keepOn = false
+  private keepChain: Promise<void> = Promise.resolve()
+
+  private keepBegin(ext: string): void {
+    if (typeof window.api.recordingBegin !== 'function') return
+    this.keepChain = this.keepChain.then(async () => {
+      try {
+        this.keepOn = await window.api.recordingBegin(this.keepId, {
+          note: this.notePath,
+          startedAt: this.startedAt.toISOString(),
+          ext
+        })
+      } catch {
+        this.keepOn = false
+      }
+    })
+  }
+
+  private keepPiece(piece: Blob): void {
+    this.keepChain = this.keepChain.then(async () => {
+      if (!this.keepOn) return
+      try {
+        const ok = await window.api.recordingAppend(this.keepId, new Uint8Array(await piece.arrayBuffer()))
+        if (!ok) this.keepOn = false
+      } catch {
+        this.keepOn = false
+      }
+    })
+  }
+
+  /** The recording is safely in the vault (or was thrown away on purpose):
+   *  the kept copy goes. Never on a failed save — it is what a later launch
+   *  recovers. */
+  private forgetKept(): void {
+    this.keepChain = this.keepChain.then(async () => {
+      if (!this.keepOn) return
+      this.keepOn = false
+      await window.api.recordingEnd(this.keepId).catch(() => {})
+    })
+  }
+
+  /** Mark this moment: a link to it goes under the voice note once it is saved
+   *  (`marksLine`). Two within a second are one. */
+  mark(): void {
+    if (this.phase !== 'recording' && this.phase !== 'paused') return
+    const t = this.recordedMs() / 1000
+    if (this.marks.length && t - this.marks[this.marks.length - 1] < 1) return
+    this.marks.push(t)
+    this.render()
+  }
+
+  /** ⌘⇧M / Ctrl+Shift+M marks from anywhere in the app while recording —
+   *  typing notes in this note or another. */
+  private readonly onKey = (e: KeyboardEvent): void => {
+    if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey || e.key.toLowerCase() !== 'm') return
+    if (this.phase !== 'recording' && this.phase !== 'paused') return
+    e.preventDefault()
+    e.stopPropagation()
+    this.mark()
+  }
   /** finished one way or another: saved, discarded or abandoned */
   private over = false
   private askedFrom: Phase = 'recording'
@@ -383,9 +509,37 @@ class Recording {
   private ext = 'm4a'
 
   constructor(
-    readonly view: EditorView,
+    public view: EditorView,
     public notePath: string
   ) {}
+
+  /** Its note went off screen: keep recording, remember where it sat. A panel
+   *  never started just goes (nothing to keep). */
+  leave(state: EditorState): void {
+    if (this.over || this.away) return
+    if (this.phase === 'ready') return this.abandon(null)
+    const spot = state.field(recorderSpot, false)
+    this.away = { text: state.doc.toString(), pos: spot && spot.id === this.id ? spot.pos : state.doc.length }
+    changed()
+    // Still open in another column: it carries on there.
+    const other = viewsShowing(this.notePath).find((v) => v !== this.view)
+    if (other) queueMicrotask(() => void tryAttach(other))
+  }
+
+  /** Its note is on screen again in `view`: the recorder back where it sat. */
+  attach(view: EditorView, pos: number): void {
+    if (this.over || !this.away) return
+    ensureInstalled(view)
+    this.view = view
+    this.viewGone = false
+    this.away = null
+    view.dispatch({ effects: showRecorder.of({ id: this.id, pos: Math.min(pos, view.state.doc.length), notePath: this.notePath }) })
+    changed()
+    if (this.revealOnReturn) {
+      this.revealOnReturn = false
+      this.reveal()
+    }
+  }
 
   recordedMs(): number {
     return this.activeMs + (this.since === null ? 0 : performance.now() - this.since)
@@ -433,7 +587,7 @@ class Recording {
     }
     let stream: MediaStream
     try {
-      stream = await devices.getUserMedia({ audio: true })
+      stream = await openMic()
     } catch (e) {
       console.error('could not open the microphone', e)
       const name = (e as { name?: unknown } | null)?.name
@@ -459,6 +613,7 @@ class Recording {
     }
     if (!started) return this.abandon('Recording isn’t available here.')
     this.startMeter(stream)
+    window.addEventListener('keydown', this.onKey, true)
     this.phase = 'recording'
     this.since = performance.now()
     this.render()
@@ -478,6 +633,7 @@ class Recording {
         console.warn('no backup recorder', e)
       }
     }
+    this.keepBegin(plan.first.ext)
     this.take.recorder.start(TIMESLICE_MS)
     try {
       this.backup?.recorder.start(TIMESLICE_MS)
@@ -498,6 +654,7 @@ class Recording {
       if (!e.data || e.data.size === 0) return
       take.chunks.push(e.data)
       take.bytes += e.data.size
+      if (take === this.take) this.keepPiece(e.data)
       // AAC has produced sound: it works with this microphone, so the
       // understudy can go.
       if (take === this.take && this.backup) this.dropBackup()
@@ -541,6 +698,8 @@ class Recording {
       // so it takes over and nothing said so far is lost.
       this.take = this.backup
       this.backup = null
+      // What it has recorded so far was not being kept: keep it now.
+      for (const c of this.take.chunks) this.keepPiece(c)
       try {
         if (take.recorder.state !== 'inactive') take.recorder.stop()
       } catch {
@@ -637,6 +796,10 @@ class Recording {
 
   /** A second `/voice` while this one runs: bring it into view and light it up. */
   reveal(): void {
+    if (this.away) {
+      notifyUser(this.view.state, `Already recording into ${titleOf(this.notePath)} — stop it in the sidebar first.`)
+      return
+    }
     if (!this.viewGone) {
       const spot = this.view.state.field(recorderSpot, false)
       if (spot?.id === this.id) {
@@ -698,6 +861,7 @@ class Recording {
 
     const chosen = takes.find((t) => !t.failed && t.bytes > 0) ?? takes.find((t) => t.bytes > 0)
     if (!chosen) {
+      this.forgetKept()
       this.end()
       const broke = takes.length > 0 && takes.every((t) => t.failed)
       notifyUser(this.view.state, broke ? 'Couldn’t record from the microphone.' : 'Nothing was recorded.')
@@ -737,9 +901,11 @@ class Recording {
       return
     }
     this.bytes = null
+    this.forgetKept()
     const added = this.insert(name)
+    const anchor = this.away ?? undefined // before end(), which clears it
     this.end()
-    if (!added) addToItsNote(this.view, this.notePath, name)
+    if (!added) addToItsNote(this.view, this.notePath, name, anchor, this.lineFor(name))
   }
 
   /** Write the voice note's line where the block is, on a line of its own, in
@@ -754,7 +920,7 @@ class Recording {
     const doc = view.state.doc
     const pos = Math.min(spot.pos, doc.length)
     const line = doc.lineAt(pos)
-    const { at, text } = recordingInsert(line.text, line.from, pos, audioTag(encodeTarget(name)))
+    const { at, text } = recordingInsert(line.text, line.from, pos, this.lineFor(name))
     // Someone still sitting where they typed `/voice` carries on below the new
     // line; someone who has moved on — elsewhere, or further along that same
     // line — is left where they are.
@@ -768,6 +934,11 @@ class Recording {
     return true
   }
 
+  /** The voice note's line — and the line of its marks under it, if any. */
+  private lineFor(name: string): string {
+    return audioTag(encodeTarget(name)) + marksLine(encodeTarget(name), this.marks)
+  }
+
   private blockShowing(): boolean {
     if (this.viewGone) return false
     return this.view.state.field(recorderSpot, false)?.id === this.id
@@ -777,6 +948,7 @@ class Recording {
    *  `message` if there is something to say. */
   private abandon(message: string | null): void {
     if (this.over) return
+    this.forgetKept() // given up or thrown away: nothing to recover
     for (const t of [this.take, this.backup]) {
       if (!t) continue
       t.failed = true
@@ -813,10 +985,13 @@ class Recording {
 
   /** Over: the block goes and the app is free to record again. */
   private end(): void {
+    window.removeEventListener('keydown', this.onKey, true)
     this.over = true
     this.since = null
     if (!this.viewGone && this.blockShowing()) this.view.dispatch({ effects: hideRecorder.of(this.id) })
+    this.away = null
     if (live === this) live = null
+    changed()
   }
 
   // --- the block -------------------------------------------------------------------
@@ -825,6 +1000,7 @@ class Recording {
     this.uis.add(ui)
     ui.start.addEventListener('click', () => this.start())
     ui.pause.addEventListener('click', () => (this.phase === 'paused' ? this.resume() : this.pause()))
+    ui.mark.addEventListener('click', () => this.mark())
     ui.stop.addEventListener('click', () => void this.finish())
     ui.discard.addEventListener('click', () => this.discard())
     ui.askYes.addEventListener('click', () => this.throwAway())
@@ -845,6 +1021,7 @@ class Recording {
     for (const ui of this.uis) {
       ui.root.dataset.phase = p
       ui.start.hidden = p !== 'ready'
+      if (p !== 'ready') ui.mic.hidden = true
       ui.state.hidden = p === 'ready'
       ui.status.textContent =
         p === 'ready'
@@ -852,9 +1029,9 @@ class Recording {
           : p === 'starting'
             ? 'Starting the microphone…'
             : p === 'recording'
-              ? 'Recording'
+              ? 'Recording' + marksWords(this.marks.length)
               : p === 'paused'
-                ? 'Paused'
+                ? 'Paused' + marksWords(this.marks.length)
                 : p === 'confirm'
                   ? 'Discard this recording?'
                   : p === 'saving'
@@ -865,6 +1042,7 @@ class Recording {
       ui.ask.hidden = p !== 'confirm'
       // Pause and Stop mean nothing until there is a recording to pause or stop.
       ui.pause.hidden = p === 'ready'
+      ui.mark.hidden = !(p === 'recording' || p === 'paused')
       ui.stop.hidden = p === 'ready'
       if (p === 'paused') face(ui.pause, 'play', 'Resume', 'Resume recording', 'Carry on recording')
       else face(ui.pause, 'pause', 'Pause', 'Pause recording', 'Pause — nothing is recorded until you resume')
@@ -879,6 +1057,7 @@ class Recording {
     }
     this.shownTime = ''
     this.paint()
+    changed()
   }
 
   /** The parts that move: the time, and the live waveform — the last 30
@@ -935,6 +1114,8 @@ interface WaitingLine {
   name: string
   /** the voice note's line, exactly as it will be written */
   tag: string
+  /** where it was recorded, when its note was left mid-recording (`placeAgain`) */
+  anchor?: { text: string; pos: number }
 }
 
 /** Lines still waiting for their note, by note path. */
@@ -953,11 +1134,12 @@ let watching = false
 export function voiceNoteMoved(from: string, to: string): void {
   const remap = (p: string): string => (p === from ? to : p.startsWith(from + '/') ? to + p.slice(from.length) : p)
   const rec = live
-  if (rec && !rec.leaving) {
+  if (rec) {
     const next = remap(rec.notePath)
     if (next !== rec.notePath) {
-      if (!rec.viewGone) rec.view.dispatch({ effects: recorderMoved.of({ from: rec.notePath, to: next }) })
+      if (!rec.viewGone && !rec.away) rec.view.dispatch({ effects: recorderMoved.of({ from: rec.notePath, to: next }) })
       rec.notePath = next
+      changed()
     }
   }
   for (const [p, list] of [...waiting]) {
@@ -968,9 +1150,15 @@ export function voiceNoteMoved(from: string, to: string): void {
   }
 }
 
-function addToItsNote(from: EditorView, notePath: string, name: string): void {
+function addToItsNote(
+  from: EditorView,
+  notePath: string,
+  name: string,
+  anchor?: { text: string; pos: number },
+  tag = audioTag(encodeTarget(name))
+): void {
   const list = waiting.get(notePath) ?? []
-  list.push({ name, tag: audioTag(encodeTarget(name)) })
+  list.push({ name, tag, anchor })
   waiting.set(notePath, list)
   if (!watching) {
     watching = true
@@ -981,7 +1169,7 @@ function addToItsNote(from: EditorView, notePath: string, name: string): void {
   }
   const shown = viewsShowing(notePath)
   if (shown.length) void addWaiting(shown[0])
-  else notifyUser(from.state, addedWhenOpened(name, titleOf(notePath)))
+  else notifyUser(from.state, anchor ? `Saved ${name} — it goes into ${titleOf(notePath)} when you open it.` : addedWhenOpened(name, titleOf(notePath)))
 }
 
 /** Add whatever is waiting for the note `view` shows, at the end of it — but
@@ -1015,10 +1203,14 @@ async function addWaiting(view: EditorView): Promise<void> {
     const lines = waiting.get(path) ?? []
     if (!lines.length) return
     waiting.delete(path)
-    view.dispatch({
-      changes: { from: view.state.doc.length, insert: endInsert(before, lines.map((l) => l.tag)) }
-    })
-    notifyUser(view.state, addedAtEnd(lines.map((l) => l.name), titleOf(path)))
+    const { inserts, placed } = waitingInserts(before, lines)
+    view.dispatch({ changes: inserts.map((i) => ({ from: i.at, insert: i.text })) })
+    notifyUser(
+      view.state,
+      placed === lines.length && lines.length === 1
+        ? addedWhereRecorded(lines[0].name, titleOf(path))
+        : addedAtEnd(lines.map((l) => l.name), titleOf(path))
+    )
   } catch (e) {
     console.error('could not add a waiting voice note', e)
   } finally {
@@ -1044,11 +1236,119 @@ async function writeWaitingIntoFiles(settleMs: number): Promise<void> {
       continue // the note isn't there any more; the recording stays beside where it was
     }
     try {
-      await window.api.writeNote(path, text + endInsert(text, lines.map((l) => l.tag)))
+      await window.api.writeNote(path, applyInserts(text, waitingInserts(text, lines).inserts))
       waiting.delete(path)
     } catch (e) {
       console.error(`could not add a voice note to ${path}`, e)
     }
+  }
+}
+
+// --- a recording whose note is off screen --------------------------------------------
+
+/** Put the recorder back in `view` if it shows the note being recorded into —
+ *  once `view` really holds that note's text (a pane given a note it hasn't
+ *  loaded yet shows an empty stand-in first: see `addWaiting`). */
+async function tryAttach(view: EditorView): Promise<void> {
+  const rec = live
+  if (!rec?.away || notePathOf(view) !== rec.notePath) return
+  const before = view.state.doc.toString()
+  const handlers = view.state.facet(linkHandlersFacet)?.current
+  const truth = (handlers ? await handlers.readNote(rec.notePath) : before).replace(/\r\n?/g, '\n')
+  if (live !== rec || !rec.away || !view.dom.isConnected || notePathOf(view) !== rec.notePath) return
+  if (view.state.doc.toString() !== before || truth !== before) return
+  rec.attach(view, placeAgain(before, rec.away) ?? before.length)
+}
+
+let returnsWatched = false
+function watchForReturns(): void {
+  if (returnsWatched) return
+  returnsWatched = true
+  onNoteShown((view) => {
+    if (live?.away && notePathOf(view) === live.notePath) queueMicrotask(() => void tryAttach(view))
+  })
+}
+
+/** What the sidebar shows of a recording (`SidebarRecorder`). */
+export interface RecorderStatus {
+  notePath: string
+  phase: Phase
+  /** its note is off screen */
+  away: boolean
+  /** how many moments are marked */
+  marks: number
+}
+let status: RecorderStatus | null = null
+const statusListeners = new Set<() => void>()
+
+/** Tell the sidebar, if what it shows has changed. */
+function changed(): void {
+  const r = live
+  const next: RecorderStatus | null = r ? { notePath: r.notePath, phase: r.phase, away: r.away !== null, marks: r.marks.length } : null
+  if (status === next) return
+  if (
+    status &&
+    next &&
+    status.notePath === next.notePath &&
+    status.phase === next.phase &&
+    status.away === next.away &&
+    status.marks === next.marks
+  )
+    return
+  status = next
+  for (const fn of [...statusListeners]) fn()
+}
+
+export function onRecorder(fn: () => void): () => void {
+  statusListeners.add(fn)
+  return () => statusListeners.delete(fn)
+}
+export const recorderStatus = (): RecorderStatus | null => status
+/** Recorded time so far, pauses left out. */
+export const recorderElapsed = (): string => formatElapsed(live?.recordedMs() ?? 0)
+export function recorderPauseToggle(): void {
+  const r = live
+  if (r?.phase === 'paused') r.resume()
+  else r?.pause()
+}
+export function recorderMark(): void {
+  live?.mark()
+}
+export function recorderStop(): void {
+  void live?.finish()
+}
+/** The sidebar's ↗: scroll to the recorder once its note is back on screen. */
+export function recorderReturning(): void {
+  if (live?.away) live.revealOnReturn = true
+}
+
+// --- recordings an earlier run left unfinished ---------------------------------------
+
+/** Recordings a crash left unfinished, already saved beside their notes by main
+ *  (`recordingsLeft`): each goes into its note — at the end, as a line waiting
+ *  for the note, like any voice note whose note wasn't on screen. `say` is App's
+ *  notice. */
+export function addRecovered(list: readonly { note: string; file: string; startedAt: string }[], say: (m: string) => void): void {
+  for (const r of list) {
+    const when = new Date(r.startedAt)
+    const at = Number.isNaN(when.getTime()) ? '' : ` from ${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`
+    if (!r.note) {
+      say(`Recovered a recording${at} that wasn't finished: ${r.file}`)
+      continue
+    }
+    const tag = audioTag(relativeTarget(r.file, r.note))
+    const list2 = waiting.get(r.note) ?? []
+    list2.push({ name: r.file.slice(r.file.lastIndexOf('/') + 1), tag })
+    waiting.set(r.note, list2)
+    say(`Recovered a recording${at} that wasn't finished — it goes into ${titleOf(r.note)}.`)
+    if (!watching) {
+      watching = true
+      onNoteShown((view) => {
+        if (waiting.has(notePathOf(view))) queueMicrotask(() => void addWaiting(view))
+      })
+    }
+    const shown = viewsShowing(r.note)
+    if (shown.length) void addWaiting(shown[0])
   }
 }
 
@@ -1061,6 +1361,7 @@ export function startVoiceNote(view: EditorView): void {
     live.reveal()
     return
   }
+  watchForReturns()
   const notePath = view.state.field(linkEnv, false)?.path ?? ''
   if (!notePath) {
     notifyUser(view.state, 'Open a note first, then record into it.')

@@ -142,8 +142,7 @@ class LineGrip implements PluginValue {
     const hover = this.hoverPos()
     targets.set(view, hover)
     // On the cursor's line only while the editor has focus; on the pointer's line
-    // always. Hidden in a note too short to have anywhere to move a block TO — a
-    // control that cannot do anything should not be offered.
+    // always. Hidden only in an empty note.
     if ((hover === null && !view.hasFocus) || !canMoveBlock(view.state)) return { show: false }
     const range = blockRange(view.state, hover ?? undefined)
     const block = view.lineBlockAt(range.from)

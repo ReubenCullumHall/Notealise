@@ -508,6 +508,11 @@ const api: VaultApi = {
   microphoneAccess: async () => ({ ok: true as const }),
   convertAudio: async () => ({ ok: false as const, reason: 'unsupported' as const, platform: 'other' as const }),
   pickAudioFiles: async () => null,
+  // Save as you record needs the real vault: the preview keeps nothing.
+  recordingBegin: async () => false,
+  recordingAppend: async () => false,
+  recordingEnd: async () => {},
+  recordingsLeft: async () => [],
   // Browser preview has no real folder picker or importer, so onboarding
   // (which needs both) is never worth showing here — always "already done".
   vaultEstablished: async () => false,

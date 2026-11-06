@@ -66,7 +66,7 @@ function copyBlockLink(view: EditorView, n: number): void {
  *  fallback, `execCommand('copy')`, copies whatever is SELECTED on the page, so
  *  it is given a hidden box holding just the link to select; copying the
  *  editor's own selection would put the wrong text on the clipboard. */
-async function copyText(text: string): Promise<boolean> {
+export async function copyText(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text)

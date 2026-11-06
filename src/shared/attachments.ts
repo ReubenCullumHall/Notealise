@@ -402,6 +402,20 @@ export function repointFileLinks(
     if (resolveVaultPath(target, toNote) === now) return null // still reaches it
     return relativeTarget(now, toNote)
   }
+  // A plain link: a document, or a moment in a recording — `memo.m4a#t=83`
+  // (editor/momentLink.ts), whose time rides along unchanged.
+  const linkFix = (target: string): string | null => {
+    const hash = target.lastIndexOf('#')
+    if (hash > 0 && target.startsWith('t=', hash + 1)) {
+      const base = target.slice(0, hash)
+      const file = resolveVaultPath(base, fromNote)
+      if (file && kindForFilename(file) === 'audio') {
+        const next = fix(base, false)
+        return next === null ? null : next + target.slice(hash)
+      }
+    }
+    return fix(target, true)
+  }
   return text
     .replace(
       /(!\[[^\]\n]*\]\()((?:[^()\n]|\([^()\n]*\))*)(\))|(<(?:video|audio)\b[^>\n]*\bsrc=)("[^"]*"|'[^']*')([^>\n]*>)/gi,
@@ -417,6 +431,6 @@ export function repointFileLinks(
     )
     .replace(
       /((?<!!)\[[^\]\n]*\]\()((?:[^()\n]|\([^()\n]*\))*)(\))/g,
-      (_whole, a: string, dest: string, z: string) => a + swapDestination(dest, (t) => fix(t, true)) + z
+      (_whole, a: string, dest: string, z: string) => a + swapDestination(dest, linkFix) + z
     )
 }

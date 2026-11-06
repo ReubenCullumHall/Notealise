@@ -8,6 +8,7 @@ import { indexLinks, stripMd, type LinkRow } from '../shared/links'
 import { sanitizeFilename } from '../shared/filenames'
 import { indexEmbeds, isDocFilename } from '../shared/attachments'
 import { isRecordingName } from './voice'
+import { voiceFileName } from '../shared/voiceNote'
 import { indexBlocks, indexHeadings } from '../shared/blocks'
 import { heldPath, RECOVERY_DIR, TRASH_DIR } from '../shared/workspace'
 import type { NoteVersion } from '../shared/noteVersions'
@@ -1021,4 +1022,122 @@ export async function keepVersionNow(relPath: string): Promise<void> {
 export async function sweepVersions(): Promise<void> {
   if (!vaultRoot) return
   await versions.sweep(versionsCtx())
+}
+
+// ---------------------------------------------------------------------------
+// A recording kept as it is made — save as you record (Reuben, 2026-11-06: "all"
+// to the ideas, "a crash mid-lecture keeps everything up to that second").
+// While a voice note records, each second of it is appended to
+// <vault>/.mdnotes/recording/<id>.part, with <id>.json saying which note it is
+// for. Saved (or discarded) normally, both go. Left behind by a crash, the next
+// time the vault opens they become a recording beside their note
+// (`recordingsLeft`), and the renderer adds it to the note. LOSABLE (rule 2):
+// delete the folder and the worst lost is an unfinished recording.
+// The renderer only ever names an id (checked here) — never a path.
+// ---------------------------------------------------------------------------
+const RECORDING_ID = /^[a-z0-9]{6,40}$/
+/** One piece is a second of sound (~8 KB); anything near this is not a piece. */
+const MAX_PIECE = 16 * 1024 * 1024
+/** ~35 hours at the recorder's 64 kbps — past it, the file stops growing. */
+const MAX_KEPT = 1024 * 1024 * 1024
+/** A recording whose file grew this recently is still being recorded (another
+ *  window of this app on the same folder): never "recovered" from under it. */
+const STILL_GROWING_MS = 15_000
+
+const recordingOk = (id: unknown): id is string => typeof id === 'string' && RECORDING_ID.test(id)
+
+function keptRecording(id: string): { part: string; info: string } {
+  const dir = path.join(requireVault(), '.mdnotes', 'recording')
+  return { part: path.join(dir, `${id}.part`), info: path.join(dir, `${id}.json`) }
+}
+
+export async function recordingBegin(id: unknown, info: unknown): Promise<boolean> {
+  if (!recordingOk(id)) return false
+  const i = info as { note?: unknown; startedAt?: unknown; ext?: unknown } | null
+  if (
+    !i ||
+    typeof i.note !== 'string' ||
+    i.note.length > 4096 ||
+    typeof i.startedAt !== 'string' ||
+    i.startedAt.length > 64 ||
+    typeof i.ext !== 'string' ||
+    !/^[a-z0-9]{1,8}$/.test(i.ext)
+  )
+    return false
+  try {
+    const p = keptRecording(id)
+    await fs.mkdir(path.dirname(p.part), { recursive: true })
+    await fs.writeFile(p.info, JSON.stringify({ v: 1, note: i.note, startedAt: i.startedAt, ext: i.ext }), 'utf8')
+    await fs.writeFile(p.part, new Uint8Array(0))
+    return true
+  } catch (e) {
+    console.warn('[voice] could not keep the recording as it is made', e)
+    return false
+  }
+}
+
+export async function recordingAppend(id: unknown, data: unknown): Promise<boolean> {
+  if (!recordingOk(id) || !(data instanceof Uint8Array) || data.byteLength > MAX_PIECE) return false
+  try {
+    const p = keptRecording(id)
+    const st = await fs.stat(p.part) // only one that was begun
+    if (st.size + data.byteLength > MAX_KEPT) return false
+    await fs.appendFile(p.part, data)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function recordingEnd(id: unknown): Promise<void> {
+  if (!recordingOk(id)) return
+  const p = keptRecording(id)
+  await fs.unlink(p.part).catch(() => {})
+  await fs.unlink(p.info).catch(() => {})
+}
+
+/** Every recording an earlier run left unfinished, saved beside its note as
+ *  "Voice note … (recovered).m4a" (at the vault's top when its folder has gone)
+ *  and its kept pieces removed. The renderer puts each into its note. */
+export async function recordingsLeft(): Promise<{ note: string; file: string; startedAt: string }[]> {
+  const dir = path.join(requireVault(), '.mdnotes', 'recording')
+  let names: string[]
+  try {
+    names = await fs.readdir(dir)
+  } catch {
+    return []
+  }
+  const out: { note: string; file: string; startedAt: string }[] = []
+  for (const n of names) {
+    const m = /^([a-z0-9]{6,40})\.json$/.exec(n)
+    if (!m) continue
+    const id = m[1]
+    const p = keptRecording(id)
+    try {
+      const st = await fs.stat(p.part).catch(() => null)
+      if (!st || st.size === 0) {
+        await recordingEnd(id)
+        continue
+      }
+      if (Date.now() - st.mtimeMs < STILL_GROWING_MS) continue
+      const info = JSON.parse(await fs.readFile(p.info, 'utf8')) as { note?: unknown; startedAt?: unknown; ext?: unknown }
+      const note = typeof info.note === 'string' ? info.note : ''
+      const startedAt = typeof info.startedAt === 'string' ? info.startedAt : new Date(st.mtimeMs).toISOString()
+      const ext = typeof info.ext === 'string' && /^[a-z0-9]{1,8}$/.test(info.ext) ? info.ext : 'm4a'
+      let folder = note.includes('/') ? note.slice(0, note.lastIndexOf('/')) : ''
+      try {
+        if (folder && !(await fs.stat(resolveInVault(folder))).isDirectory()) folder = ''
+      } catch {
+        folder = ''
+      }
+      const when = new Date(startedAt)
+      const name = voiceFileName(Number.isNaN(when.getTime()) ? new Date(st.mtimeMs) : when, ext).replace(/\.([^.]+)$/, ' (recovered).$1')
+      const file = await writeAssetUnique(folder, name, await fs.readFile(p.part))
+      await recordingEnd(id)
+      out.push({ note, file, startedAt })
+    } catch (e) {
+      console.warn('[voice] could not recover an unfinished recording', e)
+    }
+  }
+  return out
 }

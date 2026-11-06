@@ -1,4 +1,5 @@
 import { lineOfEmbed } from '../../../shared/attachments'
+import { playMomentHere } from './momentLink'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
@@ -55,6 +56,8 @@ interface Props {
   /** vault path of a photo/video: scroll to the line embedding it. The
    *  delete dialog's "go and look at that note" jump. */
   revealEmbed?: string | null
+  /** with revealEmbed: play that voice note from here, in seconds (a link to a moment) */
+  revealEmbedAt?: number | null
   /** told once that jump has landed, so the request can be let go (as
    *  `onRevealedHeading` does for a heading) — left standing it fired again every
    *  time the note came back on screen */
@@ -132,6 +135,7 @@ export function CodeEditor({
   revealHeading,
   onRevealedHeading,
   revealEmbed,
+  revealEmbedAt,
   onRevealedEmbed,
   revealText,
   onRevealedText,
@@ -456,6 +460,13 @@ export function CodeEditor({
   useEffect(() => {
     const view = viewRef.current
     if (!view || !revealEmbed) return
+    // A link to a moment: scroll to the voice note and play it from there
+    // (momentLink.ts). Not found yet may be a document still arriving.
+    if (revealEmbedAt != null) {
+      if (!playMomentHere(view, revealEmbed, revealEmbedAt)) return
+      onRevealedEmbedRef.current?.()
+      return
+    }
     const n = lineOfEmbed(view.state.doc.toString(), path, revealEmbed)
     if (!n) return // not in this note (any more) — leave the cursor where it is
     const line = view.state.doc.line(n)
@@ -466,7 +477,7 @@ export function CodeEditor({
     view.focus()
     // Landed: the request has done its job.
     onRevealedEmbedRef.current?.()
-  }, [revealEmbed, path, version])
+  }, [revealEmbed, revealEmbedAt, path, version])
 
   // "Show me where those words are" — a "Search notes" result. Same shape as the
   // two jumps above, including the `version` key (the text lands in its own effect).

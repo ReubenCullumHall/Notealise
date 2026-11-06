@@ -3,6 +3,7 @@ import { Decoration, EditorView, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { kindForFilename, relativeTarget, resolveVaultPath } from '../../../shared/attachments'
 import { baseName, dirName } from '../../../shared/links'
+import { findTranscript } from '../../../shared/transcript'
 import type { ConvertedAudio } from '../../../shared/types'
 import {
   VOICE_DEFAULTS,
@@ -24,6 +25,10 @@ import { linkEnv, linkHandlersFacet, notifyError, notifyUser } from './linkEnv'
 import { insideEmbed, selectionCovers, selectionSwallows } from './attachSelect'
 import { isMediaSource } from './mediaSource'
 import { VoiceBlock, blockOf, type VoiceBlockProps } from './voicePlayerUi'
+import { playerFor } from './voicePlayer'
+import { clockOf, copyMomentLink } from './momentLink'
+import { openClipEditor, type ClipApplied, type ClipSaveResult } from './clipEdit/open'
+import { MAX_EDIT_SECONDS } from './clipEdit/audio'
 
 // Voice notes in the note: the line
 //
@@ -258,7 +263,8 @@ class VoiceNoteWidget extends WidgetType {
       openElsewhere: () => openElsewhere(view, block.props.rel),
       skipMenu: (side, x, y) => skipMenu(view, side, x, y),
       rename: (name) => writeName(view, block.dom, name),
-      menu: (x, y) => blockMenu(view, block, x, y)
+      menu: (x, y, at) => blockMenu(view, block, x, y, at),
+      edit: () => editClip(view, block)
     })
     return block.dom
   }
@@ -363,13 +369,122 @@ function writeName(view: EditorView, dom: HTMLElement, name: string): void {
 
 /** Right-click on the block, or a click on its six dots once it is selected:
  *  name it (Reuben, 2026-10-16), in the app's own menu. */
-function blockMenu(view: EditorView, block: VoiceBlock, x: number, y: number): void {
+function blockMenu(view: EditorView, block: VoiceBlock, x: number, y: number, at?: number): void {
   const handlers = view.state.facet(linkHandlersFacet)?.current
   if (!handlers) return
   const named = block.props.name !== ''
   const items = [{ label: named ? 'Rename voice note…' : 'Name voice note…', run: () => block.startNaming() }]
+  // The voice note editor, first (Reuben, 2026-11-04: "right click … edit clip").
+  // Only for a recording that plays: there is nothing to edit in one that can't.
+  if (block.dom.dataset.state === 'ready') items.unshift({ label: 'Edit clip…', run: () => editClip(view, block) })
+  // A link to this moment (momentLink.ts) — the spot right-clicked on the
+  // waveform, or where playback is. Only in a note (it is written relative to one).
+  const { rel } = block.props
+  if (rel && at !== undefined && notePathOf(view)) {
+    items.push({
+      label: `Copy link to ${clockOf(at)}`,
+      run: () => {
+        const from = spanOfBlock(view, block.dom)?.from
+        copyMomentLink(view, block.props.name, rel, at, from === undefined ? undefined : view.state.doc.lineAt(from).from)
+      }
+    })
+  }
   if (named) items.push({ label: 'Remove name', run: () => writeName(view, block.dom, '') })
   handlers.menu(x, y, items)
+}
+
+/** Open the voice note editor for this voice note (clipEdit/ClipEditor.tsx). */
+function editClip(view: EditorView, block: VoiceBlock): void {
+  const { rel, src } = block.props
+  if (!rel) return
+  // Too long to edit: said at once, from the length the player already knows,
+  // rather than after reading the whole recording in (a 70-minute one took 9 s
+  // and ~800 MB just to say no — 2026-11-06).
+  const known = playerFor(rel).duration
+  if (known !== null && known > MAX_EDIT_SECONDS) {
+    notifyUser(view.state, `This recording is too long to edit here (over ${MAX_EDIT_SECONDS / 60} minutes)`)
+    return
+  }
+  const notePath = notePathOf(view)
+  const near = spanOfBlock(view, block.dom)?.from ?? 0
+  openClipEditor({
+    rel,
+    notePath,
+    name: block.props.name,
+    settings: block.props.settings,
+    notify: (m) => notifyUser(view.state, m),
+    apply: (result) => {
+      // Only into the note the editor was opened from: the view outlives the
+      // note in it (see makePlayableCopy).
+      if (notePathOf(view) !== notePath) return null
+      const span = (block.dom.isConnected ? spanOfBlock(view, block.dom) : null) ?? findVoice(view.state, src, near)
+      if (!span || span.src !== src) return null
+      return applyClip(view, span, result, notePath)
+    }
+  })
+}
+
+/** Write a saved clip in. OUT of the undo history, as the mixer is: Cmd+Z in
+ *  the note would bring back a line whose recording Save has just moved to the
+ *  bin. The way back is "Put back" on the notice that follows, which restores
+ *  both (App.tsx `binReplacedRecording`). */
+function applyClip(view: EditorView, span: VoiceSpan, result: ClipSaveResult, notePath: string): ClipApplied {
+  const changes = clipChange(span, result, notePath, view.state.doc)
+  // What each piece wrote and what it replaced — Put back finds each by its text.
+  const pieces = changes.map((c) => ({ written: c.insert, was: c.to === undefined ? '' : view.state.doc.sliceString(c.from, c.to) }))
+  view.dispatch({ changes, annotations: Transaction.addToHistory.of(false) })
+  return {
+    text: view.state.doc.toString(),
+    revert: () => {
+      if (notePathOf(view) !== notePath) return false
+      const doc = view.state.doc.toString()
+      const back: { from: number; to: number; insert: string }[] = []
+      for (const p of pieces) {
+        const at = doc.indexOf(p.written)
+        if (at < 0 || doc.indexOf(p.written, at + 1) >= 0) return false
+        back.push({ from: at, to: at + p.written.length, insert: p.was })
+      }
+      view.dispatch({ changes: back, annotations: Transaction.addToHistory.of(false) })
+      return true
+    }
+  }
+}
+
+/** The edit that writes a saved clip into the note: Save puts the new voice
+ *  notes where the original was, Save as new clip puts them under it. Each keeps
+ *  the original's volume and tone; its speed goes back to 1× when the speed was
+ *  saved into the file (Reuben, 2026-11-04), so the two never stack. Sections are
+ *  each on the line straight below the last, as a new recording is placed
+ *  (voiceRecModel.ts `ownLineInsert`; Reuben, 2026-11-04: "on the next block down"). */
+export function clipChange(
+  span: VoiceSpan,
+  result: ClipSaveResult,
+  notePath: string,
+  doc?: Text
+): { from: number; to?: number; insert: string }[] {
+  const s: VoiceSettings = result.speedSaved ? { ...span.settings, speed: 1 } : span.settings
+  const lines = result.files.map((f) => {
+    const tag = audioTag(relativeTarget(f.rel, notePath), s)
+    const open = tag.slice(0, tag.indexOf('>') + 1)
+    return withVoiceName(open, f.name) + tag.slice(open.length)
+  })
+  // A transcript folded straight under the voice note (shared/transcript.ts)
+  // belongs to it: new lines go after the fold, never between the two. Save
+  // leaves the fold under the first section — its old src is what offers
+  // "Transcribe again" (the Transcribe session's rule).
+  let after = span.to
+  if (doc) {
+    const found = findTranscript(doc.toString().split('\n'), doc.lineAt(span.to).number - 1)
+    if (found) after = doc.line(found.close + 1).to
+  }
+  if (result.replace) {
+    if (after === span.to || lines.length === 1) return [{ from: span.from, to: span.to, insert: lines.join('\n') }]
+    return [
+      { from: span.from, to: span.to, insert: lines[0] },
+      { from: after, insert: `\n${lines.slice(1).join('\n')}` }
+    ]
+  }
+  return [{ from: after, insert: `\n${lines.join('\n')}` }]
 }
 
 /** The voice note pointing at `src` nearest `near` — for when its block went off

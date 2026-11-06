@@ -1,6 +1,9 @@
 import type { EditorState } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
-import { findToggles, isToggleMarkup, toggleAtTitle } from './toggleModel'
+import { findToggles, toggleAtTitle } from './toggleModel'
+
+const MATH_FENCE = /^\s*\$\$\s*$/
+const FENCE = /^\s{0,3}(`{3,}|~{3,})/
 
 // Which lines the line-grip picks up.
 //
@@ -19,9 +22,6 @@ export interface BlockRange {
 }
 
 const isBlank = (text: string): boolean => text.trim() === ''
-/** Where a paragraph stops: a blank line, or a toggle list's markup line (a
- *  paragraph written straight under a title is still not part of the title). */
-const isEdge = (text: string): boolean => isBlank(text) || isToggleMarkup(text) || isEmbedLine(text)
 /** A line that is nothing but a voice note, a video or a picture. Those go into
  *  a note on the line straight under the text, with no blank line between
  *  (voiceRecModel.ts `ownLineInsert`, attachInput.ts), so each is a block of its
@@ -53,19 +53,20 @@ function fenceAt(state: EditorState, pos: number): { from: number; to: number } 
 
 /** The lines the grip on `pos`'s line would move.
  *
- *  Four rules, in order:
+ *  Five rules, in order:
  *
  *  1. **A selection wins.** Select four lines and the grip moves those four —
  *     the explicit answer always beats the inferred one, and it is the only way
  *     to move part of a paragraph.
  *  2. **A toggle list moves whole** when the cursor is on its title.
  *  3. **A fenced code block moves whole** (see `fenceAt`).
- *  4. **Otherwise the paragraph**: the run of non-blank lines around the cursor.
- *     A blank line is its own block, which is what lets an empty line be pushed
- *     around to open up space rather than being silently glued to a neighbour.
- *
- *  A table needs no rule of its own: Markdown tables cannot contain a blank
- *  line, so rule 3 already takes one whole.
+ *  4. **Something that only makes sense whole moves whole** (`wholeBlockAt`):
+ *     the properties at the top, a `$$` formula, a table, a quote, an HTML
+ *     block, an underlined heading, a list item with the items nested under it.
+ *  5. **Otherwise the line** (Reuben, 2026-11-06: "for ALL blocks there should
+ *     be this" — until then a run of lines moved as one paragraph, with one
+ *     grip at its top). A blank line is its own block, which is what lets an
+ *     empty line be pushed around to open up space.
  *
  *  `at` is a line the POINTER is over rather than the cursor (the grip follows
  *  the pointer onto any line — Reuben, 2026-10-06: "a selector for every line").
@@ -99,12 +100,94 @@ export function blockRange(state: EditorState, at?: number): BlockRange {
 
   const line = doc.lineAt(head)
   if (isBlank(line.text) || isEmbedLine(line.text)) return { from: line.from, to: line.to }
+  const whole = wholeBlockAt(state, line.number)
+  if (whole) return { from: doc.line(whole[0]).from, to: doc.line(whole[1]).to }
+  // Otherwise the line itself (Reuben, 2026-11-06: "for ALL blocks there
+  // should be this" — every line its own handle, a link on its own line too).
+  return { from: line.from, to: line.to }
+}
 
-  let first = line.number
-  let last = line.number
-  while (first > 1 && !isEdge(doc.line(first - 1).text)) first--
-  while (last < doc.lines && !isEdge(doc.line(last + 1).text)) last++
-  return { from: doc.line(first).from, to: doc.line(last).to }
+/** Syntax-tree blocks that only make sense whole: split one and it stops being
+ *  that thing (half a table, a quote's first line without the rest). */
+const WHOLE = new Set([
+  'Table',
+  'Blockquote',
+  'HTMLBlock',
+  'CommentBlock',
+  'ProcessingInstructionBlock',
+  'SetextHeading1',
+  'SetextHeading2',
+  'CodeBlock'
+])
+
+/** The first and last line numbers of the block line `n` must move with, or
+ *  null when it moves alone. In order: the note's properties at the top
+ *  (frontmatter), a `$$` formula, a table / quote / HTML block / underlined
+ *  heading, and a list item — with the items nested under it, never its
+ *  siblings. */
+function wholeBlockAt(state: EditorState, n: number): [number, number] | null {
+  const doc = state.doc
+  const text = (i: number): string => doc.line(i).text
+
+  // The properties block: `---` on line 1 down to its closing `---`.
+  if (text(1).trim() === '---') {
+    for (let i = 2; i <= doc.lines; i++) {
+      if (/^(---|\.\.\.)\s*$/.test(text(i))) {
+        if (n <= i) return [1, i]
+        break
+      }
+    }
+  }
+
+  // A `$$` formula: the parser reads it as a paragraph, so it is counted here,
+  // outside code fences, the way blocks.ts indexes them.
+  let open: number | null = null
+  let fence: string | null = null
+  for (let i = 1; i <= doc.lines && i <= n + 2000; i++) {
+    const t = text(i)
+    const f = FENCE.exec(t)
+    if (fence) {
+      if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null
+      continue
+    }
+    if (open === null && f) {
+      fence = f[1]
+      continue
+    }
+    if (MATH_FENCE.test(t)) {
+      if (open === null) open = i
+      else {
+        if (n >= open && n <= i) return [open, i]
+        open = null
+      }
+      continue
+    }
+    if (open === null && i > n) break
+  }
+  if (open !== null && n >= open) return [open, doc.lines] // an unclosed one runs to the end
+
+  // The syntax tree's answer for everything else.
+  const at = doc.line(n)
+  const inner = syntaxTree(state).resolveInner(at.from + (at.text.length - at.text.trimStart().length), 1)
+  let item: { from: number; to: number } | null = null
+  for (let node: typeof inner | null = inner; node; node = node.parent) {
+    if (WHOLE.has(node.name)) return trimmed(state, node.from, node.to)
+    // The innermost list item STARTING on this line is the one grabbed; on a
+    // wrapped continuation line, the item it continues.
+    if (node.name === 'ListItem' && (!item || doc.lineAt(node.from).number === n)) {
+      if (!item || doc.lineAt(item.from).number !== n) item = { from: node.from, to: node.to }
+    }
+  }
+  return item ? trimmed(state, item.from, item.to) : null
+}
+
+/** Line numbers of [from, to], blank lines off the end. */
+function trimmed(state: EditorState, from: number, to: number): [number, number] {
+  const doc = state.doc
+  const first = doc.lineAt(from).number
+  let last = doc.lineAt(to).number
+  while (last > first && isBlank(doc.line(last).text)) last--
+  return [first, last]
 }
 
 /** Whether a grip should be offered at all.
@@ -112,5 +195,7 @@ export function blockRange(state: EditorState, at?: number): BlockRange {
  *  A note with one blank line in it has nothing to reorder, and a grip floating
  *  beside the only line there is reads as a control that does nothing. */
 export function canMoveBlock(state: EditorState): boolean {
-  return state.doc.lines > 1
+  // Any note with something in it: the grip also selects (a click) and links
+  // (right-click), which a one-line note wants as much as any other.
+  return state.doc.length > 0
 }

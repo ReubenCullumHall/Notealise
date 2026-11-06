@@ -26,6 +26,7 @@ export type IconName =
   | 'filePlus'
   | 'folderPlus'
   | 'sliders'
+  | 'scissors'
   | 'text'
   | 'sort'
   | 'sun'
@@ -176,6 +177,13 @@ const PATHS: Record<IconName, React.JSX.Element> = {
       <path d="M4 8h9M18 8h2M4 16h2M11 16h9" />
       <circle cx="15.5" cy="8" r="2" />
       <circle cx="8.5" cy="16" r="2" />
+    </>
+  ),
+  scissors: (
+    <>
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12" />
     </>
   ),
   text: <path d="M4 6h16M4 11h16M4 16h9" />,

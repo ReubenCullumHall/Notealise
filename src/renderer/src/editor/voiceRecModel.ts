@@ -5,6 +5,7 @@
 // tests the deciding.
 
 import type { MicAccess, VoicePlatform } from '../../../shared/types'
+import { clockOf } from './momentModel'
 
 // --- what MediaRecorder is asked for ------------------------------------------
 
@@ -195,6 +196,85 @@ export const addedAtEnd = (names: readonly string[], noteTitle: string): string 
  *  (or for the app to quit, when it is written into the file). */
 export const addedWhenOpened = (name: string, noteTitle: string): string =>
   `Saved ${name} — it will be added to the end of ${noteTitle} when you open it.`
+
+/** The marks made while recording (Reuben, 2026-11-06: "marks while
+ *  recording"), as the line that goes straight under the voice note: a link to
+ *  each moment (editor/momentLink.ts), `[0:12](memo.m4a#t=12) · [1:05](…)`.
+ *  '' for none. `target` is the recording as the note links it. */
+export function marksLine(target: string, marks: readonly number[]): string {
+  if (!marks.length) return ''
+  return '\n' + marks.map((t) => `[${clockOf(t)}](${target}#t=${Math.max(0, Math.floor(t))})`).join(' · ')
+}
+
+/** "Recording · 2 marks" */
+export const marksWords = (n: number): string => (n === 0 ? '' : n === 1 ? ' · 1 mark' : ` · ${n} marks`)
+
+/** Said when a recording you stopped from the sidebar (its note off screen)
+ *  has gone back where you recorded it. */
+export const addedWhereRecorded = (name: string, noteTitle: string): string =>
+  `Added ${name} to ${noteTitle}, where you recorded it.`
+
+/** Where a recording that kept going while its note was off screen goes back
+ *  (Reuben, 2026-11-06: switching notes no longer stops it). `left` is the
+ *  note's text when you left it and `pos` where its recorder sat. The same text:
+ *  the same place. Changed since (edited in another column, or outside the app):
+ *  the same side of the line it sat on, if that line is there exactly once.
+ *  Otherwise null — the end of the note. */
+export function placeAgain(text: string, left: { text: string; pos: number }): number | null {
+  if (text === left.text) return Math.min(left.pos, text.length)
+  const t = left.text
+  const p = Math.min(Math.max(0, left.pos), t.length)
+  const from = t.lastIndexOf('\n', p - 1) + 1
+  const end = t.indexOf('\n', p)
+  const to = end < 0 ? t.length : end
+  const line = t.slice(from, to)
+  if (!line.trim()) return null
+  let at = 0
+  let found = -1
+  let count = 0
+  for (const l of text.split('\n')) {
+    if (l === line) {
+      count++
+      found = at
+    }
+    at += l.length + 1
+  }
+  if (count !== 1) return null
+  return p <= from ? found : found + line.length
+}
+
+/** The insertions that add waiting voice notes to a note's `text`: each one
+ *  where it was recorded (`placeAgain`) when its note was left mid-recording,
+ *  the rest together at the end (`endInsert`). Offsets are into `text` as it
+ *  is; `placed` counts the ones that went back where they were. */
+export function waitingInserts(
+  text: string,
+  lines: readonly { tag: string; anchor?: { text: string; pos: number } }[]
+): { inserts: { at: number; text: string }[]; placed: number } {
+  const inserts: { at: number; text: string }[] = []
+  const atEnd: string[] = []
+  for (const l of lines) {
+    const at = l.anchor ? placeAgain(text, l.anchor) : null
+    if (at === null) {
+      atEnd.push(l.tag)
+      continue
+    }
+    const from = text.lastIndexOf('\n', at - 1) + 1
+    const end = text.indexOf('\n', at)
+    const lineText = text.slice(from, end < 0 ? text.length : end)
+    inserts.push(recordingInsert(lineText, from, at, l.tag))
+  }
+  const placed = inserts.length
+  if (atEnd.length) inserts.push({ at: text.length, text: endInsert(text, atEnd) })
+  return { inserts, placed }
+}
+
+/** `text` with `inserts` (offsets into it) made. */
+export function applyInserts(text: string, inserts: readonly { at: number; text: string }[]): string {
+  let out = text
+  for (const i of [...inserts].sort((a, b) => b.at - a.at)) out = out.slice(0, i.at) + i.text + out.slice(i.at)
+  return out
+}
 
 /** What to put at the END of a note's text to add these lines: each on a line
  *  of its own, after a blank line when the note has text. Judged on the text

@@ -89,8 +89,11 @@ export interface VoiceBlockActions {
   /** Write this name onto the voice note's line ('' takes it off). */
   rename(name: string): void
   /** The block was right-clicked, or its grip clicked while selected: offer
-   *  "Name voice note…" at that point. */
-  menu(x: number, y: number): void
+   *  "Name voice note…" at that point. `at` is the moment the right-click points
+   *  at, in seconds — for "Copy link to 1:23" (momentLink.ts). */
+  menu(x: number, y: number, at?: number): void
+  /** The scissors: open the voice note editor (clipEdit/). */
+  edit(): void
 }
 
 /** The block behind a widget's DOM — how `updateDOM` and `destroy` find it. */
@@ -193,6 +196,7 @@ export class VoiceBlock {
   private readonly backNum: SVGElement
   private readonly fwdNum: SVGElement
   private readonly mixBtn: HTMLButtonElement
+  private readonly editBtn: HTMLButtonElement
   private readonly alert: HTMLElement
   private readonly alertMsg: HTMLElement
   private readonly alertActions: HTMLElement
@@ -244,7 +248,7 @@ export class VoiceBlock {
     root.addEventListener('contextmenu', (e) => {
       if (e.target === this.nameInput) return
       e.preventDefault()
-      this.actions.menu(e.clientX, e.clientY)
+      this.actions.menu(e.clientX, e.clientY, this.momentAt(e))
     })
 
     const row = el('span', 'cm-voice-row')
@@ -256,7 +260,8 @@ export class VoiceBlock {
       onClick: (v, pos, range) => {
         if (!this.props.selected) return EMBED_SOURCE.onClick?.(v, pos, range)
         const r = grip.getBoundingClientRect()
-        this.actions.menu(r.left, r.bottom + 4)
+        const d = this.player?.duration
+        this.actions.menu(r.left, r.bottom + 4, d && this.dom.dataset.state === 'ready' ? this.player?.position : undefined)
       }
     })
     row.appendChild(grip)
@@ -390,7 +395,15 @@ export class VoiceBlock {
       this.renderMixer(true)
     })
 
-    this.controls.append(this.playBtn, this.waveBox, this.time, this.backBtn, this.fwdBtn, this.mixBtn)
+    // The scissors: the voice note editor (Reuben, 2026-11-04). Unlike the other
+    // icons here it carries a hover label — scissors alone don't say "edit this
+    // clip", and the label is the app's plaque now, not stray text (Tooltip.tsx).
+    this.editBtn = button('cm-voice-icon cm-voice-editbtn', 'Edit clip')
+    this.editBtn.setAttribute('data-tip', 'Edit clip')
+    this.editBtn.appendChild(scissorsIcon())
+    this.editBtn.addEventListener('click', () => this.actions.edit())
+
+    this.controls.append(this.playBtn, this.waveBox, this.time, this.backBtn, this.fwdBtn, this.editBtn, this.mixBtn)
 
     // --- when it can't play -------------------------------------------------
     this.alert = el('span', 'cm-voice-alert')
@@ -578,6 +591,22 @@ export class VoiceBlock {
       this.dom.appendChild(this.caption)
     }
     this.view.requestMeasure()
+  }
+
+  /** The moment a right-click points at: the spot under the pointer when it is
+   *  on the waveform (zoomed or not), else where playback is. Undefined until
+   *  the recording's length is known. */
+  private momentAt(e: MouseEvent): number | undefined {
+    const duration = this.player?.duration
+    if (!duration || this.dom.dataset.state !== 'ready') return undefined
+    if (e.target instanceof Node && this.waveBox.contains(e.target)) {
+      const box = this.waveBox.getBoundingClientRect()
+      const start = this.zoom ? this.zoom.start : 0
+      const span = this.zoom ? this.zoom.span : duration
+      const f = box.width > 0 ? Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)) : 0
+      return start + f * span
+    }
+    return this.player?.position ?? 0
   }
 
   // --- zoom ----------------------------------------------------------------------
@@ -895,6 +924,7 @@ export class VoiceBlock {
       this.playBtn.disabled = !ready
       this.backBtn.disabled = !ready
       this.fwdBtn.disabled = !ready
+      this.editBtn.disabled = !ready
       this.renderMixer()
       this.view.requestMeasure()
     }
@@ -1100,6 +1130,15 @@ function slidersIcon(): SVGSVGElement {
   part(s, 'path', { d: 'M4 8h9M18 8h2M4 16h2M11 16h9' })
   part(s, 'circle', { cx: '15.5', cy: '8', r: '2' })
   part(s, 'circle', { cx: '8.5', cy: '16', r: '2' })
+  return s
+}
+
+/** Scissors (icons.tsx, `scissors`) — the voice note editor. */
+function scissorsIcon(): SVGSVGElement {
+  const s = svg(18)
+  part(s, 'circle', { cx: '6', cy: '6', r: '3' })
+  part(s, 'circle', { cx: '6', cy: '18', r: '3' })
+  part(s, 'path', { d: 'M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12' })
   return s
 }
 

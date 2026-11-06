@@ -12,9 +12,10 @@ import {
   type VoiceSettings,
   type VoiceSkip
 } from '../../../shared/voiceNote'
-import { deckPlayer, ejectDeck, onDeck, playerFor, type VoicePlayer } from '../editor/voicePlayer'
+import { deckPlayer, ejectDeck, onDeck, playerFor, setMediaKeySkip, type VoicePlayer } from '../editor/voicePlayer'
 import { recordingName } from '../editor/voiceMixer'
 import { flashLines } from '../editor/blockFlash'
+import { onRecorder, recorderElapsed, recorderMark, recorderPauseToggle, recorderReturning, recorderStatus, recorderStop } from '../editor/voiceRecorder'
 
 // The tape: a small player for a note's voice notes (Reuben, 2026-10-16, after
 // the media player in Arc's sidebar).
@@ -409,6 +410,8 @@ interface SidebarDeckProps {
  *  screen. Nothing when nothing has been played, or its note is showing. */
 export function SidebarDeck({ onScreen, skip, onGoTo }: SidebarDeckProps): React.JSX.Element | null {
   const player = useDeck()
+  // The keyboard's media keys skip as far as the tape's buttons (voicePlayer.ts).
+  useEffect(() => setMediaKeySkip(skip), [skip])
   if (!player || !player.note || onScreen(player.note)) return null
   const name = titleOf(player.note)
   const voice = player.label || recordingName(player.rel)
@@ -426,6 +429,100 @@ export function SidebarDeck({ onScreen, skip, onGoTo }: SidebarDeckProps): React
         closeTip="Stop and close"
         onClose={ejectDeck}
       />
+    </div>
+  )
+}
+
+// --- a recording whose note is off screen ----------------------------------------
+// Switching notes no longer stops a recording (Reuben, 2026-11-06: "fix" the
+// note switch stopping it). While its note is off screen it is steered from
+// here — Pause, Stop, ↗ back to it — in the tape's place and the tape's look.
+// Stop puts the voice note where it was recorded (voiceRecorder.ts).
+
+/** The sidebar's recording card. Nothing unless a recording's note is off screen. */
+export function SidebarRecorder({ onGoTo }: { onGoTo: (note: string) => void }): React.JSX.Element | null {
+  const st = useSyncExternalStore(onRecorder, recorderStatus)
+  const [time, setTime] = useState(recorderElapsed)
+  const shown = !!st?.away
+  useEffect(() => {
+    if (!shown) return
+    setTime(recorderElapsed())
+    const t = window.setInterval(() => setTime(recorderElapsed()), 250)
+    return () => window.clearInterval(t)
+  }, [shown])
+  if (!st || !st.away) return null
+  const name = titleOf(st.notePath)
+  const paused = st.phase === 'paused'
+  const live = st.phase === 'recording' || st.phase === 'paused'
+  const word =
+    st.phase === 'recording' ? 'Recording' : paused ? 'Paused' : st.phase === 'saving' ? 'Saving…' : st.phase === 'starting' ? 'Starting…' : 'Recording'
+  return (
+    <div className="fade-in mb-2">
+      <div className="deck rounded-xl bg-ink-900 text-paper shadow-float" role="group" aria-label={`Recording into ${name}`}>
+        <div className="flex items-center gap-2 pl-3 pr-1.5 pt-1.5">
+          <span
+            className={'deck-rec-dot h-2.5 w-2.5 shrink-0 rounded-full' + (st.phase === 'recording' ? ' is-live' : '')}
+            aria-hidden="true"
+          />
+          <span className="text-[13px] font-medium text-paper">{word}</span>
+          <span className="text-[13px] tabular-nums text-paper/70">{time}</span>
+          <span className="flex-1" />
+          <button type="button" className={DECK_BTN} onClick={() => {
+              recorderReturning()
+              onGoTo(st.notePath)
+            }}
+            data-tip={`Go back to ${name}`} aria-label={`Go back to ${name}`}>
+            <Icon name="arrowUpRight" className="h-[18px] w-[18px]" />
+          </button>
+        </div>
+        <div className="flex h-11 items-center gap-1 px-2.5 pb-1">
+          <span className="min-w-0 flex-1 truncate pl-0.5 text-[12px] text-paper/60" data-tip={`The voice note goes into ${name}, where you recorded it`}>
+            into {name}
+            {st.marks > 0 && ` · ${st.marks} ${st.marks === 1 ? 'mark' : 'marks'}`}
+          </span>
+          <button
+            type="button"
+            className={DECK_BTN + ' w-auto px-2 text-[12px]'}
+            disabled={!live}
+            onClick={recorderMark}
+            data-tip={`Mark this moment (${/Mac/.test(navigator.userAgent) ? '⌘⇧M' : 'Ctrl+Shift+M'}) — a link to it goes under the voice note`}
+            aria-label="Mark this moment"
+          >
+            Mark
+          </button>
+          <button
+            type="button"
+            className={DECK_BTN}
+            disabled={!live}
+            onClick={recorderPauseToggle}
+            data-tip={paused ? 'Carry on recording' : 'Pause — nothing is recorded until you resume'}
+            aria-label={paused ? 'Resume recording' : 'Pause recording'}
+          >
+            {paused ? (
+              <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="currentColor" aria-hidden="true">
+                <path d="M8 5.5v13a1 1 0 0 0 1.5.86l10-6.5a1 1 0 0 0 0-1.72l-10-6.5A1 1 0 0 0 8 5.5z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="currentColor" aria-hidden="true">
+                <rect x="6.5" y="5.5" width="3.5" height="13" rx="1" />
+                <rect x="14" y="5.5" width="3.5" height="13" rx="1" />
+              </svg>
+            )}
+          </button>
+          <button
+            type="button"
+            className={DECK_BTN}
+            disabled={!live}
+            onClick={recorderStop}
+            data-tip={`Stop — the voice note goes into ${name}`}
+            aria-label="Stop recording"
+          >
+            <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="currentColor" aria-hidden="true">
+              <rect x="6.5" y="6.5" width="11" height="11" rx="2" />
+            </svg>
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

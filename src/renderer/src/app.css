@@ -4527,6 +4527,16 @@ body.table-col-resizing * {
   mask: var(--icon-clip) no-repeat center / contain;
 }
 
+/* A link to a moment in a voice note ("Explain it · 1:23", editor/momentLink.ts):
+   the file pill, with a play mark where that has a paperclip — clicking it plays. */
+.cm-weblink.cm-momentlink::before {
+  width: 0.7em;
+  height: 0.7em;
+  vertical-align: 0;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%204.5v15a1%201%200%200%200%201.5.86l12.5-7.5a1%201%200%200%200%200-1.72L7.5%203.64A1%201%200%200%200%206%204.5z%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20d%3D%22M6%204.5v15a1%201%200%200%200%201.5.86l12.5-7.5a1%201%200%200%200%200-1.72L7.5%203.64A1%201%200%200%200%206%204.5z%22%2F%3E%3C%2Fsvg%3E");
+}
+
 /* A YouTube or Vimeo title is a MENTION: the same pill, with the site's logo in
    front (Reuben, 2026-10-06: "the youtube logo"). The mark is a brand logo, so it
    keeps the brand's own colours — an image, like the photos in a note, not one of
@@ -5154,6 +5164,10 @@ html.space-vt::view-transition-new(root) {
 .cm-voice {
   position: relative;
   display: block;
+  /* Its width is the column's, never its controls' (below): the row used to
+     need ~340px on one line, which made the whole note wider than a narrow
+     column and scroll sideways (Reuben, 2026-11-06). */
+  container-type: inline-size;
   /* in the note's own em, as the formula's margin is — the type size is set on
      the rows below, so it doesn't shrink this */
   margin: 0.3em 0;
@@ -5320,6 +5334,7 @@ html.space-vt::view-transition-new(root) {
   min-width: 48px;
   height: 30px;
   margin: 0 10px;
+  container-type: inline-size;
 }
 /* The rows hold one bar more than shows, so a zoomed-in stretch can slide
    (voiceMixer.ts, stripAt) — this clips them to the waveform's own box. */
@@ -5354,6 +5369,26 @@ html.space-vt::view-transition-new(root) {
    bars' content-box clip and run the played bars together into one block. */
 .cm-voice-wave-played i {
   background-color: rgb(var(--ink-800));
+}
+/* (After the bar rule above, so it wins.) Too narrow for 96 bars with gaps (a column of three, 2026-11-06): each slot
+   is under 2px and its gap ate the whole bar, so the waveform vanished. There,
+   the bars touch — one shape instead of nothing. */
+@container (max-width: 200px) {
+  .cm-voice-wave i { padding: 0; border-radius: 0; }
+}
+/* A narrow voice note (a column of three, a small window): play and the
+   waveform keep the first line, and the time and the buttons drop to a second
+   line on the right — every control in sight, the note no wider than its
+   column. After the controls' and the waveform's own rules, so it wins. */
+@container (max-width: 380px) {
+  .cm-voice-controls {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 4px;
+  }
+  .cm-voice-wavebox { flex: 1 1 calc(100% - 64px); }
+  /* the sliders under it start at the play button: no room to indent them */
+  .cm-voice .cm-voice-mixer { padding-left: 0; } /* the mixer's own rule comes later: this one is more specific */
 }
 .cm-voice-seek {
   position: absolute;
@@ -5585,6 +5620,496 @@ html.space-vt::view-transition-new(root) {
 
 /* ===== END VOICE NOTE BLOCK ===== */
 
+/* ===== VOICE NOTE EDITOR — editor/clipEdit/ClipEditor.tsx (docs/plans/voice-editor.md).
+   Settings' frame (the classes on the element), shorter. The waveform is a
+   canvas; everything drawn over it — selection, handles, joins, splits, the
+   playhead — is positioned in % of the inner box, so a zoom is one re-render.
+   Colours are tokens (rule 5); the one red is the app's "destroys something"
+   red, as on button.danger. Hover changes colour, never size. ===== */
+.clip-ed {
+  border-radius: var(--r-surface);
+  animation: clip-ed-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.clip-ed.closing { animation: clip-ed-out 160ms cubic-bezier(0.5, 0, 0.85, 0.35) both; }
+/* The confirm dialog's motion family: there is no button to fly out of, as
+   Settings' genie flies from the gear, so a gentle scale and fade. */
+@keyframes clip-ed-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes clip-ed-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: scale(0.98); }
+}
+.clip-ed-wave {
+  position: relative;
+  height: 150px;
+  border-radius: var(--r-control);
+  background: rgb(var(--wash) / 0.04);
+  overflow: hidden;
+  cursor: text;
+  touch-action: none;
+}
+.clip-ed-in {
+  position: absolute;
+  inset: 0 14px;
+}
+.clip-ed-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.clip-ed-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: rgb(var(--ink-400));
+}
+.clip-ed-sel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgb(var(--accent-500) / 0.14);
+  border-left: 2px solid rgb(var(--accent-500));
+  border-right: 2px solid rgb(var(--accent-500));
+  pointer-events: none;
+}
+/* What a trim handle being dragged will take away. */
+.clip-ed-going {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgb(var(--paper) / 0.7);
+  pointer-events: none;
+}
+.clip-ed-trim {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  margin-left: -5px;
+  cursor: ew-resize;
+  pointer-events: none;
+}
+.clip-ed-trim::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgb(var(--ink-900));
+}
+.clip-ed-trim::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 10px;
+  height: 28px;
+  margin-top: -14px;
+  border-radius: var(--r-control);
+  background: rgb(var(--ink-900));
+}
+/* Where a cut closed up: a hairline with a small mark on the bottom edge. */
+.clip-ed-join {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgb(var(--ink-400) / 0.7);
+  pointer-events: none;
+}
+.clip-ed-join::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -4px;
+  border: 4px solid transparent;
+  border-bottom: 5px solid rgb(var(--ink-400));
+}
+.clip-ed-split {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  margin-left: -4px;
+  cursor: pointer;
+}
+.clip-ed-split::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 0;
+  border-left: 1.5px dashed rgb(var(--ink-700));
+}
+.clip-ed-split:hover::before { border-left-color: #e5484d; }
+/* Edit by the words (WordList.tsx): the transcript under the sound. A word is
+   pressed or dragged across to select it — the same selection as the waveform's,
+   so it wears the same accent; the word being said is underlined as it plays. */
+.clip-ed-words {
+  max-height: calc(1.65em * 5 + 12px);
+  overflow-y: auto;
+  padding: 6px 2px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: rgb(var(--ink-700));
+  user-select: none;
+  cursor: text;
+  border-top: 1px solid rgb(var(--ink-300) / 0.2);
+}
+.clip-ed-word {
+  border-radius: var(--r-control);
+  padding: 0 1px;
+}
+.clip-ed-word:hover { background: rgb(var(--ink-300) / 0.15); }
+.clip-ed-word.is-sel { background: rgb(var(--accent-500) / 0.2); color: rgb(var(--ink-900)); }
+.clip-ed-word[data-now] { box-shadow: inset 0 -2px rgb(var(--accent-500)); }
+.clip-ed-words-break { display: block; height: 6px; }
+/* A section's label, all of it but the ×, is its handle: click selects the
+   section, drag moves it. The six dots are the table's column handle
+   (.cm-table-col-handle), showing while the pointer is over the waveform, as
+   that one shows while it's over the table. */
+.clip-ed .clip-ed-take-grip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0;
+  margin-left: -4px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+.clip-ed .clip-ed-take-grip:active { cursor: grabbing; }
+.clip-ed .clip-ed-take-x { cursor: pointer; }
+.clip-ed-take-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 14px;
+  border-radius: var(--r-pill);
+  background: rgb(var(--wash) / 0.14);
+  color: rgb(var(--ink-500));
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+.clip-ed-track:hover .clip-ed-take-dots,
+.clip-ed-take-grip:focus-visible .clip-ed-take-dots { opacity: 1; }
+.clip-ed-band:hover:not(:has(.clip-ed-take-x:hover)) .clip-ed-take-dots { background: rgb(var(--brand-500) / 0.22); color: rgb(var(--brand-600)); }
+/* While a section is carried: it greys where it is, and a line shows where it
+   will land (the table's .cm-table-col-drop). */
+.clip-ed-lifted {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgb(var(--paper) / 0.6);
+  pointer-events: none;
+}
+.clip-ed-drop {
+  position: absolute;
+  top: 26px;
+  bottom: 0;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: var(--r-pill);
+  background: rgb(var(--brand-500));
+  pointer-events: none;
+}
+/* The × that deletes a section — the label stays click-through, only this takes a press. */
+.clip-ed .clip-ed-take-x {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: rgb(var(--ink-400));
+  pointer-events: auto;
+  cursor: pointer;
+}
+.clip-ed .clip-ed-take-x:hover:not(:disabled) {
+  background: #e5484d;
+  color: #fff;
+}
+/* The playhead is MOVED (a transform, set from ClipEditor.tsx `draw`), on a
+   layer of its own: a move costs a recomposite, not a repaint of the panel. It
+   carries no text, so the resting transform costs nothing on Windows either. */
+.clip-ed-head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-left: 1.5px solid rgb(var(--accent-500));
+  pointer-events: none;
+  will-change: transform;
+}
+/* The "played" bars: a second canvas in the darker ink, shown up to the
+   playhead by sliding this clipping window one way and the canvas inside it
+   the other — again transforms only, so playing and dragging never redraw. */
+.clip-ed-played {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  will-change: transform;
+}
+.clip-ed-played > .clip-ed-canvas { will-change: transform; }
+.clip-ed-head.is-recording { border-left-color: rgb(var(--clip-rec-red)); }
+.clip-ed-head.is-recording::before { border-top-color: rgb(var(--clip-rec-red)); }
+.clip-ed-head::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -7px;
+  border: 6.5px solid transparent;
+  border-top: 9px solid rgb(var(--accent-500));
+}
+.clip-ed-over {
+  position: relative;
+  height: 22px;
+  border-radius: var(--r-control);
+  background: rgb(var(--wash) / 0.04);
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+}
+.clip-ed-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 1.5px solid rgb(var(--accent-500));
+  border-radius: calc(3px * var(--r-k));
+  background: rgb(var(--accent-500) / 0.1);
+  cursor: grab;
+}
+/* The timeline (ClipEditor.tsx): the ruler, the section blocks, the sound —
+   one playhead line through all three, drawn in .clip-ed-overlay. Every row
+   keeps the same 14px inset, so a time is the same x in each. */
+.clip-ed-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.clip-ed-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 14px;
+  right: 14px;
+  pointer-events: none;
+}
+/* The ruler: press or drag anywhere on it to move the playhead, as in Resolve. */
+.clip-ed-rulerrow {
+  cursor: pointer;
+  touch-action: none;
+}
+.clip-ed-rulerrow.is-scrubbing { cursor: grabbing; }
+.clip-ed-ruler {
+  position: relative;
+  height: 22px;
+  margin: 0 14px;
+  font-size: 11px;
+  color: rgb(var(--ink-400));
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid rgb(var(--ink-300) / 0.5);
+}
+.clip-ed-rulerrow:hover .clip-ed-ruler { color: rgb(var(--ink-600)); }
+.clip-ed-ruler span {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+}
+.clip-ed-ruler b {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  height: 5px;
+  background: rgb(var(--ink-300));
+}
+/* The sections, as blocks on their own row — like clips on a track. The
+   block's frame is drawn 1px in from each end, so two blocks side by side show
+   a gap and never touch. The whole block but its × is the handle. */
+.clip-ed-lane {
+  position: relative;
+  height: 26px;
+  margin: 0 14px;
+  overflow: hidden;
+}
+.clip-ed-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 4px 0 6px;
+  overflow: hidden;
+  font-size: 11px;
+  color: rgb(var(--ink-700));
+  white-space: nowrap;
+  cursor: grab;
+  touch-action: none;
+}
+.clip-ed-band::before {
+  content: '';
+  position: absolute;
+  inset: 0 1px;
+  border: 1px solid rgb(var(--wash) / 0.16);
+  border-radius: var(--r-control);
+  background: rgb(var(--wash) / 0.05);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.clip-ed-band > * { position: relative; }
+.clip-ed-band:active { cursor: grabbing; }
+.clip-ed-band:hover:not(:has(.clip-ed-take-x:hover))::before { border-color: rgb(var(--brand-500) / 0.5); }
+.clip-ed-band.is-on::before {
+  border-color: rgb(var(--accent-500));
+  background: rgb(var(--accent-500) / 0.14);
+}
+.clip-ed-band.is-lifted { opacity: 0.45; }
+.clip-ed-band .clip-ed-take-x { margin-left: auto; }
+.clip-ed-band.is-whole,
+.clip-ed-band.is-recording { cursor: default; justify-content: center; }
+.clip-ed-band.is-whole::before { border-style: dashed; background: transparent; }
+.clip-ed-band-hint { color: rgb(var(--ink-400)); overflow: hidden; text-overflow: ellipsis; }
+.clip-ed-band.is-recording::before {
+  border-color: rgb(var(--clip-rec-red));
+  background: rgb(var(--clip-rec-red) / 0.12);
+}
+.clip-ed-band.is-recording .clip-ed-band-hint { color: rgb(var(--clip-rec-red)); }
+.clip-ed-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.clip-ed .clip-ed-play {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  flex: none;
+  border-radius: var(--r-pill);
+  display: grid;
+  place-items: center;
+  background: rgb(var(--ink-900));
+  border-color: rgb(var(--ink-900));
+  color: rgb(var(--paper));
+}
+.clip-ed .clip-ed-play:hover:not(:disabled) { background: rgb(var(--ink-700)); }
+.clip-ed .clip-ed-play:disabled { opacity: 0.4; cursor: default; }
+/* Record another take — the recorder's own "live" red (.cm-voice-rec's
+   --voice-rec-red: theme.css has no token for it yet). */
+.clip-ed { --clip-rec-red: 229 72 77; }
+.clip-ed .clip-ed-rec {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  flex: none;
+  border-radius: var(--r-pill);
+  display: grid;
+  place-items: center;
+  color: rgb(var(--clip-rec-red));
+}
+.clip-ed .clip-ed-rec:hover:not(:disabled) { background: rgb(var(--clip-rec-red) / 0.12); }
+.clip-ed .clip-ed-rec.is-on {
+  background: rgb(var(--clip-rec-red));
+  border-color: rgb(var(--clip-rec-red));
+  color: #fff;
+}
+.clip-ed .clip-ed-rec:disabled { opacity: 0.4; cursor: default; }
+.clip-ed-recording { color: rgb(var(--clip-rec-red)); }
+.clip-ed-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: rgb(var(--ink-700));
+  min-width: 100px;
+}
+.clip-ed-time em {
+  font-style: normal;
+  color: rgb(var(--ink-400));
+}
+/* The buttons stay on one line; on a narrow window it's the zoom that drops below. */
+.clip-ed-tools {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.clip-ed .clip-ed-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+.clip-ed-kbd {
+  font-size: 10.5px;
+  color: rgb(var(--ink-400));
+  margin-left: 2px;
+}
+.clip-ed-zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: rgb(var(--ink-500));
+}
+.clip-ed-zoom input { width: 90px; }
+.clip-ed-zoom input,
+.clip-ed-speed input {
+  height: 16px;
+  margin: 0;
+  accent-color: rgb(var(--accent-500));
+  cursor: pointer;
+}
+.clip-ed-speed {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: rgb(var(--ink-700));
+}
+.clip-ed-speed input { width: 260px; }
+.clip-ed-ends {
+  font-size: 11px;
+  color: rgb(var(--ink-400));
+}
+.clip-ed-value {
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--ink-500));
+  min-width: 36px;
+}
+.clip-ed-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.clip-ed-sum {
+  font-size: 12.5px;
+  color: rgb(var(--ink-500));
+  font-variant-numeric: tabular-nums;
+}
+.clip-ed-sum b {
+  font-weight: 500;
+  color: rgb(var(--ink-800));
+}
+.clip-ed-error { color: #e5484d; }
+.clip-ed-foot button:disabled { opacity: 0.45; cursor: default; }
+:root[data-motion='off'] .clip-ed { animation-duration: 1ms; }
+
+/* ===== END VOICE NOTE EDITOR ===== */
+
 /* ===== VOICE RECORDER — editor/voiceRecorder.ts (the block shown while recording).
    Functional first pass, same as above. ===== */
 
@@ -5706,6 +6231,22 @@ html.space-vt::view-transition-new(root) {
   gap: 6px;
   margin-left: auto;
 }
+/* Which microphone (micChoice.ts), beside Start recording — dressed as the
+   recorder's own buttons; shown only when there is more than one. */
+.cm-voice-rec-mic {
+  max-width: 220px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.2;
+  border: 1px solid rgb(var(--wash) / 0.14);
+  border-radius: var(--r-control);
+  background: rgb(var(--wash) / 0.04);
+  color: rgb(var(--ink-800));
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.cm-voice-rec-mic:hover { background: rgb(var(--wash) / 0.09); }
 .cm-voice-rec-btn {
   display: inline-flex;
   align-items: center;
@@ -5779,8 +6320,17 @@ html.space-vt::view-transition-new(root) {
     background-color: rgb(var(--surface));
   }
 }
+/* The sidebar's card for a recording whose note is off screen (VoiceDeck.tsx
+   SidebarRecorder): the recorder's own red dot, breathing the same way. */
+.deck-rec-dot {
+  --voice-rec-red: 229 72 77;
+  background: rgb(var(--voice-rec-red));
+  opacity: 0.5;
+}
+.deck-rec-dot.is-live { opacity: 1; animation: voice-rec-pulse 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .cm-voice-rec.is-live .cm-voice-rec-dot {
+  .cm-voice-rec.is-live .cm-voice-rec-dot,
+  .deck-rec-dot.is-live {
     animation: none;
   }
 }
