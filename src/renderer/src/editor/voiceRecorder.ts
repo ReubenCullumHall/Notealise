@@ -1236,7 +1236,10 @@ async function writeWaitingIntoFiles(settleMs: number): Promise<void> {
       continue // the note isn't there any more; the recording stays beside where it was
     }
     try {
-      await window.api.writeNote(path, applyInserts(text, waitingInserts(text, lines).inserts))
+      // Compared as the editor holds notes (\n only): a Windows file's \r\n would
+      // hide the line a recording was made under. The writer puts its endings back.
+      const lf = text.replace(/\r\n?/g, '\n')
+      await window.api.writeNote(path, applyInserts(lf, waitingInserts(lf, lines).inserts))
       waiting.delete(path)
     } catch (e) {
       console.error(`could not add a voice note to ${path}`, e)

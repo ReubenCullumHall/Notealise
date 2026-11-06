@@ -22,11 +22,19 @@ def check(name, ok, detail=''):
     print(('PASS ' if ok else 'FAIL ') + name + (f' — {detail}' if detail else ''))
 
 
+def kill(proc, hard=True):
+    """The whole app at once — a crash: no quit, no save. taskkill on Windows."""
+    if sys.platform == 'win32':
+        subprocess.run(['taskkill'] + (['/F'] if hard else []) + ['/T', '/PID', str(proc.pid)], capture_output=True)
+    else:
+        os.killpg(proc.pid, signal.SIGKILL if hard else signal.SIGTERM)
+
+
 def launch(ud):
     env = {k: x for k, x in os.environ.items() if k != 'ELECTRON_RUN_AS_NODE'}
     return subprocess.Popen([str(ELECTRON), str(WORK / 'out/main/index.js'), f'--user-data-dir={ud}',
                              f'--remote-debugging-port={PORT}', '--mute-audio', '--use-fake-device-for-media-stream'], env=env,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=sys.platform != 'win32')
 
 
 def connect(p):
@@ -74,7 +82,7 @@ def main():
             check('…and keep growing', size2 > size, f'{size} → {size2}')
             b.close()
         # the crash: kill the whole app, no chance to save
-        os.killpg(proc.pid, signal.SIGKILL)
+        kill(proc)
         proc.wait(timeout=10)
         time.sleep(1)
         check('after the crash the note has no voice note yet', '<audio' not in (v / 'Voice' / 'A.md').read_text())
@@ -120,7 +128,7 @@ def main():
             check('no errors on the page', not errors, '; '.join(errors))
     finally:
         try:
-            os.killpg(proc.pid, signal.SIGTERM)
+            kill(proc, hard=False)
         except Exception:
             pass
     failed = [r for r in results if not r[1]]
