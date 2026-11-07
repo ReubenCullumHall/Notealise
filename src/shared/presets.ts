@@ -169,7 +169,8 @@ const PART_KEYS: Record<LookPart, readonly (keyof SpaceLook)[]> = {
   colour: ['colorStyle', 'colorAuto', 'colorInherit', 'colorFadeNested', 'colorPalette', 'formatColors'],
   arranging: ['freeArrange', 'compactNav'],
   links: ['showLinks', 'linksPosition'],
-  noteExtras: ['showPath', 'showIsland', 'showNoteInfo', 'markdownPro', 'rawMarkStyle', 'rawMarkTint'],
+  // Markdown pro left this group 2026-11-07: it is one app-wide switch now (Settings → Extra features).
+  noteExtras: ['showPath', 'showIsland', 'showNoteInfo'],
   whileScrolling: ['pinLinks', 'pinPath', 'pinNoteHeader', 'pinTabs'],
   shortcuts: ['toolbarSlots']
 }

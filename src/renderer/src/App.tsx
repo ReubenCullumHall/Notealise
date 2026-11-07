@@ -79,7 +79,7 @@ import { STEPS, type StepId } from './onboarding/model'
 import { LinkInspector, type Inspect } from './links/LinkInspector'
 import { rewriteLinks, titleOf, type LinkRow } from '../../shared/links'
 import { countWords } from '../../shared/plainText'
-import type { LinkEnv, LinkHandlers, MediaDelete, OpenHow } from './editor/linkEnv'
+import type { LinkEnv, LinkHandlers, MediaDelete, OpenHow, PickedMediaDelete } from './editor/linkEnv'
 import {
   type MediaLanding,
   asRestoreResult,
@@ -1595,6 +1595,8 @@ export default function App(): React.JSX.Element {
       // The editor has no notice strip of its own, so it borrows this one —
       // the same line "Couldn't make that note" already appears on.
       notify: (message) => flash(message),
+      // A note asking for a Settings page (the voice note's "More accurate transcription").
+      openSettings: (section) => setSettingsJumpTo(section as SectionId),
       confirmMediaDelete: (req) => {
         // THE FILE ONLY EVER LEAVES WHEN THE LAST NOTE STOPS USING IT.
         //
@@ -1655,6 +1657,7 @@ export default function App(): React.JSX.Element {
         setConfirmClosing(false)
         setMediaConfirm(req)
       },
+      binPickedMedia: (req) => binPickedMediaRef.current(req),
       readNote: async (p) => docsRef.current.get(p) ?? (await window.api.readNote(p)),
       menu: (x, y, items, heading) =>
         setMenu({
@@ -1783,6 +1786,47 @@ export default function App(): React.JSX.Element {
    *  the same reason `settingsRef` sits beside it. The notice is not a courtesy:
    *  it is the only thing standing between a stray Backspace and a file leaving
    *  the note with nothing said about it. */
+  /** Several picked blocks deleted together (blockPick.ts): the files of their voice notes,
+   *  pictures and videos go to the bin in one move, under the same rule as one — a file another
+   *  note, or this one, still uses stays. One notice; Undo puts the blocks and the files back
+   *  (Reuben, 2026-11-07). No dialog: it would have to be one per file. */
+  const binPickedMediaRef = useRef<(req: PickedMediaDelete) => void>(() => {})
+  binPickedMediaRef.current = (req) => {
+    const text = docsRef.current.get(req.note)
+    const seen = new Set<string>()
+    const go = req.items.filter(({ file }) => {
+      if (seen.has(file)) return false
+      seen.add(file)
+      if (text && indexEmbeds(text).some((t) => resolveVaultPath(t, req.note) === file)) return false
+      return otherNotesUsing(mediaUsageRef.current, file, req.note).length === 0
+    })
+    if (!go.length) return
+    void run(async () => {
+      const ws = await window.api.trashEntries(
+        go.map((g) => g.file),
+        Object.fromEntries(go.map((g) => [g.file, g.origin]))
+      )
+      setWorkspace(ws)
+      await loadTree()
+      const moved = go.flatMap((g) => {
+        const id = ws.trash.find((t) => t.from === g.file)?.id
+        return id ? [{ id, file: g.file }] : []
+      })
+      if (moved.length < go.length) flash(`Couldn't move ${go.length - moved.length === 1 ? 'a file' : `${go.length - moved.length} files`} to the bin — still in your vault`)
+      if (!moved.length) return
+      showNotice({
+        text: moved.length === 1 ? 'Moved its file to the bin.' : `Moved ${moved.length} files to the bin.`,
+        action: {
+          label: 'Undo',
+          run: () => {
+            if (!req.restore()) flash('Couldn’t put the blocks back — the note has changed since')
+            for (const m of moved) unbinMedia(m.id, m.file)
+          }
+        }
+      })
+    })
+  }
+
   const deleteMediaNowRef = useRef<(req: MediaDelete) => void>(() => {})
   deleteMediaNowRef.current = (req) => {
     void run(async () => {
@@ -3625,9 +3669,9 @@ export default function App(): React.JSX.Element {
   const purgeRecovery = (ids?: string[]): void =>
     void run(async () => setWorkspace(await window.api.purgeRecoveryEntries(ids)))
 
-  // No naming prompt — a click should just create the thing. A collision
-  // (another "Untitled") is resolved by main with a " (2)", " (3)"... suffix,
-  // same convention restoreEntry already uses. Rename afterwards if wanted.
+  // No naming prompt — a click should just create the thing. Main names it with
+  // the vault's next "Untitled N" (one count for notes, folders and voice notes —
+  // shared/untitled.ts), so no two share a name. Rename afterwards if wanted.
   // "" means "the top of what I'm looking at", which is the active space's
   // folder — not the vault root. Making a note in the Revision space must not
   // drop it beside the spaces; that's the whole point of the hierarchy.
@@ -4740,7 +4784,7 @@ export default function App(): React.JSX.Element {
                   linksPosition={space.linksPosition}
                   pinNoteHeader={space.pinNoteHeader}
                   onScrollTopChange={i === layout.focus ? setFocusedScrolledPastTop : undefined}
-                  markdownPro={space.markdownPro}
+                  markdownPro={settings.markdownPro}
                   // Which notes are RAW is a property of each note, so it sits
                   // in workspace.json beside its pin and its colour — not in the
                   // space, and not in React state that a reopen would forget.

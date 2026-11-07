@@ -1,6 +1,7 @@
 import { EditorView, WidgetType } from '@codemirror/view'
 import type { VideoLink } from '../../../shared/embeds'
 import { attachDragHandle } from './attachMove'
+import { pickOnModifierClick } from './blockPick'
 import { sourceCaption } from './mediaSource'
 import { openPasteOptions } from './pasteLink'
 
@@ -72,6 +73,8 @@ export class VideoCardWidget extends WidgetType {
     const wrap = document.createElement('span')
     wrap.className = this.selected ? 'cm-video-card cm-attach-selected' : 'cm-video-card'
     wrap.appendChild(attachDragHandle(view))
+    // Cmd/Ctrl/Shift+click anywhere on it picks it with other blocks, as its six dots do.
+    pickOnModifierClick(view, wrap)
 
     const stage = document.createElement('span')
     stage.className = 'cm-vc-stage'

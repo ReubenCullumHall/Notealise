@@ -95,6 +95,52 @@ export interface PickedAudio {
   tooBig: string[]
 }
 
+/** How far a transcription has got (main -> renderer). `waiting` — how many are
+ *  ahead of it in line (0 = running now); `etaMs` — the guess at what's left, null
+ *  while it is too early to say. */
+export interface TranscribeProgress {
+  job: string
+  percent: number
+  etaMs: number | null
+  waiting: number
+}
+
+/** One word and when it was said, in ms from the recording's start. */
+export interface WordTime {
+  text: string
+  from: number
+  to: number
+}
+
+/** "More accurate transcription" (Whisper Turbo, a one-time 550 MB download). */
+export interface AccurateStatus {
+  state: 'none' | 'downloading' | 'ready'
+  received: number
+  total: number
+}
+/** `accurateDownload()`'s answer. `offline` — no connection, or it stalled; `damaged` —
+ *  the file didn't match its fingerprint and was thrown away; `no-space` — not enough room
+ *  on the disk; `busy` — a download is already going. */
+export type AccurateDownload =
+  | { ok: true }
+  | { ok: false; reason: 'offline' | 'damaged' | 'no-space' | 'failed' | 'cancelled' | 'busy' }
+
+/** `transcribeRun()`'s answer. `unavailable` — this copy of the app has no Whisper
+ *  program; `empty` — no words were heard; `failed` — the program stopped with an
+ *  error (or got stuck); `cancelled` — Cancel, or the window closed. */
+export type TranscribeResult =
+  | {
+      ok: true
+      paragraphs: string[]
+      /** every word and when it was said (ms from the recording's start) — for the clip
+       *  editor's "edit by the words"; the note itself stores only the text */
+      words: WordTime[]
+      language: string | null
+      /** true when Whisper Turbo did the transcribing ("More accurate transcription") */
+      accurate: boolean
+    }
+  | { ok: false; reason: 'unavailable' | 'empty' | 'failed' | 'cancelled' }
+
 /** The typed API exposed on `window.api` by the preload bridge. Every path
  *  argument is vault-relative and validated against the vault root in main. */
 export interface VaultApi {
@@ -127,15 +173,18 @@ export interface VaultApi {
   readVersion(path: string, token: string): Promise<string>
   /** Keep the note as it is on disk now as a version, before a restore replaces it. */
   keepVersionNow(path: string): Promise<void>
-  /** Create `<dirPath>/<name>.md` ("" = vault root, name defaults to "Untitled"),
+  /** Create `<dirPath>/<name>.md` ("" = vault root; with no name, the vault's next "Untitled N"),
    *  or "<name> (2).md" etc. if that name's taken. The name is sanitised, so
    *  ALWAYS use the vault-relative path this returns rather than the one asked
    *  for. */
   createNote(dirPath: string, name?: string): Promise<string>
-  /** Create a folder inside `dirPath`, named `name` (or "New folder" when
-   *  omitted), suffixed " (2)" etc. if taken. The name is sanitised, so ALWAYS
+  /** Create a folder inside `dirPath`, named `name` (or the vault's next
+   *  "Untitled N" when omitted), suffixed " (2)" etc. if taken. The name is sanitised, so ALWAYS
    *  use the vault-relative path this returns rather than the one asked for. */
   createFolder(dirPath: string, name?: string): Promise<string>
+  /** The next `count` names from the vault's one "Untitled N" count (shared/untitled.ts) —
+   *  for voice notes made without a name. A number is never given out twice. */
+  untitledNames(count: number): Promise<string[]>
   /** Rename/move; target segment sanitised. Migrates the entry's workspace.json
    *  key (and its descendants'). Returns the actual new rel path. */
   renameEntry(from: string, to: string): Promise<string>
@@ -355,6 +404,28 @@ export interface VaultApi {
   recordingAppend(id: string, data: Uint8Array): Promise<boolean>
   recordingEnd(id: string): Promise<void>
   recordingsLeft(): Promise<RecoveredRecording[]>
+  /** Transcribe (docs/plans/transcribe.md): worked out on this computer by the Whisper
+   *  program inside the app — nothing goes online. Open a job, send the recording as
+   *  16 kHz mono 16-bit samples in pieces (at most 2 hours in all), then run it; the
+   *  answer is the words as paragraphs. Writes nothing into the vault. */
+  transcribeAvailable(): Promise<boolean>
+  /** `recording` — the voice note's file (vault path), so its word times can be kept for the
+   *  clip editor; leave it out for a recording that isn't in the vault yet. */
+  transcribeBegin(recording?: string): Promise<string>
+  transcribeAppend(job: string, samples: Int16Array): Promise<void>
+  transcribeRun(job: string): Promise<TranscribeResult>
+  transcribeCancel(job: string): Promise<void>
+  onTranscribeProgress(cb: (p: TranscribeProgress) => void): () => void
+  /** The word times kept when this recording was transcribed, or null when there are none or
+   *  the recording has changed since (moved, renamed, edited). Never transcribes by itself. */
+  transcribeWordTimes(recording: string): Promise<WordTime[] | null>
+  accurateStatus(): Promise<AccurateStatus>
+  /** The one-time Turbo download, only on the user's click. Resolves when it ends. */
+  accurateDownload(): Promise<AccurateDownload>
+  accurateCancel(): Promise<void>
+  /** Back to Base: deletes the download. `ok: false` while a transcription is running. */
+  accurateRemove(): Promise<{ ok: boolean }>
+  onAccurateProgress(cb: (p: { received: number; total: number }) => void): () => void
   /** Subscribe to update state changes; returns an unsubscribe function. */
   onUpdateStatus(cb: (status: UpdateStatus) => void): () => void
 

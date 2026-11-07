@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transcribe a voice note — plan</title>
+<style>
+  :root { --ink:#1d1d1f; --mute:#6e6e73; --line:#e5e5ea; --wash:#f5f5f7; --acc:#3a5a40; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#f2f2f7; --mute:#a1a1a6; --line:#3a3a3c; --wash:#1c1c1e; --acc:#9cc5a1; } body { background:#111; } }
+  body { font: 16px/1.55 -apple-system, "Segoe UI", Inter, sans-serif; color: var(--ink); margin: 0; }
+  main { max-width: 760px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  .status { color: var(--mute); font-size: 14px; margin-bottom: 24px; }
+  h2 { font-size: 17px; margin: 32px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .goal { background: var(--wash); border-radius: 10px; padding: 14px 16px; }
+  ol, ul { padding-left: 22px; } li { margin: 6px 0; }
+  .tick { list-style: none; padding-left: 0; } .tick li::before { content: "☐ "; } .tick li.done::before { content: "☑ "; color: var(--acc); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; } td, th { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--mute); font-weight: 600; }
+  .num { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+  .flag { border-left: 3px solid #d9822b; padding: 8px 12px; background: var(--wash); border-radius: 0 8px 8px 0; margin: 10px 0; }
+  .ko { font-size: 15px; } .bad { text-decoration: line-through; color: var(--mute); }
+  small { color: var(--mute); }
+  .pick { border:1px solid var(--line); border-radius:10px; padding:12px; margin:14px 0; }
+  .pick h3 { margin:0 0 4px; font-size:15px; } .pick p { margin:4px 0 8px; font-size:14px; color:var(--mute); }
+  .pick img, .shot img { width:100%; height:auto; border-radius:8px; border:1px solid var(--line); display:block; }
+  .tag { display:inline-block; font-weight:700; background:var(--wash); border-radius:6px; padding:1px 8px; margin-right:6px; }
+  .rec { color:var(--acc); font-weight:600; }
+</style>
+</head>
+<body><main>
+<h1>Transcribe a voice note</h1>
+<div class="status">Started 4 Nov 2026 · <b>Building</b>: the behind-the-scenes half is done and works in the real app on your Mac. The right-click <b>Transcribe</b> and the progress bar go in once the clip editor is logged (it uses the same files).</div>
+
+<div class="goal">"Transcribe a voice note into plain text in the note. It must run on the computer only — nothing sent online."<br>
+<b>Done</b> = right-click a voice note → <b>Transcribe</b>, and its words land as plain text under it, worked out on the computer itself, on Mac, Windows and Linux, without the app slowing down.</div>
+<h2>Pick: how Transcribe looks (6 Nov)</h2>
+<p><small>Photographed from the real app. The new piece is put into the real voice note using the app's own styles, but nothing in the app has changed yet. The real recording is 8 seconds long; the transcript text is from the test clips.</small></p>
+
+<div class="pick"><h3><span class="tag">Today</span>The voice note as it is now</h3><img src="page-img/voice-now-light.png" alt="Today's voice note row"></div>
+
+<div class="pick"><h3><span class="tag">A</span>An icon in the row, between skip-forward and the scissors</h3>
+<p>Tidy: the row keeps its look. Hover shows "Transcribe". Easy to miss for someone new.</p><img src="page-img/voice-A-light.png" alt="Option A"></div>
+
+<div class="pick"><h3><span class="tag">B</span>A "Transcribe" button at the end of the row</h3>
+<p>Clear wording, but the row gets crowded and the waveform shrinks to make room.</p><img src="page-img/voice-B-light.png" alt="Option B"></div>
+
+<div class="pick"><h3><span class="tag">C</span>"Transcribe" under the row <span class="rec">— recommended</span></h3>
+<p>The easiest to spot, and the row is untouched. It shows only until the voice note is transcribed; then the transcript takes its place.</p><img src="page-img/voice-C-light.png" alt="Option C"></div>
+
+<div class="pick"><h3>While it works</h3><p>In the same spot: the bar, how far it is, and Cancel. On a slow computer, the "long time" line.</p>
+<img src="page-img/voice-P1-light.png" alt="Transcribing 40%"><br><img src="page-img/voice-P2-light.png" alt="Slow computer message"></div>
+
+<div class="pick"><h3>The transcript inside the voice note</h3>
+<p>A thin line under the row, then the words in the note's own text. The small button bottom-left is "Separate transcript from audio block" (its label shows on hover).</p>
+<img src="page-img/voice-T1-light.png" alt="Short transcript"></div>
+
+<div class="pick"><h3>A long transcript: 10 lines, then it scrolls</h3><img src="page-img/voice-T2-light.png" alt="Long transcript, scrolling"><br><img src="page-img/voice-T2-dark.png" alt="Long transcript, dark"></div>
+
+<div class="pick"><h3>After the clip has been edited</h3><p>The words stay (you may have corrected them). A line above offers to redo them.</p><img src="page-img/voice-T3-light.png" alt="Transcribe again"></div>
+
+<div class="pick"><h3>Settings → Extra features (your new entry)</h3>
+<p>Under Data, above Help. Markdown pro moves here as one on/off switch, along with "More accurate transcription". The boxed part shows the download's other two states.</p>
+<img src="page-img/settings-extra-light.png" alt="Settings, Extra features"></div>
+
+<div class="flag"><b>Known problems, left visible:</b> the Separate button is a small icon, so people may only find it by hovering over it. The Settings picture uses today's Settings style; the Settings redesign you haven't picked yet would restyle it along with everything else.</div>
+
+
+<h2>Waiting on you</h2>
+<p>Nothing right now.</p>
+
+<h2>Checklist</h2>
+<ul class="tick">
+  <li class="done">Plan</li><li class="done">Measure Base on your Mac</li><li class="done">Build: the Whisper program inside each download, running quietly in the background</li><li class="done">Build: "More accurate transcription — 550 MB" download (behind the scenes; 32 s on your connection, Cancel and Remove work)</li>
+  <li class="done">Build: each word's timing kept for the clip editor's "edit by the words"</li>
+  <li>Build: Transcribe button + right-click item, progress bar, transcript inside the voice note, Separate button, the Settings row (after the clip editor is logged — shown to you first)</li><li>You try it on the Mac</li>
+  <li>Windows check</li><li>Changelog line</li><li>Docs</li><li>Shipped</li>
+</ul>
+
+<h2>What you picked</h2>
+<ol>
+  <li><b>The button:</b> right-click the voice note → <b>Transcribe</b>. Once it's done, it reads <b>Transcribe again</b>.</li>
+  <li><b>The text:</b> plain paragraphs straight under the voice note, broken where the speaker pauses. Other apps see ordinary text.</li>
+  <li><b>Languages:</b> worked out by itself for each recording, Korean included. No language setting.</li>
+  <li><b>While it works:</b> a thin bar under the voice note — <b>Transcribing · 40% · Cancel</b>. You can keep typing and playing. The text lands in one go, and one Cmd/Ctrl+Z takes it back out.</li>
+  <li><b>Size:</b> Base is built into the app. No download, and it works with no internet. Each download gets about 65 MB bigger.</li>
+  <li><b>Smoothness:</b> Whisper runs as its own separate program at low priority, on half the processor, one recording at a time, with Cancel any time.</li>
+  <li><b>Slow computers:</b> the bar says <b>This will take a long time on this computer — about 6 min</b> when the guess is over 2 minutes.</li>
+  <li><b>Edited clip:</b> the text stays as it is. Press Transcribe again to redo it.</li>
+  <li><b>Transcribe again:</b> the new text goes under the old, so words you corrected by hand are never deleted.</li>
+</ol>
+
+<h2>Base vs the bigger versions, on real voices (18 languages)</h2>
+<p><small>Mistakes in every 100 words (in every 100 letters for Japanese, Korean and Chinese). Lower is better. Real people reading, 30 clips per language.</small></p>
+<table><tr><th>Language</th><th>Base<br><small>57 MB, built in</small></th><th>Small<br><small>190 MB</small></th><th>Turbo<br><small>550 MB</small></th></tr>
+<tr><td>English</td><td class='num'>8.5</td><td class='num'>5.7</td><td class='num'>4.8</td></tr>
+<tr><td>Spanish</td><td class='num'>9.7</td><td class='num'>6.1</td><td class='num'>3.7</td></tr>
+<tr><td>French</td><td class='num'>24.2</td><td class='num'>10.8</td><td class='num'>5.4</td></tr>
+<tr><td>German</td><td class='num'>19.3</td><td class='num'>9.3</td><td class='num'>3.6</td></tr>
+<tr><td>Portuguese</td><td class='num'>11.1</td><td class='num'>7</td><td class='num'>3.8</td></tr>
+<tr><td>Italian</td><td class='num'>21.9</td><td class='num'>10.7</td><td class='num'>3.7</td></tr>
+<tr><td>Dutch</td><td class='num'>37.5</td><td class='num'>19.6</td><td class='num'>9.6</td></tr>
+<tr><td>Russian</td><td class='num'>15.8</td><td class='num'>8.9</td><td class='num'>4.4</td></tr>
+<tr><td>Polish</td><td class='num'>40.5</td><td class='num'>19.7</td><td class='num'>6.1</td></tr>
+<tr><td>Turkish</td><td class='num'>31.4</td><td class='num'>14.2</td><td class='num'>8.9</td></tr>
+<tr><td>Ukrainian</td><td class='num'>43.8</td><td class='num'>32.4</td><td class='num'>10.1</td></tr>
+<tr><td>Arabic</td><td class='num'>49.4</td><td class='num'>28.5</td><td class='num'>14.5</td></tr>
+<tr><td>Hindi</td><td class='num'>100.7</td><td class='num'>39.7</td><td class='num'>26.7</td></tr>
+<tr><td>Vietnamese</td><td class='num'>41.8</td><td class='num'>21.6</td><td class='num'>9.6</td></tr>
+<tr><td>Indonesian</td><td class='num'>42.9</td><td class='num'>24.5</td><td class='num'>10.3</td></tr>
+<tr><td>Japanese</td><td class='num'>28.3</td><td class='num'>13.7</td><td class='num'>4.4</td></tr>
+<tr><td>Korean</td><td class='num'>11.7</td><td class='num'>7.1</td><td class='num'>4</td></tr>
+<tr><td>Chinese</td><td class='num'>30</td><td class='num'>19.3</td><td class='num'>4.4</td></tr>
+<tr><td><b>10 minutes, your Mac</b></td><td class='num'>28 s</td><td class='num'>47 s</td><td class='num'>88 s</td></tr>
+<tr><td><b>10 minutes, processor only</b><br><small>nearest to Windows / Linux</small></td><td class='num'>33 s</td><td class='num'>73 s</td><td class='num'>183 s</td></tr>
+</table>
+<p><small>Hindi and Chinese Base scores are from before the script fix, so they look worse than the app now does.</small></p>
+<h2>Fixed: each language in its own words</h2>
+<p>Whisper picks one language from the first 30 seconds, whatever its size, so the 550 MB download wouldn't have helped. Base names the language correctly even from 2 seconds of speech. So the app now cuts a recording at its pauses, checks each stretch's language, and transcribes each stretch in its own language. A change of language starts a new paragraph.</p>
+<table>
+  <tr><th>What</th><th>Result</th></tr>
+  <tr><td>English then Korean (1 min 42 s)</td><td>English paragraph, then a Korean paragraph, in <span class="num">7.9 s</span></td></tr>
+  <tr><td>10 minutes of English</td><td><span class="num">29 s</span> (no slower than before)</td></tr>
+  <tr><td>Still a limit</td><td>English and Korean mixed <i>inside one sentence</i> are written in that stretch's language</td></tr>
+</table>
+
+<h2>Silence, noise and typing</h2>
+<ul>
+<li>Silence, background hiss and a beeping tone come back as "no words heard". Before the fix, Whisper made up "You" and "www.cabella.com".</li>
+<li>Whispering, someone far from the microphone and fast talking: nearly word-perfect. A noisy café: a few words wrong.</li>
+<li>Typing in a note while a 10-minute recording transcribes: no slower than normal (8 ms from key to letter).</li>
+</ul>
+
+<h2>Tried in the real app on your Mac</h2>
+<table>
+  <tr><th>What</th><th>Result</th></tr>
+  <tr><td>9.7-minute recording</td><td><span class="num">33 s</span>, in the background at low priority</td></tr>
+  <tr><td>Did the window stay smooth?</td><td>Yes. The longest stutter was <span class="num">26 ms</span>, too short to notice.</td></tr>
+  <tr><td>Cancel</td><td>Stopped within <span class="num">1.5 s</span></td></tr>
+  <tr><td>Two at once</td><td>The second waited its turn, then ran</td></tr>
+</table>
+
+<div class="flag"><b>Known problems, left visible:</b>
+<ul>
+<li><b>The first Transcribe after installing is slower on a Mac.</b> It took about 20 seconds extra; later ones were fast. It will probably happen again after each update. <i>You said that's fine.</i></li>
+<li><b>Not tried yet:</b> the app as downloaded from the website (with macOS's "Open Anyway" step), an Intel Mac, Windows and Linux. Windows and Linux get their first test from a GitHub check that runs when you next push.</li>
+<li><b>The "long time" warning:</b> its first guess was 5× too high, so it now waits until 15% is done before deciding.</li>
+</ul></div>
+
+<h2>Measured on your MacBook Air</h2>
+<p><small>Test recordings are the Mac's own voices with background noise added. They're cleaner than a real phone recording, so real results will be somewhat worse.</small></p>
+<table>
+  <tr><th>What</th><th>Result</th></tr>
+  <tr><td>Added to each download</td><td><span class="num">8 MB</span> Whisper program + <span class="num">57 MB</span> Base file</td></tr>
+  <tr><td>10 minutes of speech, your Mac</td><td><span class="num">17–26 s</span></td></tr>
+  <tr><td>Same, processor only<br><small>(nearest stand-in for Windows, Linux and Intel Macs)</small></td><td><span class="num">~36 s</span><br><small>A typical Windows laptop is slower than your M4: guess 1–2 min, not measured.</small></td></tr>
+  <tr><td>English</td><td>Close to word-perfect on ordinary speech. American spelling ("factorize").</td></tr>
+  <tr><td>Korean</td><td>About <b>1 word in 8 wrong</b>. Picked the language by itself.</td></tr>
+</table>
+
+<p class="ko">Korean misses, from the test clip:<br>
+<span class="bad">광합성</span> → 관합성 (photosynthesis) · <span class="bad">잎</span> → 입 (leaf → mouth) · <span class="bad">녹말</span> → 논말 (starch) · <span class="bad">빼기</span> → 대기 (minus) · <span class="bad">이로</span> → 1호</p>
+
+<div class="flag"><b>Found and fixed in the settings:</b> with Whisper's usual setting, long recordings went wrong in 3 of 5 runs. One sentence repeated up to 40 times, and once only 49 words came out of 10 minutes. The app will always run it with that behaviour turned off. Every run since has come out clean, and it's faster too.</div>
+
+<h2>Windows and Linux</h2>
+<ul>
+  <li>Same button, same text, same languages. Everything comes inside the download, so no internet is needed.</li>
+  <li>Slower than your Mac, because only the processor does the work. Slow computers get the "long time" line.</li>
+  <li>It works on any voice note that plays, including Windows Voice Recorder and WhatsApp files. A recording that can't play can't be transcribed.</li>
+  <li>Recordings up to 2 hours can be transcribed.</li>
+  <li>Not tried on Windows, Linux or an Intel Mac.</li>
+</ul>
+
+<h2>Rules it has to follow</h2>
+<ul>
+  <li>The text is ordinary note text. The Whisper file lives inside the app, never in your notes or OneDrive.</li>
+  <li>Only the behind-the-scenes part of the app runs Whisper. A bundled program has to be checked in the app itself, not just the test copy.</li>
+  <li>It works alongside the clip editor (the other session), which uses the same voice note and the same right-click menu.</li>
+</ul>
+</main></body>
+</html>

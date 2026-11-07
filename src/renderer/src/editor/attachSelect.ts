@@ -45,8 +45,8 @@ function isEmbed(text: string): boolean {
  *  apart. The format bar was the first to need it: selecting a picture popped up
  *  the highlight and text-colour swatches, offering to paint a JPEG pink. */
 export function selectionIsEmbed(state: EditorState): boolean {
-  const r = state.selection.main
-  return !r.empty && isEmbed(state.doc.sliceString(r.from, r.to))
+  // Every range, when several are picked (blockPick.ts): all pictures and voice notes.
+  return state.selection.ranges.every((r) => !r.empty && isEmbed(state.doc.sliceString(r.from, r.to)))
 }
 
 /** Every embed on the line containing `pos`, as document ranges. Found by
@@ -69,7 +69,12 @@ function embedsOnLine(state: EditorState, pos: number): { from: number; to: numb
  *  from `posAtDOM` on the grip button, so it lands at or inside the embed's own
  *  replaced range. */
 export function embedSpanAt(state: EditorState, pos: number): { from: number; to: number } | null {
-  return embedsOnLine(state, pos).find((s) => pos >= s.from && pos <= s.to) ?? null
+  const spans = embedsOnLine(state, pos)
+  // Two embeds written touching (`…</audio><audio …>`) share a position: the first one's end
+  // IS the second one's start, and that shared spot is exactly what `posAtDOM` gives for the
+  // SECOND one's grip. The one that starts there is the one clicked — otherwise its grip
+  // selected the voice note before it (Reuben, 2026-11-07: a take's dots ringed its master).
+  return spans.find((s) => s.from === pos) ?? spans.find((s) => pos >= s.from && pos <= s.to) ?? null
 }
 
 /** True when the document selection covers `from`–`to` exactly.
@@ -80,8 +85,15 @@ export function embedSpanAt(state: EditorState, pos: number): { from: number; to
  *  embed would flip it to raw markdown, which is the opposite of showing the
  *  user what they are about to delete. */
 export function selectionCovers(view: EditorView, from: number, to: number): boolean {
-  const r = view.state.selection.main
-  return !r.empty && r.from === from && r.to === to
+  // Any of the ranges, when several blocks are picked (blockPick.ts).
+  return view.state.selection.ranges.some((r) => !r.empty && r.from === from && r.to === to)
+}
+
+/** True when this embed is the ONE thing selected — what a second click on its grip
+ *  needs (the voice note's name menu), as opposed to one of several picked. */
+export function selectionIsOnly(view: EditorView, from: number, to: number): boolean {
+  const sel = view.state.selection
+  return sel.ranges.length === 1 && sel.main.from === from && sel.main.to === to
 }
 
 /** Whether the selection swallows this embed WHOLE — the exact-cover case above
@@ -102,8 +114,7 @@ export function selectionCovers(view: EditorView, from: number, to: number): boo
  *  work with the text, and it moves nothing, because the picture was already
  *  raw for the cursor that started it. */
 export function selectionSwallows(view: EditorView, from: number, to: number): boolean {
-  const r = view.state.selection.main
-  return !r.empty && r.from <= from && r.to >= to
+  return view.state.selection.ranges.some((r) => !r.empty && r.from <= from && r.to >= to)
 }
 
 /** Whether the selection is genuinely INSIDE this embed, rather than merely

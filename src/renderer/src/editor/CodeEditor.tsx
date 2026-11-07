@@ -9,6 +9,7 @@ import { applyColor, clearColor } from './colorCommands'
 import { SelectionToolbar } from './SelectionToolbar'
 import { setLinkEnv, type LinkEnv, type LinkHandlers } from './linkEnv'
 import { selectionIsEmbed } from './attachSelect'
+import { isDotPick } from './blockPick'
 import { rawViewOf } from './rawView'
 import { mediaSourceOf } from './mediaSource'
 import type { Layer } from './palette'
@@ -201,7 +202,9 @@ export function CodeEditor({
     // no sense. Its own affordance is the ring plus Backspace. Nor is a
     // selection inside a `[[link]]` — a link takes no colour (Reuben,
     // 2026-09-29), so a colour bar there would offer what can't happen.
-    if (sel.empty || !box || selectionIsEmbed(view.state) || insideWikiLink(view.state)) {
+    // Nor is a block picked by its six dots (or Cmd/Ctrl-click): a pick is a whole block to move or
+    // delete, and the bar over it covered the block above and its dots (2026-11-07).
+    if (sel.empty || !box || selectionIsEmbed(view.state) || insideWikiLink(view.state) || isDotPick(view.state)) {
       cancelSettle()
       setTb(null)
       return

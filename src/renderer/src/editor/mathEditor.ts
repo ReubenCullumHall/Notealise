@@ -57,15 +57,26 @@ class EditingMathWidget extends WidgetType {
     return other.latex === this.latex && other.kind === this.kind && other.open === this.open
   }
   toDOM(): HTMLElement {
-    const el = document.createElement(this.kind === 'fenced' ? 'div' : 'span')
+    if (this.kind !== 'fenced') {
+      const el = document.createElement('span')
+      this.paint(el)
+      return el
+    }
+    // A block: in the frame the editor measures (app.css `.cm-block-frame`) — the maths'
+    // own margins are not something CodeMirror counts.
+    const frame = document.createElement('div')
+    frame.className = 'cm-block-frame'
+    const el = document.createElement('div')
     this.paint(el)
-    return el
+    frame.appendChild(el)
+    return frame
   }
   // Redrawn in place on every keystroke rather than replaced, so the box keeps
   // measuring the same element and nothing flickers.
   updateDOM(dom: HTMLElement): boolean {
-    if ((dom.tagName === 'DIV') !== (this.kind === 'fenced')) return false
-    this.paint(dom)
+    const framed = dom.classList.contains('cm-block-frame')
+    if (framed !== (this.kind === 'fenced')) return false
+    this.paint(framed ? (dom.firstElementChild as HTMLElement) : dom)
     return true
   }
   private paint(el: HTMLElement): void {
@@ -94,9 +105,9 @@ function editDecos(state: EditorState): DecorationSet {
   const widget = new EditingMathWidget(e.latex, e.kind, e.open)
   const doc = state.doc
   if (e.kind === 'fenced') {
-    // A block replacement has to cover whole lines (see blockMath.ts).
-    const last = doc.lineAt(e.to)
-    const end = last.number < doc.lines ? doc.line(last.number + 1).from : last.to
+    // A block replacement covers whole lines — to the end of the closing `$$` line, never into
+    // the line after, which would swallow a blank line under the block (see blockMath.ts).
+    const end = doc.lineAt(e.to).to
     return Decoration.set(Decoration.replace({ widget, block: true }).range(doc.lineAt(e.from).from, end))
   }
   // An inline formula with nothing typed yet has no text to cover.

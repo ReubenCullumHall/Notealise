@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { CH } from '../shared/channels'
-import type { VaultApi, VaultChange } from '../shared/types'
+import type { TranscribeProgress, VaultApi, VaultChange } from '../shared/types'
 import type { UpdateStatus } from '../shared/update'
 import type { ImportProgress } from '../shared/notesImport'
 
@@ -27,6 +27,7 @@ const api: VaultApi = {
   keepVersionNow: (p) => ipcRenderer.invoke(CH.keepVersionNow, p),
   createNote: (dir, name) => ipcRenderer.invoke(CH.createNote, dir, name),
   createFolder: (dir, name) => ipcRenderer.invoke(CH.createFolder, dir, name),
+  untitledNames: (count) => ipcRenderer.invoke(CH.untitledNames, count),
   renameEntry: (from, to) => ipcRenderer.invoke(CH.renameEntry, from, to),
   moveEntryInto: (from, toDir) => ipcRenderer.invoke(CH.moveEntryInto, from, toDir),
   scanLinks: (paths) => ipcRenderer.invoke(CH.scanLinks, paths),
@@ -78,6 +79,30 @@ const api: VaultApi = {
   recordingAppend: (id, data) => ipcRenderer.invoke(CH.recordingAppend, id, data),
   recordingEnd: (id) => ipcRenderer.invoke(CH.recordingEnd, id),
   recordingsLeft: () => ipcRenderer.invoke(CH.recordingsLeft),
+  transcribeAvailable: () => ipcRenderer.invoke(CH.transcribeAvailable),
+  transcribeBegin: (recording) => ipcRenderer.invoke(CH.transcribeBegin, recording),
+  transcribeAppend: (job, samples) => ipcRenderer.invoke(CH.transcribeAppend, job, samples),
+  transcribeRun: (job) => ipcRenderer.invoke(CH.transcribeRun, job),
+  transcribeCancel: (job) => ipcRenderer.invoke(CH.transcribeCancel, job),
+  transcribeWordTimes: (recording) => ipcRenderer.invoke(CH.transcribeWordTimes, recording),
+  accurateStatus: () => ipcRenderer.invoke(CH.accurateStatus),
+  accurateDownload: () => ipcRenderer.invoke(CH.accurateDownload),
+  accurateCancel: () => ipcRenderer.invoke(CH.accurateCancel),
+  accurateRemove: () => ipcRenderer.invoke(CH.accurateRemove),
+  onAccurateProgress: (cb) => {
+    const listener = (_e: unknown, p: { received: number; total: number }): void => cb(p)
+    ipcRenderer.on(CH.accurateProgress, listener)
+    return () => {
+      ipcRenderer.removeListener(CH.accurateProgress, listener)
+    }
+  },
+  onTranscribeProgress: (cb) => {
+    const listener = (_e: unknown, p: TranscribeProgress): void => cb(p)
+    ipcRenderer.on(CH.transcribeProgress, listener)
+    return () => {
+      ipcRenderer.removeListener(CH.transcribeProgress, listener)
+    }
+  },
   vaultEstablished: () => ipcRenderer.invoke(CH.vaultEstablished),
   getOnboarded: () => ipcRenderer.invoke(CH.getOnboarded),
   setOnboarded: (value) => ipcRenderer.invoke(CH.setOnboarded, value),

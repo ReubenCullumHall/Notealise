@@ -24,6 +24,10 @@ export const TRANSCRIPT_SUMMARY = 'Transcript'
  *  sending it (~230 MB an hour). Two hours covers a long lecture. Main enforces it too. */
 export const TRANSCRIBE_MAX_SECONDS = 2 * 60 * 60
 
+/** The guess past which the voice note says "This will take a long time on this computer"
+ *  (Reuben, 2026-11-04; the 2-minute cut-off is assumed). */
+export const TRANSCRIBE_SLOW_MS = 2 * 60 * 1000
+
 const OPEN = /^<details\s+data-transcript\s*=\s*"([^"]*)"\s*>\s*<summary>\s*Transcript\s*<\/summary>\s*$/i
 const CLOSE = /^\s*<\/details>\s*$/i
 
@@ -103,4 +107,27 @@ export function transcriptIsStale(found: FoundTranscript, audioSrc: string): boo
  *  gone. Hand edits are kept exactly. */
 export function separatedText(found: FoundTranscript): string {
   return found.paragraphs.join('\n\n')
+}
+
+/** What a paragraph reads as on screen: the escapes `escapeSpoken` added taken back out. */
+export function unescapeSpoken(text: string): string {
+  return text.replace(/\\([\\`*_[\]<>$|~#.)+=-])/g, '$1')
+}
+
+/** Where a new transcript goes, as a replacement of whole lines: replace lines
+ *  [from, to) (0-based) with `lines`. With no transcript under the voice note on
+ *  `audioLine`, it goes straight under it. With one there already (Transcribe again),
+ *  the new one takes the fold and the OLD words come out under it as ordinary text —
+ *  they may have been corrected by hand, and nothing here deletes them (answer 9). */
+export function placeTranscript(
+  doc: readonly string[],
+  audioLine: number,
+  src: string,
+  paragraphs: string[]
+): { from: number; to: number; lines: string[] } {
+  const fold = transcriptBlock(src, paragraphs).split('\n')
+  const old = findTranscript(doc, audioLine)
+  if (!old) return { from: audioLine + 1, to: audioLine + 1, lines: fold }
+  const kept = old.paragraphs.length ? ['', ...separatedText(old).split('\n')] : []
+  return { from: old.open, to: old.close + 1, lines: [...fold, ...kept] }
 }

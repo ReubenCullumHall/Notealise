@@ -37,6 +37,7 @@ export const END = '</details>'
 
 const SUMMARY_RE = /^<details( open)?><summary>(.*)<\/summary>[ \t]*$/
 const END_RE = /^<\/details>[ \t]*$/
+const TRANSCRIPT_RE = /^<details\s+data-transcript\s*=\s*"[^"]*"\s*>\s*<summary>\s*Transcript\s*<\/summary>\s*$/i
 
 /** A line that is part of a toggle's markup: its title line or its end line.
  *  Block commands (headings, lists) leave these alone — a `- ` in front of
@@ -65,8 +66,26 @@ export function toggleText(title: string, body: string[], open: boolean, br = '\
 // ---------------------------------------------------------------------------
 
 export const toggleMarkdown: MarkdownConfig = {
-  defineNodes: [{ name: 'ToggleSummary', block: true }, 'ToggleMark', { name: 'ToggleEnd', block: true }],
+  defineNodes: [
+    { name: 'ToggleSummary', block: true },
+    'ToggleMark',
+    { name: 'ToggleEnd', block: true },
+    { name: 'TranscriptOpen', block: true }
+  ],
   parseBlock: [
+    // A voice note's transcript is a <details> fold too (shared/transcript.ts). It is not a
+    // toggle, but its `</details>` is a ToggleEnd — so its opening line must be seen, or that
+    // end would close whatever toggle the voice note sits in (found 2026-11-07, before it shipped).
+    {
+      name: 'TranscriptOpen',
+      before: 'HTMLBlock',
+      parse(cx, line) {
+        if (cx.parentType().name !== 'Document' || line.pos !== 0 || !TRANSCRIPT_RE.test(line.text)) return false
+        cx.addElement(cx.elt('TranscriptOpen', cx.lineStart, cx.lineStart + line.text.length))
+        cx.nextLine()
+        return true
+      }
+    },
     {
       name: 'ToggleSummary',
       before: 'HTMLBlock',
@@ -137,7 +156,7 @@ export function findToggles(state: EditorState): Toggle[] {
   const doc = state.doc
   const tree = syntaxTree(state)
   const out: Toggle[] = []
-  type Open = { from: number; to: number; parent: Open | null; made?: Toggle }
+  type Open = { from: number; to: number; parent: Open | null; made?: Toggle; transcript?: boolean }
   const stack: Open[] = []
   const made: { t: Toggle; entry: Open }[] = []
 
@@ -146,9 +165,13 @@ export function findToggles(state: EditorState): Toggle[] {
   do {
     if (cur.name === 'ToggleSummary') {
       stack.push({ from: cur.from, to: cur.to, parent: stack[stack.length - 1] ?? null })
+    } else if (cur.name === 'TranscriptOpen') {
+      // Pairs with its own </details>, and is never a toggle (see the parser rule above).
+      stack.push({ from: cur.from, to: cur.to, parent: stack[stack.length - 1] ?? null, transcript: true })
     } else if (cur.name === 'ToggleEnd') {
       const entry = stack.pop()
       if (!entry) continue // a stray </details>: left as the text it is
+      if (entry.transcript) continue
       const t = build(doc, entry.from, cur.from)
       entry.made = t
       made.push({ t, entry })

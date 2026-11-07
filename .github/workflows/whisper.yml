@@ -1,0 +1,39 @@
+name: Whisper program
+
+# Builds the Whisper program for Transcribe (tools/whisper/build.sh) on every system a
+# download is made for, whenever the script changes — so a build that breaks on Windows or
+# Linux shows up on a push, not on a release tag. Nothing is uploaded anywhere: each job
+# builds, transcribes whisper.cpp's sample with the Base file (build.sh's own check), and
+# stops. docs/plans/transcribe.md.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/whisper/**'
+      - '.github/workflows/whisper.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build + check (this runner's system)
+        shell: bash
+        run: tools/whisper/build.sh
+      - name: Build the Intel Mac program too
+        if: runner.os == 'macOS'
+        shell: bash
+        run: tools/whisper/build.sh x64
+      - name: Sizes
+        shell: bash
+        run: du -sh build-whisper/*

@@ -164,6 +164,21 @@ const bundledAssets = [
     version: '17.0.0',
     license: 'MIT',
     licenseText: readFileSync(path.join(ROOT, 'tools/licenses/emojibase-data-LICENSE.txt'), 'utf8').trim()
+  },
+  // Transcribe (docs/plans/transcribe.md): the Whisper program and the Base file ship in
+  // every download's resources (electron-builder.yml extraResources), not through npm.
+  // Keep the version in step with WHISPER_COMMIT in tools/whisper/build.sh.
+  {
+    name: 'whisper.cpp (Transcribe)',
+    version: '4da27c4',
+    license: 'MIT',
+    licenseText: readFileSync(path.join(ROOT, 'tools/licenses/whisper.cpp-LICENSE.txt'), 'utf8').trim()
+  },
+  {
+    name: 'OpenAI Whisper — Base, and Turbo when downloaded (Transcribe)',
+    version: 'base',
+    license: 'MIT',
+    licenseText: readFileSync(path.join(ROOT, 'tools/licenses/openai-whisper-LICENSE.txt'), 'utf8').trim()
   }
 ]
 

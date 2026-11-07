@@ -40,7 +40,12 @@ class BlockMathWidget extends WidgetType {
       div.className = 'math-error'
       div.textContent = '$$' + this.latex + '$$'
     }
-    return div
+    // In the frame the editor measures: the maths' own margins (and KaTeX's, which fold
+    // through them) are not something CodeMirror counts (app.css `.cm-block-frame`).
+    const frame = document.createElement('div')
+    frame.className = 'cm-block-frame'
+    frame.appendChild(div)
+    return frame
   }
   ignoreEvent(): boolean {
     return false
@@ -93,9 +98,11 @@ function build(state: EditorState): DecorationSet {
     // Inside a shut toggle: not drawn at all, the toggle hides those lines.
     if (hiddenLine(toggles, open)) continue
     const from = doc.line(open).from
-    // A block replacement must cover whole lines: end at the start of the
-    // line after the closing fence, or at the document's end if it's last.
-    const to = close < doc.lines ? doc.line(close + 1).from : doc.line(close).to
+    // A block replacement covers whole lines: to the end of the closing fence. It used to run
+    // on to the start of the line after, which swallowed a blank line under the block, so a
+    // table or a paragraph below sat hard against the formula with nowhere to click between
+    // (Reuben, 2026-11-07: "ensure there's a gap").
+    const to = doc.line(close).to
     // No reveal for the cursor or a selection, ever: the raw $$ never shows
     // outside Markdown pro (Reuben, 2026-09-27). It is edited in the maths box.
     if (edit && edit.from < to && edit.to > from) continue
@@ -150,12 +157,18 @@ const blockMathField = StateField.define<DecorationSet>({
 //   • typing at the very start or end of a note, beside a block that sits there,
 //     goes onto a line of its own.
 
+/** Where the block's stretch ends for the rules below: the start of the line after its
+ *  closing `$$`, or the note's end when it is last. (The drawn block itself ends at the end of
+ *  that `$$` line — see build.) */
+function after(doc: Text, to: number): number {
+  return to < doc.length ? to + 1 : to
+}
+
 /** The range the cursor must not sit inside: from the end of the line above the
  *  block to the start of the line below it. Both ends are ordinary places to
- *  type. `to` is the block's own replaced range end (the next line's start, or
- *  the note's end when the block is last). */
-function guard(from: number, to: number): { from: number; to: number } {
-  return { from: from > 0 ? from - 1 : 0, to }
+ *  type. */
+function guard(doc: Text, from: number, to: number): { from: number; to: number } {
+  return { from: from > 0 ? from - 1 : 0, to: after(doc, to) }
 }
 
 const ATOM = Decoration.mark({})
@@ -164,7 +177,7 @@ const blockAtomic = EditorView.atomicRanges.of((view) => {
   if (!set || set.size === 0) return Decoration.none
   const out = new RangeSetBuilder<Decoration>()
   set.between(0, view.state.doc.length, (from, to) => {
-    const g = guard(from, to)
+    const g = guard(view.state.doc, from, to)
     out.add(g.from, g.to, ATOM)
   })
   return out.finish()
@@ -177,9 +190,9 @@ function blockBeside(state: EditorState, forward: boolean): { from: number; to: 
   const head = state.selection.main.head
   let hit: { from: number; to: number } | null = null
   state.field(blockMathField, false)?.between(0, state.doc.length, (from, to) => {
-    const g = guard(from, to)
+    const g = guard(state.doc, from, to)
     if (forward ? head === g.from : head === g.to) {
-      hit = { from, to }
+      hit = { from, to: g.to }
       return false
     }
     return undefined
@@ -251,10 +264,16 @@ const blockKeys = Prec.high(
 const blockTyping = EditorView.inputHandler.of((view, from, to, text) => {
   if (from !== to || isRaw(view.state)) return false
   const doc = view.state.doc
+  // The browser can't put its caret after a block at the very end of the note, so typing there
+  // arrives as typing at the line above it; the editor's own cursor says where it really is
+  // (found 2026-11-07: a letter typed after a closing formula landed above it).
+  const sel = view.state.selection.main
+  const atEnd = from === doc.length || (sel.empty && sel.head === doc.length)
   let edit: { at: number; insert: string; cursor: number } | null = null
-  view.state.field(blockMathField, false)?.between(0, doc.length, (bFrom, bTo) => {
+  view.state.field(blockMathField, false)?.between(0, doc.length, (bFrom, end) => {
+    const bTo = after(doc, end)
     if (bFrom === 0 && from === 0) edit = { at: 0, insert: text + '\n', cursor: text.length }
-    else if (bTo === doc.length && from === doc.length) edit = { at: from, insert: '\n' + text, cursor: from + 1 + text.length }
+    else if (bTo === doc.length && atEnd) edit = { at: doc.length, insert: '\n' + text, cursor: doc.length + 1 + text.length }
   })
   if (!edit) return false
   const e: { at: number; insert: string; cursor: number } = edit

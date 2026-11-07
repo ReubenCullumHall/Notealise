@@ -1,4 +1,5 @@
 import { StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
+import { addsToPick, blockAt, pickFromClick } from './blockPick'
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { isRaw } from './rawView'
@@ -32,9 +33,9 @@ import {
 // blockMath.ts spells out: a table spans line breaks, replacing those needs
 // `block: true`, and CM6 does not allow a ViewPlugin to provide block
 // decorations. The other half of that contract matters just as much: a block
-// replacement's range must cover WHOLE lines — from a line start to the start of
-// the line after — so it ends at `doc.line(last + 1).from`, not at the table
-// node's own `to`.
+// replacement's range must cover WHOLE lines — from a line start to the end of
+// its last line. (Not on to the start of the line after: that swallowed a blank
+// line under the table, 2026-11-07.)
 //
 // WHY THE PIPES NEVER SHOW ANY MORE. This used to bail out whenever the
 // selection touched the table (`touchesSelection`), handing you the raw
@@ -102,7 +103,7 @@ interface FoundTable {
    *  replaces. Distinct from `blockTo` on purpose: replacing the newline too
    *  would weld the table to the paragraph beneath it. */
   to: number
-  /** start of the following line — what a block decoration must end at */
+  /** where the block decoration ends: the end of its last line, as `to` */
   blockTo: number
   model: TableModel
 }
@@ -120,7 +121,9 @@ function findTables(state: EditorState): FoundTable[] {
       // 2026-10-27) — so such a table is left as text, never rewritten.
       if (node.from > doc.lineAt(node.from).from) return false
       const firstLine = doc.lineAt(node.from).number
-      const lastLine = doc.lineAt(node.to).number
+      let lastLine = doc.lineAt(node.to).number
+      // The node can end at the start of the blank line under it; that line isn't the table's.
+      while (lastLine > firstLine && doc.line(lastLine).text.trim() === '') lastLine--
 
       let header: string[] = []
       let align: ReturnType<typeof parseAlign> = []
@@ -142,7 +145,10 @@ function findTables(state: EditorState): FoundTable[] {
       out.push({
         from: widths && above ? above.from : doc.line(firstLine).from,
         to: doc.line(lastLine).to,
-        blockTo: lastLine < doc.lines ? doc.line(lastLine + 1).from : doc.line(lastLine).to,
+        // To the end of its own last line. It used to run on to the start of the line after,
+        // which swallowed a blank line under the table, so whatever came next sat hard against
+        // it with nowhere to click between (Reuben, 2026-11-07: "ensure there's a gap").
+        blockTo: doc.line(lastLine).to,
         model: padRows(widths ? { header, align, rows, widths } : { header, align, rows })
       })
     }
@@ -206,6 +212,26 @@ class TableWidget extends WidgetType {
   toDOM(view: EditorView): HTMLElement {
     const wrap = document.createElement('div')
     wrap.className = 'cm-table'
+    // Cmd/Ctrl+click on the table (a cell included) adds it to the picked blocks; Shift+click
+    // picks down to it (blockPick.ts) — the same as every other block. Capture, ahead of the
+    // cells' own press that opens one for typing.
+    wrap.addEventListener(
+      'mousedown',
+      (e) => {
+        if (!(addsToPick(e) || e.shiftKey)) return
+        let pos: number
+        try {
+          pos = view.posAtDOM(wrap)
+        } catch {
+          return
+        }
+        if (pickFromClick(view, e, blockAt(view.state, pos))) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
+      },
+      true
+    )
     if (this.depth) {
       wrap.classList.add('cm-in-toggle')
       wrap.style.setProperty('--toggle-depth', String(this.depth))
@@ -819,7 +845,13 @@ class TableWidget extends WidgetType {
     this.cleanup = () => resize.disconnect()
 
     wrap.appendChild(grid)
-    return wrap
+    // In a frame the editor measures (app.css `.cm-block-frame`): the table's negative margins
+    // are not something CodeMirror counts, and every line below it was placed 20–40px away from
+    // where clicks and drags were aimed (2026-11-07).
+    const frame = document.createElement('div')
+    frame.className = 'cm-block-frame'
+    frame.appendChild(wrap)
+    return frame
   }
 
   /** Only job: stop the `ResizeObserver` from `positionChrome` outliving the

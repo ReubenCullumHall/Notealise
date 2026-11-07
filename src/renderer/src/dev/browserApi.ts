@@ -15,6 +15,7 @@
  *  stunt double.
  */
 import type { TreeNode, VaultApi, VaultChange } from '../../../shared/types'
+import { untitledName, untitledNumber } from '../../../shared/untitled'
 import { indexLinks, stripMd } from '../../../shared/links'
 import { indexEmbeds } from '../../../shared/attachments'
 import { normalizeSettings, type AppSettings } from '../../../shared/settings'
@@ -120,6 +121,15 @@ const unique = (dir: string, name: string): string => {
   return candidate
 }
 
+/** The preview's stand-in for main's one "Untitled N" count: past the highest name it holds. */
+let untitledNext = 0
+const nextUntitled = (): string => {
+  const names = [...Object.keys(store.files), ...store.dirs].map(nameOf)
+  for (const n of names) untitledNext = Math.max(untitledNext, (untitledNumber(n) ?? 0) + 1)
+  untitledNext = Math.max(untitledNext, 1)
+  return untitledName(untitledNext++)
+}
+
 // The SAME stripper main uses (shared/plainText.ts), not a hand-rolled subset.
 // The old one here didn't strip HTML, so the preview row showed raw
 // `<mark class="hl-rose">` tags that the real app never shows — and on
@@ -194,7 +204,7 @@ const api: VaultApi = {
   },
   keepVersionNow: async () => {},
   createNote: async (dirPath, name) => {
-    const path = unique(dirPath, (name ? stripMd(name) : 'Untitled') + '.md')
+    const path = unique(dirPath, (name ? stripMd(name) : nextUntitled()) + '.md')
     store.files[path] = ''
     save()
     return path
@@ -209,8 +219,9 @@ const api: VaultApi = {
       embeds: indexEmbeds(store.files[path])
     }))
   },
+  untitledNames: async (count) => Array.from({ length: Math.max(1, count) }, nextUntitled),
   createFolder: async (dirPath, name) => {
-    const path = unique(dirPath, name || 'New folder')
+    const path = unique(dirPath, name || nextUntitled())
     store.dirs.push(path)
     save()
     return path
@@ -513,6 +524,19 @@ const api: VaultApi = {
   recordingAppend: async () => false,
   recordingEnd: async () => {},
   recordingsLeft: async () => [],
+  // Transcribe needs the real Whisper program: the preview has none.
+  transcribeAvailable: async () => false,
+  transcribeBegin: async () => 'preview',
+  transcribeAppend: async () => {},
+  transcribeRun: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+  transcribeCancel: async () => {},
+  onTranscribeProgress: () => () => {},
+  transcribeWordTimes: async () => null,
+  accurateStatus: async () => ({ state: 'none' as const, received: 0, total: 0 }),
+  accurateDownload: async () => ({ ok: false as const, reason: 'failed' as const }),
+  accurateCancel: async () => {},
+  accurateRemove: async () => ({ ok: false }),
+  onAccurateProgress: () => () => {},
   // Browser preview has no real folder picker or importer, so onboarding
   // (which needs both) is never worth showing here — always "already done".
   vaultEstablished: async () => false,

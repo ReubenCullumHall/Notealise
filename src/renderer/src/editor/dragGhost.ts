@@ -1,5 +1,6 @@
 import { StateEffect, StateField, type EditorState, type Range } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
+import { motionOn } from '../tabs/tabStyles'
 
 // Where a dragged block will land, shown AS the block (Reuben, 2026-10-16:
 // "instead of having the line … make it have that text/media greyed out and
@@ -139,13 +140,78 @@ export const dragGhost = StateField.define<GhostState>({
   provide: (f) => EditorView.decorations.from(f, (v) => v.decorations)
 })
 
+// --- the slide (Reuben, 2026-11-07) -----------------------------------------------------
+//
+// With Interface animations on, the blocks around a carried one glide out of its way and back
+// ("really smooth … where the elements slowly slide out of the way"); with them off they snap,
+// as before. The layout itself still changes in one step — the gap and the closed-up place are
+// where attachMove counts on them being, and CodeMirror's map of the note stays true — and only
+// what is DRAWN eases: each line is drawn where it just was and glides to where it now is
+// (a transform, which moves nothing else). A move mid-glide starts from where the line is drawn
+// at that moment, so a gap that keeps moving never jumps.
+
+const SLIDE_MS = 640
+/** Eased in and out, a long soft settle, no overshoot: the glide of a sheet or a list making
+ *  room. 420ms and a sharper start first; Reuben asked for it "about 50% smoother" (2026-11-07). */
+const SLIDE_EASE = 'cubic-bezier(0.25, 0.8, 0.25, 1)'
+const SLIDE_ID = 'drag-slide'
+
+const isOurs = (el: Element): boolean => el.classList.contains('cm-drag-ghost') || el.classList.contains('cm-drag-gone')
+
+/** Where each line and block is drawn now, by where it starts in the note (the note is not
+ *  edited while carrying, so that is the same line before and after). Null: nothing to glide. */
+function drawnTops(view: EditorView): Map<number, number> | null {
+  if (!motionOn() || !view.dom.isConnected) return null
+  const tops = new Map<number, number>()
+  for (const el of Array.from(view.contentDOM.children)) {
+    if (isOurs(el)) continue
+    let pos: number
+    try {
+      pos = view.posAtDOM(el, 0)
+    } catch {
+      continue
+    }
+    tops.set(pos, el.getBoundingClientRect().top)
+  }
+  return tops
+}
+
+/** Draw each line where it was and let it glide to where it is. */
+function glide(view: EditorView, was: Map<number, number> | null): void {
+  if (!was) return
+  for (const el of Array.from(view.contentDOM.children) as HTMLElement[]) {
+    if (isOurs(el)) {
+      // The copy in the gap comes in softly rather than appearing under lines still on their way.
+      if (el.classList.contains('cm-drag-ghost') && !el.getAnimations().some((a) => a.id === SLIDE_ID)) {
+        el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: SLIDE_MS * 0.6, delay: SLIDE_MS * 0.15, easing: 'ease-out', fill: 'backwards' }).id = SLIDE_ID
+      }
+      continue
+    }
+    let pos: number
+    try {
+      pos = view.posAtDOM(el, 0)
+    } catch {
+      continue
+    }
+    const before = was.get(pos)
+    if (before === undefined) continue
+    for (const a of el.getAnimations()) if (a.id === SLIDE_ID) a.cancel()
+    const dy = before - el.getBoundingClientRect().top
+    if (Math.abs(dy) < 0.5) continue
+    el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }], { duration: SLIDE_MS, easing: SLIDE_EASE }).id = SLIDE_ID
+  }
+}
+
 /** Show (or move, or with null take away) the gap in `view`. Only when it
  *  changes: this runs on every pointer move. */
 export function showGhost(view: EditorView, ghost: Ghost | null): void {
   const now = view.state.field(dragGhost, false)
   if (!now) return
   const same = now.ghost === ghost || (now.ghost && ghost && now.ghost.id === ghost.id && now.ghost.at === ghost.at)
-  if (!same) view.dispatch({ effects: setGhost.of(ghost) })
+  if (same) return
+  const was = drawnTops(view)
+  view.dispatch({ effects: setGhost.of(ghost) })
+  glide(view, was)
 }
 
 /** Close up (or with null open again) the carried block's own place. */
@@ -153,7 +219,10 @@ export function hideSource(view: EditorView, source: { from: number; to: number 
   const now = view.state.field(dragGhost, false)
   if (!now) return
   const same = now.source === source || (now.source && source && now.source.from === source.from && now.source.to === source.to)
-  if (!same) view.dispatch({ effects: setGhostSource.of(source) })
+  if (same) return
+  const was = drawnTops(view)
+  view.dispatch({ effects: setGhostSource.of(source) })
+  glide(view, was)
 }
 
 /** A still copy of what is drawn for [from, to] in `view` — every line and block

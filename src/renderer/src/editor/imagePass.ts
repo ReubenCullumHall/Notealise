@@ -1,3 +1,4 @@
+import { EditorSelection } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType } from '@codemirror/view'
 import { syntaxTree } from '@codemirror/language'
 import { linkEnv } from './linkEnv'
@@ -6,8 +7,9 @@ import { isInlineDataUrl } from '../../../shared/attachments'
 import { parseVideoUrl } from '../../../shared/embeds'
 import { VideoCardWidget } from './videoCard'
 import { type Pass } from './livePreview'
-import { insideEmbed, selectionCovers, selectionSwallows, embedSpanAt, remeasureWhenSized } from './attachSelect'
+import { selectionCovers, selectionSwallows, embedSpanAt, remeasureWhenSized } from './attachSelect'
 import { attachDragHandle } from './attachMove'
+import { addsToPick } from './blockPick'
 import { isMediaSource, sourceCaption } from './mediaSource'
 import { isVoiceTarget } from './audioPass'
 
@@ -136,13 +138,14 @@ export const imagePass: Pass = (view, _active, push) => {
         // An exact cover means "selected" and is handled below. `insideEmbed`
         // rather than `overlapsSelection` because a bare cursor at the edge is
         // adjacent, not inside — see its own note.
-        // `picked` rings it (the grip selected exactly this); `spanned` merely
-        // keeps it a picture. A selection dragged over a photo must not swap it
-        // for raw markdown — that resizes the line mid-drag. See
-        // `selectionSwallows`.
-        const picked = selectionCovers(view, node.from, node.to)
-        const spanned = picked || selectionSwallows(view, node.from, node.to)
-        if (!spanned && insideEmbed(view, node.from, node.to)) return
+        // `spanned` keeps it a picture AND rings it — picked by its grip, or swept up in
+        // a selection dragged across it (Reuben, 2026-11-07: dragging over a section must
+        // show its blocks as taken too). A selection dragged over a photo must not swap it
+        // for raw markdown — that resizes the line mid-drag. See `selectionSwallows`.
+        const spanned = selectionCovers(view, node.from, node.to) || selectionSwallows(view, node.from, node.to)
+        // Never opened up to show its markdown outside Markdown pro, wherever the cursor or a
+        // selection is (Reuben, 2026-11-07 — the voice note rule, for pictures too). Markdown pro
+        // drops every widget, so the code shows there and only there.
 
         let url = ''
         for (let c = node.node.firstChild; c; c = c.nextSibling) {
@@ -172,7 +175,7 @@ export const imagePass: Pass = (view, _active, push) => {
             node.from,
             node.to,
             Decoration.replace({
-              widget: new VideoCardWidget(video, alt, picked, isMediaSource(view.state) ? raw : null)
+              widget: new VideoCardWidget(video, alt, spanned, isMediaSource(view.state) ? raw : null)
             }),
             true
           )
@@ -184,7 +187,7 @@ export const imagePass: Pass = (view, _active, push) => {
           node.from,
           node.to,
           Decoration.replace({
-            widget: new ImageWidget(url, alt, rel, picked, isMediaSource(view.state) ? raw : null)
+            widget: new ImageWidget(url, alt, rel, spanned, isMediaSource(view.state) ? raw : null)
           }),
           true
         )
@@ -193,25 +196,25 @@ export const imagePass: Pass = (view, _active, push) => {
   }
 }
 
-/** Clicking a rendered image puts the cursor on it, which reveals the markdown
- *  — otherwise a picture is the one thing in the document you can't get back to
- *  in order to edit or delete it. */
+/** Clicking a rendered picture picks it, as its six dots do: ringed, so Backspace deletes it
+ *  and a drag moves it. It used to put the cursor inside it, which opened up the markdown behind
+ *  it — that now shows only in Markdown pro (Reuben, 2026-11-07). */
 export const imageClick = EditorView.domEventHandlers({
   mousedown: (event, view) => {
     const target = event.target as HTMLElement
     if (!target.closest('.cm-image')) return false
+    if (event.button !== 0) return false
+    // Cmd/Ctrl/Shift+click picks the picture with other blocks (blockPick.ts), and moving the
+    // cursor here first would drop whatever was already picked (2026-11-07).
+    if (addsToPick(event) || event.shiftKey) return false
     // The eye's read-out is not the picture. Clicking it is a request to copy a
     // path, and moving the document cursor here is what made that impossible.
     if (target.closest('.cm-attach-source')) return false
-    const pos = view.posAtDOM(target)
-    // Strictly INSIDE the embed, not at its edge. `posAtDOM` lands on the
-    // widget's own start, and since `insideEmbed` stopped treating an edge as
-    // inside, a cursor there no longer reveals anything — clicking a picture
-    // would do nothing at all. One character in is unambiguous, and this is the
-    // gesture that says "I want at the markdown", so it should be.
-    const span = embedSpanAt(view.state, pos)
-    const anchor = span && span.to - span.from > 1 ? span.from + 1 : pos
-    view.dispatch({ selection: { anchor } })
-    return false
+    const span = embedSpanAt(view.state, view.posAtDOM(target))
+    if (!span) return false
+    view.dispatch({ selection: EditorSelection.single(span.from, span.to), userEvent: 'select.pick' })
+    view.focus()
+    event.preventDefault()
+    return true
   }
 })

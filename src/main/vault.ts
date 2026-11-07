@@ -1,7 +1,7 @@
 import { promises as fs, realpathSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import type { TreeNode } from '../shared/types'
 import { toPreviewLine } from '../shared/plainText'
 import { indexLinks, stripMd, type LinkRow } from '../shared/links'
@@ -11,6 +11,7 @@ import { isRecordingName } from './voice'
 import { voiceFileName } from '../shared/voiceNote'
 import { indexBlocks, indexHeadings } from '../shared/blocks'
 import { heldPath, RECOVERY_DIR, TRASH_DIR } from '../shared/workspace'
+import { UNTITLED_TAKE_MAX, untitledName, untitledNumber, voiceUntitledNumbers } from '../shared/untitled'
 import type { NoteVersion } from '../shared/noteVersions'
 import * as versions from './noteVersions'
 
@@ -588,8 +589,99 @@ async function uniqueName(dirAbs: string, stem: string, ext: string): Promise<st
   return candidate
 }
 
+// ---------------------------------------------------------------------------
+// "Untitled 17" — one count for the whole vault (shared/untitled.ts)
+// ---------------------------------------------------------------------------
+// The next number is kept in `.mdnotes/untitled.json` ({"next": 18}) so it travels with the
+// notes. Losable (rule 2): the first ask after a vault opens also looks at what is really there
+// — note and folder names, voice-note names inside the notes, names in the bin — and starts past
+// the highest, so a lost or out-of-date file can never hand out a number twice.
+
+const UNTITLED_FILE = 'untitled.json'
+let untitledCount: { root: string; next: number } | null = null
+let untitledChain: Promise<unknown> = Promise.resolve()
+
+async function storedUntitledNext(root: string): Promise<number> {
+  try {
+    const raw = JSON.parse(await fs.readFile(path.join(root, '.mdnotes', UNTITLED_FILE), 'utf8')) as { next?: unknown }
+    const n = Number(raw?.next)
+    return Number.isInteger(n) && n > 0 ? n : 1
+  } catch {
+    return 1
+  }
+}
+
+async function writeUntitledNext(root: string, next: number): Promise<void> {
+  const dir = path.join(root, '.mdnotes')
+  await fs.mkdir(dir, { recursive: true })
+  const tmp = path.join(dir, `.${UNTITLED_FILE}.${randomBytes(6).toString('hex')}.tmp`)
+  await fs.writeFile(tmp, JSON.stringify({ next }), 'utf8')
+  await renameWithRetry(tmp, path.join(dir, UNTITLED_FILE))
+}
+
+/** The highest "Untitled N" anywhere in the vault: note and folder names, the voice notes
+ *  named inside notes, and what is in the bin and Recovery (put back, it would clash). */
+async function highestUntitled(root: string): Promise<number> {
+  let max = 0
+  const see = (n: number | null): void => {
+    if (n && n > max) max = n
+  }
+  const walk = async (abs: string, readNotes: boolean): Promise<void> => {
+    const entries = await fs.readdir(abs, { withFileTypes: true }).catch(() => [])
+    for (const e of entries) {
+      if (ignored(e.name)) continue
+      const child = path.join(abs, e.name)
+      if (e.isDirectory()) {
+        see(untitledNumber(e.name))
+        await walk(child, readNotes)
+      } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
+        see(untitledNumber(e.name))
+        if (readNotes) {
+          const text = await fs.readFile(child, 'utf8').catch(() => '')
+          for (const n of voiceUntitledNumbers(text)) see(n)
+        }
+      }
+    }
+  }
+  await walk(root, true)
+  for (const held of [TRASH_DIR, RECOVERY_DIR]) await walk(path.join(root, ...held.split('/')), false)
+  return max
+}
+
+/** The next `count` names from the vault's one count — "Untitled 17", "Untitled 18"… Never
+ *  the same number twice; one ask at a time, so two quick New notes can't share one. */
+export function takeUntitled(count = 1): Promise<string[]> {
+  const n = Math.max(1, Math.min(UNTITLED_TAKE_MAX, Math.floor(Number(count)) || 1))
+  const job = untitledChain.then(async () => {
+    const root = requireVault()
+    const stored = await storedUntitledNext(root) // another computer may have taken some since
+    if (!untitledCount || untitledCount.root !== root) {
+      untitledCount = { root, next: Math.max(stored, (await highestUntitled(root)) + 1) }
+    } else {
+      untitledCount.next = Math.max(untitledCount.next, stored)
+    }
+    const names: string[] = []
+    for (let i = 0; i < n; i++) names.push(untitledName(untitledCount.next++))
+    // A failed write only costs the shortcut: the next launch looks at the vault again.
+    await writeUntitledNext(root, untitledCount.next).catch((e) => console.error('untitled.json write failed', e))
+    return names
+  })
+  untitledChain = job.catch(() => {})
+  return job
+}
+
+/** A free "Untitled N" in `dirAbs` (`ext` ".md" for a note, "" for a folder). A number whose
+ *  name is somehow already there (made by hand, say) is skipped, not doubled. */
+async function untitledIn(dirAbs: string, ext: string): Promise<string> {
+  for (let tries = 0; tries < 50; tries++) {
+    const [name] = await takeUntitled(1)
+    if (!(await nameTaken(dirAbs, name + ext))) return name + ext
+  }
+  return uniqueName(dirAbs, 'Untitled', ext)
+}
+
 /** Create `<dirPath>/<name>.md` (dirPath "" = vault root), defaulting to
- *  "Untitled" and suffixing " (2)" etc. if that name's taken. Returns the actual
+ *  the vault's next "Untitled N" (takeUntitled), or `name` with " (2)" etc. if that's taken. Returns the actual
  *  rel path it landed at — the name is sanitised, so it may not be the one asked
  *  for, and the caller must use what comes back.
  *
@@ -605,8 +697,7 @@ export async function createNote(dirPath: string, name?: string): Promise<string
   // an existing folder a no-op rather than a collision.
   await fs.mkdir(resolveInVault(dirPath), { recursive: true })
   const dirAbs = await resolveReal(dirPath)
-  const stem = name ? sanitizeFilename(stripMd(name)).name : 'Untitled'
-  const fname = await uniqueName(dirAbs, stem, '.md')
+  const fname = name ? await uniqueName(dirAbs, sanitizeFilename(stripMd(name)).name, '.md') : await untitledIn(dirAbs, '.md')
   const abs = path.join(dirAbs, fname)
   // Re-check after the join, the way `renameEntry` does. `sanitizeFilename` is
   // what normally makes this redundant — but it is one function away, and a
@@ -620,8 +711,8 @@ export async function createNote(dirPath: string, name?: string): Promise<string
 }
 
 /** Create a folder inside `dirPath` ("" = vault root), named `name` (or
- *  "New folder" when the caller has no name in mind), suffixing " (2)" etc. if
- *  that's taken. Returns the actual rel path it landed at — the name is
+ *  the vault's next "Untitled N" when the caller has no name in mind), suffixing
+ *  " (2)" etc. to a given name if that's taken. Returns the actual rel path it landed at — the name is
  *  sanitised, so the caller must use what comes back.
  *
  *  `name` exists for the same reason `createNote`'s does, and the importers are
@@ -633,8 +724,7 @@ export async function createNote(dirPath: string, name?: string): Promise<string
  *  `mkdir` removes both. */
 export async function createFolder(dirPath: string, name?: string): Promise<string> {
   const dirAbs = await resolveReal(dirPath)
-  const stem = name ? sanitizeFilename(name).name : 'New folder'
-  const fname = await uniqueName(dirAbs, stem, '')
+  const fname = name ? await uniqueName(dirAbs, sanitizeFilename(name).name, '') : await untitledIn(dirAbs, '')
   const abs = path.join(dirAbs, fname)
   // See createNote. This is the one that was actually reachable: `name` arrives
   // over IPC, structured clone carries an ARRAY through intact, and
@@ -1022,6 +1112,90 @@ export async function keepVersionNow(relPath: string): Promise<void> {
 export async function sweepVersions(): Promise<void> {
   if (!vaultRoot) return
   await versions.sweep(versionsCtx())
+}
+
+// ---------------------------------------------------------------------------
+// Word times for a transcribed recording (docs/plans/transcribe.md "Word times").
+// The clip editor's "edit by the words" needs when each word was said; the note
+// keeps only the text. So they live in <vault>/.mdnotes/transcripts/, one small
+// file per recording, named by a hash of its path (no awkward names, no long
+// paths). LOSABLE (rule 2): without it the editor re-transcribes for the times.
+// Stamped with the recording's size and modified time when Transcribe STARTED, so
+// a recording changed since (a clip edit, a sync) is a miss, never stale times.
+// A moved or renamed recording is a miss too — cheap, agreed with the editor.
+// ---------------------------------------------------------------------------
+export interface RecordingStamp {
+  size: number
+  mtimeMs: number
+}
+
+export interface WordTime {
+  text: string
+  from: number
+  to: number
+}
+
+function timesFile(rel: string): string {
+  const name = createHash('sha256').update(foldCase(rel)).digest('hex').slice(0, 32)
+  return path.join(requireVault(), '.mdnotes', 'transcripts', `${name}.json`)
+}
+
+/** The recording's size and modified time now, or null if it isn't a file in the vault. */
+export async function recordingStamp(relPath: string): Promise<RecordingStamp | null> {
+  try {
+    const st = await fs.stat(await resolveReal(relPath))
+    return st.isFile() ? { size: st.size, mtimeMs: Math.round(st.mtimeMs) } : null
+  } catch {
+    return null
+  }
+}
+
+/** Keep a recording's word times. A failure is swallowed: it only costs speed later. */
+export async function writeWordTimes(relPath: string, stamp: RecordingStamp, words: WordTime[]): Promise<void> {
+  try {
+    const rel = toRel(await resolveReal(relPath))
+    const file = timesFile(rel)
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    const tmp = `${file}.${randomBytes(6).toString('hex')}.tmp`
+    await fs.writeFile(tmp, JSON.stringify({ v: 1, path: rel, ...stamp, words }), 'utf8')
+    markWrite(file)
+    markWrite(tmp)
+    await renameWithRetry(tmp, file).catch(async (e) => {
+      await fs.unlink(tmp).catch(() => {})
+      throw e
+    })
+  } catch (e) {
+    console.warn('[transcribe] word times not kept:', e)
+  }
+}
+
+/** A recording's word times, or null when there are none, or the recording has
+ *  changed since they were made (the editor decides whether to re-transcribe). */
+export async function readWordTimes(relPath: string): Promise<WordTime[] | null> {
+  try {
+    const abs = await resolveReal(relPath)
+    const rel = toRel(abs)
+    const st = await fs.stat(abs)
+    const raw = JSON.parse(await fs.readFile(timesFile(rel), 'utf8')) as {
+      v?: unknown
+      path?: unknown
+      size?: unknown
+      mtimeMs?: unknown
+      words?: unknown
+    }
+    if (raw.v !== 1 || typeof raw.path !== 'string' || foldCase(raw.path) !== foldCase(rel)) return null
+    if (raw.size !== st.size || raw.mtimeMs !== Math.round(st.mtimeMs)) return null
+    if (!Array.isArray(raw.words)) return null
+    const words: WordTime[] = []
+    for (const w of raw.words) {
+      const o = w as Partial<WordTime> | null
+      if (typeof o?.text !== 'string' || !Number.isFinite(o.from) || !Number.isFinite(o.to)) return null
+      words.push({ text: o.text, from: o.from as number, to: o.to as number })
+    }
+    return words
+  } catch {
+    return null
+  }
 }
 
 // ---------------------------------------------------------------------------

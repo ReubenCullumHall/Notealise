@@ -77,3 +77,6 @@ __pycache__/
 *.pem
 *.key
 *.mobileprovision
+
+# Whisper program + Base file for Transcribe (tools/whisper/build.sh)
+build-whisper/

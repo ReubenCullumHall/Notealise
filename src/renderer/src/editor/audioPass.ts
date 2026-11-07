@@ -4,6 +4,7 @@ import { syntaxTree } from '@codemirror/language'
 import { kindForFilename, relativeTarget, resolveVaultPath } from '../../../shared/attachments'
 import { baseName, dirName } from '../../../shared/links'
 import { findTranscript } from '../../../shared/transcript'
+import { startTranscribe } from './transcribeUi'
 import type { ConvertedAudio } from '../../../shared/types'
 import {
   VOICE_DEFAULTS,
@@ -22,7 +23,7 @@ import {
 } from '../../../shared/voiceNote'
 import { type Pass } from './livePreview'
 import { linkEnv, linkHandlersFacet, notifyError, notifyUser } from './linkEnv'
-import { insideEmbed, selectionCovers, selectionSwallows } from './attachSelect'
+import { selectionCovers, selectionSwallows } from './attachSelect'
 import { isMediaSource } from './mediaSource'
 import { VoiceBlock, blockOf, type VoiceBlockProps } from './voicePlayerUi'
 import { playerFor } from './voicePlayer'
@@ -225,7 +226,7 @@ const notePathOf = (view: EditorView): string => view.state.field(linkEnv, false
 /** A recording the block may load: a file in the vault that is a sound (or a
  *  video container, which a voice note can be — `.webm`, an audio-only `.mp4`).
  *  Anything else — a note, a picture — is not read as one. */
-function recordingPath(src: string, notePath: string): string | null {
+export function recordingPath(src: string, notePath: string): string | null {
   const rel = resolveVaultPath(src, notePath)
   const kind = rel ? kindForFilename(rel) : null
   return kind === 'audio' || kind === 'video' ? rel : null
@@ -252,7 +253,8 @@ class VoiceNoteWidget extends WidgetType {
       a.settings.tone === b.settings.tone &&
       a.settings.speed === b.settings.speed &&
       a.skip.back === b.skip.back &&
-      a.skip.forward === b.skip.forward
+      a.skip.forward === b.skip.forward &&
+      a.transcript === b.transcript
     )
   }
 
@@ -264,7 +266,8 @@ class VoiceNoteWidget extends WidgetType {
       skipMenu: (side, x, y) => skipMenu(view, side, x, y),
       rename: (name) => writeName(view, block.dom, name),
       menu: (x, y, at) => blockMenu(view, block, x, y, at),
-      edit: () => editClip(view, block)
+      edit: () => editClip(view, block),
+      transcribe: () => transcribe(view, block)
     })
     return block.dom
   }
@@ -300,12 +303,11 @@ export const audioPass: Pass = (view, _active, push) => {
   const skip = state.field(linkEnv, false)?.voiceSkip ?? VOICE_SKIP_DEFAULT
   for (const { from, to } of view.visibleRanges) {
     for (const n of voiceNotesIn(state, from, to)) {
-      // The reveal contract every embed follows (videoPass.ts): an exact cover
-      // is "selected" — keep the block and ring it; a selection running across
-      // it keeps it a block; a cursor genuinely inside it shows the source.
-      const picked = selectionCovers(view, n.from, n.to)
-      const spanned = picked || selectionSwallows(view, n.from, n.to)
-      if (!spanned && insideEmbed(view, n.from, n.to)) continue
+      // Ringed when picked or swept up in a dragged selection (imagePass.ts says why). Never
+      // opened up to show its code, wherever the cursor or a selection is (Reuben, 2026-11-07:
+      // "in markdown pro only expand to show the code") — Markdown pro drops every widget, so
+      // the code shows there and only there. (It used to open whenever a cursor got inside.)
+      const spanned = selectionCovers(view, n.from, n.to) || selectionSwallows(view, n.from, n.to)
       push(
         n.from,
         n.to,
@@ -315,9 +317,10 @@ export const audioPass: Pass = (view, _active, push) => {
             rel: recordingPath(n.src, notePath),
             settings: n.settings,
             name: n.name,
-            selected: picked,
+            selected: spanned,
             source: showSource ? state.doc.sliceString(n.from, n.to) : null,
-            skip
+            skip,
+            transcript: transcriptUnder(state, n)
           })
         }),
         true
@@ -377,6 +380,11 @@ function blockMenu(view: EditorView, block: VoiceBlock, x: number, y: number, at
   // The voice note editor, first (Reuben, 2026-11-04: "right click … edit clip").
   // Only for a recording that plays: there is nothing to edit in one that can't.
   if (block.dom.dataset.state === 'ready') items.unshift({ label: 'Edit clip…', run: () => editClip(view, block) })
+  // Transcribe, straight after it (docs/plans/transcribe.md). "again" when there are words already.
+  if (block.dom.dataset.state === 'ready' && block.props.rel) {
+    const again = block.props.transcript !== 'none'
+    items.splice(1, 0, { label: again ? 'Transcribe again' : 'Transcribe', run: () => transcribe(view, block) })
+  }
   // A link to this moment (momentLink.ts) — the spot right-clicked on the
   // waveform, or where playback is. Only in a note (it is written relative to one).
   const { rel } = block.props
@@ -391,6 +399,25 @@ function blockMenu(view: EditorView, block: VoiceBlock, x: number, y: number, at
   }
   if (named) items.push({ label: 'Remove name', run: () => writeName(view, block.dom, '') })
   handlers.menu(x, y, items)
+}
+
+/** Is there a transcript straight under this voice note, and was it made from this recording?
+ *  (shared/transcript.ts — only a fold DIRECTLY under the voice note's line counts.) */
+function transcriptUnder(state: EditorState, n: VoiceSpan): 'none' | 'current' | 'stale' {
+  const line = state.doc.lineAt(n.to)
+  if (line.number >= state.doc.lines) return 'none'
+  const next = state.doc.line(line.number + 1).text
+  if (!/^<details\s+data-transcript\s*=/i.test(next)) return 'none'
+  // Only now read the lines (the rare case): the fold's end is needed to be sure it is one.
+  const found = findTranscript(state.doc.toString().split('\n'), line.number - 1)
+  if (!found) return 'none'
+  return found.src === n.src ? 'current' : 'stale'
+}
+
+/** Transcribe this voice note (editor/transcribeUi.ts). */
+function transcribe(view: EditorView, block: VoiceBlock): void {
+  const { rel, src, name } = block.props
+  if (rel) startTranscribe(view, src, rel, name)
 }
 
 /** Open the voice note editor for this voice note (clipEdit/ClipEditor.tsx). */

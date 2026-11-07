@@ -1,4 +1,5 @@
 import { EditorView } from '@codemirror/view'
+import { EditorSelection } from '@codemirror/state'
 import { gripIcon } from './blockTable'
 import { embedSpanAt, selectEmbed } from './attachSelect'
 import { createEdgeScroller } from '../edgeScroll'
@@ -6,6 +7,7 @@ import type { BlockRange } from './blockMove'
 import { notePathOf, viewAtPoint } from './viewRegistry'
 import { retargetEmbeds } from '../../../shared/attachments'
 import { GHOST_MAX_PX, ghostBody, hideSource, showGhost, type Ghost } from './dragGhost'
+import { addsToPick, blockGroup, moveGroupSpec, pickedGroup, pickFromClick } from './blockPick'
 
 // Dragging an image/video embed to a different line in the note — the same
 // grip-and-drag interaction blockTable.ts's column handle already uses
@@ -34,6 +36,9 @@ export interface DragSource {
   rangeAt: (view: EditorView, pos: number) => BlockRange | null
   /** a press that never became a drag */
   onClick?: (view: EditorView, pos: number, range: BlockRange) => void
+  /** what Cmd/Ctrl+click (add to the pick) and Shift+click (pick down to here) pick —
+   *  blockPick.ts. The block itself, whatever is selected; `rangeAt` when not given. */
+  pickAt?: (view: EditorView, pos: number) => BlockRange | null
   /** class on the button, so the two grips can be positioned differently */
   className: string
   /** for screen readers — the only thing that says what the six dots do */
@@ -51,6 +56,7 @@ export const EMBED_SOURCE: DragSource = {
     const span = embedSpanAt(view.state, pos)
     if (span) selectEmbed(view, span)
   },
+  pickAt: (view, pos) => embedSpanAt(view.state, pos),
   className: 'cm-attach-grip',
   label: 'Drag to move up or down in the note'
 }
@@ -80,6 +86,15 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
     start.preventDefault()
     start.stopPropagation() // don't let imageClick/CM6 place a cursor here
 
+    // Cmd/Ctrl+click adds this block to the pick (or takes it out), Shift+click picks down to
+    // it — the sidebar's multi-select, for blocks (blockPick.ts). No drag starts.
+    if (addsToPick(start) || start.shiftKey) {
+      const at = Math.min(view.posAtDOM(btn), view.state.doc.length)
+      const block = (source.pickAt ?? source.rangeAt)(view, at)
+      if (block) pickFromClick(view, start, block)
+      return
+    }
+
     // Asked of the DOM at the moment of the gesture, rather than captured when
     // the widget was built. That swap is what lets ImageWidget/VideoWidget drop
     // their positions out of `eq()`: they used to carry from/to purely so a
@@ -94,6 +109,25 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
     // derived from may have moved on.
     const range = source.rangeAt(view, startPos)
     if (!range) return
+    // One of several picked blocks: they all go together (blockPick.ts). Their places stay
+    // where they are while carried — only a single block's place closes up.
+    const group = pickedGroup(view.state, range)
+    // What a drop does with this block alone — also what says a target is "where it already is".
+    const alone = blockGroup(view.state, [{ from: view.state.doc.lineAt(range.from).from, to: view.state.doc.lineAt(range.to).to }])
+
+    // Picked on the PRESS, not on letting go (Reuben, 2026-11-07: "when you click on anything 3x2
+    // dot it should select it right away and enable you to drag it"). Left alone when it is
+    // already picked, one of several picked (they move together), or inside a selection the
+    // grip is carrying.
+    const pickRange = (source.pickAt ?? source.rangeAt)(view, startPos)
+    const sel = view.state.selection
+    const carried = !sel.main.empty && sel.ranges.length === 1 && sel.main.from <= range.from && sel.main.to >= range.to
+    let pickedOnPress = false
+    if (!group && !carried && pickRange && pickRange.from !== pickRange.to) {
+      view.dispatch({ selection: EditorSelection.single(pickRange.from, pickRange.to), userEvent: 'select.pick' })
+      pickedOnPress = true
+    }
+    view.focus()
     const firstLine = doc.lineAt(range.from)
     const lastLine = doc.lineAt(range.to)
     const isLast = lastLine.number === doc.lines
@@ -289,10 +323,13 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       if (!moved || !ghost) return
       // On its own edges (or inside itself) it is not moving anywhere: no gap,
       // and the block back in its place.
-      const home = dropView === view && target >= ownFrom && target <= ownTo
+      const home =
+        dropView === view &&
+        view.state.doc === doc &&
+        !moveGroupSpec(view.state, group ?? alone, target)
       // Its place closes up while it is carried — unless Alt is copying it into
       // another pane, when it stays.
-      const closes = !home && !(copyHeld && dropView !== view)
+      const closes = !group && !home && !(copyHeld && dropView !== view)
       gone = closes ? { top: srcTop, h: ghost.fullHeight } : null
       hideSource(view, closes ? { from: firstLine.from, to: lastLine.to } : null)
       showAt(dropView, home ? null : target)
@@ -306,9 +343,19 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
         // The block's own place and height where it is now, so the gap is its
         // size and its place can close up by exactly that much.
         srcTop = view.lineBlockAt(firstLine.from).top
-        const full = Math.max(1, view.lineBlockAt(lastLine.to).bottom - srcTop)
-        const height = Math.min(Math.round(full), GHOST_MAX_PX)
-        ghost = { height, fullHeight: full, body: ghostBody(view, firstLine.from, lastLine.to, full > GHOST_MAX_PX), id: ++ghostIds }
+        if (group) {
+          // Every picked block, one under the other, as the copy carried.
+          const parts = group.spans.map((g) => ({ g, h: view.lineBlockAt(g.to).bottom - view.lineBlockAt(g.from).top }))
+          const full = Math.max(1, parts.reduce((n, p) => n + p.h, 0))
+          const capped = full > GHOST_MAX_PX
+          const body = ghostBody(view, group.spans[0].from, group.spans[0].to, capped)
+          for (const p of parts.slice(1)) body.append(...Array.from(ghostBody(view, p.g.from, p.g.to, capped).childNodes))
+          ghost = { height: Math.min(Math.round(full), GHOST_MAX_PX), fullHeight: full, body, id: ++ghostIds }
+        } else {
+          const full = Math.max(1, view.lineBlockAt(lastLine.to).bottom - srcTop)
+          const height = Math.min(Math.round(full), GHOST_MAX_PX)
+          ghost = { height, fullHeight: full, body: ghostBody(view, firstLine.from, lastLine.to, full > GHOST_MAX_PX), id: ++ghostIds }
+        }
       }
       // A pane with no note in it (the blank column) is not a place text can go,
       // so the pointer being over one leaves the target where it was rather than
@@ -345,7 +392,31 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       // what lets Backspace remove the whole thing rather than one character of
       // its source — see attachSelect); for a line it selects the block.
       if (!wasMoved) {
-        source.onClick?.(view, startPos, range)
+        // Already picked by the press: that was the click. A second click on a block already
+        // picked is the caller's (a voice note's name menu).
+        if (!pickedOnPress) source.onClick?.(view, startPos, range)
+        return
+      }
+      if (group) {
+        if (view.state.doc !== doc) return
+        if (into !== view) {
+          // Into another pane: all of them, re-pointed for that note (see below).
+          const to = notePathOf(into)
+          if (!to) return
+          const text = retargetEmbeds(group.text, notePathOf(view), to)
+          const at = Math.min(dropAt, into.state.doc.length)
+          // Spaced the way a move within one note is (blockPick.ts) — it used to land hard
+          // against its new neighbours (2026-11-07).
+          const land = moveGroupSpec(into.state, { ...group, text }, at, true)
+          if (!land) return
+          into.dispatch({ changes: land.changes, selection: land.selection, scrollIntoView: true, userEvent: 'move.pick' })
+          if (!copying) view.dispatch({ changes: group.cuts.map((c) => ({ from: c.from, to: c.to, insert: '' })) })
+          into.focus()
+          return
+        }
+        const move = moveGroupSpec(view.state, group, dropAt)
+        if (move) view.dispatch({ changes: move.changes, selection: move.selection, userEvent: 'move.pick' })
+        view.focus()
         return
       }
       // Dropping on either edge of the embed's own current line is not a
@@ -371,21 +442,18 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
         // silently stops loading. Same file on disk, new way of naming it —
         // which is the whole reason this is a re-point and not a copy.
         const text = retargetEmbeds(raw, from, to)
-        const intoDoc = into.state.doc
-        const at = Math.min(dropAt, intoDoc.length)
-        const atEnd = at === intoDoc.length && at > 0
-        into.dispatch({
-          changes: { from: at, to: at, insert: atEnd ? '\n' + text : text + '\n' },
-          // Land the cursor on what just arrived: the pane you dropped into is
-          // where your attention is, and it is the only feedback that says the
-          // transfer went where you meant.
-          selection: { anchor: atEnd ? at + 1 : at },
-          scrollIntoView: true
-        })
+        const at = Math.min(dropAt, into.state.doc.length)
+        // Spaced the way a move within one note is (blockPick.ts), and picked where it lands: the
+        // pane you dropped into is where your attention is, and the ring is the feedback that
+        // says the transfer went where you meant (2026-11-07; it used to land hard against its
+        // new neighbours, with a cursor before it).
+        const land = moveGroupSpec(into.state, { ...alone, text }, at, true)
+        if (!land) return
+        into.dispatch({ changes: land.changes, selection: land.selection, scrollIntoView: true, userEvent: 'move.drop' })
         // Alt keeps the original. Otherwise this is a transfer, and the source
         // gives it up — one dispatch per document, because they are separate
         // documents with separate undo histories.
-        if (!copying) view.dispatch({ changes: { from: removeFrom, to: removeTo, insert: '' } })
+        if (!copying) view.dispatch({ changes: alone.cuts.map((c) => ({ from: c.from, to: c.to, insert: '' })) })
         into.focus()
         return
       }
@@ -398,31 +466,14 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       // real case; this is the belt-and-braces one.
       if (dropAt > removeFrom && dropAt < removeTo) return
 
-      const content = doc.sliceString(firstLine.from, lastLine.to)
-      const atEnd = dropAt === doc.length && removeTo !== doc.length
-      const insert = atEnd ? '\n' + content : content + '\n'
-      // Two changes, both expressed against the ORIGINAL document — CM6
-      // composes a non-overlapping multi-range ChangeSpec correctly on its
-      // own, the same way a table rewrite is one transaction rather than a
-      // remove-then-insert pair that could flash a half-moved state. They are
-      // handed over in document order, and collapsed into ONE change when the
-      // insert point is exactly where the cut begins (which happens when the
-      // embed is on the last line and the line above it is empty) rather than
-      // relying on how CM6 resolves two changes touching at a single point.
-      view.dispatch({
-        changes:
-          dropAt === removeFrom
-            ? { from: removeFrom, to: removeTo, insert }
-            : dropAt < removeFrom
-              ? [
-                  { from: dropAt, to: dropAt, insert },
-                  { from: removeFrom, to: removeTo, insert: '' }
-                ]
-              : [
-                  { from: removeFrom, to: removeTo, insert: '' },
-                  { from: dropAt, to: dropAt, insert }
-                ]
-      })
+      // The block out of its place and into the new one as ONE change, keeping the blank lines
+      // that set it apart (or not, for a list item) — the same move a group of picked blocks makes
+      // (blockPick.ts). It used to cut just the lines and drop `content + '\n'` at the target, so
+      // every move left a blank line behind and parked the block hard against its new neighbours:
+      // paragraphs ran together, and a voice note dropped under a table became part of the table
+      // (found by a 100-drag check, 2026-11-07). It stays picked where it lands.
+      const move = moveGroupSpec(view.state, alone, dropAt)
+      if (move) view.dispatch({ changes: move.changes, selection: move.selection, userEvent: 'move.drop' })
       view.focus()
     }
 

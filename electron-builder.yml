@@ -22,6 +22,22 @@ files:
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!{.oxlintrc.json,CLAUDE.md,PROJECT-CONTEXT-BRIEF.md,run-legacy.bat,vercel.json}'
+# Transcribe a voice note (docs/plans/transcribe.md): the Whisper program for THIS
+# download's system and chip, and the Base file, beside the app's resources — outside
+# the app's archive, because a program can't be run from inside one. main/transcribe.ts
+# reads them from <resources>/whisper/. tools/whisper/build.sh makes build-whisper/
+# before packaging (release.yml runs it for each download). ${platform}-${arch} is
+# darwin-arm64, darwin-x64 (the Intel build's --x64), win32-x64 or linux-x64.
+# A missing folder is NOT an error to electron-builder — it packages without it and
+# Transcribe says it isn't available — so release.yml checks the package for the program.
+extraResources:
+  - from: build-whisper/${platform}-${arch}
+    to: whisper
+  - from: build-whisper/ggml-base-q5_1.bin
+    to: whisper/ggml-base-q5_1.bin
+  # the speech finder's file (0.9 MB) — keeps silence away from Whisper, which invents words in it
+  - from: build-whisper/ggml-silero-v5.1.2.bin
+    to: whisper/ggml-silero-v5.1.2.bin
 # Electron ships every fuse in its permissive default state, and the packaged
 # binary confirmed it: the fuse wire in release/win-unpacked/Notealise.exe read
 # 101100011, i.e. RunAsNode, NODE_OPTIONS and the --inspect CLI arguments all

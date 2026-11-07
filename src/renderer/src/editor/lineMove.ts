@@ -1,6 +1,7 @@
 import { EditorView, ViewPlugin, type PluginValue, type ViewUpdate } from '@codemirror/view'
 import { attachDragHandle, type DragSource } from './attachMove'
-import { blockRange, canMoveBlock } from './blockMove'
+import { blockRange, canMoveBlock, isEmbedLine } from './blockMove'
+import { blockAt } from './blockPick'
 import { openBlockLinkMenu } from './copyBlockLink'
 
 // The six-dot grip beside the line you are on — or, since 2026-10-06, the line
@@ -35,9 +36,11 @@ const LINE_SOURCE: DragSource = {
   // what the grip thinks it is holding before committing to a drag, and it
   // matches the embed grip, where a click also selects what would move.
   onClick: (view, _pos, range) => {
-    view.dispatch({ selection: { anchor: range.from, head: range.to } })
+    view.dispatch({ selection: { anchor: range.from, head: range.to }, userEvent: 'select.pick' })
     view.focus()
   },
+  // Cmd/Ctrl/Shift+click: the block the grip is beside, never the selection standing in for it.
+  pickAt: (view) => blockAt(view.state, targets.get(view) ?? view.state.selection.main.head),
   className: 'cm-line-grip',
   label: 'Drag to move this block up or down in the note. Right-click to copy a link to it'
 }
@@ -98,7 +101,9 @@ class LineGrip implements PluginValue {
       this.pointer = null
       this.place()
     }
-    view.dom.addEventListener('mousemove', this.onMove)
+    // Capture: a table stops its own pointer moves from bubbling (its column chrome), and the
+    // grip then stayed beside the line before it — so its dots picked up the wrong block (2026-11-07).
+    view.dom.addEventListener('mousemove', this.onMove, true)
     view.dom.addEventListener('mouseleave', this.onLeave)
     this.place()
   }
@@ -145,6 +150,11 @@ class LineGrip implements PluginValue {
     // always. Hidden only in an empty note.
     if ((hover === null && !view.hasFocus) || !canMoveBlock(view.state)) return { show: false }
     const range = blockRange(view.state, hover ?? undefined)
+    // A voice note, picture or video alone on its line has its own six dots beside it: one
+    // handle per thing (Reuben, 2026-11-07: "only 1 3x2 dot toggle for each element"). The line's
+    // would sit at the top of its row, a second handle for the same block.
+    const one = view.state.doc.lineAt(range.from)
+    if (range.to <= one.to && isEmbedLine(one.text)) return { show: false }
     const block = view.lineBlockAt(range.from)
     const top = block.top + view.documentTop
     const editor = view.dom.getBoundingClientRect()
@@ -180,7 +190,7 @@ class LineGrip implements PluginValue {
 
   destroy(): void {
     this.view.scrollDOM.removeEventListener('scroll', this.onScroll)
-    this.view.dom.removeEventListener('mousemove', this.onMove)
+    this.view.dom.removeEventListener('mousemove', this.onMove, true)
     this.view.dom.removeEventListener('mouseleave', this.onLeave)
     targets.delete(this.view)
     this.btn.remove()

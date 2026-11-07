@@ -11,6 +11,8 @@ import {
 import { BOUNCE, BOUNCE_MS, motionOn } from '../tabs/tabStyles'
 import { createPress } from '../organise/archivePress'
 import { EMBED_SOURCE, attachDragHandle } from './attachMove'
+import { embedSpanAt, selectionIsOnly } from './attachSelect'
+import { addsToPick, pickFromClick } from './blockPick'
 import { sourceCaption } from './mediaSource'
 import { playerFor, type VoicePlayer } from './voicePlayer'
 import {
@@ -33,6 +35,9 @@ import {
   type ZoomWindow
 } from './voiceMixer'
 import { BARS, ENVELOPE_PER_SECOND, barsFor } from './voiceWave'
+import { linkEnv } from './linkEnv'
+import { jobFor, onJobs } from './transcribeUi'
+import { TRANSCRIBE_SLOW_MS as SLOW_MS } from '../../../shared/transcript'
 
 // The voice note block as drawn in the note: plain DOM, built once per widget
 // and kept up to date from its player (voicePlayer.ts) — not React, for the
@@ -75,6 +80,9 @@ export interface VoiceBlockProps {
   source: string | null
   /** how far the two skip buttons jump — the app's setting (shared/settings.ts) */
   skip: VoiceSkip
+  /** its transcript straight under it (shared/transcript.ts): none yet, made from this
+   *  recording, or made before the clip was edited */
+  transcript: 'none' | 'current' | 'stale'
 }
 
 export interface VoiceBlockActions {
@@ -94,6 +102,8 @@ export interface VoiceBlockActions {
   menu(x: number, y: number, at?: number): void
   /** The scissors: open the voice note editor (clipEdit/). */
   edit(): void
+  /** "Transcribe", under the row (editor/transcribeUi.ts). */
+  transcribe(): void
 }
 
 /** The block behind a widget's DOM — how `updateDOM` and `destroy` find it. */
@@ -152,6 +162,10 @@ export class VoiceBlock {
 
   private player: VoicePlayer | null = null
   private unsubscribe: (() => void) | null = null
+  /** The line under the row: "Transcribe", or how far a transcription has got (Reuben's C,
+   *  2026-11-07). Empty once there is a transcript and nothing is running. */
+  private txLine!: HTMLElement
+  private offJobs: (() => void) | null = null
   /** what the mixer says right now — ahead of the note while a slider is held */
   private live: VoiceSettings
   /** the mixer slider being dragged, which the note must not move under the pointer */
@@ -239,10 +253,36 @@ export class VoiceBlock {
     this.dom = root
     blocks.set(root, this)
     root.addEventListener('pointerdown', this.engage, true)
+    // Cmd/Ctrl+click on the voice note (not on one of its controls) adds it to the picked
+    // blocks; Shift+click picks down to it (blockPick.ts) — as its six dots do.
+    root.addEventListener('mousedown', (e) => {
+      if (!(addsToPick(e) || e.shiftKey)) return
+      if ((e.target as HTMLElement).closest('button, input, .cm-voice-wavebox, .cm-voice-tx')) return
+      let pos: number
+      try {
+        pos = view.posAtDOM(root)
+      } catch {
+        return
+      }
+      const span = embedSpanAt(view.state, pos)
+      if (span && pickFromClick(view, e, span)) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    })
 
     // Its name, when it has one (Reuben, 2026-10-16) — above the player, where
     // the box to type it into opens too (`startNaming`).
     this.nameEl = el('span', 'cm-voice-name')
+    // Click the name to rename it, right there (Reuben, 2026-11-07: "just click it and edit
+    // it like that, rather than the popup").
+    this.nameEl.setAttribute('aria-label', 'Rename voice note')
+    this.nameEl.addEventListener('click', (e) => {
+      if (this.nameInput) return
+      e.preventDefault()
+      e.stopPropagation()
+      this.startNaming()
+    })
     root.appendChild(this.nameEl)
     // Right-click anywhere on it: name it. The skip buttons keep their own menu.
     root.addEventListener('contextmenu', (e) => {
@@ -258,7 +298,10 @@ export class VoiceBlock {
     const grip: HTMLElement = attachDragHandle(view, {
       ...EMBED_SOURCE,
       onClick: (v, pos, range) => {
-        if (!this.props.selected) return EMBED_SOURCE.onClick?.(v, pos, range)
+        // The name menu only when this voice note is the one thing selected — one of several
+        // picked, or swept up in a dragged selection, is picked on its own instead.
+        const span = embedSpanAt(v.state, pos)
+        if (!span || !selectionIsOnly(v, span.from, span.to)) return EMBED_SOURCE.onClick?.(v, pos, range)
         const r = grip.getBoundingClientRect()
         const d = this.player?.duration
         this.actions.menu(r.left, r.bottom + 4, d && this.dom.dataset.state === 'ready' ? this.player?.position : undefined)
@@ -426,6 +469,10 @@ export class VoiceBlock {
     row.append(this.controls, this.alert)
     root.appendChild(row)
 
+    this.txLine = el('span', 'cm-voice-txline')
+    root.appendChild(this.txLine)
+    this.offJobs = onJobs(() => this.renderTx())
+
     // --- the mixer --------------------------------------------------------------
     this.mixer = el('span', 'cm-voice-mixer')
     this.mixer.id = mixerId
@@ -481,6 +528,7 @@ export class VoiceBlock {
     this.renderSkip()
     this.renderSliders()
     this.render()
+    if (next.transcript !== prev.transcript) this.renderTx()
   }
 
   destroy(): void {
@@ -488,6 +536,8 @@ export class VoiceBlock {
     this.destroyed = true
     this.unsubscribe?.()
     this.unsubscribe = null
+    this.offJobs?.()
+    this.offJobs = null
     this.player?.unmount()
     this.player = null
     this.endZoomCursor()
@@ -901,6 +951,51 @@ export class VoiceBlock {
 
   /** Bring the block in line with its player. Runs every frame while playing,
    *  so everything here compares before it writes. */
+  /** The line under the row. A running transcription shows wherever this recording is drawn
+   *  in this note, however often the block is redrawn — the job is kept in transcribeUi.ts. */
+  private renderTx(): void {
+    const line = this.txLine
+    const notePath = this.view.state.field(linkEnv, false)?.path ?? ''
+    const job = jobFor(notePath, this.props.src)
+    line.replaceChildren()
+    line.dataset.mode = job ? 'busy' : ''
+    if (job) {
+      const { percent, etaMs, waiting } = job.progress
+      const bar = el('span', 'cm-voice-txbar')
+      const fill = el('span', 'cm-voice-txfill')
+      fill.style.width = `${Math.max(2, percent)}%`
+      bar.appendChild(fill)
+      const words =
+        waiting > 0
+          ? 'Waiting for another voice note to finish'
+          : etaMs !== null && etaMs > SLOW_MS
+            ? `This will take a long time on this computer — about ${Math.ceil(etaMs / 60000)} min · ${percent}%`
+            : `Transcribing · ${percent}%`
+      const cancel = el('button', 'cm-voice-tx-link', 'Cancel') as HTMLButtonElement
+      cancel.type = 'button'
+      cancel.addEventListener('click', () => job.cancel())
+      line.append(bar, el('span', 'cm-voice-txwords', words), cancel)
+      line.hidden = false
+      return
+    }
+    if (this.props.transcript === 'none' && this.props.rel && this.dom.dataset.state === 'ready') {
+      const b = el('button', 'cm-voice-txstart') as HTMLButtonElement
+      b.type = 'button'
+      b.innerHTML =
+        '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg>'
+      b.appendChild(el('span', '', 'Transcribe'))
+      b.addEventListener('click', () => this.actions.transcribe())
+      // Centred under the four buttons at the row's right end (back, forward, scissors,
+      // mixer — Reuben, 2026-11-07): a slot their width, at the right (app.css).
+      const slot = el('span', 'cm-voice-txslot')
+      slot.appendChild(b)
+      line.appendChild(slot)
+      line.hidden = false
+      return
+    }
+    line.hidden = true
+  }
+
   private render(): void {
     if (this.destroyed) return
     const p = this.player
@@ -910,6 +1005,7 @@ export class VoiceBlock {
     if (state !== s.state) {
       s.state = state
       this.dom.dataset.state = state
+      this.renderTx()
       const failed = state === 'missing' || state === 'unplayable'
       this.controls.hidden = failed
       this.alert.hidden = !failed

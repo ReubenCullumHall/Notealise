@@ -497,10 +497,10 @@ export function applySettings(s: AppSettings): void {
   // the text or behind it) and a var() pointing at the theme-aware value. A NEW
   // custom property, never an override of a ramp token, so the inline-always-
   // wins trap above does not apply.
-  root.dataset.rawMarks = a.rawMarkStyle
-  const tint = splitToken(a.rawMarkTint)
+  root.dataset.rawMarks = s.rawMarkStyle
+  const tint = splitToken(s.rawMarkTint)
   root.dataset.rawMarkLayer = tint.layer
-  setVar(root, '--raw-mark-ink', `var(--${a.rawMarkTint})`)
+  setVar(root, '--raw-mark-ink', `var(--${s.rawMarkTint})`)
   // The writing surface: a pattern behind the text and a colour wash under it
   // (shared/looks.ts). Both resolved to something the CSS can definitely draw
   // — an unknown id or an unparseable tint becomes a plain page, never a

@@ -27,6 +27,7 @@ import type { RecoveryItem } from '../../../shared/workspace'
 import { useInstalledFonts } from './useInstalledFonts'
 import { claimEscape, escapeClaimed } from './escapeClaims'
 import { searchSettings, type SearchEntry } from './search'
+import { ExtraFeatures } from './ExtraFeatures'
 
 /** What a plain settings section needs. Kept free of `spaceActions` so General
  *  and Formatting don't have to carry a dependency only Spaces uses. */
@@ -72,6 +73,7 @@ export type SectionId =
   | 'recovery'
   | 'import'
   | 'transferData'
+  | 'extras'
   | 'updates'
   | 'reportBug'
   | 'requestFeature'
@@ -91,6 +93,9 @@ export type SectionId =
 //                    (2026-10-08). Never reached by Look's "every space".
 //   Data           — where your notes live and moving things in and out:
 //                    Source folder, Recovery, Import, Transfer data.
+//   Extra features — things added to the app, one switch each for the whole app
+//                    (Markdown pro; More accurate transcription, a download), and
+//                    later add-on packs and paid features (Reuben, 2026-11-06).
 //   Help           — Tutorials, Report a bug, Request a feature.
 //   Updates
 //
@@ -105,7 +110,7 @@ export type SectionId =
 // results, the File menu's jumps ('import', 'updates'), goTo. A GROUP is only
 // how the pages are listed, so moving a page between groups never breaks a
 // route.
-type GroupId = 'general' | 'look' | 'spaces' | 'archive' | 'data' | 'help' | 'updates'
+type GroupId = 'general' | 'look' | 'spaces' | 'archive' | 'data' | 'extras' | 'help' | 'updates'
 
 interface Group {
   id: GroupId
@@ -147,6 +152,8 @@ const GROUPS: Group[] = [
       { id: 'transferData', label: 'Transfer data' }
     ]
   },
+  // Under Data, above Help (Reuben, 2026-11-07).
+  { id: 'extras', label: 'Extra features', icon: 'plus', pages: [{ id: 'extras', label: 'Extra features' }] },
   {
     id: 'help',
     label: 'Help',
@@ -964,6 +971,7 @@ function SettingsWindow({
           {group.pages.length > 1 && !(section === 'collection' && explore) && (
             <PageTabs tabs={group.pages} value={section} onPick={(id) => goTo(id)} label={group.label} />
           )}
+          {section === 'extras' && <ExtraFeatures settings={settings} onChange={onChange} />}
           {section === 'general' &&
             (showLicenses ? (
               <OssLicenses onBack={() => setShowLicenses(false)} />

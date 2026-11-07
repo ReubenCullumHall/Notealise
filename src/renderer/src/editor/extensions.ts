@@ -16,8 +16,11 @@ import { momentPasteFilter } from './momentLink'
 import { attachDeleteKeys, embedSelectionAttr } from './attachSelect'
 import { scrollbarReveal } from './scrollbarReveal'
 import { webLinkGestures } from './webLinkPass'
+import { blockPick } from './blockPick'
 import { taskClick } from './taskPass'
 import { blockMath } from './blockMath'
+import { blockGuard } from './blockGuard'
+import { transcriptFold } from './transcriptFold'
 import { ruleSnap } from './ruleSnap'
 import { pagePaper } from './pagePaper'
 import { mathEditor } from './mathEditor'
@@ -32,6 +35,8 @@ import { relink } from './relink'
 import { exitListKey, listIndentKeys } from './listIndent'
 import { searchSkipsHiddenTags } from './searchHidden'
 import { registerView } from './viewRegistry'
+import { sizeWatch } from './sizeWatch'
+import { nameUntitledVoiceNotes } from './voiceUntitled'
 import { applyColor } from './colorCommands'
 import { completionExtension } from './completions'
 import { linkEnv, linkHandlersFacet, type LinkHandlersRef } from './linkEnv'
@@ -158,11 +163,18 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // is pasted into (momentLink.ts).
     momentPasteFilter,
     webLinkGestures,
+    // Cmd/Ctrl+click picks several blocks; copy, cut and delete act on them all (blockPick.ts).
+    // After the link gestures, so a Cmd+click on a link still opens it behind.
+    blockPick,
     taskClick,
     // Toggle lists: the arrow, the indent and the hidden lines (toggleList.ts).
     // Ahead of blockMath and blockTable, which ask it what is hidden.
     toggleList,
     blockMath,
+    // The same for voice notes, pictures, videos and tables: no cursor on their lines (blockGuard.ts).
+    blockGuard,
+    // A voice note's transcript, drawn under it as part of it (transcriptFold.ts).
+    transcriptFold,
     // Measures each formula on its own line so the Lined look can round it up
     // to whole rules (ruleSnap.ts, app.css).
     ruleSnap,
@@ -187,6 +199,11 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // Makes this view findable by a drag that starts in another pane
     // (viewRegistry.ts) — the one place in editor/ that looks sideways.
     registerView,
+    // Anything that grows after it is drawn (a voice note, maths) re-measures the note, so
+    // clicks, the six dots and drops aim at what is really there (sizeWatch.ts).
+    sizeWatch,
+    // A voice note with no name gets the vault's next "Untitled N" (voiceUntitled.ts).
+    nameUntitledVoiceNotes,
     editorStyling,
     completionExtension()
   ]

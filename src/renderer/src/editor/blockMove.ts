@@ -27,7 +27,7 @@ const isBlank = (text: string): boolean => text.trim() === ''
  *  (voiceRecModel.ts `ownLineInsert`, attachInput.ts), so each is a block of its
  *  own — never glued to the paragraph beside it (Reuben, 2026-10-16: dragging a
  *  paragraph took the voice note under it too). */
-const isEmbedLine = (text: string): boolean =>
+export const isEmbedLine = (text: string): boolean =>
   /^\s*<(audio|video)\b[^>]*>\s*<\/\1>\s*$/i.test(text) || /^\s*!\[[^\]\n]*\]\([^)\n]*\)\s*$/.test(text)
 
 /** The fenced code block containing `pos`, or null.

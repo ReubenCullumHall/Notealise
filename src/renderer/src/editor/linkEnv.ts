@@ -97,9 +97,16 @@ export interface LinkHandlers {
    *  App owns the dialog, the "ask me about this" setting, and the binning —
    *  see `MediaDelete` for what it is handed. */
   confirmMediaDelete: (req: MediaDelete) => void
+  /** Several picked blocks were deleted together and some of them were voice notes, pictures or
+   *  videos: their files go to the bin with them, unless another note (or this one) still uses
+   *  them (Reuben, 2026-11-07). One notice, one Undo; no dialog per file. */
+  binPickedMedia?: (req: PickedMediaDelete) => void
   /** A note's text — the open buffer when it has one, so what the `[[` picker
    *  lists inside a note is what you have typed, not what was last saved. */
   readNote: (path: string) => Promise<string>
+  /** Open Settings at a page — the voice note's "More accurate transcription" line opens
+   *  Extra features (editor/transcribeUi.ts). Optional: a test editor has no Settings. */
+  openSettings?: (section: string) => void
   /** Show the app's right-click menu at a point on screen — with a caption
    *  above the items when the menu is a choice, and a quieter word after an
    *  item, or a tick on the choice in use. */
@@ -138,6 +145,15 @@ export interface MediaDelete {
    *  The file is binned only once the delete is CONFIRMED, so Cancel never has
    *  anything to undo on disk. */
   restore: () => void
+}
+
+export interface PickedMediaDelete {
+  /** the note they were deleted from */
+  note: string
+  /** each file and where it sat, for the bin row's Restore (as `MediaDelete.origin`) */
+  items: { file: string; origin: MediaOrigin }[]
+  /** puts the deleted blocks back, if the note is still as the delete left it; false otherwise */
+  restore: () => boolean
 }
 
 export type LinkHandlersRef = { current: LinkHandlers | null }

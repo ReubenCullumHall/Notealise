@@ -12,6 +12,7 @@ export const CH = {
   keepVersionNow: 'vault:keepVersionNow',
   createNote: 'vault:createNote',
   createFolder: 'vault:createFolder',
+  untitledNames: 'vault:untitledNames',
   renameEntry: 'vault:renameEntry',
   moveEntryInto: 'vault:moveEntryInto',
   /** renderer -> main: raw bytes of a vault file, for showing an image inline */
@@ -132,6 +133,20 @@ export const CH = {
   recordingAppend: 'voice:recordingAppend',
   recordingEnd: 'voice:recordingEnd',
   recordingsLeft: 'voice:recordingsLeft',
+  /** renderer -> main: Transcribe (main/transcribe.ts) — is the program here; open a
+   *  job, send it 16 kHz samples in pieces, run it (resolves with the text), cancel */
+  transcribeAvailable: 'voice:transcribeAvailable',
+  transcribeBegin: 'voice:transcribeBegin',
+  transcribeAppend: 'voice:transcribeAppend',
+  transcribeRun: 'voice:transcribeRun',
+  transcribeCancel: 'voice:transcribeCancel',
+  /** renderer -> main: a recording's kept word times, or null (missing / recording changed) */
+  transcribeWordTimes: 'voice:transcribeWordTimes',
+  /** renderer -> main: "More accurate transcription" — status, one-time download, cancel, remove */
+  accurateStatus: 'voice:accurateStatus',
+  accurateDownload: 'voice:accurateDownload',
+  accurateCancel: 'voice:accurateCancel',
+  accurateRemove: 'voice:accurateRemove',
   /** renderer -> main: which import formats this build supports */
   importFormats: 'import:formats',
   /** renderer -> main: notes import — open a native picker scoped by format */
@@ -148,6 +163,10 @@ export const CH = {
   importProgress: 'import:progress',
   /** main -> renderer: update progress/state changed */
   updateStatus: 'update:status',
+  /** main -> renderer: how far a transcription has got */
+  transcribeProgress: 'voice:transcribeProgress',
+  /** main -> renderer: how far the "More accurate transcription" download has got */
+  accurateProgress: 'voice:accurateProgress',
   /** main -> renderer: debounced external-change notification */
   changed: 'vault:changed',
   /** main -> renderer: an application-menu item was invoked */

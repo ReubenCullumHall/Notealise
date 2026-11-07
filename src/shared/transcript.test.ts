@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { escapeSpoken, findTranscript, separatedText, transcriptBlock, transcriptIsStale } from './transcript'
+import { escapeSpoken, findTranscript, placeTranscript, separatedText, transcriptBlock, transcriptIsStale, unescapeSpoken } from './transcript'
 
 const audio = '<audio controls src="Lecture%203.m4a"></audio>'
 
@@ -56,5 +56,32 @@ describe('findTranscript', () => {
   it('an awkward src (a quote or & in a hand-written one) round-trips', () => {
     const lines = [audio, ...transcriptBlock('Tom & "Jo".m4a', ['x']).split('\n')]
     expect(findTranscript(lines, 0)!.src).toBe('Tom & "Jo".m4a')
+  })
+})
+
+describe('placeTranscript', () => {
+  it('a first transcript goes straight under the voice note, before anything else under it', () => {
+    const doc = [audio, '[0:12](Lecture%203.m4a#t=12)', 'after']
+    const p = placeTranscript(doc, 0, 'Lecture%203.m4a', ['Hello.'])
+    expect(p.from).toBe(1)
+    expect(p.to).toBe(1)
+    const next = [...doc.slice(0, p.from), ...p.lines, ...doc.slice(p.to)]
+    expect(findTranscript(next, 0)?.paragraphs).toEqual(['Hello.'])
+    expect(next[next.length - 2]).toBe('[0:12](Lecture%203.m4a#t=12)')
+  })
+  it('Transcribe again: the new words take the fold, the old (maybe hand-corrected) ones stay as text under it', () => {
+    const doc = [audio, ...transcriptBlock('old.m4a', ['Fixed by hand.']).split('\n'), 'after']
+    const p = placeTranscript(doc, 0, 'Lecture%203.m4a', ['New words.'])
+    const next = [...doc.slice(0, p.from), ...p.lines, ...doc.slice(p.to)]
+    const found = findTranscript(next, 0)!
+    expect(found.src).toBe('Lecture%203.m4a')
+    expect(found.paragraphs).toEqual(['New words.'])
+    expect(next.slice(found.close + 1)).toEqual(['', 'Fixed by hand.', 'after'])
+  })
+})
+
+describe('unescapeSpoken', () => {
+  it('shows what was said', () => {
+    for (const t of ['It costs $5.', '1. Mix', '# of people', 'see [[x]]', 'a < b > c']) expect(unescapeSpoken(escapeSpoken(t))).toBe(t)
   })
 })

@@ -59,6 +59,16 @@ import { openAllowedExternal } from './externalLinks'
 import { lookUpLink, readLinkThumb } from './linkPreview'
 import { convertAudio, microphoneAccess, pickAudioFiles } from './voice'
 import {
+  stopAllTranscriptions,
+  transcribeAppend,
+  transcribeAvailable,
+  transcribeBegin,
+  transcribeCancel,
+  transcribeBusy,
+  transcribeRun
+} from './transcribe'
+import { accurateCancel, accurateDownload, accurateRemove, accurateStatus, stopAccurateDownload } from './transcribeAccurate'
+import {
   beginImport,
   getImporter,
   listImporters,
@@ -87,6 +97,7 @@ import path from 'node:path'
 import {
   createFolder,
   createNote,
+  takeUntitled,
   getVaultRoot,
   listTree,
   readAsset,
@@ -107,7 +118,8 @@ import {
   listVersions,
   readVersion,
   keepVersionNow,
-  sweepVersions
+  sweepVersions,
+  readWordTimes
 } from './vault'
 
 registerImporter('notion', notionZipImporter)
@@ -289,6 +301,7 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.keepVersionNow, (_e, p: string) => keepVersionNow(p))
   ipcMain.handle(CH.createNote, (_e, dir: string, name?: string) => createNote(dir, name))
   ipcMain.handle(CH.createFolder, (_e, dir: string, name?: string) => createFolder(dir, name))
+  ipcMain.handle(CH.untitledNames, (_e, count: unknown) => takeUntitled(typeof count === 'number' ? count : 1))
   // Rename and re-key together: the filesystem move happens first (it's the part
   // that can fail), then the sidecar follows it so pins and order survive a move.
   ipcMain.handle(CH.renameEntry, async (_e, from: string, to: string) => {
@@ -415,6 +428,25 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.recordingAppend, (_e, id: unknown, data: unknown) => recordingAppend(id, data))
   ipcMain.handle(CH.recordingEnd, (_e, id: unknown) => recordingEnd(id))
   ipcMain.handle(CH.recordingsLeft, () => recordingsLeft())
+  // Transcribe (main/transcribe.ts): nothing written to the vault, nothing sent
+  // online; a job belongs to the window that began it, and every argument is
+  // checked there.
+  ipcMain.handle(CH.transcribeAvailable, () => transcribeAvailable())
+  ipcMain.handle(CH.transcribeBegin, (e, recording: unknown) => transcribeBegin(e.sender, recording))
+  ipcMain.handle(CH.transcribeAppend, (e, job: unknown, samples: unknown) => transcribeAppend(e.sender, job, samples))
+  ipcMain.handle(CH.transcribeRun, (e, job: unknown) => transcribeRun(e.sender, job))
+  ipcMain.handle(CH.transcribeCancel, (e, job: unknown) => transcribeCancel(e.sender, job))
+  ipcMain.handle(CH.transcribeWordTimes, (_e, recording: unknown) =>
+    typeof recording === 'string' ? readWordTimes(recording) : null
+  )
+  ipcMain.handle(CH.accurateStatus, () => accurateStatus())
+  ipcMain.handle(CH.accurateDownload, (e) => accurateDownload(e.sender))
+  ipcMain.handle(CH.accurateCancel, () => accurateCancel())
+  ipcMain.handle(CH.accurateRemove, () => accurateRemove(transcribeBusy()))
+  app.on('will-quit', () => {
+    stopAllTranscriptions()
+    stopAccurateDownload()
+  })
   // MAIN_STARTED_AT is module-level, so it is the moment this process booted —
   // not the moment the window asked.
   ipcMain.handle(CH.bootInfo, () => ({ startedAt: MAIN_STARTED_AT, version: app.getVersion() }))

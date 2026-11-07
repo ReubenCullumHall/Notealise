@@ -4,7 +4,8 @@ import { linkEnv } from './linkEnv'
 import { cachedVideoUrl, loadVideo, resolveVaultPath } from './videoAssets'
 import { type Pass } from './livePreview'
 import { attachDragHandle } from './attachMove'
-import { insideEmbed, selectionCovers, selectionSwallows, remeasureWhenSized } from './attachSelect'
+import { pickOnModifierClick } from './blockPick'
+import { selectionCovers, selectionSwallows, remeasureWhenSized } from './attachSelect'
 import { isMediaSource, sourceCaption } from './mediaSource'
 
 // Inline video. `<video controls src="path"></video>` is not an invented
@@ -55,6 +56,8 @@ class VideoWidget extends WidgetType {
     const wrap = document.createElement('span')
     wrap.className = this.selected ? 'cm-video cm-attach-selected' : 'cm-video'
     wrap.appendChild(attachDragHandle(view))
+    // Cmd/Ctrl/Shift+click anywhere on it picks it with other blocks, as its six dots do.
+    pickOnModifierClick(view, wrap)
     const video = document.createElement('video')
     video.controls = true
     video.className = 'cm-video-el'
@@ -136,9 +139,10 @@ export const videoPass: Pass = (view, _active, push) => {
         // keeps it a player. Swapping in raw `<video …>` source mid-drag would
         // collapse the line under the pointer — and for a video it also tears
         // down the element, losing playback position. See `selectionSwallows`.
-        const picked = selectionCovers(view, open.from, node.to)
-        const spanned = picked || selectionSwallows(view, open.from, node.to)
-        if (!spanned && insideEmbed(view, open.from, node.to)) return
+        // Ringed when picked or swept up in a dragged selection (imagePass.ts says why).
+        const spanned = selectionCovers(view, open.from, node.to) || selectionSwallows(view, open.from, node.to)
+        // Never opened up to show its HTML outside Markdown pro (Reuben, 2026-11-07 — the voice
+        // note rule, for videos too).
 
         const rel = resolveVaultPath(open.src, notePath)
         push(
@@ -148,7 +152,7 @@ export const videoPass: Pass = (view, _active, push) => {
             widget: new VideoWidget(
               open.src,
               rel,
-              picked,
+              spanned,
               // The whole `<video …></video>` pair, not just the opening tag:
               // what the eye promises is the code that puts this here.
               isMediaSource(view.state) ? view.state.doc.sliceString(open.from, node.to) : null

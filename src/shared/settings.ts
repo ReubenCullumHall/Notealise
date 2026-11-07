@@ -279,31 +279,6 @@ export interface Space {
   showPath: boolean
   /** show when the note was made and last edited, beside its word count */
   showNoteInfo: boolean
-  /** "Markdown pro": put a button in the corner of every note that switches
-   *  between the formatted view and the raw Markdown. Per-space like the rest of
-   *  this list — a revision space full of tables wants it, a journal doesn't —
-   *  and off by default, because the button is permanent furniture for people
-   *  who never want to see a `**`. Which notes are currently RAW is not here:
-   *  that is a property of each note, and lives in workspace.json. */
-  markdownPro: boolean
-  /** How the syntax marks read once Markdown pro has revealed them.
-   *
-   *  'faded' greys them so your eye runs past `<mark class="hl-rose">` to the
-   *  words; 'code' gives them a tinted monospace ground so they stand out as
-   *  markup. Reuben's call, 2026-08-29 — "make it blend in or stand out
-   *  depending on what you want". Faded is the default because the common
-   *  reason to be in raw view is to READ the note with its marks showing, not
-   *  to audit the markup.
-   *
-   *  Only ever visible inside raw view; in the formatted view the marks are
-   *  hidden, so this setting has nothing to colour. */
-  rawMarkStyle: RawMarkStyleId
-  /** Which palette colour the marks take when `rawMarkStyle` is 'colour', as the
-   *  same `hl-NAME` / `tc-NAME` token a coloured phrase in a note uses — so the
-   *  choice is made from the very same eight swatches, in the same two layers.
-   *  Reuben, 2026-08-29: the first attempt used a neutral tint and "can't see it
-   *  well, even in light mode". Ignored entirely while the style is 'faded'. */
-  rawMarkTint: ColorToken
   // --- shortcuts ---
   /** The four custom format-bar buttons, in bar order: [farLeft, left, right,
    *  farRight]. Each is an action id from the renderer's catalogue
@@ -534,6 +509,33 @@ export interface AppSettings {
    *  `confirmMediaDelete` is: it is how this person likes to listen, not how any
    *  set of notes looks. */
   voiceSkip: VoiceSkip
+  /** "Markdown pro": put a button in the corner of every note that switches
+   *  between the formatted view and the raw Markdown. ONE switch for the whole
+   *  app, in Settings → Extra features (Reuben, 2026-11-07: "one switch for the
+   *  whole app in extra features") — it was per space, like the rest of a
+   *  space's note extras, until then; a file written before keeps it on if ANY
+   *  space had it on (normalizeSettings). Off by default, because the button is
+   *  permanent furniture for people who never want to see a `**`. Which notes are currently RAW is not here:
+   *  that is a property of each note, and lives in workspace.json. */
+  markdownPro: boolean
+  /** How the syntax marks read once Markdown pro has revealed them.
+   *
+   *  'faded' greys them so your eye runs past `<mark class="hl-rose">` to the
+   *  words; 'code' gives them a tinted monospace ground so they stand out as
+   *  markup. Reuben's call, 2026-08-29 — "make it blend in or stand out
+   *  depending on what you want". Faded is the default because the common
+   *  reason to be in raw view is to READ the note with its marks showing, not
+   *  to audit the markup.
+   *
+   *  Only ever visible inside raw view; in the formatted view the marks are
+   *  hidden, so this setting has nothing to colour. */
+  rawMarkStyle: RawMarkStyleId
+  /** Which palette colour the marks take when `rawMarkStyle` is 'colour', as the
+   *  same `hl-NAME` / `tc-NAME` token a coloured phrase in a note uses — so the
+   *  choice is made from the very same eight swatches, in the same two layers.
+   *  Reuben, 2026-08-29: the first attempt used a neutral tint and "can't see it
+   *  well, even in light mode". Ignored entirely while the style is 'faded'. */
+  rawMarkTint: ColorToken
   /** Full-colour or accent-coloured space emoji. Global, against the settings
    *  rule (CLAUDE.md: every look setting belongs to a space) — Reuben's call,
    *  2026-09-28: the switcher shows every space's emoji side by side, and the
@@ -625,11 +627,6 @@ export const DEFAULT_SPACE: Space = {
   showIsland: true,
   showPath: true,
   showNoteInfo: false,
-  markdownPro: false,
-  rawMarkStyle: 'faded',
-  // Violet reads as markup rather than as prose, and its light and dark values
-  // are far enough from the body ink to be unmistakable on either theme.
-  rawMarkTint: 'tc-violet',
   toolbarSlots: ['', '', '', ''],
   pageLook: '',
   font: '',
@@ -686,6 +683,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   confirmMediaDelete: true,
   lookUpLinks: true,
   voiceSkip: { ...VOICE_SKIP_DEFAULT },
+  markdownPro: false,
+  rawMarkStyle: 'faded',
+  // Violet reads as markup rather than as prose, and its light and dark values
+  // are far enough from the body ink to be unmistakable on either theme.
+  rawMarkTint: 'tc-violet',
   emojiStyle: 'colour',
   pageLookLibrary: [],
   tintLibrary: [],
@@ -849,11 +851,6 @@ function normalizeSpace(raw: unknown, legacy: LegacyChrome = {}): Space {
     showPath: chrome(s.showPath, legacy.showPath, DEFAULT_SPACE.showPath),
     showNoteInfo:
       typeof s.showNoteInfo === 'boolean' ? s.showNoteInfo : DEFAULT_SPACE.showNoteInfo,
-    markdownPro: typeof s.markdownPro === 'boolean' ? s.markdownPro : DEFAULT_SPACE.markdownPro,
-    rawMarkStyle: RAW_MARK_STYLES.includes(s.rawMarkStyle as RawMarkStyleId)
-      ? (s.rawMarkStyle as RawMarkStyleId)
-      : DEFAULT_SPACE.rawMarkStyle,
-    rawMarkTint: isColorToken(s.rawMarkTint) ? s.rawMarkTint : DEFAULT_SPACE.rawMarkTint,
     toolbarSlots: normalizeSlots(s.toolbarSlots),
     // through migratePageLook: presets reach here too, via normalizeLook
     pageLook: migratePageLook(shortString(s.pageLook)),
@@ -916,6 +913,28 @@ function dedupeFolders(spaces: Space[]): Space[] {
  * It does NOT check folders against the disk — that's `reconcileSpaces`, which
  * needs the tree and so runs in the renderer once the vault is loaded.
  */
+/** Markdown pro and how its marks look — app-wide since 2026-11-07. MIGRATION: a file
+ *  written before has them per space (and a pre-Spaces file at the top level, which
+ *  `src` then is). On if ANY space had it on — nobody who used it loses it — and the
+ *  marks' look from the first space that had it on. Once written app-wide, that wins. */
+function normalizeMarkdownPro(
+  s: Record<string, unknown>,
+  src: unknown[]
+): Pick<AppSettings, 'markdownPro' | 'rawMarkStyle' | 'rawMarkTint'> {
+  const spaces = src.filter(isPlainObject)
+  const using = spaces.find((x) => x.markdownPro === true)
+  const from = typeof s.markdownPro === 'boolean' ? s : (using ?? {})
+  const style = from.rawMarkStyle ?? s.rawMarkStyle
+  const tint = from.rawMarkTint ?? s.rawMarkTint
+  return {
+    markdownPro: typeof s.markdownPro === 'boolean' ? s.markdownPro : !!using,
+    rawMarkStyle: RAW_MARK_STYLES.includes(style as RawMarkStyleId)
+      ? (style as RawMarkStyleId)
+      : DEFAULT_SETTINGS.rawMarkStyle,
+    rawMarkTint: isColorToken(tint) ? tint : DEFAULT_SETTINGS.rawMarkTint
+  }
+}
+
 export function normalizeSettings(raw: unknown): AppSettings {
   const s = isPlainObject(raw) ? raw : {}
   const list = Array.isArray(s.spaces) ? s.spaces.filter(isPlainObject) : []
@@ -994,6 +1013,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
       typeof s.confirmMediaDelete === 'boolean' ? s.confirmMediaDelete : DEFAULT_SETTINGS.confirmMediaDelete,
     lookUpLinks: typeof s.lookUpLinks === 'boolean' ? s.lookUpLinks : DEFAULT_SETTINGS.lookUpLinks,
     voiceSkip: normalizeVoiceSkip(s.voiceSkip),
+    ...normalizeMarkdownPro(s, src),
     emojiStyle: EMOJI_STYLES.includes(s.emojiStyle as EmojiStyle)
       ? (s.emojiStyle as EmojiStyle)
       : DEFAULT_SETTINGS.emojiStyle,
