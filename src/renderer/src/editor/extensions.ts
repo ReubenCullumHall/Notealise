@@ -22,6 +22,7 @@ import { blockMath } from './blockMath'
 import { blockGuard } from './blockGuard'
 import { transcriptFold } from './transcriptFold'
 import { ruleSnap } from './ruleSnap'
+import { blockLines } from './blockLines'
 import { pagePaper } from './pagePaper'
 import { mathEditor } from './mathEditor'
 import { blockTable } from './blockTable'
@@ -178,6 +179,9 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // Measures each formula on its own line so the Lined look can round it up
     // to whole rules (ruleSnap.ts, app.css).
     ruleSnap,
+    // Marks the lines that are a picture or video alone, so app.css keeps a gap round them, and
+    // rings a picked table or formula like any other picked block (blockLines.ts).
+    blockLines,
     // Tells the page look's sheet, behind the editor, where the text starts and
     // how far the note scrolls (pagePaper.ts, app.css).
     pagePaper,

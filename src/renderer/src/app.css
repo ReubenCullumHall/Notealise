@@ -1032,7 +1032,8 @@ button.icon:hover {
 .cm-math-display {
   display: block;
   text-align: center;
-  margin: 0.3em 0;
+  /* the gap every block keeps (--block-clear, above the pictures) */
+  margin: var(--block-clear) 0;
 }
 /* On Lined a formula on its own line takes a whole number of rules, so the
    lines below it stay on theirs (they sat ~5px off before, 2026-09-27).
@@ -1042,9 +1043,10 @@ button.icon:hover {
    measurement from depending on the padding it produces. */
 :is([data-page-look='lined'], [data-page-look='worn']) .cm-math-display {
   display: flow-root;
-  margin-top: 0;
-  margin-bottom: 0;
-  --snap-pad: calc((round(up, var(--snap-h, 0px), var(--page-rule)) - var(--snap-h, 0px)) / 2);
+  /* the gap every block keeps, inside its whole rules (2026-11-08) */
+  margin-top: var(--block-clear);
+  margin-bottom: var(--block-clear);
+  --snap-pad: calc((round(up, calc(var(--snap-h, 0px) + 2 * var(--block-clear)), var(--page-rule)) - var(--snap-h, 0px)) / 2 - var(--block-clear));
   padding-top: var(--snap-pad);
   padding-bottom: var(--snap-pad);
 }
@@ -3783,6 +3785,17 @@ button.look-card:hover {
   line-height: 1;
 }
 
+/* --- the gap round every block (Reuben, 2026-11-08: "don't make any blocks overlap") ---
+   Two blocks in a row — voice notes, pictures, videos, tables, formulas — always keep a visible
+   gap, and their picked outlines (2px out from the edge, plus 2px of their own) never meet, on
+   every page look. Each block keeps this band above and below it, inside its OWN line, so a click
+   there is on the block. It grows with the note's text and never drops under 6px. The rules:
+   docs/feature-done-checklist.md "Blocks — spacing and page looks"; the check:
+   tools/block-check/spacing.py. */
+.cm-editor {
+  --block-clear: max(6px, 0.4em);
+}
+
 /* --- inline images + tables in the editor (imagePass / tablePass) ---
    Colours are tokens, never hex (rule 5). Both widgets replace their markdown
    off the cursor line and hand it back when you select into them. */
@@ -3852,6 +3865,23 @@ button.look-card:hover {
   max-width: 100%;
   border-radius: var(--r-surface);
   min-height: 1.2em;
+}
+/* A picture or video ALONE on its line is a block (blockLines.ts marks the line; one inside a
+   sentence is left as it was): the gap above and below it is inside its own line. On Lined and
+   Worn it takes whole rules, measured like a formula (ruleSnap.ts), so the lines below stay on
+   theirs. It stays inline beside CodeMirror's invisible markers — hiding them, as the voice note
+   does, with the picture made a block, left the editor unable to place a selection next to it,
+   and Cmd-clicking a formula above a picture picked nothing (spacing.py, 2026-11-08). */
+.cm-block-line > :is(.cm-image, .cm-video, .cm-video-card) {
+  /* top-aligned, so the line is exactly the block plus its gap — no strip under the baseline */
+  vertical-align: top;
+  margin-top: var(--block-clear);
+  margin-bottom: var(--block-clear);
+}
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-block-line > :is(.cm-image, .cm-video, .cm-video-card) {
+  --snap-pad: calc((round(up, calc(var(--snap-h, 0px) + 2 * var(--block-clear)), var(--page-rule)) - var(--snap-h, 0px) - 2 * var(--block-clear)) / 2);
+  margin-top: calc(var(--block-clear) + var(--snap-pad));
+  margin-bottom: calc(var(--block-clear) + var(--snap-pad));
 }
 .cm-video-missing .cm-video-el {
   min-width: 8rem;
@@ -4210,8 +4240,10 @@ button.look-card:hover {
    goes too (the margin cancels the chrome padding exactly), so a table takes a
    whole number of rules and the page below it stays in step. */
 :is([data-page-look='lined'], [data-page-look='worn']) .cm-table {
-  margin-top: -20px;
-  margin-bottom: -20px;
+  /* Half a rule above and below — one rule in all — so the table still takes whole rules and
+     keeps the gap every block keeps (2026-11-08; it used to sit hard against its neighbours). */
+  margin-top: calc(var(--page-rule) / 2 - 20px);
+  margin-bottom: calc(var(--page-rule) / 2 - 20px);
 }
 :is([data-page-look='lined'], [data-page-look='worn']) .cm-table table {
   box-shadow: inset 1px 1px 0 rgb(var(--ink-300) / 0.35);
@@ -5172,9 +5204,9 @@ html.space-vt::view-transition-new(root) {
      need ~340px on one line, which made the whole note wider than a narrow
      column and scroll sideways (Reuben, 2026-11-06). */
   container-type: inline-size;
-  /* in the note's own em, as the formula's margin is — the type size is set on
-     the rows below, so it doesn't shrink this */
-  margin: 0.3em 0;
+  /* the gap every block keeps (--block-clear, with the pictures) — in the note's own em, so
+     it grows with the text; the type size is set on the rows below, so it doesn't shrink this */
+  margin: var(--block-clear) 0;
   /* Room inside its ring, so the play button and the name don't sit on the edge when it is
      selected (Reuben, 2026-11-07: "make it a bit more friendly"). */
   padding: 6px 10px;
@@ -5647,9 +5679,11 @@ html.space-vt::view-transition-new(root) {
    formula) and this rounds up and splits the difference above and below. */
 :is([data-page-look='lined'], [data-page-look='worn']) .cm-voice {
   display: flow-root;
-  margin-top: 0;
-  margin-bottom: 0;
-  --snap-pad: calc((round(up, var(--snap-h, 0px), var(--page-rule)) - var(--snap-h, 0px)) / 2);
+  /* the gap every block keeps, inside its whole rules: two voice notes one under the other
+     touched here, and their picked outlines crossed (Reuben, 2026-11-08) */
+  margin-top: var(--block-clear);
+  margin-bottom: var(--block-clear);
+  --snap-pad: calc((round(up, calc(var(--snap-h, 0px) + 2 * var(--block-clear)), var(--page-rule)) - var(--snap-h, 0px)) / 2 - var(--block-clear));
   padding-top: var(--snap-pad);
   padding-bottom: var(--snap-pad);
 }
@@ -6684,11 +6718,13 @@ html.space-vt::view-transition-new(root) {
   opacity: 0.5;
   cursor: default;
 }
-/* Measured in the app (2026-11-07): the voice note's line carries ~32px of space under the block,
-   so the transcript is pulled up into it to sit right under the row; and the block itself starts
-   28px into its line (the grip's gutter), so 28 + 44 lines the words up with the waveform. */
+/* Straight under the voice note, never over it (2026-11-08): it used to be pulled up 36px into
+   space the voice note's line no longer has (its invisible markers were hidden on 2026-11-07), so
+   it started ~30px inside the voice note, under its play row — two things drawn in one place.
+   The voice note's own gap (--block-clear) is the space between them. The block starts 28px into
+   its line (the grip's gutter), so 28 + 44 lines the words up with the waveform. */
 .cm-voice-tx {
-  margin: -36px 0 10px 82px;
+  margin: 0 0 10px 82px;
   padding-top: 8px;
   border-top: 1px solid rgb(var(--ink-300) / 0.35);
   user-select: text;

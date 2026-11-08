@@ -1,7 +1,7 @@
 import { lineOfEmbed } from '../../../shared/attachments'
 import { playMomentHere } from './momentLink'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Compartment, EditorState } from '@codemirror/state'
+import { Compartment, EditorState, Transaction } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { history } from '@codemirror/commands'
 import { baseExtensions, historyBox } from './extensions'
@@ -11,6 +11,7 @@ import { setLinkEnv, type LinkEnv, type LinkHandlers } from './linkEnv'
 import { selectionIsEmbed } from './attachSelect'
 import { isDotPick } from './blockPick'
 import { rawViewOf } from './rawView'
+import { separateBlocks } from './separateBlocks'
 import { mediaSourceOf } from './mediaSource'
 import type { Layer } from './palette'
 import { blockIdOf, blockLineOf } from '../../../shared/blocks'
@@ -406,6 +407,22 @@ export function CodeEditor({
     view.dispatch({ effects: historyBox.reconfigure([]) })
     view.dispatch({ effects: historyBox.reconfigure(history()) })
     programmatic.current = false
+    // Blocks stuck together on one line — two voice notes, or words typed onto a voice note's
+    // line — go back on their own lines as the note opens, and that is saved (separateBlocks.ts,
+    // Reuben 2026-11-08). One change covering only the lines that differ, so the cursor and the
+    // scroll stay put, and kept out of Undo: there is nothing of yours to take back.
+    const opened = view.state.doc.toString()
+    const separated = separateBlocks(opened)
+    if (separated !== null) {
+      let head = 0
+      while (head < opened.length && opened[head] === separated[head]) head++
+      let tail = 0
+      while (tail < Math.min(opened.length, separated.length) - head && opened[opened.length - 1 - tail] === separated[separated.length - 1 - tail]) tail++
+      view.dispatch({
+        changes: { from: head, to: opened.length - tail, insert: separated.slice(head, separated.length - tail) },
+        annotations: Transaction.addToHistory.of(false)
+      })
+    }
     view.scrollDOM.scrollTop = saved ? saved.scrollTop : 0
     prevPath.current = path
     hideToolbar()

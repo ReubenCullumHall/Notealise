@@ -10,7 +10,9 @@ import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view'
 // needs nothing re-measured). The content box is what's observed, so the
 // padding that answers the measurement can never trigger another one.
 
-const SELECTOR = '.cm-math-display'
+// A picture or video alone on its line too (blockLines.ts marks the line), so on Lined it takes
+// whole rules like a formula and the lines below stay on theirs (2026-11-08).
+const SELECTOR = '.cm-math-display, .cm-block-line > .cm-image, .cm-block-line > .cm-video, .cm-block-line > .cm-video-card'
 
 export const ruleSnap = ViewPlugin.fromClass(
   class {

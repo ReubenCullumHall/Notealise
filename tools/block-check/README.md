@@ -25,3 +25,21 @@ put `binv1.m4a`, `binv2.m4a` (copies of any recording) and a `BinTest` note usin
 - `down.py <dir with drag-original.md>` — fast drags downward and to the end of the note.
 Ports and the note's starting text are written at the top of each; on Windows use `python -X utf8` and the
 modifier is Control, not Meta (search the script for 'Meta').
+
+Added 2026-11-08 — blocks keep their distance (`docs/feature-done-checklist.md` "Blocks — spacing and page looks"):
+- `spacing.py [port] [looks…]` — every pair of block kinds, one on the line under the other, on every page look:
+  both picked with real Cmd-clicks, outlines >= 2px apart (>= 0 against text), the line below on its rule on
+  Lined/Worn, nothing drawn off. Needs a note called `Spacing` (any text) and a.m4a, pic.png, clip.mp4.
+  Mac 2026-11-08: 245 pairs, 0 problems.
+- `gaps.py <vault> [port]` — the awkward cases: stuck blocks split on open (saved, not undone), a picture in a
+  sentence left alone, a transcript between two voice notes, a narrow column, a click in the gap picks the
+  block, picked tables/formulas ringed. Writes its own notes. Mac: 26/26.
+
+Starting texts the older checks need (worked out again 2026-11-08 — keep them here):
+- `Drag` (drag.py, before EVERY seed — it moves things and doesn't reset): `Para A first words`, a voice note
+  `data-name="Voice one"` (src `Lecture%203.m4a`), `Para B middle words`, the table `| a | b |` / `| - | - |` /
+  `| 1 | 2 |`, a voice note `data-name="Voice two"` (src `Lecture%203%20take%201.m4a`), `$$` `x^2` `$$`,
+  `Para C last words` — each separated by a blank line. down.py only needs `Drag` to hold one voice note.
+- `Select` and `Guard` must already show a voice note when opened (they wait for one, then set their own text).
+- `Table` (split2.py): any table. Close the split it leaves open before running down.py.
+- Files: `Lecture 3.m4a`, `Lecture 3 take 1.m4a` (copies of any recording), `a.m4a`, `b.m4a`, `pic.png`, `clip.mp4`.
