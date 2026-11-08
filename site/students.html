@@ -17,6 +17,7 @@
   <!-- dev theme switch (nav.js): applies a saved Light/Dark choice before paint; only ever set on local addresses -->
   <script>try{var t=localStorage.getItem("nl-site-theme");if(t)document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
   <link rel="stylesheet" href="students.css?v=20261029a" />
+  <link rel="stylesheet" href="voice-demo.css?v=20261108c" />
   <!-- KaTeX, the same maths drawing the app uses, so the Maths example is real maths -->
   <link rel="stylesheet" href="katex/katex.min.css" />
 <link rel="stylesheet" href="hover.css" />
@@ -110,10 +111,65 @@
       </div>
     </section>
 
-    <!-- ── 02 Maths ────────────────────────────────────────────────────── -->
-    <section class="st-stop" data-side="right" data-pen="blue">
+    <!-- ── 02 Voice notes ──────────────────────────────────────────────── -->
+    <!-- The video is a screen recording of the real clip editor (1280x720, light and dark);
+         the voice note under it is the app's player rebuilt in this page's colours (voice-demo.css/js). -->
+    <section class="st-stop st-voice" data-side="right" data-pen="green" data-voice-demo>
       <div class="st-head">
-        <p class="st-label" data-rv><b>02</b>Maths and science</p>
+        <p class="st-label" data-rv><b>02</b>Voice notes</p>
+        <h2 class="st-h2" data-rv>Ramble, then <span class="hl">cut it out</span>.</h2>
+      </div>
+      <div class="st-row">
+        <div class="st-body" data-rv>
+          <p>Explain it out loud, umms and all. Then cut the false starts and the long pauses, and keep the take that makes sense.</p>
+          <p>Press Transcribe and the words are written out for you, all done on device.</p>
+        </div>
+        <div class="vn-stage" data-rv>
+          <figure class="st-shot vn-film">
+            <video muted loop playsinline preload="metadata" disablepictureinpicture
+              data-light="media/voice-edit-light.mp4" data-dark="media/voice-edit-dark.mp4"
+              data-light-poster="media/voice-edit-light.jpg" data-dark-poster="media/voice-edit-dark.jpg"
+              poster="media/voice-edit-light.jpg"
+              aria-label="The voice note editor: a Korean pronunciation clip has its fumbled middle cut out and its pauses shortened, then plays back clean"></video>
+            <button type="button" class="vn-hit" aria-label="Turn the sound on" aria-pressed="false">
+              <span class="vn-hud" aria-hidden="true">
+                <svg viewBox="0 0 36 36" fill="currentColor"><path d="M6 13.5h5.2L18 7.6c.8-.7 2-.1 2 .9v19c0 1-1.2 1.6-2 .9l-6.8-5.9H6c-.8 0-1.5-.7-1.5-1.5v-6c0-.8.7-1.5 1.5-1.5z"/>
+                  <g class="vn-waves" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M24 13.4a6 6 0 0 1 0 9.2"/><path d="M27.4 10a11 11 0 0 1 0 16"/></g>
+                  <g class="vn-slash" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M24.5 14l7 8M31.5 14l-7 8"/></g></svg>
+              </span>
+            </button>
+          </figure>
+          <div class="vn-card">
+            <div class="vn" data-src="media/gamsahamnida.m4a" data-duration="10.405" data-bars="[0.06,0.06,0.06,0.107,0.653,0.75,0.945,0.838,0.397,0.962,1.0,0.48,0.554,0.685,0.277,0.185,0.34,0.454,0.55,0.06,0.06,0.06,0.06,0.06,0.06,0.109,0.589,0.318,0.864,0.893,0.673,0.517,0.115,0.202,0.27,0.676,0.365,0.687,0.208,0.393,0.339,0.505,0.189,0.119,0.102,0.079,0.06,0.06,0.06,0.217,0.87,0.969,0.86,0.288,0.087,0.06,0.06,0.06,0.06,0.845,0.981,0.8,0.102,0.06,0.06,0.081,0.758,0.778,0.268,0.19,0.06,0.06,0.108,0.439,0.387,0.349,0.142,0.06,0.06,0.183,0.654,0.38,0.06,0.06,0.06,0.704,0.434,0.915,0.297,0.512,0.06,0.06,0.06,0.06,0.06,0.06]" data-words="[[&quot;&#x27;감사합니다&#x27;&quot;,0.4,1.16],[&quot;발음해&quot;,1.16,1.61],[&quot;볼게요.&quot;,1.61,2.07],[&quot;&#x27;합니다&#x27;는&quot;,2.72,3.42],[&quot;&#x27;함니다&#x27;처럼&quot;,3.42,4.3],[&quot;소리&quot;,4.3,4.65],[&quot;나요.&quot;,4.65,5.0],[&quot;감,&quot;,5.41,5.88],[&quot;사,&quot;,6.26,6.8],[&quot;함,&quot;,7.11,7.55],[&quot;니,&quot;,7.82,8.29],[&quot;다.&quot;,8.61,8.89],[&quot;감사합니다!&quot;,9.25,9.78]]">
+              <div class="vn-name">감사합니다</div>
+              <div class="vn-row">
+                <button type="button" class="vn-play" aria-label="Play"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" aria-hidden="true"><path class="pp-a" fill="currentColor"/><path class="pp-b" fill="currentColor"/></svg></button>
+                <div class="vn-wave"><span class="vn-bars"></span><span class="vn-bars lit"></span><input class="vn-seek" type="range" min="0" step="0.01" value="0" aria-label="Playback position" /></div>
+                <span class="vn-time">0:10</span>
+                <button type="button" class="vn-icon" data-skip="-10" aria-label="Back 10 seconds"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.87 6.86A8 8 0 1 0 10.61 4.12"/><path d="M13.15 1.23L10.61 4.12L13.98 5.96"/><text x="12" y="15.1" text-anchor="middle" font-size="7.4" font-weight="600" fill="currentColor" stroke="none">10</text></svg></button>
+                <button type="button" class="vn-icon" data-skip="10" aria-label="Forward 10 seconds"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.13 6.86A8 8 0 1 1 13.39 4.12"/><path d="M10.85 1.23L13.39 4.12L10.02 5.96"/><text x="12" y="15.1" text-anchor="middle" font-size="7.4" font-weight="600" fill="currentColor" stroke="none">10</text></svg></button>
+                <button type="button" class="vn-icon vn-edit" aria-label="Edit clip (in the app)" aria-describedby="vn-tip"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12"/></svg><span class="vn-tip" role="tooltip" id="vn-tip">Download the app to test this out</span></button>
+                <button type="button" class="vn-icon vn-mixbtn" aria-label="Mixer" aria-expanded="false" aria-controls="vn-mixer"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h9M18 8h2M4 16h2M11 16h9"/><circle cx="15.5" cy="8" r="2"/><circle cx="8.5" cy="16" r="2"/></svg></button>
+              </div>
+              <div class="vn-txline"><span class="vn-txslot"><button type="button" class="vn-txstart vn-glow"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg>Transcribe</button></span></div>
+              <div class="vn-mixer" id="vn-mixer" hidden>
+                <label class="vn-ctl"><span class="vn-ctl-head"><span>Volume</span><span class="vn-ctl-value" data-value="volume">100%</span></span><input type="range" data-key="volume" min="0" max="200" step="5" value="100" /></label>
+                <label class="vn-ctl"><span class="vn-ctl-head"><span>Tone</span><span class="vn-ctl-value" data-value="tone">0</span></span><input type="range" data-key="tone" min="-100" max="100" step="5" value="0" /><span class="vn-ctl-ends"><span>Warmer</span><span>Brighter</span></span></label>
+                <label class="vn-ctl"><span class="vn-ctl-head"><span>Speed</span><span class="vn-ctl-value" data-value="speed">1&times;</span></span><input type="range" data-key="speed" min="0" max="1000" step="1" value="387" /></label>
+                <button type="button" class="vn-reset">Reset</button>
+              </div>
+              <div class="vn-tx" hidden><p class="vn-tx-text" lang="ko"></p></div>
+            </div>
+          </div>
+          <p class="st-caption">Try it. Editing is in the app.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 03 Maths ────────────────────────────────────────────────────── -->
+    <section class="st-stop" data-side="left" data-pen="blue">
+      <div class="st-head">
+        <p class="st-label" data-rv><b>03</b>Maths and science</p>
         <h2 class="st-h2" data-rv>Maths that <span class="hl">looks like maths</span>.</h2>
       </div>
       <div class="st-row">
@@ -128,10 +184,10 @@
       </div>
     </section>
 
-    <!-- ── 03 Toggles as flashcards ────────────────────────────────────── -->
-    <section class="st-stop" data-side="left" data-pen="pink">
+    <!-- ── 04 Toggles as flashcards ────────────────────────────────────── -->
+    <section class="st-stop" data-side="right" data-pen="pink">
       <div class="st-head">
-        <p class="st-label" data-rv><b>03</b>Testing yourself</p>
+        <p class="st-label" data-rv><b>04</b>Testing yourself</p>
         <h2 class="st-h2" data-rv>Hide the answer. <span class="hl">Test yourself</span>.</h2>
       </div>
       <div class="st-row">
@@ -159,10 +215,10 @@
       </div>
     </section>
 
-    <!-- ── 04 Colour ───────────────────────────────────────────────────── -->
-    <section class="st-stop" data-side="right" data-pen="green">
+    <!-- ── 05 Colour ───────────────────────────────────────────────────── -->
+    <section class="st-stop" data-side="left" data-pen="green">
       <div class="st-head">
-        <p class="st-label" data-rv><b>04</b>Colour</p>
+        <p class="st-label" data-rv><b>05</b>Colour</p>
         <h2 class="st-h2" data-rv>Colour-code it like <span class="hl">your paper notes</span>.</h2>
       </div>
       <div class="st-row">
@@ -182,10 +238,10 @@
       </div>
     </section>
 
-    <!-- ── 05 Links ────────────────────────────────────────────────────── -->
-    <section class="st-stop" data-side="left" data-pen="orange">
+    <!-- ── 06 Links ────────────────────────────────────────────────────── -->
+    <section class="st-stop" data-side="right" data-pen="orange">
       <div class="st-head">
-        <p class="st-label" data-rv><b>05</b>Linking</p>
+        <p class="st-label" data-rv><b>06</b>Linking</p>
         <h2 class="st-h2" data-rv>Join the <span class="hl">topics up</span>.</h2>
       </div>
       <div class="st-row">
@@ -205,10 +261,10 @@
       </div>
     </section>
 
-    <!-- ── 06 Everything else ──────────────────────────────────────────── -->
+    <!-- ── 07 Everything else ──────────────────────────────────────────── -->
     <section class="st-stop st-more" data-pen="yellow">
       <div class="st-head st-head-center">
-        <p class="st-label" data-rv><b>06</b>The rest of the pencil case</p>
+        <p class="st-label" data-rv><b>07</b>The rest of the pencil case</p>
         <h2 class="st-h2" data-rv>Everything else <span class="hl">you&rsquo;ll need</span>.</h2>
       </div>
       <ul class="st-grid">
@@ -255,11 +311,11 @@
       </ul>
     </section>
 
-    <!-- ── 07 Questions ────────────────────────────────────────────────── -->
+    <!-- ── 08 Questions ────────────────────────────────────────────────── -->
     <section class="st-stop st-faq" data-pen="pink">
       <div class="st-faq-grid">
         <div class="st-head">
-          <p class="st-label" data-rv><b>07</b>Questions</p>
+          <p class="st-label" data-rv><b>08</b>Questions</p>
           <h2 class="st-h2" data-rv>Before <span class="hl">you start</span>.</h2>
         </div>
         <div class="faq" data-rv>
@@ -295,6 +351,7 @@
   <script src="nav.js"></script>
   <script src="katex/katex.min.js"></script>
   <script src="students.js"></script>
+  <script src="voice-demo.js?v=20261108c"></script>
 <script src="hover.js"></script>
 <script src="motion.js?v=20261031c"></script>
 </body>
