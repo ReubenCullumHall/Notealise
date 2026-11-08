@@ -81,7 +81,7 @@ const QUIT_BUDGET_MS = 1100
 const LIVE_SLOT = LIVE_SECONDS / BARS
 
 /** How the mark key is written on this computer. */
-const MARK_KEY = /Mac/.test(navigator.userAgent) ? '⌘⇧M' : 'Ctrl+Shift+M'
+const MARK_KEY = typeof navigator !== 'undefined' && /Mac/.test(navigator.userAgent) ? '⌘⇧M' : 'Ctrl+Shift+M'
 const UNEXPECTED_STOP = 'Recording stopped unexpectedly — saving what was recorded.'
 
 // --- where the block is ------------------------------------------------------------
