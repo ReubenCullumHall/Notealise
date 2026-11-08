@@ -40,6 +40,31 @@
   </script>
   <meta name="description" content="A Markdown editor you shape until it fits how you think. Your notes stay plain files on your own disk — no account, no lock-in. Free, for Windows, macOS and Linux." />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <!-- Search engines: tells Google the app is also spelled with a Z (Notealize), which many
+       US visitors type. Not shown on the page. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://notealise.com/#website",
+        "url": "https://notealise.com/",
+        "name": "Notealise",
+        "alternateName": ["Notealize"]
+      },
+      {
+        "@type": "SoftwareApplication",
+        "name": "Notealise",
+        "alternateName": ["Notealize"],
+        "applicationCategory": "ProductivityApplication",
+        "operatingSystem": "Windows, macOS, Linux",
+        "url": "https://notealise.com/",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    ]
+  }
+  </script>
   <link rel="canonical" href="https://notealise.com/" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Notealise" />
