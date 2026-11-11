@@ -15,6 +15,7 @@ import {
   underline,
   wikiLink
 } from './formatCommands'
+import { parsed } from './parsedState'
 
 // The commands themselves, driven against a real EditorState. CodeMirror's state
 // is pure — only EditorView needs a DOM — so a stub view with the two members
@@ -205,11 +206,13 @@ describe('set vs toggle', () => {
 describe('style toggles over a mismatched selection', () => {
   function md(doc: string, sel: string): { view: EditorView; read: () => string } {
     const at = doc.indexOf(sel)
-    let state = EditorState.create({
-      doc,
-      selection: { anchor: at, head: at + sel.length },
-      extensions: [markdown({ base: markdownLanguage })]
-    })
+    let state = parsed(
+      EditorState.create({
+        doc,
+        selection: { anchor: at, head: at + sel.length },
+        extensions: [markdown({ base: markdownLanguage })]
+      })
+    )
     const view = {
       get state() {
         return state

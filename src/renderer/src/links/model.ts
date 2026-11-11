@@ -51,6 +51,22 @@ export function noteRefs(tree: TreeNode[]): NoteRef[] {
   return out
 }
 
+/** `next`, unless it names exactly the notes and folders `prev` does, in the same order
+ *  — then `prev` itself.
+ *
+ *  Everything that resolves a link is keyed on this array (LinkEnv.notes), and each open
+ *  note re-works its incoming links whenever it is a new one: 50+ ms a time on a real
+ *  vault. The tree is renewed whenever a note's second line or edited time changes, which
+ *  since the app check of 2026-11-09 is after every save — none of which changes what a
+ *  link can point at. Same idea as `spaceMarks` in App.tsx. */
+export function keepNoteRefs(prev: NoteRef[], next: NoteRef[]): NoteRef[] {
+  if (prev.length !== next.length) return next
+  for (let i = 0; i < next.length; i++) {
+    if (prev[i].path !== next[i].path || prev[i].kind !== next[i].kind) return next
+  }
+  return prev
+}
+
 /** One row of the `[[` picker. */
 export interface LinkChoice {
   ref: NoteRef
@@ -445,10 +461,15 @@ export function outgoingLinks(
   headings?: ReadonlyMap<string, string[]>
 ): LinkEntry[] {
   const out: LinkEntry[] = []
+  // Which link on its line this is — what its chip is known by (`key`, below).
+  let onLine = 0
+  let nth = 0
   // The same walk the index uses, so the block and the backlinks it produces
   // elsewhere can never disagree about what counts as a link (fenced code, in
   // particular, is skipped by both because it is skipped here).
   eachLinkLine(text, (l, line, lineText) => {
+    nth = line === onLine ? nth + 1 : 0
+    onLine = line
     const r = resolveLink(l, notes, path)
     if (r.kind === 'self') return // a jump inside this note is not a connection to another
     const target = r.kind === 'note' ? r.path : null
@@ -463,7 +484,13 @@ export function outgoingLinks(
       ...(target ? crossing(path, target, spaces) : { cross: false, space: '', emoji: '' }),
       context: toContext(lineText),
       ambiguous: r.kind === 'note' && r.ambiguous,
-      key: `out:${line}:${l.from}`
+      // Its line and which link on that line — NOT where it starts in the note. With
+      // the start in it, every character typed anywhere above a link gave that link a
+      // new key, and React tore down and rebuilt its chip (and every chip after it) each
+      // time the pane redrew: 224 chips in six words on a note with 32 links (app check
+      // 2026-11-09). A chip now changes identity only when lines are added or removed
+      // above it, or a link is added before it on its own line.
+      key: `out:${line}:${nth}`
     })
   })
   return out

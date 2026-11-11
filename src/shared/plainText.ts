@@ -90,6 +90,12 @@ export function countWords(md: string): number {
   return tokens.filter((t) => /[\p{L}\p{N}]/u.test(t)).length
 }
 
+/** How much of a note the sidebar's second line is made from, and how long that line is.
+ *  Main reads only this much of each file on a tree walk — reading every note whole would
+ *  make a large vault crawl. */
+export const PREVIEW_BYTES = 400
+export const PREVIEW_CHARS = 90
+
 /** One line of a note's opening text, for the sidebar's second row.
  *
  *  The tidy-up after collapsing whitespace is the same stranded-punctuation
@@ -103,4 +109,19 @@ export function toPreviewLine(md: string, max: number): string {
     .replace(/([([{])\s+/g, '$1')
     .trim()
     .slice(0, max)
+}
+
+/** The sidebar's second line for a note, worked out from its whole text — what main's
+ *  tree walk will say about the same note once it is saved (vault.ts `readPreview`), so
+ *  the window can bring a row up to date after its own save without a walk of the vault.
+ *
+ *  Only the first PREVIEW_BYTES count, as bytes of UTF-8, because that is all main reads:
+ *  cutting by characters instead would give a longer line for a note in Korean (three
+ *  bytes a character) than the one main gives for it at the next launch. A Windows note
+ *  is saved with two-byte line ends, so for one of those the cut can fall a few
+ *  characters earlier on disk than here; the next real walk settles it. */
+export function notePreview(text: string): string | undefined {
+  // 400 characters are never fewer than 400 bytes, so only that much is ever encoded.
+  const bytes = new TextEncoder().encode(text.slice(0, PREVIEW_BYTES)).subarray(0, PREVIEW_BYTES)
+  return toPreviewLine(new TextDecoder().decode(bytes), PREVIEW_CHARS) || undefined
 }

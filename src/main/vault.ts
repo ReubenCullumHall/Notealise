@@ -3,7 +3,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { createHash, randomBytes } from 'node:crypto'
 import type { TreeNode } from '../shared/types'
-import { toPreviewLine } from '../shared/plainText'
+import { PREVIEW_BYTES, PREVIEW_CHARS, toPreviewLine } from '../shared/plainText'
 import { indexLinks, stripMd, type LinkRow } from '../shared/links'
 import { sanitizeFilename } from '../shared/filenames'
 import { indexEmbeds, isDocFilename } from '../shared/attachments'
@@ -336,8 +336,8 @@ function compareNodes(a: TreeNode, b: TreeNode): number {
 
 // The second line of a sidebar row. Only the head of the file is read — a tree
 // walk touches every note, so reading them whole would make a large vault crawl.
-const PREVIEW_BYTES = 400
-const PREVIEW_CHARS = 90
+// How much, and how long the line is, are in shared/plainText.ts: the window works
+// the same line out for a note it has just saved (`notePreview`).
 
 /** Strip the markdown that would read as noise in a one-line preview, then
  *  collapse whitespace.
@@ -372,7 +372,23 @@ async function readDir(absDir: string): Promise<TreeNode[]> {
     if (ignored(e.name)) continue
     const abs = path.join(absDir, e.name)
     if (e.isDirectory()) {
-      nodes.push({ name: e.name, path: toRel(abs), type: 'dir', children: await readDir(abs) })
+      // A folder that can't be read (no permission, or something else has hold of
+      // it) must not fail the whole walk: one such folder anywhere in the vault left
+      // the app on "Loading…" for good (app check 2026-11-09). It stays in the tree,
+      // shown empty — leaving a SPACE's folder out would have the spaces sync drop
+      // that space and its look (shared/settings.ts `reconcileSpaces`). One that has
+      // just gone (deleted between the two reads) is left out. The vault's own folder
+      // is not covered: `listTree` still fails when THAT can't be read, and the window
+      // falls back to the folder picker (App.tsx, the boot).
+      let children: TreeNode[]
+      try {
+        children = await readDir(abs)
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code
+        if (code === 'ENOENT' || code === 'ENOTDIR') continue
+        children = []
+      }
+      nodes.push({ name: e.name, path: toRel(abs), type: 'dir', children })
     } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
       // One stat per note, for "made / last edited". The walk already opens and
       // reads the head of every file for its preview, so this is the cheaper

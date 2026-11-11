@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 import { toggleMarkdown } from './toggleModel'
 import { videoPass } from './videoPass'
+import { parsed } from './parsedState'
 
 // What videoPass decides to draw as a player, against the real markdown parser.
 // The pass only reads `state` and `visibleRanges` from the view, so a stand-in
 // view is enough to run it without a DOM.
 
 function drawn(doc: string): { from: number; to: number }[] {
-  const state = EditorState.create({
-    doc,
-    extensions: [markdown({ base: markdownLanguage, extensions: [toggleMarkdown] })]
-  })
-  ensureSyntaxTree(state, doc.length, 5000)
+  const state = parsed(
+    EditorState.create({
+      doc,
+      extensions: [markdown({ base: markdownLanguage, extensions: [toggleMarkdown] })]
+    })
+  )
   const view = { state, visibleRanges: [{ from: 0, to: doc.length }] } as unknown as EditorView
   const out: { from: number; to: number }[] = []
   videoPass(view, new Set(), (from, to) => out.push({ from, to }))

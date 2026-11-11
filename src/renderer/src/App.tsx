@@ -67,7 +67,7 @@ import {
   type TabLayout
 } from './tabs/model'
 import { applySettings, resolveTheme } from './settings/model'
-import { indexFingerprint, liveIndex, noteRefs } from './links/model'
+import { indexFingerprint, keepNoteRefs, liveIndex, noteRefs } from './links/model'
 import { forbiddenIn, sanitizeFilename } from '../../shared/filenames'
 import { cleanIpcError } from './ipcError'
 import { PathBar } from './PathBar'
@@ -77,8 +77,9 @@ import { Onboarding } from './onboarding/Onboarding'
 import { seedWelcomeNotes } from './onboarding/welcomeNotes'
 import { STEPS, type StepId } from './onboarding/model'
 import { LinkInspector, type Inspect } from './links/LinkInspector'
-import { rewriteLinks, titleOf, type LinkRow } from '../../shared/links'
-import { countWords } from '../../shared/plainText'
+import { rewriteLinks, titleOf, type LinkRow, type NoteRef } from '../../shared/links'
+import { notePreview } from '../../shared/plainText'
+import { countNow, countSoon, remapWordCounts } from './wordCounts'
 import type { LinkEnv, LinkHandlers, MediaDelete, OpenHow, PickedMediaDelete } from './editor/linkEnv'
 import {
   type MediaLanding,
@@ -137,7 +138,8 @@ import {
   flattenNotes,
   isArchived,
   siblingColors,
-  sortSiblings
+  sortSiblings,
+  withNoteSaved
 } from './organise/model'
 import { prepare, searchableText, searchArchive, type ArchiveDoc, type ArchiveHit } from './organise/archiveSearch'
 import { motionOn } from './tabs/tabStyles'
@@ -393,7 +395,6 @@ export default function App(): React.JSX.Element {
   const docsRef = useRef<Map<string, string>>(new Map())
   const loadingRef = useRef<Set<string>>(new Set())
   const [versions, setVersions] = useState<Record<string, number>>({})
-  const [wordCounts, setWordCounts] = useState<Record<string, number>>({})
   const [menu, setMenu] = useState<{
     x: number
     y: number
@@ -583,6 +584,12 @@ export default function App(): React.JSX.Element {
           // each note was only refreshed by changes made OUTSIDE the app, so words
           // typed here weren't found (bug scan 2026-10-27).
           if (contentCache.current.has(path)) contentCache.current.set(path, text)
+          // ...and the note's own row. Its second line in the sidebar and its "edited"
+          // time both come from the tree, which only a walk of the vault refreshed — so
+          // what you typed never showed there until something else reloaded the list
+          // (app check 2026-11-09). The app's own saves are deliberately not echoed back
+          // by the folder watcher, so the row is brought up to date here.
+          setTree((t) => withNoteSaved(t, path, notePreview(text), Date.now()))
         } catch (e) {
           // Keep the buffer for a later retry — unless typing has already put a
           // newer one in its place, which must not be overwritten by this one.
@@ -619,8 +626,9 @@ export default function App(): React.JSX.Element {
       // Keep the loaded copy current too: a pane that shows this note again
       // later re-seeds from here, and stale text would look like lost edits.
       docsRef.current.set(path, text)
-      const words = countWords(text)
-      setWordCounts((c) => (c[path] === words ? c : { ...c, [path]: words }))
+      // Counted a moment from now, off this keystroke's path, and without redrawing
+      // the whole window for it (wordCounts.ts).
+      countSoon(path, text)
       // Re-derive the index only when the links or the EMBEDS changed, not on
       // every keystroke: typing inside a paragraph must not cost a backlink
       // rebuild across every open note.
@@ -658,7 +666,7 @@ export default function App(): React.JSX.Element {
       loadingRef.current.delete(path)
     }
     docsRef.current.set(path, text)
-    setWordCounts((c) => ({ ...c, [path]: countWords(text) }))
+    countNow(path, text)
     setVersions((v) => ({ ...v, [path]: (v[path] ?? 0) + 1 }))
   }, [])
 
@@ -798,9 +806,11 @@ export default function App(): React.JSX.Element {
       let written: Promise<unknown> = Promise.resolve()
       if (pending !== undefined) {
         dirtyRef.current.delete(path)
-        written = window.api
-          .writeNote(path, pending)
-          .catch((e: Error) => flash(`Save failed: ${e.message}`))
+        written = window.api.writeNote(path, pending).then(
+          // its row follows this save too, as in `flush`
+          () => setTree((t) => withNoteSaved(t, path, notePreview(pending), Date.now())),
+          (e: Error) => flash(`Save failed: ${e.message}`)
+        )
       }
       // Earlier versions on "When you close the note" (the default): keep the note
       // as it leaves the screen — after its last typing is written. A note that
@@ -861,7 +871,7 @@ export default function App(): React.JSX.Element {
             : p
       remapKeys(dirtyRef.current, map)
       remapKeys(docsRef.current, map)
-      setWordCounts((c) => remapRecord(c, map))
+      remapWordCounts(map)
       setVersions((v) => remapRecord(v, map))
       applyLayout(renamePath(layoutRef.current, oldPath, newRel))
       // The voice note on the tape, if its note is the one that moved.
@@ -1540,7 +1550,13 @@ export default function App(): React.JSX.Element {
   /** Every note in the whole vault, for resolving links. Deliberately not the
    *  space-scoped `allNotes` the search uses: a link may point outside the space
    *  you're in, and showing which space it lands in is the point. */
-  const vaultNotes = useMemo(() => noteRefs(tree), [tree])
+  //
+  // The SAME array until a note or folder is really added, removed, renamed or moved:
+  // the tree is renewed after every save now (a note's second line and edited time,
+  // `withNoteSaved`), and each open note re-works its incoming links whenever this is
+  // a new array — the cost `spaceMarks` below was written to stop.
+  const vaultNotesKept = useRef<NoteRef[]>([])
+  const vaultNotes = useMemo(() => (vaultNotesKept.current = keepNoteRefs(vaultNotesKept.current, noteRefs(tree))), [tree])
 
   /** When each note was made and last written, straight off the tree main sends.
    *  Rebuilt with the tree, which is also what the watcher refreshes — so an edit
@@ -2195,10 +2211,27 @@ export default function App(): React.JSX.Element {
       // a large or slow-syncing vault (see MAX_MS in StartupSplash.tsx).
       let loadedTree: TreeNode[] = []
       let s: AppSettings
+      // The vault that is open — `v`, unless its folder turns out not to be readable.
+      let open = v
       if (v) {
-        const [t, , loadedSettings] = await Promise.all([loadTree(), loadWorkspace(), loadSettings(v)])
-        loadedTree = t
+        const [t, , loadedSettings] = await Promise.all([
+          // The folder is there but can't be listed: its permissions changed, or the
+          // computer refused the app access to it. Left to reject, this stopped the
+          // boot before `setReady` — the window sat on "Loading…" for good, on every
+          // launch, with no way to choose another folder (app check 2026-11-09).
+          loadTree().catch(() => null),
+          loadWorkspace(),
+          loadSettings(v)
+        ])
         s = loadedSettings
+        if (t) loadedTree = t
+        else {
+          // Treated like a folder that has gone: the plain "Choose folder…" screen
+          // below. Nothing is synced or restored against a tree that never arrived —
+          // an empty one would drop every space and every saved tab.
+          open = null
+          setVault(null)
+        }
       } else {
         s = await loadSettings(null)
       }
@@ -2214,13 +2247,13 @@ export default function App(): React.JSX.Element {
       // Also gated on onboarding already being done: Onboarding's Welcome
       // screen plays this same clip itself, so the ambient one stays off
       // until that flow has actually finished.
-      if (v && s.playStartupAnimation && onboarded) setSplashActive(true)
-      if (v) await syncSpaces(loadedTree, s)
-      if (v) restoreSession(loadedTree, s)
-      if (v) await loadPresets()
-      if (v) await rescanLinks() // one walk of the vault; incremental after this
+      if (open && s.playStartupAnimation && onboarded) setSplashActive(true)
+      if (open) await syncSpaces(loadedTree, s)
+      if (open) restoreSession(loadedTree, s)
+      if (open) await loadPresets()
+      if (open) await rescanLinks() // one walk of the vault; incremental after this
       // Last, once the tabs are back: it can move notes that are open.
-      if (v) await adoptOldArchiveRef.current()
+      if (open) await adoptOldArchiveRef.current()
     })()
   }, [loadTree, loadWorkspace, loadSettings, restoreSession, syncSpaces, rescanLinks, loadPresets])
 
@@ -2506,7 +2539,7 @@ export default function App(): React.JSX.Element {
         try {
           const text = await window.api.readNote(p)
           docsRef.current.set(p, text)
-          setWordCounts((c) => ({ ...c, [p]: countWords(text) }))
+          countNow(p, text)
           setVersions((v) => ({ ...v, [p]: (v[p] ?? 0) + 1 }))
         } catch {
           docsRef.current.delete(p) // gone from disk — close its tab
@@ -3744,7 +3777,7 @@ export default function App(): React.JSX.Element {
       await window.api.writeNote(rel, text)
       dirtyRef.current.delete(rel)
       docsRef.current.set(rel, text)
-      setWordCounts((c) => ({ ...c, [rel]: countWords(text) }))
+      countNow(rel, text)
       setVersions((v) => ({ ...v, [rel]: (v[rel] ?? 0) + 1 }))
       await loadTree()
       await openNote(rel, true)
@@ -4767,7 +4800,6 @@ export default function App(): React.JSX.Element {
                   onPutBack={(x, y) => putBackMenu([p], x, y)}
                   doc={docsRef.current.get(p) ?? ''}
                   version={versions[p] ?? 0}
-                  wordCount={wordCounts[p] ?? 0}
                   numberFormat={settings.numberFormat}
                   createdAt={fileTimes[p]?.createdAt}
                   updatedAt={fileTimes[p]?.updatedAt}

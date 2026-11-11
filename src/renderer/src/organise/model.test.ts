@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TreeNode } from '../../../shared/types'
 import type { Workspace } from '../../../shared/workspace'
+import { AWKWARD_NAMES } from '../../../shared/awkwardNames'
 import {
   asksToArchive,
   importedSince,
@@ -15,6 +16,7 @@ import {
   sortArchived,
   sortSiblings,
   splitMoved,
+  withNoteSaved,
   withoutArchived
 } from './model'
 
@@ -375,3 +377,75 @@ describe('asksToArchive', () => {
     expect(new Date(monthsBefore(new Date(2026, 0, 15, 9).getTime(), 3)).getMonth()).toBe(9)
   })
 })
+
+describe('withNoteSaved — a row brought up to date after the window saves its note', () => {
+  const tree = (): TreeNode[] => [
+    dir('Bio', [file('Bio/Old.md')]),
+    dir('Biology', [dir('Biology/Topic 1', [{ ...file('Biology/Topic 1/Cells.md'), preview: 'old words', updatedAt: 1 }]), file('Biology/Loose.md')]),
+    { ...file('Top.md'), preview: 'top', updatedAt: 1 }
+  ]
+  const find = (nodes: TreeNode[], path: string): TreeNode | undefined => {
+    for (const n of nodes) {
+      if (n.path === path) return n
+      const deeper = n.children ? find(n.children, path) : undefined
+      if (deeper) return deeper
+    }
+    return undefined
+  }
+
+  it('gives the note its new second line and edited time', () => {
+    const next = withNoteSaved(tree(), 'Biology/Topic 1/Cells.md', 'fresh words', 99)
+    expect(find(next, 'Biology/Topic 1/Cells.md')).toMatchObject({ preview: 'fresh words', updatedAt: 99 })
+  })
+
+  it('a note at the top of the vault too', () => {
+    expect(find(withNoteSaved(tree(), 'Top.md', 'new top', 5), 'Top.md')).toMatchObject({ preview: 'new top', updatedAt: 5 })
+  })
+
+  it('an emptied note loses its line (the row then says "Empty note")', () => {
+    const next = withNoteSaved(tree(), 'Top.md', undefined, 5)
+    expect(find(next, 'Top.md')!.preview).toBeUndefined()
+  })
+
+  it('hands back every branch the note is not in as the SAME object', () => {
+    const before = tree()
+    const next = withNoteSaved(before, 'Biology/Topic 1/Cells.md', 'fresh words', 99)
+    expect(next).not.toBe(before)
+    expect(next[0]).toBe(before[0]) // "Bio" — a folder whose name merely starts the same
+    expect(next[2]).toBe(before[2]) // the loose note
+    expect(find(next, 'Biology/Loose.md')).toBe(find(before, 'Biology/Loose.md'))
+    expect(next[1]).not.toBe(before[1]) // the folders on the way down are new…
+    expect(find(next, 'Biology/Topic 1')).not.toBe(find(before, 'Biology/Topic 1'))
+  })
+
+  it('hands back the tree itself when nothing differs, or the note is not in it', () => {
+    const before = tree()
+    expect(withNoteSaved(before, 'Biology/Topic 1/Cells.md', 'old words', 1)).toBe(before)
+    expect(withNoteSaved(before, 'Biology/Topic 1/Gone.md', 'x', 2)).toBe(before)
+    expect(withNoteSaved(before, 'Nowhere/At all.md', 'x', 2)).toBe(before)
+  })
+
+  it('never touches the tree it was given', () => {
+    const before = tree()
+    const copy = JSON.stringify(before)
+    withNoteSaved(before, 'Biology/Topic 1/Cells.md', 'fresh words', 99)
+    expect(JSON.stringify(before)).toBe(copy)
+  })
+})
+
+describe('withNoteSaved with the names people really use', () => {
+  // one note per awkward name, each inside a folder of the same awkward name
+  const tree: TreeNode[] = AWKWARD_NAMES.map((name) => dir(name, [{ ...file(`${name}/${name}.md`), preview: 'old', updatedAt: 1 }]))
+
+  it.each(AWKWARD_NAMES.map((n) => [n]))('brings %j up to date, and only it', (name) => {
+    const path = `${name}/${name}.md`
+    const next = withNoteSaved(tree, path, 'fresh', 2)
+    const changed = next.flatMap((d) => d.children ?? []).filter((n) => n.preview === 'fresh')
+    expect(changed.map((n) => n.path)).toEqual([path])
+    // every other folder — the other spelling of "Café" among them — is the same object
+    next.forEach((d, i) => {
+      if (d.path !== name) expect(d).toBe(tree[i])
+    })
+  })
+})
+

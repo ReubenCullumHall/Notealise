@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TreeNode } from '../../../shared/types'
 import type { LinkRow, NoteRef } from '../../../shared/links'
-import { ancestorsOf, closeWikiLink, crumbsFor, incomingLinks, indexFingerprint, linkChoices, liveIndex, noteRefs, outgoingLinks, type SpaceMark } from './model'
+import { ancestorsOf, closeWikiLink, crumbsFor, incomingLinks, indexFingerprint, keepNoteRefs, linkChoices, liveIndex, noteRefs, outgoingLinks, type SpaceMark } from './model'
 
 const dir = (path: string, children: TreeNode[]): TreeNode => ({
   name: path.slice(path.lastIndexOf('/') + 1),
@@ -188,6 +188,23 @@ describe('outgoingLinks', () => {
     expect(out[0].key).not.toBe(out[1].key)
   })
 
+  it('a link keeps its key while you type above it, or before it on its own line', () => {
+    // The key is what React knows a chip by: a new key tears the chip down and builds it
+    // again. It used to hold the link's position in the whole note, so every character
+    // typed anywhere above a link rebuilt its chip (app check 2026-11-09).
+    const keys = (text: string): string[] => outgoingLinks('Inbox.md', text, NOTES, SPACES).map((e) => e.key)
+    const before = keys('intro\nsee [[Optics]] and [[Waves]]\nthen [[Optics]]')
+    expect(keys('intro, with more words typed here\nsee [[Optics]] and [[Waves]]\nthen [[Optics]]')).toEqual(before)
+    expect(keys('intro\nplease see [[Optics]] and [[Waves]]\nthen [[Optics]]')).toEqual(before)
+    expect(keys('intro\nsee [[Optics]] and also [[Waves]]\nthen [[Optics]]')).toEqual(before)
+  })
+
+  it('every link has a key of its own, two on one line included', () => {
+    const out = outgoingLinks('Inbox.md', '[[Optics]] [[Optics]] [[Waves]]\n[[Optics]]', NOTES, SPACES)
+    expect(out).toHaveLength(4)
+    expect(new Set(out.map((e) => e.key)).size).toBe(4)
+  })
+
   it('leaves a same-note jump out of the block', () => {
     // [[#Heading]] moves you around inside the note you are already reading. It
     // is navigation, not a connection to somewhere else, and listing it under
@@ -322,3 +339,40 @@ describe('closeWikiLink', () => {
     expect(closeWikiLink('Waves', 'ves]]')).toBeNull()
   })
 })
+
+describe('keepNoteRefs', () => {
+  const optics = { name: 'Optics.md', path: 'Physics/Optics.md', type: 'file' as const }
+  const physics = { name: 'Physics', path: 'Physics', type: 'dir' as const, children: [optics] }
+  const inbox = { name: 'Inbox.md', path: 'Inbox.md', type: 'file' as const }
+  const tree = [physics, inbox]
+
+  it('hands back the list it already had when the same notes and folders are there', () => {
+    const prev = noteRefs(tree)
+    // a note's second line and edited time changed — nothing a link cares about
+    const renewed = [{ ...physics, children: [{ ...optics, preview: 'new words', updatedAt: 9 }] }, inbox]
+    expect(keepNoteRefs(prev, noteRefs(renewed))).toBe(prev)
+  })
+
+  it('hands back the new list when a note was added, removed, renamed or moved', () => {
+    const prev = noteRefs(tree)
+    const added = noteRefs([...tree, { name: 'New.md', path: 'New.md', type: 'file' as const }])
+    expect(keepNoteRefs(prev, added)).toBe(added)
+    const removed = noteRefs([physics])
+    expect(keepNoteRefs(prev, removed)).toBe(removed)
+    const renamed = noteRefs([physics, { name: 'Outbox.md', path: 'Outbox.md', type: 'file' as const }])
+    expect(keepNoteRefs(prev, renamed)).toBe(renamed)
+  })
+
+  it('compares everything a note ref holds that its path does not already decide', () => {
+    // keepNoteRefs compares `path` and `kind`; `title` comes from the path. A new field
+    // on NoteRef has to be compared there too, or a changed one would be kept stale.
+    for (const ref of noteRefs(tree)) expect(Object.keys(ref).sort()).toEqual(['kind', 'path', 'title'])
+  })
+
+  it('a note that became a folder of the same name is a change', () => {
+    const prev = noteRefs([{ name: 'Thing', path: 'Thing', type: 'file' as const }])
+    const next = noteRefs([{ name: 'Thing', path: 'Thing', type: 'dir' as const, children: [] }])
+    expect(keepNoteRefs(prev, next)).toBe(next)
+  })
+})
+

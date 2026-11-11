@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { ensureSyntaxTree } from '@codemirror/language'
 import { EditorState, type ChangeSpec } from '@codemirror/state'
 import { toggleMarkdown } from './toggleModel'
 import { clipChange, isVoiceTarget, nameChange, retargetChange, settingsChange, voiceNotesIn, voiceSpanAt } from './audioPass'
 import { selectionIsEmbed, embedSpanAt, attachmentFileOf } from './attachSelect'
 import { VOICE_DEFAULTS } from '../../../shared/voiceNote'
+import { parsed } from './parsedState'
 
 // Which text is a voice note, and what writing a setting or a new file onto it
 // does to the line — against the real markdown parser the editor uses
@@ -13,12 +13,12 @@ import { VOICE_DEFAULTS } from '../../../shared/voiceNote'
 // everything that decides WHAT is drawn and WHAT is written does not.
 
 function stateOf(doc: string): EditorState {
-  const state = EditorState.create({
-    doc,
-    extensions: [markdown({ base: markdownLanguage, extensions: [toggleMarkdown] })]
-  })
-  ensureSyntaxTree(state, doc.length, 5000)
-  return state
+  return parsed(
+    EditorState.create({
+      doc,
+      extensions: [markdown({ base: markdownLanguage, extensions: [toggleMarkdown] })]
+    })
+  )
 }
 
 const notes = (doc: string) => {
@@ -197,10 +197,7 @@ describe('undo after naming a voice note and then moving its mixer (bug scan 202
     const { history, undo } = await import('@codemirror/commands')
     const doc = '<audio controls src="memo.m4a"></audio>\n'
     let state = EditorState.create({ doc, extensions: [history(), markdown({ base: markdownLanguage, extensions: [toggleMarkdown] })] })
-    const span = () => {
-      ensureSyntaxTree(state, state.doc.length, 5000)
-      return voiceNotesIn(state, 0, state.doc.length)[0]
-    }
+    const span = () => voiceNotesIn(parsed(state), 0, state.doc.length)[0]
     state = state.update({ changes: nameChange(state.doc, span(), 'Lecture')! }).state
     const vol = settingsChange(state.doc, span(), { ...VOICE_DEFAULTS, volume: 1.1 })!
     state = state.update({ changes: vol, annotations: Transaction.addToHistory.of(false) }).state

@@ -4,6 +4,7 @@ import { EditorState, type TransactionSpec } from '@codemirror/state'
 import { keymap, type EditorView } from '@codemirror/view'
 import { colorEditing } from './colorCommands'
 import { rawViewOf } from './rawView'
+import { parsed } from './parsedState'
 
 // The two behaviours that keep concealed colour tags editable, driven against a
 // real EditorState. CodeMirror's state is pure — only EditorView needs a DOM —
@@ -20,14 +21,16 @@ const OPEN = '<mark class="hl-rose">'
 const CLOSE = '</mark>'
 
 function harness(doc: string, at: number): { view: EditorView; doc: () => string; sel: () => number } {
-  let state = EditorState.create({
-    doc,
-    selection: { anchor: at },
-    // `markdown()` is not optional here — without a language there is no syntax
-    // tree, `colorPairs` finds no HTMLTag nodes, and every test below passes by
-    // doing nothing.
-    extensions: [markdown(), colorEditing]
-  })
+  let state = parsed(
+    EditorState.create({
+      doc,
+      selection: { anchor: at },
+      // `markdown()` is not optional here — without a language there is no syntax
+      // tree, `colorPairs` finds no HTMLTag nodes, and every test below passes by
+      // doing nothing.
+      extensions: [markdown(), colorEditing]
+    })
+  )
   const view = {
     get state() {
       return state
@@ -93,11 +96,13 @@ describe('Backspace / Delete at a colour tag edge', () => {
 
   it('declines when there is a selection, so deleting a range is normal', () => {
     const doc = `Keep ${OPEN}colour${CLOSE} end`
-    let state = EditorState.create({
-      doc,
-      selection: { anchor: 0, head: 4 },
-      extensions: [markdown(), colorEditing]
-    })
+    let state = parsed(
+      EditorState.create({
+        doc,
+        selection: { anchor: 0, head: 4 },
+        extensions: [markdown(), colorEditing]
+      })
+    )
     const view = { get state() { return state }, dispatch: () => {}, focus: () => {} } as unknown as EditorView
     expect(press(view, 'Backspace')).toBe(false)
   })
@@ -111,7 +116,7 @@ describe('Backspace / Delete at a colour tag edge', () => {
 
 describe('mending a pair an edit broke', () => {
   const build = (doc: string, raw = false): EditorState =>
-    EditorState.create({ doc, extensions: [markdown(), colorEditing, rawViewOf(raw)] })
+    parsed(EditorState.create({ doc, extensions: [markdown(), colorEditing, rawViewOf(raw)] }))
 
   // Reuben's report, 2026-08-29: selecting a highlighted word PLUS the space
   // after it and pressing Backspace took the close tag with it, and the orphaned

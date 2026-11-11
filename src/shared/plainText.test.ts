@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { countWords, toPlainText, toPreviewLine } from './plainText'
+import { countWords, notePreview, PREVIEW_BYTES, PREVIEW_CHARS, toPlainText, toPreviewLine } from './plainText'
 
 // Every case here is "what would a person reading the rendered note count?", not
 // "what does the current implementation return" — see CLAUDE.md on tests that
@@ -116,5 +116,50 @@ describe('toPreviewLine', () => {
 
   it('clips to the limit', () => {
     expect(toPreviewLine('word '.repeat(100), 20)).toHaveLength(20)
+  })
+})
+
+describe('notePreview — the sidebar line the window works out after its own save', () => {
+  /** The long way round: the WHOLE note as bytes, cut to the first PREVIEW_BYTES, decoded,
+   *  then made into a line — which is what main does with the file (vault.ts `readPreview`;
+   *  src/main/notePreview.test.ts checks this against main's own walk of real files). */
+  const asMainReadsIt = (text: string): string | undefined =>
+    toPreviewLine(new TextDecoder().decode(new TextEncoder().encode(text).subarray(0, PREVIEW_BYTES)), PREVIEW_CHARS) || undefined
+
+  it('is the opening words, with the markdown taken out', () => {
+    expect(notePreview('# Cells\n\nThe **cell** is the [[Unit of life]].')).toBe('Cells The cell is the Unit of life.')
+  })
+
+  it('is nothing at all for an empty note, so the row says "Empty note"', () => {
+    expect(notePreview('')).toBeUndefined()
+    expect(notePreview('\n\n   \n')).toBeUndefined()
+    expect(notePreview('---\n')).toBeUndefined()
+  })
+
+  it('never runs past the length of the line', () => {
+    expect(notePreview('word '.repeat(400))!.length).toBeLessThanOrEqual(PREVIEW_CHARS)
+  })
+
+  it('is the line the first 400 bytes of the file give, for every kind of text', () => {
+    const texts = [
+      '# Typical\n\n## Section 1\n\nThe quick brown fox jumps over the lazy dog.',
+      'short',
+      'word '.repeat(400),
+      // Korean: three bytes a character, so the 400-byte cut falls a third of the way in
+      '세포는 생명의 기본 단위이다. '.repeat(40),
+      // a cut in the middle of a character, close enough to the start to show
+      'é'.repeat(250),
+      // emoji (four bytes, two JavaScript characters each)
+      '📓 notes '.repeat(80),
+      // a head that is mostly markup, so the 400 bytes hold fewer than 90 characters of words
+      '<mark class="hl-amber">a</mark> '.repeat(30) + 'the words after the colour',
+      '| a | b |\n| --- | --- |\n| 1 | 2 |\n\n' + 'after the table '.repeat(40),
+      // exactly on the boundary, and one either side of it
+      'x'.repeat(PREVIEW_BYTES - 1),
+      'x'.repeat(PREVIEW_BYTES),
+      'x'.repeat(PREVIEW_BYTES + 1),
+      ''
+    ]
+    for (const text of texts) expect(notePreview(text), JSON.stringify(text.slice(0, 40))).toBe(asMainReadsIt(text))
   })
 })

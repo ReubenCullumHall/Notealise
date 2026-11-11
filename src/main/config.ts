@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { DEFAULT_UPDATE_PREFS, normalizeUpdatePrefs, type UpdatePrefs } from '../shared/update'
+import { keepDamagedCopy, writeFileAtomic } from './atomicWrite'
 
 // App-level config lives in userData — NEVER inside the vault itself. In-vault
 // config belongs in <vault>/.mdnotes/. These qualify, for the same reason:
@@ -32,7 +33,11 @@ async function read(): Promise<AppConfig> {
     let raw = await fs.readFile(configPath(), 'utf8')
     if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1) // tolerate a UTF-8 BOM
     return JSON.parse(raw) as AppConfig
-  } catch {
+  } catch (e) {
+    // No file yet reads as "nothing set". One that is THERE and won't read (cut off, or
+    // no longer JSON) is about to be written over by the next change here, so a copy is
+    // kept beside it first (app check 2026-11-09).
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') await keepDamagedCopy(configPath())
     return {}
   }
 }
@@ -45,7 +50,10 @@ let writeTail: Promise<unknown> = Promise.resolve()
 function update(partial: AppConfig): Promise<void> {
   const run = writeTail.then(async () => {
     const next = { ...(await read()), ...partial }
-    await fs.writeFile(configPath(), JSON.stringify(next, null, 2), 'utf8')
+    // Temp file + rename, never in place: a crash or a power cut part-way through a
+    // plain write left a cut-off file, and a cut-off file reads as "nothing set" —
+    // the folder to reopen forgotten, the first-run screens back.
+    await writeFileAtomic(configPath(), JSON.stringify(next, null, 2))
   })
   writeTail = run.catch(() => {}) // one failed write must not wedge the queue
   return run

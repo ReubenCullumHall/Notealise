@@ -7,6 +7,18 @@ let watcher: FSWatcher | null = null
 // What the watcher was started with, kept so it can be started again after a pause.
 let current: { root: string; onChange: (change: VaultChange) => void } | null = null
 
+/** Should the watcher skip `p`? Dot-named things (`.mdnotes/`, temp files) and
+ *  node_modules, wherever they sit INSIDE the vault — but never the vault's own
+ *  folder, whatever it is called. The watcher asks about the folder it was given
+ *  too, so with a notes folder named `.notes` the answer was "skip" for the whole
+ *  vault, and nothing changed outside the app was noticed until a restart (app
+ *  check 2026-11-09). `path.relative`, not `===`: rule 7. */
+export function watchIgnores(root: string, p: string): boolean {
+  if (path.relative(root, p) === '') return false
+  const base = path.basename(p)
+  return base.startsWith('.') || base === 'node_modules'
+}
+
 // Watch the vault and push debounced external-change batches to the renderer.
 // - ignores dotfiles/dot-folders (incl. .mdnotes/) and node_modules
 // - ignores echoes of the app's own writes (recentWrites in vault.ts)
@@ -36,14 +48,17 @@ export function startWatching(root: string, onChange: (change: VaultChange) => v
   const isUnc = root.startsWith('\\\\')
   watcher = chokidar.watch(root, {
     ignoreInitial: true,
-    ignored: (p: string) => {
-      const base = path.basename(p)
-      return base.startsWith('.') || base === 'node_modules'
-    },
+    ignored: (p: string) => watchIgnores(root, p),
     awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
     usePolling: isUnc,
     interval: isUnc ? 300 : undefined
   })
+
+  // A folder it may not read, say. With no listener at all an error here is THROWN
+  // instead, from inside the watcher, where nothing catches it — one unreadable folder
+  // in the vault did exactly that at every launch (app check 2026-11-09). The folders it
+  // can read are watched either way; there is nothing to do about the one it can't.
+  watcher.on('error', (e) => console.warn('folder watcher:', e))
 
   watcher.on('all', (event, abs) => {
     // file events only matter for .md; dir add/remove always matter (tree shape)

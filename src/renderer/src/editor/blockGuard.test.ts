@@ -6,10 +6,11 @@ import { markdown } from '@codemirror/lang-markdown'
 import { GFM } from '@lezer/markdown'
 import type { EditorView } from '@codemirror/view'
 import { backspace, del, embedTailStart, guardedBlocks, guardOf, wholeBlocks } from './blockGuard'
+import { parsed } from './parsedState'
 
 const V = '<audio controls src="a.m4a" data-name="Untitled 1"></audio>'
 const make = (doc: string, cursor = 0): EditorState =>
-  EditorState.create({ doc, selection: EditorSelection.single(cursor), extensions: [markdown({ extensions: [GFM] })] })
+  parsed(EditorState.create({ doc, selection: EditorSelection.single(cursor), extensions: [markdown({ extensions: [GFM] })] }))
 const view = (state: EditorState): EditorView & { state: EditorState } => {
   const v = {
     state,

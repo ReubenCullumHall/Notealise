@@ -5,6 +5,7 @@ import { keymap, type EditorView } from '@codemirror/view'
 import { markEditing } from './markEditing'
 import { rawViewOf } from './rawView'
 import { bold, italic, underline } from './formatCommands'
+import { parsed } from './parsedState'
 
 // markEditing keeps hidden bold/italic/strike/code/<u> marks whole, against a
 // real EditorState (same harness shape as colorCommands.test.ts). Every case
@@ -13,11 +14,13 @@ import { bold, italic, underline } from './formatCommands'
 // own extensions.ts uses it too.
 
 function harness(doc: string, at: number, head = at, raw = false) {
-  let state = EditorState.create({
-    doc,
-    selection: { anchor: at, head },
-    extensions: [markdown({ base: markdownLanguage }), markEditing, rawViewOf(raw)]
-  })
+  let state = parsed(
+    EditorState.create({
+      doc,
+      selection: { anchor: at, head },
+      extensions: [markdown({ base: markdownLanguage }), markEditing, rawViewOf(raw)]
+    })
+  )
   const view = {
     get state() {
       return state

@@ -2,15 +2,12 @@
 import { describe, expect, it } from 'vitest'
 import { EditorState } from '@codemirror/state'
 import { markdown } from '@codemirror/lang-markdown'
-import { ensureSyntaxTree } from '@codemirror/language'
 import { findToggles, toggleMarkdown } from './toggleModel'
 import { transcriptBlock } from '../../../shared/transcript'
+import { parsed } from './parsedState'
 
-const stateOf = (doc: string): EditorState => {
-  const s = EditorState.create({ doc, extensions: [markdown({ extensions: [toggleMarkdown] })] })
-  ensureSyntaxTree(s, s.doc.length, 5000)
-  return s
-}
+const stateOf = (doc: string): EditorState =>
+  parsed(EditorState.create({ doc, extensions: [markdown({ extensions: [toggleMarkdown] })] }))
 
 describe('a transcript inside a toggle list', () => {
   it('the toggle still ends at ITS </details>, not the transcript\u2019s', () => {

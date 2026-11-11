@@ -231,6 +231,38 @@ export function flattenNotes(nodes: TreeNode[]): TreeNode[] {
   return out
 }
 
+/** The tree with one note's second line and edited time brought up to date, after the
+ *  window has just saved it.
+ *
+ *  Main's walk of the vault is what normally supplies both, and the app's own saves are
+ *  (rightly) not echoed back by the folder watcher — so a note you had typed in kept its
+ *  old line, and its old "edited" time, until something else reloaded the list (app check
+ *  2026-11-09). Every branch the note is NOT in comes back as the same object, so only
+ *  what shows that note is redrawn; and the tree itself comes back as it was when the
+ *  note isn't in it, or nothing about it differs. */
+export function withNoteSaved(
+  nodes: TreeNode[],
+  path: string,
+  preview: string | undefined,
+  updatedAt: number
+): TreeNode[] {
+  let changed = false
+  const next = nodes.map((n) => {
+    if (n.type === 'file') {
+      if (n.path !== path || (n.preview === preview && n.updatedAt === updatedAt)) return n
+      changed = true
+      return { ...n, preview, updatedAt }
+    }
+    // Only a folder the note sits under can hold it.
+    if (!n.children || !path.startsWith(n.path + '/')) return n
+    const children = withNoteSaved(n.children, path, preview, updatedAt)
+    if (children === n.children) return n
+    changed = true
+    return { ...n, children }
+  })
+  return changed ? next : nodes
+}
+
 /** Find a node anywhere in the tree by its path. */
 export function findNode(nodes: TreeNode[], path: string): TreeNode | null {
   for (const n of nodes) {

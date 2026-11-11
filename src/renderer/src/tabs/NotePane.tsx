@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { EditorView } from '@codemirror/view'
 import { CodeEditor } from '../editor'
 import { FormatToolbar } from '../editor/FormatToolbar'
@@ -12,6 +12,7 @@ import { LinksBlock, LINKS_BLOCK_HEIGHT } from '../links/LinksBlock'
 import { NoteTape } from './VoiceDeck'
 import type { Inspect } from '../links/LinkInspector'
 import { incomingLinks, outgoingLinks } from '../links/model'
+import { subscribeWordCounts, wordCountOf } from '../wordCounts'
 import type { LinkEnv, LinkHandlers, OpenHow } from '../editor/linkEnv'
 import { dirName, titleOf, type LinkRow } from '../../../shared/links'
 import type { AppSettings, LinksPosition } from '../../../shared/settings'
@@ -38,7 +39,6 @@ interface Props {
   doc: string
   /** bumped by App on load / external change — never on typing */
   version: number
-  wordCount: number
   numberFormat: AppSettings['numberFormat']
   /** when the file was made and last written, epoch ms — absent when the
    *  filesystem doesn't record it (see TreeNode) */
@@ -174,6 +174,21 @@ export const ROW_BTN =
 const ARROW_BTN =
   'pane-arrow absolute top-0 z-30 flex h-[10px] w-8 items-center justify-center rounded-md border-none bg-transparent p-0 text-ink-400 outline-none transition duration-200 hover:text-ink-900 focus-visible:ring-2 focus-visible:ring-brand-300 '
 
+/** "1,204 words" in a note's top bar.
+ *
+ *  Its own small piece on purpose: the count is read from `wordCounts.ts` rather than
+ *  handed down from App, so a new word redraws these two words and nothing else. As App
+ *  state it redrew the whole window — sidebar, tabs, every pane — once per word typed
+ *  (app check 2026-11-09). */
+function WordCount({ path, numberFormat }: { path: string; numberFormat: AppSettings['numberFormat'] }): React.JSX.Element {
+  const count = useSyncExternalStore(subscribeWordCounts, () => wordCountOf(path))
+  return (
+    <span>
+      {formatNumber(count, numberFormat)} {count === 1 ? 'word' : 'words'}
+    </span>
+  )
+}
+
 /** One column of the editor area: its title, its commands and its CodeMirror.
  *
  *  There is no Edit/Read toggle: the editor already renders as it goes — a
@@ -186,7 +201,6 @@ export function NotePane({
   path,
   doc,
   version,
-  wordCount,
   numberFormat,
   createdAt,
   updatedAt,
@@ -490,9 +504,7 @@ export function NotePane({
                 {/* The count first, then the date — the date is optional
                     (Settings → Note extras) and appending it must not shift
                     the count, which is the thing being pinned here. */}
-                <span>
-                  {formatNumber(wordCount, numberFormat)} {wordCount === 1 ? 'word' : 'words'}
-                </span>
+                <WordCount path={path} numberFormat={numberFormat} />
                 {edited && (
                   <span
                     // The same "hover for detail" gesture the links use, and the

@@ -2,17 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { blockRange, canMoveBlock } from './blockMove'
+import { parsed } from './parsedState'
 
 // The same base the real editor uses (extensions.ts), because rule 2 asks the
 // syntax tree what a fenced code block is. Without the language the tree is
 // empty and every fence test would silently fall through to the paragraph rule
 // and pass for the wrong reason.
 const state = (doc: string, anchor: number, head = anchor): EditorState =>
-  EditorState.create({
-    doc,
-    selection: { anchor, head },
-    extensions: [markdown({ base: markdownLanguage })]
-  })
+  parsed(
+    EditorState.create({
+      doc,
+      selection: { anchor, head },
+      extensions: [markdown({ base: markdownLanguage })]
+    })
+  )
 
 /** The text the grip would pick up, so an expectation reads as the lines a user
  *  would see move rather than as two offsets. */

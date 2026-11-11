@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { sanitizeFilename } from '../shared/filenames'
+import { keepDamagedCopy, writeFileAtomic } from './atomicWrite'
 import {
   fromPresetFile,
   IMPORTED_ORIGIN,
@@ -73,7 +74,12 @@ export async function listPresets(): Promise<SpacePreset[]> {
       if (p) out.push(p)
     }
     return sortPresets(out)
-  } catch {
+  } catch (e) {
+    // No file yet is an empty library. One that is THERE and won't read (cut off by a
+    // crash, or no longer JSON) is about to be written over by the next save, and every
+    // look saved from other folders with it — so a copy is kept beside it first (app
+    // check 2026-11-09; the same care settings.json has had since the 2026-10-27 scan).
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') await keepDamagedCopy(libraryPath())
     return []
   }
 }
@@ -94,7 +100,9 @@ function queue<T>(fn: () => Promise<T>): Promise<T> {
 async function write(list: SpacePreset[]): Promise<void> {
   const body: Library = { presets: list }
   await fs.mkdir(path.dirname(libraryPath()), { recursive: true })
-  await fs.writeFile(libraryPath(), JSON.stringify(body, null, 2), 'utf8')
+  // Temp file + rename, never in place: a crash or a power cut part-way through a
+  // plain write left a cut-off file, which read as an empty library (above).
+  await writeFileAtomic(libraryPath(), JSON.stringify(body, null, 2))
 }
 
 /**

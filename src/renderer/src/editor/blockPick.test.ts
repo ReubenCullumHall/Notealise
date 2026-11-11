@@ -6,13 +6,14 @@ import { EditorSelection, EditorState, type TransactionSpec } from '@codemirror/
 import { markdown } from '@codemirror/lang-markdown'
 import type { EditorView } from '@codemirror/view'
 import { blockAt, blockGroup, extendPicked, isMultiPick, moveGroupSpec, pickedGroup, pickedText, removePicked, togglePicked } from './blockPick'
+import { parsed } from './parsedState'
 
 const V1 = '<audio controls src="a.m4a" data-name="Untitled 1"></audio>'
 const V2 = '<audio controls src="b.m4a" data-name="Take 1"></audio>'
 const DOC = ['Intro line', '', V1, '', V2, '', 'After the voice notes.', '', 'The end.'].join('\n')
 
 const make = (doc = DOC, selection?: EditorSelection): EditorState =>
-  EditorState.create({ doc, selection, extensions: [markdown(), EditorState.allowMultipleSelections.of(true)] })
+  parsed(EditorState.create({ doc, selection, extensions: [markdown(), EditorState.allowMultipleSelections.of(true)] }))
 const at = (s: EditorState, text: string): number => s.doc.toString().indexOf(text)
 const stubView = (state: EditorState): EditorView & { state: EditorState } => {
   const v = {

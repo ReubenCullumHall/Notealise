@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { syntaxTree, ensureSyntaxTree } from '@codemirror/language'
+import { syntaxTree } from '@codemirror/language'
 import { linkAt, textFor } from './pasteLink'
+import { parsed } from './parsedState'
 
 describe('what a pasted address is written as', () => {
   const url = 'https://example.com/wiki/Wave_(physics)?a=1'
@@ -23,11 +24,10 @@ describe('what a pasted address is written as', () => {
   })
 
   it('writes something the editor itself reads back as a link / an image', () => {
-    const state = (doc: string): EditorState => EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] })
+    const state = (doc: string): EditorState => parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] }))
     for (const [form, node] of [['title', 'Link'], ['video', 'Image']] as const) {
       const doc = textFor(form, { url, title: 'Wave' })
       const s = state(doc)
-      ensureSyntaxTree(s, doc.length, 5000)
       const names: string[] = []
       syntaxTree(s).iterate({ enter: (n) => void names.push(n.name) })
       expect(names, doc).toContain(node)
@@ -37,8 +37,7 @@ describe('what a pasted address is written as', () => {
 
 describe('which web link is under a right-click', () => {
   const at = (doc: string, needle: string): ReturnType<typeof linkAt> => {
-    const s = EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] })
-    ensureSyntaxTree(s, doc.length, 5000)
+    const s = parsed(EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] }))
     return linkAt(s, doc.indexOf(needle) + 1)
   }
   const yt = 'https://youtu.be/dQw4w9WgXcQ'
