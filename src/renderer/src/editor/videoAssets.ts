@@ -11,9 +11,9 @@ import { createAssetCache } from './assetCache'
 
 const cache = createAssetCache()
 
-/** The blob: URL for an already-loaded video, for a synchronous first paint. */
+/** The address of an already-asked-for video, for a synchronous first paint. */
 export const cachedVideoUrl = cache.cached
 
-/** Read a video's bytes and mint a blob: URL for it (null if the read fails). */
+/** Ask main for a video's address (null if the file isn't there). */
 export const loadVideo = cache.load
 

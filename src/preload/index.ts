@@ -19,6 +19,7 @@ const api: VaultApi = {
   listTree: () => ipcRenderer.invoke(CH.listTree),
   readNote: (p) => ipcRenderer.invoke(CH.readNote, p),
   readAsset: (p) => ipcRenderer.invoke(CH.readAsset, p),
+  mediaUrl: (p) => ipcRenderer.invoke(CH.mediaUrl, p),
   writeAsset: (dir, filename, data) => ipcRenderer.invoke(CH.writeAsset, dir, filename, data),
   pickAttachment: (dir) => ipcRenderer.invoke(CH.pickAttachment, dir),
   writeNote: (p, content) => ipcRenderer.invoke(CH.writeNote, p, content),

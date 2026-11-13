@@ -198,7 +198,7 @@ async function run(
 
   // Pass 2: convert each page's .html to markdown, then rewrite links/assets
   // now that every page's final vault path is known.
-  const turndown = createConverter({ dropHeaderChrome: true })
+  const turndown = await createConverter({ dropHeaderChrome: true })
   const lossy: { path: string; note: string }[] = []
   let current = 0
   let cancelled = false

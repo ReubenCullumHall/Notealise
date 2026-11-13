@@ -1,6 +1,5 @@
 import { promises as fs } from 'fs'
 import path from 'path'
-import mammoth from 'mammoth'
 import { createNote, setNoteTimes, writeAsset, writeNote } from '../../vault'
 import type { ImportPreview, ImportProgress, ImportResult } from '../../../shared/notesImport'
 import { importCancelled, type ImportRunner } from '../types'
@@ -43,7 +42,9 @@ async function run(
   onProgress: (p: ImportProgress) => void
 ): Promise<ImportResult> {
   const spaceFolder = await createImportSpace(spaceName)
-  const turndown = createConverter()
+  const turndown = await createConverter()
+  // Loaded when a Word import starts, not when the app does — see createConverter.
+  const { default: mammoth } = await import('mammoth')
 
   let createdNotes = 0
   const skipped: { title: string; reason: string }[] = []

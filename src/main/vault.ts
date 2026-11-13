@@ -592,6 +592,51 @@ export async function readAsset(relPath: string): Promise<Uint8Array> {
   return new Uint8Array(await fs.readFile(abs))
 }
 
+/** A vault file to be read a piece at a time — how a picture or video is shown
+ *  since 2026-11-11 (main/mediaProtocol.ts), where `readAsset` above
+ *  hands the whole file across at once. Same boundary, checked once here:
+ *  `resolveReal`, then it must be an ordinary file.
+ *
+ *  `read` opens and closes the file around each piece, deliberately. A player
+ *  that has buffered enough simply stops asking, sometimes for minutes, and a
+ *  file left open meanwhile would be a handle inside the vault — on Windows that
+ *  refuses a rename or move of every folder above it (the folder-watcher gotcha
+ *  in CLAUDE.md is the same refusal). */
+export interface AssetFile {
+  readonly size: number
+  readonly mtimeMs: number
+  /** Up to `length` bytes from `start`; fewer (or none) if the file has shrunk. */
+  read(start: number, length: number): Promise<Uint8Array>
+}
+
+export async function openAsset(relPath: string): Promise<AssetFile> {
+  if (typeof relPath !== 'string') throw new Error('Not a path')
+  const abs = await resolveReal(relPath)
+  const st = await fs.stat(abs)
+  if (!st.isFile()) throw new Error('Not a file')
+  return {
+    size: st.size,
+    mtimeMs: st.mtimeMs,
+    read: async (start, length) => {
+      const fh = await fs.open(abs, 'r')
+      try {
+        const buf = new Uint8Array(length)
+        let got = 0
+        // One read may return less than it was asked for; keep going to the
+        // length or the end of the file, whichever comes first.
+        while (got < length) {
+          const { bytesRead } = await fh.read(buf, got, length - got, start + got)
+          if (bytesRead === 0) break
+          got += bytesRead
+        }
+        return got === length ? buf : buf.subarray(0, got)
+      } finally {
+        await fh.close()
+      }
+    }
+  }
+}
+
 /** First available "<stem><ext>" in `dirAbs`; suffixes " (2)", " (3)"... on a
  *  collision rather than failing. Shared by createNote/createFolder (there's
  *  no user-typed name to collide with any more — creating one is a single

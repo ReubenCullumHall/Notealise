@@ -1,10 +1,16 @@
-import TurndownService from 'turndown'
+import type TurndownService from 'turndown'
 
 // turndown's core doesn't include GFM tables/strikethrough (that's a separate
 // `turndown-plugin-gfm` package) — small custom rules here instead of adding
 // a second dependency for two rules' worth of behaviour.
-export function createConverter(opts: { dropHeaderChrome?: boolean } = {}): TurndownService {
-  const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' })
+//
+// The library is loaded HERE, when an import starts, not at the top of the file:
+// every importer is registered as the app starts, so a top-level import made
+// every launch pay for a tool most launches never use
+// (docs/app-check-2026-11-09.md, "Launch loads the import tools every time").
+export async function createConverter(opts: { dropHeaderChrome?: boolean } = {}): Promise<TurndownService> {
+  const { default: Turndown } = await import('turndown')
+  const td = new Turndown({ headingStyle: 'atx', codeBlockStyle: 'fenced' })
 
   // turndown does NOT strip <head>/<style>/<script> by default — fed a full
   // HTML document (as opposed to a fragment), the print stylesheet Notion's

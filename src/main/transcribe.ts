@@ -20,7 +20,7 @@
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { promises as fs, createWriteStream, type WriteStream } from 'node:fs'
+import { promises as fs, createWriteStream, rmSync, type WriteStream } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { app, type WebContents } from 'electron'
@@ -356,7 +356,22 @@ export function transcribeBusy(): boolean {
   return running !== null || queue.length > 0
 }
 
-/** Quitting stops whatever is running and clears the temp folders. */
+/** Quitting stops whatever is running and clears the temp folders.
+ *
+ *  The folders are removed HERE, before this returns. `cancel` gets to it a
+ *  moment later — after an awaited delete, or after the stopped program's
+ *  'close' — and at a quit that moment never comes: the app has gone. Measured
+ *  2026-11-12: quitting part-way through left the recording's WAV in the temp
+ *  folder every time (about 115 MB for an hour). A file something still holds
+ *  (Windows, a program stopped a moment ago) is left for the launch sweep
+ *  (tempSweep.ts). */
 export function stopAllTranscriptions(): void {
-  for (const job of [...jobs.values()]) void cancel(job)
+  for (const job of [...jobs.values()]) {
+    void cancel(job)
+    try {
+      rmSync(job.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+    } catch {
+      // still held — tempSweep.ts takes it at a later launch
+    }
+  }
 }

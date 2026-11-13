@@ -2,22 +2,23 @@
 //
 // Not a `file://` URL on purpose: in dev the renderer is served over http and
 // the browser refuses to load one, so images would work in the packaged app and
-// silently not in dev. The bytes come through the same IPC boundary as every
-// other read instead, and become a blob: URL here.
+// silently not in dev. Main is asked — over the same IPC boundary as every other
+// read — for the app's own address for the file (shared/mediaUrl.ts), and
+// serves the picture from it; the bytes are never held here.
 //
 // The caching itself lives in assetCache.ts, shared with video — read its
 // header for why, and shared/attachments.ts now owns `resolveVaultPath` (it is
-// the inverse of `encodeTarget` and belongs beside it). This file is down to
-// image bytes: fetch, cache, hand back a blob: URL.
+// the inverse of `encodeTarget` and belongs beside it). This file is down to:
+// ask, cache, hand back the address.
 
 import { createAssetCache } from './assetCache'
 
 const cache = createAssetCache()
 
-/** The blob: URL for an already-loaded image, for a synchronous first paint. */
+/** The address of an already-asked-for image, for a synchronous first paint. */
 export const cachedUrl = cache.cached
 
-/** Read an image's bytes and mint a blob: URL for it (null if the read fails). */
+/** Ask main for an image's address (null if the file isn't there). */
 export const loadImage = cache.load
 
 // `resolveVaultPath` now lives in shared/attachments.ts, beside the

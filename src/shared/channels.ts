@@ -17,6 +17,9 @@ export const CH = {
   moveEntryInto: 'vault:moveEntryInto',
   /** renderer -> main: raw bytes of a vault file, for showing an image inline */
   readAsset: 'vault:readAsset',
+  /** renderer -> main: the address a vault picture or video is shown from
+   *  (shared/mediaUrl.ts) — the file itself never crosses */
+  mediaUrl: 'vault:mediaUrl',
   /** renderer -> main: bytes already in hand (paste/drop) to write beside a
    *  note, collision-safe-named. Returns the actual vault-relative path. */
   writeAsset: 'vault:writeAsset',

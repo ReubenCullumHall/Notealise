@@ -243,6 +243,57 @@ function sharedDepth(a: string, b: string): number {
   return n
 }
 
+/** A list of notes, indexed by what a link can name.
+ *
+ *  `resolveLink` used to answer every question by walking the whole list — who
+ *  has this title, who has this path, is any note NAMED with a `#` — and a note's
+ *  backlinks ask it once for every link in the vault. That is links × notes: with
+ *  2,004 notes of a dozen links each, 4.9 seconds, on the first key after opening
+ *  a note and on every key typed in a heading (docs/app-check-2026-11-09.md
+ *  item 8). Built once per list and kept with it, the same questions are a look-up.
+ *
+ *  Every bucket keeps the LIST's order, because `resolveLink`'s tie-break falls
+ *  back on it (two files whose paths differ only in case, on a disk that allows
+ *  that). The answers must be the ones the walk gave: `links.lookup.test.ts`
+ *  holds the walk and compares the two.
+ *
+ *  Keyed on the array itself, so a caller that keeps its list (LinkEnv.notes —
+ *  `keepNoteRefs`) builds this once. `size` is the guard for a list someone
+ *  added to after it was first used. */
+interface NoteLookup {
+  size: number
+  /** by lower-cased title */
+  byTitle: Map<string, NoteRef[]>
+  /** by lower-cased path */
+  byPath: Map<string, NoteRef[]>
+  /** the notes (never folders) with a `#` in their name */
+  hashed: NoteRef[]
+}
+
+const lookups = new WeakMap<NoteRef[], NoteLookup>()
+const NONE: NoteRef[] = []
+
+function lookupFor(notes: NoteRef[]): NoteLookup {
+  const known = lookups.get(notes)
+  if (known && known.size === notes.length) return known
+  const byTitle = new Map<string, NoteRef[]>()
+  const byPath = new Map<string, NoteRef[]>()
+  const hashed: NoteRef[] = []
+  const add = (map: Map<string, NoteRef[]>, key: string, n: NoteRef): void => {
+    const bucket = map.get(key)
+    if (bucket) bucket.push(n)
+    else map.set(key, [n])
+  }
+  for (const n of notes) {
+    add(byTitle, n.title.toLowerCase(), n)
+    add(byPath, n.path.toLowerCase(), n)
+    if (n.kind !== 'dir' && n.title.includes('#')) hashed.push(n)
+  }
+  const made = { size: notes.length, byTitle, byPath, hashed }
+  lookups.set(notes, made)
+  return made
+}
+
 /**
  * Which note (if any) a link points at.
  *
@@ -260,6 +311,7 @@ export function resolveLink(link: WikiLink, notes: NoteRef[], fromPath: string):
   if (!link.target) {
     return { kind: 'self', heading: link.heading ?? '' }
   }
+  const look = lookupFor(notes)
   // A note whose NAME has a `#` in it — "C# basics", "Episode #3". `#` is also
   // how a link names a heading, so `[[C# basics]]` read as heading "basics" in a
   // note called "C", found nothing, and a click made an empty "C" (bug scan
@@ -270,10 +322,9 @@ export function resolveLink(link: WikiLink, notes: NoteRef[], fromPath: string):
   if (link.heading !== null && !link.heading.startsWith('^')) {
     const heading = link.heading
     const want = link.target.slice(link.target.lastIndexOf('/') + 1)
-    const named = notes.find((n) => {
-      if (n.kind === 'dir') return false
+    const named = look.hashed.find((n) => {
       const i = n.title.indexOf('#')
-      return i !== -1 && eq(n.title.slice(0, i).trim(), want) && eq(n.title.slice(i + 1).trim(), heading)
+      return eq(n.title.slice(0, i).trim(), want) && eq(n.title.slice(i + 1).trim(), heading)
     })
     if (named) {
       const dir = link.target.includes('/') ? link.target.slice(0, link.target.lastIndexOf('/') + 1) : ''
@@ -319,8 +370,10 @@ export function resolveLink(link: WikiLink, notes: NoteRef[], fromPath: string):
     // is what the `[[` completion inserts for another space, so it must stay
     // first and win), then inside this note's own space, then each of those as
     // a real FILENAME (see `asFilename`).
-    const byPath = (dirPath: string, notePath: string): NoteRef[] =>
-      notes.filter((n) => (n.kind === 'dir' ? eq(n.path, dirPath) : eq(n.path, notePath)))
+    const byPath = (dirPath: string, notePath: string): NoteRef[] => [
+      ...(look.byPath.get(dirPath.toLowerCase()) ?? NONE).filter((n) => n.kind === 'dir'),
+      ...(look.byPath.get(notePath.toLowerCase()) ?? NONE).filter((n) => n.kind !== 'dir')
+    ]
     candidates = byPath(target, withMd)
     if (candidates.length === 0 && homeSpace) candidates = byPath(inSpace(target), inSpace(withMd))
     if (candidates.length === 0) candidates = byPath(asFilename(target), asFilename(withMd))
@@ -328,10 +381,10 @@ export function resolveLink(link: WikiLink, notes: NoteRef[], fromPath: string):
       candidates = byPath(asFilename(inSpace(target)), asFilename(inSpace(withMd)))
     }
   } else {
-    candidates = notes.filter((n) => eq(n.title, target))
+    candidates = look.byTitle.get(target.toLowerCase()) ?? NONE
     if (candidates.length === 0) {
       const safe = asFilename(target)
-      candidates = notes.filter((n) => eq(n.title, safe))
+      candidates = look.byTitle.get(safe.toLowerCase()) ?? NONE
     }
   }
 

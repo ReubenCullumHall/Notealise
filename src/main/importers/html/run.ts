@@ -78,7 +78,7 @@ async function run(
   onProgress: (p: ImportProgress) => void
 ): Promise<ImportResult> {
   const spaceFolder = await createImportSpace(spaceName)
-  const turndown = createConverter()
+  const turndown = await createConverter()
 
   let createdNotes = 0
   let createdFolders = 0

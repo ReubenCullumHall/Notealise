@@ -7,6 +7,7 @@ import { ContextMenu, type MenuItem } from './ContextMenu'
 import type { PrintMode } from './print/page'
 import { SaveAs, type SaveAsMode } from './print/SaveAs'
 import { clearAssetCaches } from './editor/assetCache'
+import { forgetChanged } from './searchCache'
 import { checkMainIsCurrent } from './boot'
 import { encodeTarget, indexEmbeds, kindForFilename, repointFileLinks, resolveVaultPath } from '../../shared/attachments'
 import { mediaUsage, otherNotesUsing } from './media/usage'
@@ -2502,7 +2503,9 @@ export default function App(): React.JSX.Element {
   // of a split has to update there too)
   useEffect(() => {
     return window.api.onVaultChanged(async ({ paths }) => {
-      contentCache.current.clear() // note contents may have changed on disk
+      // Search's copy of the notes that changed on disk — only those, not every
+      // note's (searchCache.ts).
+      forgetChanged(contentCache.current, paths)
       // Only what changed gets re-read for links — the watcher already tells us
       // exactly which notes those are, and it already debounces by 100ms.
       void rescanLinks(paths.filter((p) => p.toLowerCase().endsWith('.md')))
@@ -2567,6 +2570,10 @@ export default function App(): React.JSX.Element {
       // would show backlinks from notes that aren't here.
       setLinkRows([])
       openTargetsRef.current.clear()
+      // Search's copies are keyed by vault-RELATIVE path too: the other vault's
+      // "Inbox.md" is another note. (Until an outside change stopped clearing
+      // everything, the first one after a switch hid that this was never done.)
+      contentCache.current.clear()
       spaceTabs.current.clear() // a different vault's spaces are different spaces
       spaceBeforeArchive.current = ''
       // Image AND video blobs are keyed by vault-RELATIVE path, so the same

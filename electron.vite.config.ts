@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 import { createHash } from 'node:crypto'
 import { PLAYER_HOSTS } from './src/shared/embeds'
+import { MEDIA_SCHEME } from './src/shared/mediaUrl'
 
 // The renderer's Content-Security-Policy, injected into index.html.
 //
@@ -16,8 +17,12 @@ import { PLAYER_HOSTS } from './src/shared/embeds'
 // displayed any file on the disk, straight past the vault boundary that every
 // IPC read honours.
 //
-// Pictures IN the vault are unaffected: they are read over IPC and shown as
-// `blob:` URLs, which is why that scheme is listed. `data:` in `font-src` is not
+// Pictures and videos IN the vault are unaffected: they are shown from the app's
+// own private address (MEDIA_SCHEME — shared/mediaUrl.ts), which main serves
+// from inside the vault and nowhere else. It is not a remote scheme: nothing
+// behind it leaves the computer. `blob:` stays for what the window holds in hand
+// (a recording, a video card's saved picture, the clip editor's sound).
+// `data:` in `font-src` is not
 // optional — settings/fontLoader.ts injects downloaded and custom typefaces as
 // FontFace objects built from base64 the main process hands across, so dropping
 // it silently un-renders all 16 downloadable fonts, and that failure looks
@@ -47,8 +52,8 @@ function policy(dev: boolean, scriptHashes: string[]): string {
     // CodeMirror's decorations and the theme layer both set inline styles from
     // JS. There is no way to run this interface without it.
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' blob: data:",
-    "media-src 'self' blob:",
+    `img-src 'self' blob: data: ${MEDIA_SCHEME}:`,
+    `media-src 'self' blob: ${MEDIA_SCHEME}:`,
     "font-src 'self' data:",
     // Dev serves the renderer from http://localhost and pushes hot updates over
     // a websocket, which `'self'` does not cover — ws: is a different scheme.

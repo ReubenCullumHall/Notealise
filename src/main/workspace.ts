@@ -131,6 +131,30 @@ function commit(next: Workspace): Workspace {
   return next
 }
 
+/** One change at a time.
+ *
+ *  Every change below reads the state, does its work, and writes the state it
+ *  worked out. For the ones that move files — the bin, Put back, the recovery net
+ *  — the work is slow (seconds, when OneDrive holds a file and the rename
+ *  retries), and until 2026-11-12 nothing stopped a second change running in the
+ *  middle: a pin, a re-order, a rename's re-keying or a second delete landed,
+ *  and then the slow one finished and wrote its OWN picture over it, built from
+ *  a copy taken before it started. The second change was simply gone
+ *  (docs/app-check-2026-11-09.md, "A change made while a slow move is in flight").
+ *
+ *  So they queue. Each exported change at the foot of this file runs its `…Now`
+ *  body through here, after whatever was asked before it has finished, and so
+ *  reads what that one wrote. A change that throws does not block the next.
+ *  Nothing in a `…Now` body may call one of the exported changes — it would wait
+ *  for itself. (The vault switch's reset is deliberately not in the queue: it
+ *  must not wait behind a slow move in the folder being left.) */
+let turns: Promise<unknown> = Promise.resolve()
+function inTurn<T>(change: () => Promise<T>): Promise<T> {
+  const run = turns.then(change)
+  turns = run.catch(() => {})
+  return run
+}
+
 // ---------------------------------------------------------------------------
 // Public API (called by the IPC handlers)
 // ---------------------------------------------------------------------------
@@ -141,7 +165,7 @@ export async function getWorkspace(): Promise<Workspace> {
 
 /** Merge `partial` into each of `paths`. One write for a whole multi-select
  *  action rather than one per row. */
-export async function updateEntries(paths: string[], partial: EntryMeta): Promise<Workspace> {
+async function updateEntriesNow(paths: string[], partial: EntryMeta): Promise<Workspace> {
   const ws = await ensureLoaded()
   const entries = { ...ws.entries }
   for (const p of paths) {
@@ -153,7 +177,7 @@ export async function updateEntries(paths: string[], partial: EntryMeta): Promis
 
 /** Record a sibling order by assigning each path its index. Notes and folders
  *  share one sequence per parent, which is what lets them interleave. */
-export async function reorderEntries(paths: string[]): Promise<Workspace> {
+async function reorderEntriesNow(paths: string[]): Promise<Workspace> {
   const ws = await ensureLoaded()
   const entries = { ...ws.entries }
   paths.forEach((p, i) => {
@@ -164,7 +188,7 @@ export async function reorderEntries(paths: string[]): Promise<Workspace> {
 
 /** Re-key an entry and everything beneath it after a move/rename, so pins and
  *  order survive. Called by the same IPC handler that performs the rename. */
-export async function migrateKey(from: string, to: string): Promise<Workspace> {
+async function migrateKeyNow(from: string, to: string): Promise<Workspace> {
   const ws = await ensureLoaded()
   if (from === to) return ws
   const intoArchive = isArchiveName(to.split('/')[0])
@@ -191,7 +215,7 @@ export async function migrateKey(from: string, to: string): Promise<Workspace> {
  *  that actually moved get a trash record, so a failed move can't leave a bin
  *  row pointing at nothing. Their metadata is dropped — a restored note comes
  *  back unpinned and unarchived, which is what localhost does too. */
-export async function trashEntries(
+async function trashEntriesNow(
   paths: string[],
   /** vault path → where inside a note that photo/video was embedded. Only the
    *  editor's grip-delete supplies this, and only for the one file it deleted;
@@ -274,7 +298,7 @@ async function restoreTarget(from: string): Promise<string> {
 }
 
 /** Put binned items back where they came from. */
-export async function restoreEntries(ids: string[]): Promise<RestoreResult> {
+async function restoreEntriesNow(ids: string[]): Promise<RestoreResult> {
   await flushNow()
   const ws = await ensureLoaded()
   const wanted = new Set(ids)
@@ -306,7 +330,7 @@ export async function restoreEntries(ids: string[]): Promise<RestoreResult> {
  *  empty the bin; an explicit empty array is "these zero items", a no-op).
  *  Nothing is actually deleted here — see restoreRecoveryEntries,
  *  purgeRecoveryEntries and the sweep below for what happens to them next. */
-export async function purgeEntries(ids?: string[]): Promise<Workspace> {
+async function purgeEntriesNow(ids?: string[]): Promise<Workspace> {
   await flushNow()
   const ws = await ensureLoaded()
   if (ids && !ids.length) return ws
@@ -353,7 +377,7 @@ export async function purgeEntries(ids?: string[]): Promise<Workspace> {
 
 /** Put recovery items back where they came from — the same restore as the
  *  bin does, just one step later. */
-export async function restoreRecoveryEntries(ids: string[]): Promise<RestoreResult> {
+async function restoreRecoveryEntriesNow(ids: string[]): Promise<RestoreResult> {
   await flushNow()
   const ws = await ensureLoaded()
   const wanted = new Set(ids)
@@ -387,7 +411,7 @@ export async function restoreRecoveryEntries(ids: string[]): Promise<RestoreResu
  *  the feature that is genuinely irreversible, and a "delete selected forever"
  *  click whose selection happens to be empty (a stale closure, a clear racing
  *  the click) would otherwise wipe the entire safety net. */
-export async function purgeRecoveryEntries(ids?: string[]): Promise<Workspace> {
+async function purgeRecoveryEntriesNow(ids?: string[]): Promise<Workspace> {
   await flushNow()
   const ws = await ensureLoaded()
   if (ids && !ids.length) return ws
@@ -421,15 +445,28 @@ let sweepTimer: ReturnType<typeof setInterval> | null = null
 /** Drop anything past its 7-day window. Runs hourly once started, and once
  *  immediately — so an item that expired while the app was closed is swept
  *  the moment it reopens, not just after the next hourly tick. */
-async function sweepExpiredRecovery(): Promise<void> {
+async function sweepExpiredRecoveryNow(): Promise<void> {
   const ws = await ensureLoaded()
   if (!ws.recovery.length) return
   const now = Date.now()
   const expired = ws.recovery.filter((r) => now - r.purgedAt >= RECOVERY_TTL_MS)
   if (!expired.length) return
-  for (const item of expired) await purgeRecoveryItem(item.id, item.name)
-  const expiredIds = new Set(expired.map((r) => r.id))
-  latest = { entries: ws.entries, trash: ws.trash, recovery: ws.recovery.filter((r) => !expiredIds.has(r.id)) }
+  // Per item, as `purgeRecoveryEntries` does. Bare, the first file that could
+  // not be deleted (locked by OneDrive or another program, or a record that
+  // won't make a path) ended the whole sweep before the list was updated: the
+  // items already deleted stayed listed in Settings as if still recoverable, and
+  // everything after the stuck one was never tried — every hour, for good.
+  const gone = new Set<string>()
+  for (const item of expired) {
+    try {
+      await purgeRecoveryItem(item.id, item.name)
+      gone.add(item.id)
+    } catch (e) {
+      console.error(`could not delete expired recovery item ${item.id}`, e) // still on disk: stays listed, tried again next hour
+    }
+  }
+  if (!gone.size) return
+  latest = { entries: ws.entries, trash: ws.trash, recovery: ws.recovery.filter((r) => !gone.has(r.id)) }
   scheduleWrite()
 }
 
@@ -452,7 +489,7 @@ export function startRecoverySweep(): void {
  *  archive / collapse flags recorded for the subtree, the same cleanup
  *  `trashEntries` does, since those entries would otherwise be dead weight
  *  in workspace.json referencing a path that no longer exists. */
-export async function deleteSpace(folder: string): Promise<Workspace> {
+async function deleteSpaceNow(folder: string): Promise<Workspace> {
   await flushNow()
   const ws = await ensureLoaded()
   await trashEntryToOS(folder) // throws on failure — caller surfaces it
@@ -473,3 +510,24 @@ export async function resetWorkspaceForVaultSwitch(): Promise<void> {
   latest = null
   latestRoot = null
 }
+
+// ---------------------------------------------------------------------------
+// The changes, each in its turn (see `inTurn`). These are what the IPC handlers
+// call; each one's rules are written on its `…Now` body above.
+// ---------------------------------------------------------------------------
+
+export const updateEntries = (paths: string[], partial: EntryMeta): Promise<Workspace> =>
+  inTurn(() => updateEntriesNow(paths, partial))
+export const reorderEntries = (paths: string[]): Promise<Workspace> => inTurn(() => reorderEntriesNow(paths))
+export const migrateKey = (from: string, to: string): Promise<Workspace> => inTurn(() => migrateKeyNow(from, to))
+export const trashEntries = (paths: string[], origins?: Record<string, MediaOrigin>): Promise<Workspace> =>
+  inTurn(() => trashEntriesNow(paths, origins))
+export const restoreEntries = (ids: string[]): Promise<RestoreResult> => inTurn(() => restoreEntriesNow(ids))
+export const purgeEntries = (ids?: string[]): Promise<Workspace> => inTurn(() => purgeEntriesNow(ids))
+export const restoreRecoveryEntries = (ids: string[]): Promise<RestoreResult> =>
+  inTurn(() => restoreRecoveryEntriesNow(ids))
+export const purgeRecoveryEntries = (ids?: string[]): Promise<Workspace> =>
+  inTurn(() => purgeRecoveryEntriesNow(ids))
+export const deleteSpace = (folder: string): Promise<Workspace> => inTurn(() => deleteSpaceNow(folder))
+/** The 7-day sweep. Exported for its test; the app runs it from `startRecoverySweep`. */
+export const sweepExpiredRecovery = (): Promise<void> => inTurn(() => sweepExpiredRecoveryNow())

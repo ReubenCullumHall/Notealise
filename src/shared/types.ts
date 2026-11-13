@@ -159,6 +159,10 @@ export interface VaultApi {
   readNote(path: string): Promise<string>
   /** Raw bytes of a vault file, for rendering an image inline in the editor. */
   readAsset(path: string): Promise<Uint8Array>
+  /** The address to give an <img> or <video> for a vault file — main
+   *  serves it a piece at a time, so the file is never held in the window
+   *  (shared/mediaUrl.ts). Rejects when the file isn't there. */
+  mediaUrl(path: string): Promise<string>
   /** Write bytes already in the renderer's hand (a pasted or dropped file)
    *  into `dirPath`, named after `filename` and de-duplicated. ALWAYS use the
    *  returned vault-relative path, never the one asked for. */

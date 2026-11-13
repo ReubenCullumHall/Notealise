@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session } from 'electron'
+import { app, BrowserWindow, ipcMain, protocol, session } from 'electron'
 import path from 'node:path'
 import { CH } from '../shared/channels'
 import { openAllowedExternal } from './externalLinks'
@@ -16,7 +16,10 @@ import { initUpdater } from './updater'
 import { stopWatching } from './watcher'
 import { startRecoverySweep } from './workspace'
 import { sweepStaleExtractions } from './importers/notionZip/extractZip'
+import { sweepStaleTemp } from './tempSweep'
 import { allowMediaRequest, appPageFor } from './voice'
+import { MEDIA_SCHEME } from '../shared/mediaUrl'
+import { serveMedia } from './mediaProtocol'
 
 // The page every window shows: the dev server's address under `npm run dev`
 // (electron-vite provides ELECTRON_RENDERER_URL), the built file otherwise.
@@ -24,6 +27,18 @@ import { allowMediaRequest, appPageFor } from './voice'
 // the permission handler below allows the microphone to that page and no other.
 const RENDERER_FILE = path.join(__dirname, '../renderer/index.html')
 const DEV_URL = !app.isPackaged && process.env['ELECTRON_RENDERER_URL'] ? process.env['ELECTRON_RENDERER_URL'] : null
+
+// The address pictures and videos in the vault are shown from
+// (shared/mediaUrl.ts). It has to be declared before the app is ready, and only
+// once. `standard` gives the address a host (the launch token) and a query;
+// `secure` keeps it from counting as mixed content under the dev server's page;
+// `stream` is what lets a <video> ask for part of a file, so a film starts at
+// once and can be scrubbed. Not `bypassCSP` — the window's policy names this
+// scheme for pictures and media only — and neither `corsEnabled` nor
+// `supportFetchAPI`: a page shows what comes from it and never reads it.
+protocol.registerSchemesAsPrivileged([
+  { scheme: MEDIA_SCHEME, privileges: { standard: true, secure: true, stream: true } }
+])
 
 // The Content-Security-Policy is injected into the renderer's HTML at build
 // time — see the `csp` plugin in electron.vite.config.ts, which is also where
@@ -158,6 +173,9 @@ app.whenReady().then(async () => {
 
   installPlayerReferer(session.defaultSession)
 
+  // Vault pictures and videos, a piece at a time (mediaProtocol.ts).
+  protocol.handle(MEDIA_SCHEME, serveMedia)
+
   installMenu()
 
   const saved = await getSavedVault()
@@ -202,6 +220,9 @@ app.whenReady().then(async () => {
   // Extraction folders from earlier Notion imports. Never blocks boot, and a
   // failure here is not worth reporting to anyone.
   void sweepStaleExtractions().catch(() => {})
+  // ...and the temp folders a quit or a crash mid-Transcribe, mid-conversion or
+  // mid-print left behind (tempSweep.ts).
+  void sweepStaleTemp()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

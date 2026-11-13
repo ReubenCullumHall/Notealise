@@ -66,7 +66,7 @@ class ImageWidget extends WidgetType {
     img.alt = this.alt
     // An <img> is natively draggable, which is not what should happen here: the
     // grip beside it is the drag affordance (attachMove), and a native drag
-    // carries the blob: URL as text, so dropping it back in the note would
+    // carries the picture's address as text, so dropping it back in the note would
     // paste that URL as characters. The video widget has no equivalent because
     // <video> doesn't start a drag of its own.
     img.draggable = false

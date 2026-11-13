@@ -1,21 +1,36 @@
 // A recording's bytes, as something the voice note block can play and draw.
 //
-// Same shape as videoAssets.ts: the blob: URL cache comes from assetCache.ts,
-// which is what makes a vault switch clear recordings as well as pictures (the
-// keys are vault-RELATIVE paths, so `memo.m4a` in another vault is another
-// file). Two more things live here because they have to be cleared at exactly
-// the same moment: each recording's waveform, and the players themselves.
+// Same shape as videoAssets.ts: the URL cache comes from assetCache.ts, which is
+// what makes a vault switch clear recordings as well as pictures (the keys are
+// vault-RELATIVE paths, so `memo.m4a` in another vault is another file). Two
+// more things live here because they have to be cleared at exactly the same
+// moment: each recording's waveform, and the players themselves.
+//
+// A recording is the one kind still held WHOLE in the window (`'bytes'`), where
+// pictures and videos are served a piece at a time since 2026-11-11. Two
+// measured reasons. The tape keeps a recording playing after its note has been
+// closed, renamed, moved or binned — with the bytes in hand it plays to the end,
+// while one served by address stopped as soon as it ran past what was already
+// loaded (about three minutes in, for an hour-long recording whose folder was
+// renamed). And the mixer hears it through Web Audio, which plays silence for a
+// sound from another origin. What changed for recordings is WHEN they go: a
+// player that is let go frees its recording (`forgetVoice`), where before every
+// one ever played stayed until the vault switched.
 
 import { createAssetCache } from './assetCache'
 import { decodeWave, type Wave } from './voiceWave'
 
-const cache = createAssetCache()
+const cache = createAssetCache('bytes')
 
 /** The blob: URL for an already-loaded recording, for a synchronous first paint. */
 export const cachedVoiceUrl = cache.cached
 
 /** Read a recording's bytes and mint a blob: URL for it (null if the read fails). */
 export const loadVoice = cache.load
+
+/** Free a recording's bytes — its player has been let go (voicePlayer.ts
+ *  `release`), so nothing is playing or showing it. */
+export const forgetVoice = cache.forget
 
 const waves = new Map<string, Promise<Wave | null>>()
 

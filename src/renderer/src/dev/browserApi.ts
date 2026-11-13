@@ -185,6 +185,9 @@ const api: VaultApi = {
   readAsset: async () => {
     throw new Error('No file access in browser preview')
   },
+  mediaUrl: async () => {
+    throw new Error('No file access in browser preview')
+  },
   // Same honest answer as readAsset: paste/drop/attach have nowhere to write
   // outside Electron, so the preview can't demonstrate this feature at all.
   writeAsset: async () => {

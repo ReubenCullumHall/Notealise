@@ -57,6 +57,7 @@ import { startWatching } from './watcher'
 import { sendBugReport, sendFeatureRequest } from './support'
 import { openAllowedExternal } from './externalLinks'
 import { lookUpLink, readLinkThumb } from './linkPreview'
+import { mediaAddress } from './mediaProtocol'
 import { convertAudio, microphoneAccess, pickAudioFiles } from './voice'
 import {
   stopAllTranscriptions,
@@ -257,6 +258,7 @@ export function registerIpc(window: BrowserWindow): void {
   ipcMain.handle(CH.listTree, () => listTree())
   ipcMain.handle(CH.readNote, (_e, p: string) => readNote(p))
   ipcMain.handle(CH.readAsset, (_e, p: string) => readAsset(p))
+  ipcMain.handle(CH.mediaUrl, (_e, p: string) => mediaAddress(p))
   // Validated the same way `pickAttachment` below validates its own results —
   // this channel used to write whatever filename and bytes the renderer handed
   // it, which is the one attachment path with no type check at all. It also
