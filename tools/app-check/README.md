@@ -22,8 +22,39 @@ For a "before", build HEAD somewhere else (`git stash` is not safe in the shared
 | `run_firstkey.py <port> small\|big` | which kind of typing freezes in a big vault (first key, a heading, a link) |
 | `run_locked.py <port> inside\|top\|root` | a folder the app may not read — does it still open |
 | `run_dot.py <port>` | a notes folder whose name starts with a dot — are outside changes noticed |
-| `run_media.py <port> <copies> [MB each]` | memory held by a note with big videos |
+| `run_media.py <port> <copies> [MB each] [a real clip]` | memory held by a note with big videos (made-up bytes, or copies of a real clip — each is then played for 2 s) |
 | `run_copy.py <port> "<real vault>"` | typing on a COPY of real notes (timings only, never names or words) |
+
+Added 2026-11-12 with the memory fix, the heading freeze and the small fixes. `./make_media.sh` first (real
+films, recordings, pictures, a .docx — into `$WORK/fix`; `LONG=1` for the hour-long recording). The first group
+takes `WORK=<build dir>` like the ones above; the second takes the build dir as an argument and `APP_BIN=<binary>`
+to run against a PACKAGED app instead. Run each on a build of HEAD and on the change, and compare.
+
+| script | what it answers |
+| --- | --- |
+| `run_media_real.py <port>` | do real pictures (odd names, no extension, .svg, missing), films and voice notes show, play, seek — and SOUND (the mixer's output level) |
+| `run_media_leave.py <port> <copies> <clip\|none>` | after films were played and the note left: what each part of the app still holds, and is any `<video>` alive |
+| `run_voice_memory.py <port> <copies> [play]` | recordings: memory with their note open, after leaving it, and with one left on the tape (`LONG=1` media) |
+| `run_voice_rename.py <port>` | an hour-long recording still plays to the end after its folder is renamed outside the app |
+| `run_pictures_scroll.py <port>` | a note of 24 pictures scrolled down and up: how long each takes to reappear |
+| `run_firstkey_frames.py <port> small\|big [note]` | like `run_firstkey.py`, but the longest gap between frames (catches what is under 50 ms) |
+| `run_links_same.py <port> <out.json>` | every link chip and backlink on a set of awkward notes — `cmp` the two builds' files |
+| `run_search_outside.py <port>` | Search notes after a note changed outside: time to find its new word; nothing stale |
+| `run_media_guard.py <port> <build> [dev]` | the media address can be SHOWN, never read: fetch, canvas, a guessed address, a path outside the vault (`dev` = served by `vite.dev` like `npm run dev`) |
+| `run_media_svg.py <port>` | an `.svg` picture shows, and one holding a script, an onload and a remote picture runs and fetches nothing |
+| `run_media_frame.py <port> <build> [dev]` | …nor framed, embedded or run as a script (a vault `.html` named as a picture) |
+| `run_import.py <port> <build>` | a real Word import and web-page import (the file box is answered by `patch_dialog.mjs` through `--inspect`) |
+| `run_transcribe_quit.py <port> <build>` | quit part-way through a real transcription: what is left in the temp folder (`main_eval.mjs` asks the app to quit) |
+| `run_temp_sweep.py <port> <build>` | the launch clean-up of old temp folders — and what it leaves alone |
+| `run_recovery_sweep.py <port> <build>` | the 7-day tidy-up at launch with one expired item that can't be deleted |
+| `run_bin_and_pin.py <port> <build>` | bin one note and pin another at the same moment, 40 times (kept everything on both builds on this Mac — the fault needs a slow disk; `main/workspaceTurns.test.ts` shows it) |
+
+More traps paid for: this Mac's `python3` is 3.9 — no backslash inside an f-string's braces, no
+`write_text(newline=…)`; a packaged app only takes `--inspect` if the scratch copy's `electron-builder.yml` has
+`enableNodeCliInspectArguments: true` (never the real one); opening a second note costs ~130 MB by itself, so take
+the "after leaving" memory against a floor with that note already open; made-up bytes are not a film — measure
+playing with real clips too; and five hour-long recordings in one note take the app past 3 GB while their
+waveforms are drawn, on any build (use recordings just over an hour to measure anything else).
 
 Traps already paid for: type new words on a fresh line at the END of a note (`Meta+ArrowDown`, Enter)
 — typed at the end of a wrapped row they can join the next word and the count is "wrong"; the made-up
