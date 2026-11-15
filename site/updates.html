@@ -63,9 +63,36 @@
          pop-up below. -->
     <div class="rels">
       <!-- whats-new:start -->
+      <article class="rel" data-version="1.7.1">
+        <header class="rel-head">
+          <p class="rel-meta"><span class="rel-tag">Latest</span><time datetime="2026-11-15">15 November 2026</time><span class="rel-dot" aria-hidden="true">&middot;</span><span class="rel-count">17 changes</span></p>
+          <h2 class="rel-title">Version <span class="hl">1.7.1</span></h2>
+          <span class="rel-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg></span>
+        </header>
+        <ol class="rel-list">
+          <li><span class="rel-n">01</span><p><strong>The app opens even when a folder inside your notes can’t be read.</strong> It used to sit on “Loading…” for good; now everything else opens as normal. If the notes folder itself can’t be read, you’re asked to choose a folder.</p></li>
+          <li><span class="rel-n">02</span><p><strong>The sidebar keeps up with your typing.</strong> The line under a note’s name, and the note’s “edited” time, now change a moment after you stop typing — they used to wait until something else refreshed the list.</p></li>
+          <li><span class="rel-n">03</span><p><strong>Typing stays smooth in very long notes.</strong> A note of a few thousand lines used to hitch every few keys.</p></li>
+          <li><span class="rel-n">04</span><p><strong>A notes folder whose name starts with a dot</strong> (like <code>.notes</code>) now notices notes added or changed outside the app, without a restart.</p></li>
+          <li><span class="rel-n">05</span><p><strong>Your saved looks and the folder the app reopens are saved more safely</strong> — a crash or a power cut in the middle of a save can no longer wipe them.</p></li>
+          <li><span class="rel-n">06</span><p><strong>Pictures and videos no longer pile up in memory.</strong> Every picture and video you looked at used to stay in memory until you quit — a note with five big videos took up about three times their size. Now they are read a piece at a time and let go when you leave the note; a voice note’s recording is let go once nothing is playing or showing it.</p></li>
+          <li><span class="rel-n">07</span><p><strong>Typing in a heading no longer freezes in a big notes folder.</strong> With thousands of linked notes, the first key after opening a note — and every key typed in a heading — could hold the app up for seconds.</p></li>
+          <li><span class="rel-n">08</span><p><strong>.svg pictures show in notes</strong> — they used to show as “not found”.</p></li>
+          <li><span class="rel-n">09</span><p><strong>The app opens a little faster</strong> — the tools for importing Word documents and web pages now load only when you import.</p></li>
+          <li><span class="rel-n">10</span><p><strong>Search notes stays quick when notes change outside the app</strong> — after a sync or an edit in another program it reads again only the notes that changed, not every note.</p></li>
+          <li><span class="rel-n">11</span><p><strong>Settings → Data → Recovery is tidied properly after 7 days.</strong> One item that couldn’t be deleted used to stop the tidy-up, and items it had already removed stayed on the list.</p></li>
+          <li><span class="rel-n">12</span><p><strong>A pin or a new order made while a note is going to the bin is kept</strong> — in a folder that syncs, the slow move could undo it.</p></li>
+          <li><span class="rel-n">13</span><p><strong>Quitting part-way through a transcription leaves nothing behind</strong> — it used to leave a copy of the recording in the computer’s temporary files; any left by an earlier crash are cleared when the app opens.</p></li>
+          <li><span class="rel-n">14</span><p><strong>A note with several long voice notes no longer swamps your computer’s memory.</strong> Their waveforms are now drawn one after another, so five hour-long recordings take a few gigabytes for a moment instead of over ten — and every one of them gets its waveform. Leaving the note stops the work straight away.</p></li>
+          <li><span class="rel-n">15</span><p><strong>The sidebar says when a folder can’t be read.</strong> Where its notes would be, it says “Couldn’t open this folder” — point at it to see why — instead of looking empty. If your notes folder itself can’t be read, the “Choose folder…” screen now says so too, including straight after you pick one.</p></li>
+          <li><span class="rel-n">16</span><p><strong>A dragged voice note lands exactly where its greyed copy shows.</strong> Dragged to just under a paragraph, it used to drop a line lower than the copy; the copy now shows the empty line that goes in above it, so nothing moves when you let go.</p></li>
+          <li><span class="rel-n">17</span><p><strong>“Remove name” is gone from a voice note’s right-click menu.</strong> A voice note always has a name now (“Untitled 1” until you rename it), so it only swapped one number for another — “Rename voice note…” is still there.</p></li>
+        </ol>
+        <button class="rel-open" type="button" aria-haspopup="dialog">See all 17 changes</button>
+      </article>
       <article class="rel" data-version="1.7.0">
         <header class="rel-head">
-          <p class="rel-meta"><span class="rel-tag">Latest</span><time datetime="2026-11-08">8 November 2026</time><span class="rel-dot" aria-hidden="true">&middot;</span><span class="rel-count">31 changes</span></p>
+          <p class="rel-meta"><time datetime="2026-11-08">8 November 2026</time><span class="rel-dot" aria-hidden="true">&middot;</span><span class="rel-count">31 changes</span></p>
           <h2 class="rel-title">Version <span class="hl">1.7.0</span></h2>
           <span class="rel-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg></span>
         </header>
