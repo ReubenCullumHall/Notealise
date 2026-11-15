@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearAssetCaches } from './assetCache'
-import { cachedVoiceUrl, forgetVoice, loadVoice, onVoiceReset, waveFor } from './voiceAssets'
+import { cachedVoiceUrl, dropWave, forgetVoice, loadVoice, onVoiceReset, waveFor } from './voiceAssets'
 
 // The vault switch has to drop recordings with everything else — assetCache.test.ts
 // explains why (the keys are vault-RELATIVE, so `memo.m4a` is another vault's
@@ -117,5 +117,77 @@ describe('the vault switch and voice notes', () => {
 
   it('refuses to decode a file over the size it was given', async () => {
     expect(await waveFor('Rec/big.m4a', 2)).toBeNull()
+  })
+
+  // 2026-11-14 (docs/app-check-2026-11-09.md, "Seen while fixing item 2"): the
+  // browser's decoder holds ~3 GB for a 59-minute recording while it works, so
+  // five long recordings in one note decoded side by side took the app past
+  // 5 GB. They take turns now, and a file is not even read until its turn.
+  describe('waveforms take turns', () => {
+    const asked: string[] = []
+    const waiting = new Map<string, (b: Uint8Array) => void>()
+    beforeEach(() => {
+      asked.length = 0
+      waiting.clear()
+      vi.stubGlobal('window', {
+        api: {
+          readAsset: (rel: string) => {
+            asked.push(rel)
+            return new Promise<Uint8Array>((r) => waiting.set(rel, r))
+          }
+        }
+      })
+    })
+    const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
+
+    it('reads (and decodes) the next recording only once the one before is done', async () => {
+      const a = waveFor('Rec/a.m4a')
+      const b = waveFor('Rec/b.m4a')
+      await settle()
+      expect(asked).toEqual(['Rec/a.m4a'])
+      waiting.get('Rec/a.m4a')!(new Uint8Array([1]))
+      await a
+      await settle()
+      expect(asked).toEqual(['Rec/a.m4a', 'Rec/b.m4a'])
+      waiting.get('Rec/b.m4a')!(new Uint8Array([2]))
+      await b
+    })
+
+    it('skips one whose player was let go before its turn, and asks afresh after', async () => {
+      const a = waveFor('Rec/a.m4a')
+      const b = waveFor('Rec/b.m4a')
+      dropWave('Rec/b.m4a')
+      await settle()
+      waiting.get('Rec/a.m4a')!(new Uint8Array([1]))
+      await a
+      expect(await b).toBeNull()
+      expect(asked).toEqual(['Rec/a.m4a']) // b was never read
+      const again = waveFor('Rec/b.m4a')
+      expect(again).not.toBe(b)
+      await settle()
+      expect(asked).toEqual(['Rec/a.m4a', 'Rec/b.m4a'])
+      waiting.get('Rec/b.m4a')!(new Uint8Array([2]))
+      await again
+    })
+
+    it('keeps one already being worked out when its player lets go', async () => {
+      const a = waveFor('Rec/a.m4a')
+      await settle()
+      dropWave('Rec/a.m4a')
+      expect(waveFor('Rec/a.m4a')).toBe(a)
+      waiting.get('Rec/a.m4a')!(new Uint8Array([1]))
+      await a
+    })
+
+    it('reads nothing that was still waiting when the vault switched', async () => {
+      const a = waveFor('Rec/a.m4a')
+      const b = waveFor('Rec/b.m4a')
+      await settle()
+      clearAssetCaches()
+      waiting.get('Rec/a.m4a')!(new Uint8Array([1]))
+      await a
+      expect(await b).toBeNull()
+      expect(asked).toEqual(['Rec/a.m4a'])
+    })
   })
 })

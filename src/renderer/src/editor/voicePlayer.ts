@@ -4,7 +4,7 @@ import { VOICE_DEFAULTS, type VoiceSettings } from '../../../shared/voiceNote'
 import { linkEnv } from './linkEnv'
 import { isRaw } from './rawView'
 import { viewsShowing } from './viewRegistry'
-import { cachedVoiceUrl, forgetVoice, loadVoice, onVoiceReset, waveFor } from './voiceAssets'
+import { cachedVoiceUrl, dropWave, forgetVoice, loadVoice, onVoiceReset, waveFor } from './voiceAssets'
 import { HIGH_SHELF_HZ, LIMITER, LOW_SHELF_HZ, recordingName, skipTarget, toneGains } from './voiceMixer'
 import { titleOf } from '../../../shared/links'
 import { WAVE_MAX_BYTES, WAVE_MAX_SECONDS } from './voiceWave'
@@ -292,7 +292,10 @@ export class VoicePlayer {
     a.load() // drops the decoder and its buffers now, rather than whenever GC gets to it
     // ...and the recording itself, which this player was the only thing holding
     // (voiceAssets.ts). After the element has let go of it, not before.
-    if (last) forgetVoice(this.rel)
+    if (last) {
+      forgetVoice(this.rel)
+      dropWave(this.rel) // its waveform, if still waiting its turn (voiceAssets.ts)
+    }
     const g = this.graph
     this.graph = null
     if (g) {

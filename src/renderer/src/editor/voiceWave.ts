@@ -16,10 +16,13 @@ export const BARS = 96
 export const MIN_BAR = 0.06
 
 /** Recordings longer than this, or bigger than `WAVE_MAX_BYTES`, get flat bars
- *  instead of a waveform. Decoding holds the whole recording as 32-bit samples;
- *  at the 8 kHz below that is ~115 MB an hour of mono (measured by the format
- *  lab — at the usual 44.1 kHz it was ~635 MB), so an hour-long lecture still
- *  gets its waveform and a longer one simply plays without it. */
+ *  instead of a waveform. What decoding RETURNS is small at the 8 kHz below
+ *  (~115 MB an hour of mono), but the browser's decoder works at the file's own
+ *  rate on the way there: a 59-minute 44.1 kHz .m4a took the window up ~3 GB for
+ *  about four seconds (measured 2026-11-14 — the same at 3 kHz or 44.1 kHz), and
+ *  gave it all back after. So waveforms are decoded one at a time (voiceAssets.ts
+ *  `waveFor`); an hour-long lecture still gets its waveform and a longer one
+ *  simply plays without it. */
 export const WAVE_MAX_SECONDS = 60 * 60
 export const WAVE_MAX_BYTES = 150 * 1024 * 1024
 

@@ -118,7 +118,8 @@ try:
             page.locator('.cm-voice-play').nth(i).click()
             time.sleep(0.4)
         out['voice'] = voices
-        out['wave_drawn'] = page.evaluate("() => [...document.querySelectorAll('.cm-voice')].map(v => !!v.querySelector('canvas, svg, .cm-voice-wave'))")
+        # the bar heights, not just "is there a bar row" (always true, flat bars too): flat stubs are all 22%
+        out['wave_drawn'] = page.evaluate("() => [...document.querySelectorAll('.cm-voice')].map(v => [...new Set([...v.querySelectorAll('.cm-voice-wave > *')].map(b => b.style.height))].join(' '))")
         out['console'] = errors[:12]
         b.close()
 finally:

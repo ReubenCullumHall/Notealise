@@ -35,6 +35,7 @@ to run against a PACKAGED app instead. Run each on a build of HEAD and on the ch
 | `run_media_real.py <port>` | do real pictures (odd names, no extension, .svg, missing), films and voice notes show, play, seek — and SOUND (the mixer's output level) |
 | `run_media_leave.py <port> <copies> <clip\|none>` | after films were played and the note left: what each part of the app still holds, and is any `<video>` alive |
 | `run_voice_memory.py <port> <copies> [play]` | recordings: memory with their note open, after leaving it, and with one left on the tape (`LONG=1` media) |
+| `run_voice_peak.py <port> <copies>` | long recordings' waveforms: FOOTPRINT at its highest with their note open, time until every waveform is drawn, what is left after leaving (`EARLY=3` leaves after 3 s) — the 2026-11-14 waveform fix |
 | `run_voice_rename.py <port>` | an hour-long recording still plays to the end after its folder is renamed outside the app |
 | `run_pictures_scroll.py <port>` | a note of 24 pictures scrolled down and up: how long each takes to reappear |
 | `run_firstkey_frames.py <port> small\|big [note]` | like `run_firstkey.py`, but the longest gap between frames (catches what is under 50 ms) |
@@ -53,8 +54,10 @@ More traps paid for: this Mac's `python3` is 3.9 — no backslash inside an f-st
 `write_text(newline=…)`; a packaged app only takes `--inspect` if the scratch copy's `electron-builder.yml` has
 `enableNodeCliInspectArguments: true` (never the real one); opening a second note costs ~130 MB by itself, so take
 the "after leaving" memory against a floor with that note already open; made-up bytes are not a film — measure
-playing with real clips too; and five hour-long recordings in one note take the app past 3 GB while their
-waveforms are drawn, on any build (use recordings just over an hour to measure anything else).
+playing with real clips too; a 59-minute recording takes the window up ~3 GB for a few seconds while its waveform is
+drawn — the browser's decoder, one at a time since 2026-11-14 (use recordings just over an hour to measure anything else).
+**Judge memory by the footprint (`footprint -p <pid>`, what Activity Monitor shows), not `ps`'s RSS**: after a big decode RSS
+kept ~2 GB the system had already been handed back, and read as a leak that wasn't (`run_voice_peak.py` prints both).
 
 Traps already paid for: type new words on a fresh line at the END of a note (`Meta+ArrowDown`, Enter)
 — typed at the end of a wrapped row they can join the next word and the count is "wrong"; the made-up

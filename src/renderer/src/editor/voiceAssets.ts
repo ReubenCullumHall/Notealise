@@ -32,26 +32,61 @@ export const loadVoice = cache.load
  *  `release`), so nothing is playing or showing it. */
 export const forgetVoice = cache.forget
 
-const waves = new Map<string, Promise<Wave | null>>()
+interface WaveJob {
+  wave: Promise<Wave | null>
+  /** its turn has come: the file is being read or decoded, or is done */
+  started: boolean
+  /** let go before its turn (`dropWave`, the vault switch): it reads nothing */
+  dropped: boolean
+}
+
+const waves = new Map<string, WaveJob>()
+
+/** The last waveform asked for; the next one waits for it. */
+let queue: Promise<unknown> = Promise.resolve()
 
 /** A recording's waveform, decoded once per file and kept. `maxBytes` refuses a
  *  file larger than that (null) — for a recording whose length is unknown, the
  *  size is the only guard against decoding hours of audio (see voiceWave.ts).
+ *
+ *  ONE AT A TIME (2026-11-14). The browser's decoder holds the whole recording
+ *  at its own rate while it works — measured ~3 GB for a 59-minute .m4a, for
+ *  about four seconds, whatever rate it is asked for — and gives it back when it
+ *  is done. Five long recordings in one note decoded side by side took the app
+ *  past 5 GB, and one of the five got no waveform at all. In turn, the most held
+ *  is one recording's worth. The file is read only when its turn comes, so the
+ *  bytes of the ones still waiting are not held either.
  *
  *  The bytes are read again over IPC rather than fetched from the blob: URL —
  *  the renderer's CSP is `connect-src 'self'`, and Chromium refuses a fetch of
  *  a blob: URL under it. One extra read of a file the size of a voice note is
  *  cheap; widening the CSP is not. */
 export function waveFor(rel: string, maxBytes = Infinity): Promise<Wave | null> {
-  let wave = waves.get(rel)
-  if (!wave) {
-    wave = window.api.readAsset(rel).then(
-      (bytes) => (bytes.byteLength > maxBytes ? null : decodeWave(bytes)),
-      () => null
-    )
-    waves.set(rel, wave)
-  }
-  return wave
+  const known = waves.get(rel)
+  if (known) return known.wave
+  const job: WaveJob = { wave: Promise.resolve(null), started: false, dropped: false }
+  job.wave = queue
+    .then(async () => {
+      if (job.dropped) return null
+      job.started = true
+      const bytes = await window.api.readAsset(rel)
+      return bytes.byteLength > maxBytes ? null : decodeWave(bytes)
+    })
+    .catch(() => null)
+  queue = job.wave
+  waves.set(rel, job)
+  return job.wave
+}
+
+/** Nothing wants this recording's waveform any more — its player has been let
+ *  go (a note left before its waveforms were all drawn). One still waiting for
+ *  its turn is skipped, so leaving a note of long recordings stops the decoding
+ *  rather than working through the rest; one already decoded is kept, as before. */
+export function dropWave(rel: string): void {
+  const job = waves.get(rel)
+  if (!job || job.started) return
+  job.dropped = true
+  waves.delete(rel)
 }
 
 const resets: (() => void)[] = []
@@ -72,6 +107,7 @@ export function onVoiceReset(fn: () => void): void {
 const clearBlobs = cache.clear
 cache.clear = (): void => {
   for (const fn of resets) fn()
+  for (const job of waves.values()) job.dropped = true // a waiting one would read the NEW vault's file of that name
   waves.clear()
   clearBlobs()
 }
