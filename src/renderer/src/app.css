@@ -4095,9 +4095,15 @@ button.look-card:hover {
   position: relative;
   box-sizing: border-box;
   overflow: hidden;
+  pointer-events: none;
+}
+/* The copy's grey place. The gap's padding around it is the blank line the drop will add
+   there (2026-11-15), left clear as it will look after the drop. */
+.cm-drag-ghost-slot {
+  height: 100%;
+  overflow: hidden;
   border-radius: var(--r-control);
   background: rgb(var(--ink-300) / 0.1);
-  pointer-events: none;
 }
 .cm-drag-ghost-body {
   opacity: 0.45;

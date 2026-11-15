@@ -397,7 +397,8 @@ function blockMenu(view: EditorView, block: VoiceBlock, x: number, y: number, at
       }
     })
   }
-  if (named) items.push({ label: 'Remove name', run: () => writeName(view, block.dom, '') })
+  // No "Remove name" since 2026-11-15 (Reuben): a voice note left without a name is given the next
+  // "Untitled N" at once (voiceUntitled.ts), so removing one only swapped it for a new number.
   handlers.menu(x, y, items)
 }
 

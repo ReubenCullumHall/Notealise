@@ -431,7 +431,14 @@ export function moveGroupSpec(
   /** Arriving from another note (a split view): nothing here to cut, and the blocks' own places
    *  are in that note, so they mean nothing here. They land spaced the same way (2026-11-07). */
   foreign = false
-): { changes: ChangeSet; selection: EditorSelection } | null {
+): {
+  changes: ChangeSet
+  selection: EditorSelection
+  /** the drop adds a blank line above / below the blocks (a neighbour of words there): what the
+   *  greyed copy's gap shows too, so the drop lands where its copy was (dragGhost.ts, 2026-11-15) */
+  blankAbove: boolean
+  blankBelow: boolean
+} | null {
   const doc = state.doc
   if (foreign) group = { ...group, cuts: [] }
   else if (group.spans.some((s) => at >= s.from && at <= (doc.lineAt(s.to).number < doc.lines ? doc.line(doc.lineAt(s.to).number + 1).from : doc.length)))
@@ -453,8 +460,10 @@ export function moveGroupSpec(
   const above = aboveAt > 0 ? doc.lineAt(midLine ? aboveAt : aboveAt - 1) : null
   const textAbove = !!above && above.text.trim() !== ''
   // A list item (tight) lands tight; anything set apart stays set apart.
-  const lead = (midLine ? '\n' : '') + (group.spaced && textAbove ? '\n' : '')
-  const insert = lead + group.text + '\n' + (group.spaced && textBelow ? '\n' : '')
+  const blankAbove = group.spaced && textAbove
+  const blankBelow = group.spaced && textBelow
+  const lead = (midLine ? '\n' : '') + (blankAbove ? '\n' : '')
+  const insert = lead + group.text + '\n' + (blankBelow ? '\n' : '')
   const specs = group.cuts.map((c) => (c === merged ? { from: c.from, to: c.to, insert } : { from: c.from, to: c.to, insert: '' }))
   if (!merged) specs.push({ from: at, to: at, insert })
   const changes = state.changes(specs)
@@ -464,12 +473,12 @@ export function moveGroupSpec(
   let start = changes.mapPos(merged ? merged.from : at, -1) + lead.length
   // From another note the text may have been re-pointed (a picture's path), so the blocks'
   // lengths there are not theirs here: the whole arrival is picked as one.
-  if (foreign) return { changes, selection: EditorSelection.single(start, start + group.text.length) }
+  if (foreign) return { changes, selection: EditorSelection.single(start, start + group.text.length), blankAbove, blankBelow }
   const ranges = group.spans.map((sp) => {
     const len = sp.to - sp.from
     const r = EditorSelection.range(start, start + len)
     start += len + group.joiner.length
     return r
   })
-  return { changes, selection: EditorSelection.create(ranges, ranges.length - 1) }
+  return { changes, selection: EditorSelection.create(ranges, ranges.length - 1), blankAbove, blankBelow }
 }

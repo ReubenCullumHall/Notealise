@@ -34,6 +34,11 @@ export interface Ghost {
   body: HTMLElement
   /** a number per drag, so moving the gap never rebuilds a different copy */
   id: number
+  /** room above / below the copy, inside `height`: the blank line the drop will add there
+   *  (blockPick.ts moveGroupSpec), so the copy sits exactly where the block will land
+   *  (Reuben, 2026-11-15 — a voice note dragged under a paragraph landed a line below its copy) */
+  padTop?: number
+  padBottom?: number
 }
 
 export const setGhost = StateEffect.define<Ghost | null>()
@@ -69,7 +74,7 @@ class GhostWidget extends WidgetType {
   }
 
   eq(other: GhostWidget): boolean {
-    return other.ghost.id === this.ghost.id && other.ghost.height === this.ghost.height
+    return other.ghost.id === this.ghost.id && other.ghost.height === this.ghost.height && other.ghost.padTop === this.ghost.padTop
   }
 
   get estimatedHeight(): number {
@@ -81,8 +86,14 @@ class GhostWidget extends WidgetType {
     box.className = 'cm-drag-ghost'
     box.setAttribute('aria-hidden', 'true')
     box.style.height = `${this.ghost.height}px`
+    if (this.ghost.padTop) box.style.paddingTop = `${this.ghost.padTop}px`
+    if (this.ghost.padBottom) box.style.paddingBottom = `${this.ghost.padBottom}px`
+    // The grey slot is the copy only; the blank line around it (the padding) stays clear, as it will be.
+    const slot = document.createElement('div')
+    slot.className = 'cm-drag-ghost-slot'
     const body = this.ghost.body.cloneNode(true) as HTMLElement
-    box.appendChild(body)
+    slot.appendChild(body)
+    box.appendChild(slot)
     if (body.dataset.capped) box.classList.add('is-capped')
     return box
   }
@@ -137,7 +148,17 @@ export const dragGhost = StateField.define<GhostState>({
     if (!changed) return value
     return { ghost, source, decorations: build(tr.state, ghost, source) }
   },
-  provide: (f) => EditorView.decorations.from(f, (v) => v.decorations)
+  provide: (f) => [
+    EditorView.decorations.from(f, (v) => v.decorations),
+    // The drop (an edit while the gap is open) ends any slide still running: the note now stands
+    // where the gap showed it, and a line still easing in its last few px could be redrawn as the
+    // dropped block — which then crept 3–4px into place after landing (2026-11-15).
+    EditorView.updateListener.of((u) => {
+      const was = u.startState.field(f, false)
+      if (!u.docChanged || !was || !(was.ghost || was.source)) return
+      for (const el of Array.from(u.view.contentDOM.children)) for (const a of el.getAnimations()) if (a.id === SLIDE_ID) a.cancel()
+    })
+  ]
 })
 
 // --- the slide (Reuben, 2026-11-07) -----------------------------------------------------

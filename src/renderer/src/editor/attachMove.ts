@@ -1,4 +1,4 @@
-import { EditorView } from '@codemirror/view'
+import { BlockType, EditorView } from '@codemirror/view'
 import { EditorSelection } from '@codemirror/state'
 import { gripIcon } from './blockTable'
 import { embedSpanAt, selectEmbed } from './attachSelect'
@@ -67,6 +67,14 @@ export const EMBED_SOURCE: DragSource = {
  *  VideoWidget from rebuilding every time their line shifts. */
 /** Each drag's ghost is its own (dragGhost.ts `Ghost.id`). */
 let ghostIds = 0
+
+/** How tall a blank line is drawn in this note (a page look's rule, or the text's line height). */
+function blankLineHeight(v: EditorView): number {
+  for (const b of v.viewportLineBlocks) {
+    if (b.length === 0 && b.type === BlockType.Text) return Math.round(b.height)
+  }
+  return Math.round(v.defaultLineHeight)
+}
 
 export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SOURCE): HTMLElement {
   const btn = document.createElement('button')
@@ -261,8 +269,16 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
         shown = null
         return
       }
-      showGhost(v, { id: ghost.id, height: ghost.height, body: ghost.body, at })
-      shown = { view: v, at, height: ghost.height }
+      // The blank lines the drop will add either side (blockPick.ts) are part of the gap, so the
+      // copy sits where the block lands and what is below it where that will be (Reuben,
+      // 2026-11-15: a voice note dragged under a paragraph landed a line below its copy).
+      const land = moveGroupSpec(v.state, group ?? alone, at, v !== view)
+      const blank = land && (land.blankAbove || land.blankBelow) ? blankLineHeight(v) : 0
+      const padTop = land?.blankAbove ? blank : 0
+      const padBottom = land?.blankBelow ? blank : 0
+      const height = ghost.height + padTop + padBottom
+      showGhost(v, { id: ghost.id, height, body: ghost.body, at, padTop, padBottom })
+      shown = { view: v, at, height }
     }
 
     // Holding near the top or bottom of the editor scrolls it — the only way to

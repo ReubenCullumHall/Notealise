@@ -181,6 +181,24 @@ describe('moving one block keeps the note’s spacing (a 100-drag check, 2026-11
     expect(moveOne(doc, V1, 'Words')).toBe(['| a | b |', '| - | - |', '| 1 | 2 |', '', V1, '', 'Words', ''].join('\n'))
   })
 
+  it('says which blank lines the drop adds, so the greyed copy can show them (2026-11-15)', () => {
+    const s = make()
+    const v2 = s.doc.lineAt(at(s, V2))
+    const alone = blockGroup(s, [{ from: v2.from, to: v2.to }])
+    // Straight under the paragraph (the blank line's start): a blank line goes in above it.
+    const under = moveGroupSpec(s, alone, s.doc.line(2).from)!
+    expect([under.blankAbove, under.blankBelow]).toEqual([true, false])
+    // At the very top, above the paragraph: one goes in below it.
+    const top = moveGroupSpec(s, alone, 0)!
+    expect([top.blankAbove, top.blankBelow]).toEqual([false, true])
+    // Between two blank lines: none.
+    const doc = ['Words', '', '', V1, '', V2, ''].join('\n')
+    const t = make(doc)
+    const v = t.doc.lineAt(at(t, V2))
+    const mid = moveGroupSpec(t, blockGroup(t, [{ from: v.from, to: v.to }]), t.doc.line(3).from)!
+    expect([mid.blankAbove, mid.blankBelow]).toEqual([false, false])
+  })
+
   it('a list item moves tight, and the list stays one list', () => {
     const doc = ['- one', '- two', '- three', ''].join('\n')
     expect(moveOne(doc, '- three', '- one')).toBe(['- three', '- one', '- two', ''].join('\n'))
