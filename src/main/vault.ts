@@ -380,15 +380,15 @@ async function readDir(absDir: string): Promise<TreeNode[]> {
       // just gone (deleted between the two reads) is left out. The vault's own folder
       // is not covered: `listTree` still fails when THAT can't be read, and the window
       // falls back to the folder picker (App.tsx, the boot).
-      let children: TreeNode[]
+      // Marked `unreadable` so the sidebar can say why it looks empty (TreeView,
+      // Sidebar) rather than pass it off as a folder with nothing in it.
       try {
-        children = await readDir(abs)
+        nodes.push({ name: e.name, path: toRel(abs), type: 'dir', children: await readDir(abs) })
       } catch (err) {
         const code = (err as NodeJS.ErrnoException).code
         if (code === 'ENOENT' || code === 'ENOTDIR') continue
-        children = []
+        nodes.push({ name: e.name, path: toRel(abs), type: 'dir', children: [], unreadable: true })
       }
-      nodes.push({ name: e.name, path: toRel(abs), type: 'dir', children })
     } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
       // One stat per note, for "made / last edited". The walk already opens and
       // reads the head of every file for its preview, so this is the cheaper

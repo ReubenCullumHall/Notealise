@@ -24,6 +24,7 @@ import { ArchiveResults, ArchiveSearchBar } from './ArchiveSearch'
 import { archRowId, type ArchiveHit } from './organise/archiveSearch'
 import { createPress } from './organise/archivePress'
 import { TreeView, type Selection, type TreeActions } from './TreeView'
+import { UNREADABLE_FOLDER, UNREADABLE_FOLDER_TIP } from './folderUnreadable'
 import { motionOn } from './tabs/tabStyles'
 import {
   ARCHIVE_SORTS,
@@ -60,6 +61,9 @@ interface Props {
   /** the vault's absolute path, for Settings → Source folder */
   vaultPath: string | null
   tree: TreeNode[]
+  /** The open space's own folder couldn't be read (main marks it — readDir,
+   *  vault.ts): its empty list says so instead of "No notes yet." */
+  spaceUnreadable?: boolean
   workspace: Workspace
   openPath: string | null
   settings: AppSettings
@@ -267,6 +271,7 @@ export function Sidebar({
   vaultName,
   vaultPath,
   tree,
+  spaceUnreadable,
   workspace,
   openPath,
   settings,
@@ -1090,9 +1095,13 @@ export function Sidebar({
                 askArchive={inArchive ? undefined : actions.onAskArchive}
               />
 
-              {mainTree.length === 0 && pinned.length === 0 && looseNotes.length === 0 && (
-                <p className="px-3 py-6 text-center text-sm text-ink-300">
-                  No notes yet.
+              {/* An unreadable space says so even when loose notes are listed below it. */}
+              {mainTree.length === 0 && pinned.length === 0 && (spaceUnreadable || looseNotes.length === 0) && (
+                <p
+                  className={'px-3 py-6 text-center text-sm ' + (spaceUnreadable ? 'text-ink-500' : 'text-ink-300')}
+                  data-tip={spaceUnreadable ? UNREADABLE_FOLDER_TIP : undefined}
+                >
+                  {spaceUnreadable ? UNREADABLE_FOLDER : 'No notes yet.'}
                 </p>
               )}
 

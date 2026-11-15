@@ -149,6 +149,7 @@ import { bindColorMemory } from './color/memory'
 import { createSwipeDetector, scrollsSideways } from './spaceSwipe'
 import { nudgeSpaces, slideSpaces, spaceSlideAvailable } from './spaceTransition'
 import { PALETTE_MAX, pickAutoColor } from '../../shared/color'
+import { UNREADABLE_VAULT } from './folderUnreadable'
 
 // --- small path helpers (renderer works in vault-relative POSIX paths) ---
 const parentOf = (p: string): string => {
@@ -305,6 +306,9 @@ const remapRecord = <T,>(r: Record<string, T>, map: (p: string) => string): Reco
 export default function App(): React.JSX.Element {
   const [ready, setReady] = useState(false)
   const [vault, setVault] = useState<string | null>(null)
+  /** The notes folder is there but couldn't be read — at launch or straight after
+   *  picking it. Only read by the "Choose folder…" screen, which then says why. */
+  const [vaultUnreadable, setVaultUnreadable] = useState(false)
   // null = not yet answered by main. Gates onboarding, not vault activation —
   // an already-onboarded user whose vault folder went missing still gets the
   // plain recovery picker below, never the full first-run flow again.
@@ -914,6 +918,11 @@ export default function App(): React.JSX.Element {
     if (!space.folder) return tree // no spaces yet — the whole vault is the view
     return tree.find((n) => n.type === 'dir' && n.path === space.folder)?.children ?? []
   }, [tree, space.folder])
+  /** The open space's own folder couldn't be read — main lists it, marked, with nothing in it. */
+  const spaceUnreadable = useMemo(
+    () => !!space.folder && !!tree.find((n) => n.type === 'dir' && n.path === space.folder)?.unreadable,
+    [tree, space.folder]
+  )
   // Notes sitting loose at the vault root, outside every space. Shown in their
   // own group rather than moved — nothing on disk shifts without being asked.
   // Not in the archive: it holds what was put there, and loose notes weren't.
@@ -2232,6 +2241,7 @@ export default function App(): React.JSX.Element {
           // an empty one would drop every space and every saved tab.
           open = null
           setVault(null)
+          setVaultUnreadable(true)
         }
       } else {
         s = await loadSettings(null)
@@ -2584,7 +2594,24 @@ export default function App(): React.JSX.Element {
       clearAssetCaches()
       // Three independent reads, run concurrently rather than summed — see the
       // identical pattern (and why) in the boot effect above.
-      const [t, , s] = await Promise.all([loadTree(), loadWorkspace(), loadSettings(v)])
+      const [t, , s] = await Promise.all([
+        loadTree().catch((err: unknown) => {
+          // Onboarding has its own folder step, left as it was.
+          if (!hasOnboardedRef.current) throw err
+          return null
+        }),
+        loadWorkspace(),
+        loadSettings(v)
+      ])
+      // A folder that can't be read: back to "Choose folder…", which says why — as at
+      // launch. Nothing is synced or restored against a tree that never arrived (an
+      // empty one would drop every space; see the boot above).
+      if (!t) {
+        setVault(null)
+        setVaultUnreadable(true)
+        return
+      }
+      setVaultUnreadable(false)
       // Via the ref, not the render closure: this line runs after an await, and
       // the last onboarding step's vault pick lands right beside the settings
       // write that flips the flag — reading a value captured before the await
@@ -4578,7 +4605,11 @@ export default function App(): React.JSX.Element {
     return (
       <div className="center picker">
         <h1>Notes</h1>
-        <p className="muted">Choose a folder to use as your vault. Your notes stay as plain .md files inside it.</p>
+        <p className="muted">
+          {vaultUnreadable
+            ? UNREADABLE_VAULT
+            : 'Choose a folder to use as your vault. Your notes stay as plain .md files inside it.'}
+        </p>
         <button className="primary" onClick={() => void pick()}>
           Choose folder…
         </button>
@@ -4628,6 +4659,7 @@ export default function App(): React.JSX.Element {
         vaultName={baseName(vault)}
         vaultPath={vault}
         tree={spaceTree}
+        spaceUnreadable={spaceUnreadable}
         looseNotes={looseNotes}
         spaces={settings.spaces}
         activeSpaceFolder={space.folder}

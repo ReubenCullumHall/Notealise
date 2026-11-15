@@ -6,6 +6,7 @@ import { inkOn, rgbChannels } from '../../shared/color'
 import { Icon } from './icons'
 import { asksToArchive, colorOf, importedSince, labelOf, metaOf, monthLabel, onDate, sortSiblings, splitMoved } from './organise/model'
 import { DRAG_NOTE } from './tabs/island'
+import { UNREADABLE_FOLDER, UNREADABLE_FOLDER_TIP } from './folderUnreadable'
 import { anyDeleted, pendingCreated, takeCreated, wasDeleted } from './organise/arrivals'
 import { BOUNCE, BOUNCE_MS, BOUNCE_SOFT, SOFT_Y1, bounceAt, motionOn } from './tabs/tabStyles'
 
@@ -762,17 +763,29 @@ export function TreeView({
                 }}
                 onDrop={drop}
                 className={
-                  'rounded-lg py-1.5 text-xs italic text-ink-300 ' +
+                  'rounded-lg py-1.5 ' +
+                  (node.unreadable ? 'text-ink-500 ' : 'text-xs italic text-ink-300 ') +
                   (hint?.kind === 'into' && hint.path === node.path ? 'bg-brand-50' : '')
                 }
-                style={{ paddingLeft: padFor(depth + 1) }}
+                // A folder the app couldn't read (main marks it — readDir, vault.ts) says
+                // so in a note row's grey second-line size, rather than passing for an
+                // empty folder. Wording approved by Reuben, 2026-11-13.
+                style={{
+                  paddingLeft: padFor(depth + 1),
+                  ...(node.unreadable ? { fontSize: 'var(--row-sub)', lineHeight: 1.35 } : null)
+                }}
+                data-tip={node.unreadable ? UNREADABLE_FOLDER_TIP : undefined}
               >
                 {/* "Empty — drop items here" read as an instruction about
                     something you had to do, and the leading "Empty" as the
                     folder's name. The state is stated plainly; the drop hint
                     only appears when there is actually something in hand
                     (Reuben, 2026-09-05, from tester feedback). */}
-                {!shelved && dragging ? 'Drop items here' : 'This folder is currently empty'}
+                {node.unreadable
+                  ? UNREADABLE_FOLDER
+                  : !shelved && dragging
+                    ? 'Drop items here'
+                    : 'This folder is currently empty'}
               </p>
             )}
           </div>

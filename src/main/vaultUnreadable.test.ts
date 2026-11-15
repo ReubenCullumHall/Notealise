@@ -79,6 +79,19 @@ describe.runIf(CAN_LOCK)('a folder the app may not read', () => {
     expect(find(tree, 'Biology/Private stuff/secret.md')?.type).toBe('file')
   })
 
+  it('is marked as unreadable, so the sidebar can say so — an empty folder is not', async () => {
+    lock('Biology/Private stuff')
+    lock('Maths')
+    mkdirSync(path.join(root, 'Biology', 'Nothing yet'))
+    const tree = await listTree()
+    expect(find(tree, 'Biology/Private stuff')?.unreadable).toBe(true)
+    expect(find(tree, 'Maths')?.unreadable).toBe(true) // a space's own folder
+    const empty = find(tree, 'Biology/Nothing yet')
+    expect(empty).toMatchObject({ type: 'dir', children: [] })
+    expect(empty && 'unreadable' in empty).toBe(false)
+    expect(find(tree, 'Biology') && 'unreadable' in find(tree, 'Biology')!).toBe(false)
+  })
+
   it('the vault folder itself: listing fails, so the window can fall back to the folder picker', async () => {
     lock('.')
     await expect(listTree()).rejects.toThrow(/EACCES|EPERM/)
@@ -90,5 +103,17 @@ describe('an ordinary vault', () => {
     const tree = await listTree()
     expect(find(tree, 'Biology/Private stuff/secret.md')?.type).toBe('file')
     expect(find(tree, 'Biology/Private stuff')?.children?.length).toBe(1)
+  })
+
+  it('marks no folder as unreadable', async () => {
+    const marked: string[] = []
+    const walk = (nodes: TreeNode[]): void => {
+      for (const n of nodes) {
+        if ('unreadable' in n) marked.push(n.path)
+        if (n.children) walk(n.children)
+      }
+    }
+    walk(await listTree())
+    expect(marked).toEqual([])
   })
 })

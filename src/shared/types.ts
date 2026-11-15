@@ -33,6 +33,10 @@ export interface TreeNode {
   type: 'dir' | 'file'
   /** present only when type === 'dir' */
   children?: TreeNode[]
+  /** folders only: set when the folder couldn't be read (no permission, or
+   *  something else has hold of it). It is still listed, with no children, and
+   *  the sidebar says so where its notes would be. Absent for an empty folder. */
+  unreadable?: true
   /** files only: a short plain-text snippet of the note's opening, for the
    *  second line of a sidebar row. Absent when the file couldn't be read. */
   preview?: string
