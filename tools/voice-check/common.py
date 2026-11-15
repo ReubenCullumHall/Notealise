@@ -1,7 +1,7 @@
 """Shared by the voice-check scripts: a fresh two-space vault, and the scratch app on its own
 profile with a debug port. The app is the one `build.sh` built into $WORK (default
 /tmp/voice-check); it never touches ~/notes-app-mac's own profile or the installed app."""
-import json, os, shutil, subprocess, sys, time
+import json, os, shutil, socket, subprocess, sys, time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -29,8 +29,11 @@ def reset_vault() -> Path:
     lines += [f'Filler line {i} so the note scrolls up and down.' for i in range(80)]
     # LF unless NOTE_CRLF=1: Python on Windows would otherwise write CRLF files, which is a different test
     nl = '\r\n' if os.environ.get('NOTE_CRLF') else '\n'
-    (vault / 'Voice' / 'Zoom.md').write_text('\n'.join(lines) + '\n', newline=nl)
-    (vault / 'Other' / 'Elsewhere.md').write_text('# Elsewhere\n\nThe other space.\n', newline=nl)
+    # open(newline=) rather than write_text(newline=), which needs Python 3.10 (this Mac has 3.9.6)
+    with open(vault / 'Voice' / 'Zoom.md', 'w', newline=nl) as f:
+        f.write('\n'.join(lines) + '\n')
+    with open(vault / 'Other' / 'Elsewhere.md', 'w', newline=nl) as f:
+        f.write('# Elsewhere\n\nThe other space.\n')
     (vault / '.mdnotes' / 'settings.json').write_text(json.dumps(
         {'spaces': [{'folder': 'Voice'}, {'folder': 'Other'}], 'activeSpaceFolder': 'Voice'}))
     ud = WORK / 'ud'
@@ -52,6 +55,13 @@ def app(port: int):
     built = WORK / 'out/main/index.js'
     if not built.exists() or any(p.stat().st_mtime > built.stat().st_mtime for p in SRC.rglob('*') if p.is_file()):
         raise SystemExit(f'the scratch build is older than src/ — run build.sh again (if it failed: {WORK / "build.log"})')
+    # A port already taken means another session's app: ours would start without one and every
+    # check would drive THEIR window (2026-11-14: menu_zoom.py found a peer's app on 9461).
+    try:
+        socket.create_connection(('127.0.0.1', port), timeout=0.5).close()
+        raise SystemExit(f'port {port} is already in use (another session\'s app?) — wait for it to close')
+    except OSError:
+        pass
     env ={k: v for k, v in os.environ.items() if k != 'ELECTRON_RUN_AS_NODE'}
     proc = subprocess.Popen([str(ELECTRON), str(WORK / 'out/main/index.js'), f'--user-data-dir={WORK / "ud"}',
                              f'--remote-debugging-port={port}', '--mute-audio'],

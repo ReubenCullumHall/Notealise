@@ -6,7 +6,16 @@ on its own — during the carry and after the drop.
     WORK=/some/scratch/dir python3 dragvoice.py [--verbose]
 
 Prints one line per drag and a FAIL for any that landed somewhere the gap didn't show, or scrolled
-by itself. First run, 2026-10-16 (Mac): 26 ok, 0 failed."""
+by itself. First run, 2026-10-16 (Mac): 26 ok, 0 failed.
+Since 2026-11-07 a moved block is set apart by a blank line on each side (blockPick.ts moveGroupSpec,
+"blocks as one thing"), so "where it landed" is read as the next line with words on it, on screen and
+in the file — blank lines between don't count.
+2026-11-15 (Mac, a build of deff34f, Python 3.9.6): 21–22 ok, 3–4 failed — a real fault in the app: dragged
+up, or through an edge, so the greyed copy sat straight under a paragraph, the voice note landed one line
+(38 px) lower than its copy showed, because the drop adds a blank line above it. Fixed the same day (Reuben
+picked "the copy shows the blank line too"): the gap now holds that blank line above (or below) the copy,
+and the drop stops any slide still running. Same day, with the fix: 25 ok, 0 failed, on a Lined page and a
+plain one. `top` is now the greyed copy itself (its grey slot), not the gap round it."""
 import json, shutil, sys, time
 from common import WORK, app, connect, reset_vault
 from playwright.sync_api import sync_playwright
@@ -39,10 +48,19 @@ note.write_text('\n'.join(body) + '\n')
     {'spaces': [{'folder': 'Voice', 'pageLook': 'lined', 'theme': 'dark'}, {'folder': 'Other'}], 'activeSpaceFolder': 'Voice'}))
 
 STATE = """() => { const g = document.querySelector('.cm-drag-ghost'); const sc = document.querySelector('.cm-scroller');
-  return {scroll: Math.round(sc.scrollTop), ghost: g ? {before: (g.nextElementSibling ? g.nextElementSibling.textContent : '(end)').slice(0, 22), top: Math.round(g.getBoundingClientRect().top), h: Math.round(g.getBoundingClientRect().height)} : null} }"""
+  let n = g && g.nextElementSibling; while (n && n.textContent.trim() === '' && !n.querySelector('.cm-voice')) n = n.nextElementSibling;
+  return {scroll: Math.round(sc.scrollTop), ghost: g ? {before: (n ? (n.querySelector('.cm-voice-name')?.textContent || n.textContent) : '(end)').slice(0, 22), top: Math.round((g.querySelector('.cm-drag-ghost-slot') || g).getBoundingClientRect().top), h: Math.round(g.getBoundingClientRect().height)} : null} }"""
+# `top` is the greyed copy itself: since 2026-11-15 the gap also holds the blank line the drop adds
+# above it (a clear strip over the grey slot), so the gap's own top is a line higher than the copy.
 # where a voice note's whole line sits on screen now
 LINE_TOP = """(n) => { const e = [...document.querySelectorAll('.cm-voice-name')].find(x => x.textContent === n);
   return e ? Math.round(e.closest('.cm-line').getBoundingClientRect().top) : null }"""
+
+
+def next_words(after, i):
+    """The first item after position i that isn't a blank line."""
+    rest = [x for x in after[i + 1:] if x != '_']
+    return rest[0] if rest else '(end)'
 
 
 def order(text):
@@ -115,15 +133,13 @@ with sync_playwright() as p, app(9349):
         after = order(note.read_text())
         # where it landed: the item after it in the new order
         i = after.index('V' + name[-1])
-        landed_before = after[i + 1] if i + 1 < len(after) else '(end)'
+        landed_before = next_words(after, i)
         if shown is None:
             want = None
         elif shown.startswith('Paragraph'):
             want = shown.split()[1]
         elif shown.startswith('Voice '):
             want = 'V' + shown[6]
-        elif shown.strip() == '':
-            want = '_'
         else:
             want = shown
         if VERBOSE:
@@ -165,9 +181,9 @@ with sync_playwright() as p, app(9349):
         time.sleep(1.2)
         after = order(note.read_text())
         i = after.index('V' + name[-1])
-        nxt = after[i + 1] if i + 1 < len(after) else '(end)'
+        nxt = next_words(after, i)
         shown = st['ghost']['before'] if st['ghost'] else None
-        want = shown.split()[1] if shown and shown.startswith('Paragraph') else ('_' if shown is not None and shown.strip() == '' else shown)
+        want = shown.split()[1] if shown and shown.startswith('Paragraph') else ('V' + shown[6] if shown and shown.startswith('Voice ') else shown)
         top = page.evaluate(LINE_TOP, name)
         print(f'  {name} via the {"top" if sign < 0 else "bottom"} edge: gap before {shown!r} at y={st["ghost"]["top"] if st["ghost"] else None}, landed before {nxt!r} at y={top}')
         check(f'{name} via the {"top" if sign < 0 else "bottom"} edge: lands where the gap showed, at the same spot',

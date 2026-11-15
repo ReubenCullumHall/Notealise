@@ -1,11 +1,20 @@
 """Naming a voice note (Reuben, 2026-10-16): right-click the block, or click its six dots once it is
-selected, → "Name voice note…" → type → Enter. The name goes onto the note's line as data-name, shows
-above the player and on the tape card; Escape leaves it, clicking away keeps it, Cmd+Z takes it back,
-"Remove name" takes it off.
+selected, → "Rename voice note…" → type → Enter. The name goes onto the note's line as data-name, shows
+above the player and on the tape card; Escape leaves it, clicking away keeps it, Cmd+Z takes it back.
+
+Since 2026-11-07 a voice note is never without a name: one with none is given the vault's next
+"Untitled N" (editor/voiceUntitled.ts, one count with new notes and folders, a number never given out
+twice). So the test note's voice note opens as "Untitled 1", the menu offers "Rename voice note…",
+and Cmd+Z goes back to "Untitled 1". "Remove name" was taken out of the menu on 2026-11-15 (Reuben):
+it only swapped the name for the next "Untitled N".
 
     WORK=/some/scratch/dir python3 name.py [shots-dir]
 
-First run, 2026-10-16 (Mac): 14 ok, 0 failed."""
+First run, 2026-10-16 (Mac): 14 ok, 0 failed.
+2026-11-14 (Mac, a build of deff34f, Python 3.9.6): 15 ok, 0 failed — updated for "Untitled N" (above).
+2026-11-15 (Mac, deff34f + "Remove name" taken out): 14 ok, 0 failed.
+The right-click menu also holds Edit clip…, Transcribe and Copy link to <time> (other scripts check
+those); this one checks only the naming entries."""
 import json, sys, time
 from pathlib import Path
 from common import WORK, app, connect, open_zoom_note, reset_vault, MOD, REDO
@@ -34,6 +43,11 @@ def shown_name(page):
     return page.evaluate("() => { const n = document.querySelector('.cm-voice-name'); return n && !n.hidden ? n.textContent : null }")
 
 
+def name_items(page) -> list:
+    """The menu's naming entries, in order (the other entries belong to other features)."""
+    return page.evaluate("() => [...document.querySelectorAll('.menu-item')].map(e => e.textContent.trim()).filter(t => /name/i.test(t))")
+
+
 def menu_click(page, label: str) -> None:
     page.locator('.menu-item', has_text=label).first.click()
     time.sleep(0.3)
@@ -46,13 +60,16 @@ with sync_playwright() as p, app(9346):
     b, page = connect(p, 9346)
     open_zoom_note(page)
     wave = page.locator('.cm-voice-wavebox').first.bounding_box()
+    time.sleep(1.0)  # the "Untitled N" is asked for 400 ms after the note opens, then saved
+    check('a voice note with no name opens as "Untitled 1", on screen and on its line',
+          shown_name(page) == 'Untitled 1' and 'data-name="Untitled 1"' in audio_line(note), (shown_name(page), audio_line(note)))
 
-    # --- right-click → Name voice note… → type → Enter -------------------------
+    # --- right-click → Rename voice note… → type → Enter -------------------------
     page.mouse.click(wave['x'] + wave['width'] / 2, wave['y'] + wave['height'] / 2, button='right')
     time.sleep(0.4)
-    items = page.evaluate("() => [...document.querySelectorAll('.menu-item')].map(e => e.textContent.trim())")
-    check('right-click the voice note: the menu offers "Name voice note…"', items == ['Name voice note…'], items)
-    menu_click(page, 'Name voice note…')
+    items = name_items(page)
+    check('right-click the voice note: the menu offers "Rename voice note…" (and no "Remove name")', items == ['Rename voice note…'], items)
+    menu_click(page, 'Rename voice note…')
     focused = page.evaluate("() => document.activeElement?.className")
     check('…which opens the name box, ready to type', focused == 'cm-voice-name-input', focused)
     page.screenshot(path=str(SHOTS / 'name-01-box.png'), clip={'x': wave['x'] - 80, 'y': wave['y'] - 60, 'width': 900, 'height': 120})
@@ -66,7 +83,7 @@ with sync_playwright() as p, app(9346):
     # --- Cmd+Z takes it back, Cmd+Shift+Z puts it back -----------------------------
     page.keyboard.press(f'{MOD}+z')
     time.sleep(1.0)
-    check('Cmd+Z takes the name back', shown_name(page) is None and 'data-name' not in audio_line(note), (shown_name(page), audio_line(note)))
+    check('Cmd+Z takes the name back to "Untitled 1"', shown_name(page) == 'Untitled 1' and 'data-name="Untitled 1"' in audio_line(note), (shown_name(page), audio_line(note)))
     page.keyboard.press(REDO)
     time.sleep(1.0)
     check('Cmd+Shift+Z puts it back', shown_name(page) == 'Lecture 3', shown_name(page))
@@ -82,8 +99,8 @@ with sync_playwright() as p, app(9346):
     check('first click on the six dots selects it (no menu yet)', sel and menu_up == 0, (sel, menu_up))
     grip.click()
     time.sleep(0.4)
-    items = page.evaluate("() => [...document.querySelectorAll('.menu-item')].map(e => e.textContent.trim())")
-    check('second click, while selected: "Rename voice note…" and "Remove name"', items == ['Rename voice note…', 'Remove name'], items)
+    items = name_items(page)
+    check('second click, while selected: "Rename voice note…" (and no "Remove name")', items == ['Rename voice note…'], items)
     page.screenshot(path=str(SHOTS / 'name-03-grip-menu.png'), clip={'x': wave['x'] - 80, 'y': wave['y'] - 60, 'width': 900, 'height': 160})
     menu_click(page, 'Rename voice note…')
     val = page.evaluate("() => { const i = document.activeElement; return [i?.className, i?.value, i?.selectionStart, i?.selectionEnd] }")
@@ -113,17 +130,10 @@ with sync_playwright() as p, app(9346):
     page.keyboard.press('Escape')
     time.sleep(0.3)
 
-    # --- Remove name ---------------------------------------------------------------------
-    page.mouse.click(wave['x'] + 40, wave['y'] + 10, button='right')
-    time.sleep(0.3)
-    menu_click(page, 'Remove name')
-    time.sleep(1.0)
-    check('"Remove name" takes it off the block and the line', shown_name(page) is None and 'data-name' not in audio_line(note), (shown_name(page), audio_line(note)))
-
     # --- dark, Lined: how it looks ---------------------------------------------------------
     page.mouse.click(wave['x'] + 40, wave['y'] + 10, button='right')
     time.sleep(0.3)
-    menu_click(page, 'Name voice note…')
+    menu_click(page, 'Rename voice note…')
     page.keyboard.type('Lecture 3 — thermodynamics')
     page.keyboard.press('Enter')
     time.sleep(0.8)

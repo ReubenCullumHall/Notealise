@@ -10,7 +10,7 @@ way) — run it again after any change to the voice note block or to the space s
     WORK=/some/scratch/dir python3 scroll.py      # sideways scroll over a voice note, and the space swipes around it
     WORK=/some/scratch/dir python3 tape.py        # the tape: corner button, its card, the sidebar player, row star/bin order
     WORK=/some/scratch/dir python3 grip.py        # the six-dot handle on a paragraph beside a voice note (dark, Lined): seen on hover, drags the whole paragraph
-    WORK=/some/scratch/dir python3 name.py        # naming a voice note: right-click / six dots when selected, Enter, Escape, Cmd+Z, Remove name
+    WORK=/some/scratch/dir python3 name.py        # naming a voice note: right-click / six dots when selected, Enter, Escape, Cmd+Z, "Untitled N"
     WORK=/some/scratch/dir python3 ghost.py       # dragging a block: a greyed copy in a gap at the drop point, steady, lands where shown
     WORK=/some/scratch/dir python3 dragvoice.py   # carrying voice notes: lands exactly where its copy showed, no page jumps, via the edges too
 
@@ -19,6 +19,21 @@ to run against a scratch build older than `src/` (`common.py`) — run `build.sh
 `build.log` if it failed. `WORK`
 defaults to `/tmp/voice-check`. The app runs muted (`--mute-audio`) and quits normally at the end.
 Needs Python Playwright and `~/notes-app-mac/node_modules`.
+
+Runs on the Mac's own Python 3.9.6 (`common.py` writes the test notes with `open(..., newline=)`, not
+`write_text(newline=)`, which needs 3.10). A check also refuses to start when its debug port is already taken —
+that is another session's app, and the check would otherwise drive THAT window. While someone else is editing
+`src/`, build a clean copy of the last commit instead (`git archive HEAD | tar -x -C <dir>`, then that copy's
+`build.sh`) — the old-build guard otherwise stops every run.
+
+**Mac, 2026-11-14/15 (a build of `deff34f`, then with "Remove name" taken out of the menu):** `tape.py` 28 ok ·
+`name.py` 14 ok · `menu_zoom.py` 11 ok · `grip.py` 0 failed · `ghost.py` 14 ok · `dragvoice.py` 25 ok, all with 0
+failed. Since 2026-11-07 a voice note with no name opens as "Untitled 1" (the vault's one "Untitled N" count,
+`editor/voiceUntitled.ts`), and a moved block lands with a blank line on each side; the scripts now expect both.
+`menu_zoom.py` used to print its numbers as JSON and judge nothing; it now says ok/FAIL itself. `dragvoice.py` found
+a real fault first (dragged under a paragraph, a voice note landed a line lower than its greyed copy); fixed the
+same day — the gap now holds the blank line the drop adds, so `dragvoice.py` and `ghost.py` read the copy's own grey
+slot (`.cm-drag-ghost-slot`), not the gap round it. `scroll.py` still prints numbers only, with no ok/FAIL lines.
 
 What they do NOT cover: recording (needs a fake microphone — `--use-fake-device-for-media-stream`
 plus `--use-file-for-fake-audio-capture=<wav>`; never `--use-fake-ui-for-media-stream`, which skips

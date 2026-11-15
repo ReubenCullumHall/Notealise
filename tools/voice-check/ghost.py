@@ -5,8 +5,14 @@ down), that the drop lands where the gap was, that Escape changes nothing, and a
 
     WORK=/some/scratch/dir python3 ghost.py [shots-dir]
 
-First run, 2026-10-16 (Mac): 13 ok, 0 failed."""
-import json, sys, time
+First run, 2026-10-16 (Mac): 13 ok, 0 failed.
+Since 2026-11-07 a voice note with no name is given the vault's next "Untitled N" as its note opens
+(editor/voiceUntitled.ts), which rewrites its line — so "the note as it was" is read once that has
+happened, not as the script wrote it.
+2026-11-15 (Mac, a build of deff34f, Python 3.9.6): 14 ok, 0 failed — "the note as it was" read after the naming, and the paragraph brought into view before each grab (after Cmd+Z only the cursor was scrolled into view).
+Later on 2026-11-15, with the drag fix (the gap also holds the blank line the drop adds): 14 ok, 0 failed —
+the copy's size is now read from its grey slot, not the gap round it."""
+import json, re, sys, time
 from pathlib import Path
 from common import WORK, app, connect, reset_vault, MOD
 from playwright.sync_api import sync_playwright
@@ -26,18 +32,19 @@ def check(name: str, ok: bool, saw=None) -> None:
 
 
 GHOST = """() => { const g = document.querySelector('.cm-drag-ghost'); if (!g) return null;
-  const next = g.nextElementSibling; const r = g.getBoundingClientRect();
+  const next = g.nextElementSibling; const r = (g.querySelector('.cm-drag-ghost-slot') || g).getBoundingClientRect();
   return {h: Math.round(r.height), top: Math.round(r.top), text: g.textContent.slice(0, 40), voice: !!g.querySelector('.cm-voice'),
           before: next ? next.textContent.slice(0, 24) : '(end)',
           gone: document.querySelectorAll('.cm-drag-gone').length,
           marker: !!document.querySelector('.cm-attach-drop-marker')} }"""
 
+# h and top are the greyed copy itself (its grey slot): since 2026-11-15 the gap around it also holds
+# the blank line the drop will add next to words, so the gap can be a line taller than the copy.
 vault = reset_vault()
 note = vault / 'Voice' / 'Wrap.md'
 lines = ['# Wrap', '', '<audio controls src="memo.m4a"></audio>', '', PARA, '']
 lines += [f'Line {i} of the rest of the note.' for i in range(1, 13)]
 note.write_text('\n'.join(lines) + '\n')
-original = note.read_text()
 # The voice note straight under the text, no blank line — how a recording goes in (Reuben's case).
 tight = vault / 'Voice' / 'Tight.md'
 tight.write_text(f'# Tight\n\n{PARA}\n<audio controls src="memo.m4a"></audio>\nNext line.\nAnd the last line.\n')
@@ -52,7 +59,24 @@ with sync_playwright() as p, app(9347):
     time.sleep(0.8)
     page.evaluate('() => document.activeElement.blur()')
 
+    def named(path: Path) -> str:
+        """The note's text once its voice note has been given its "Untitled N" and saved."""
+        for _ in range(50):
+            t = path.read_text()
+            if re.search(r'<audio controls src="memo\.m4a" data-name="Untitled \d+"></audio>', t):
+                return t
+            time.sleep(0.1)
+        return path.read_text()
+
+    original = named(note)
+    check('opening the note names its voice note "Untitled 1"', 'data-name="Untitled 1"' in original, original[:80])
+
     def grab_paragraph():
+        # Brought into view first: after Cmd+Z the editor scrolls only the cursor into view, which left the
+        # paragraph's first line above the top edge, under the note's title (2026-11-15), and its six dots
+        # never showed. Where it sits is this script's start, not something it checks.
+        page.evaluate("""(t) => [...document.querySelectorAll('.cm-line')].find(e => e.textContent.startsWith(t)).scrollIntoView({block: 'center'})""", PARA[:20])
+        time.sleep(0.4)
         first = page.evaluate("""(t) => { const l = [...document.querySelectorAll('.cm-line')].find(e => e.textContent.startsWith(t));
           const r = document.createRange(); r.selectNodeContents(l); const q = r.getClientRects()[0]; const b = l.getBoundingClientRect();
           return {x: q.left, y: q.top + q.height / 2, h: b.height} }""", PARA[:20])
@@ -161,6 +185,7 @@ with sync_playwright() as p, app(9347):
     page.wait_for_selector('.cm-voice[data-state="ready"]', timeout=20000)
     time.sleep(0.8)
     page.evaluate('() => document.activeElement.blur()')
+    tight_line = next((l for l in named(tight).splitlines() if l.startswith('<audio')), '')
     first, g = grab_paragraph()
     y = first['y'] + 10
     page.mouse.move(g['x'] + 10, y, steps=3)
@@ -176,7 +201,7 @@ with sync_playwright() as p, app(9347):
     page.mouse.up()
     time.sleep(1.5)
     t = tight.read_text()
-    check('dropped at the end: the voice note stayed where it was', t.startswith('# Tight\n\n<audio controls src="memo.m4a"></audio>\nNext line.') and t.rstrip().endswith(PARA), t)
+    check('dropped at the end: the voice note stayed where it was', 'data-name="Untitled' in tight_line and t.startswith(f'# Tight\n\n{tight_line}\nNext line.') and t.rstrip().endswith(PARA), t)
     b.close()
 
 print(f'\n{oks} ok, {fails} failed')

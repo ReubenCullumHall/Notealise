@@ -5,7 +5,9 @@ sidebar player while the note is off screen, and the sidebar row's star/bin orde
 
 Real clicks and pointer moves over CDP, on the scratch build `build.sh` made. Screenshots go to
 shots-dir (default $WORK/shots). Prints one line per check; a FAIL line says what it saw.
-First run, 2026-10-16 (Mac): 28 ok, 0 failed."""
+First run, 2026-10-16 (Mac): 28 ok, 0 failed.
+2026-11-14 (Mac, a build of deff34f, Python 3.9.6): 28 ok, 0 failed — the two name checks now expect
+"Untitled 1" (a voice note with no name gets the next "Untitled N" since 2026-11-07)."""
 import json, sys, time
 from pathlib import Path
 from common import WORK, app, connect, open_zoom_note, reset_vault
@@ -96,8 +98,12 @@ with sync_playwright() as p, app(9342):
     time.sleep(0.5)
     card = page.locator('.edit-layer .deck')
     check('clicking the tape opens the card', card.count() == 1, card.count())
+    # Since 2026-11-07 a voice note with no name is given the vault's next "Untitled N" when its note
+    # opens (editor/voiceUntitled.ts), so the fixture's unnamed one is "Untitled 1" — on its line too.
     name = page.evaluate("() => document.querySelector('.edit-layer .deck span.truncate')?.textContent")
-    check('card names the recording', name == 'memo', name)
+    line = next((l for l in (vault / 'Voice' / 'Zoom.md').read_text().splitlines() if l.startswith('<audio')), '')
+    check('card names the recording by its name ("Untitled 1", also on its line)',
+          name == 'Untitled 1' and 'data-name="Untitled 1"' in line, (name, line))
     shot(page, '03-card-in-note', '.edit-layer .deck', pad=60)
     page.locator('.edit-layer .deck .deck-play').click()
     time.sleep(1.2)
@@ -133,8 +139,11 @@ with sync_playwright() as p, app(9342):
     check('hover opens the name row (card grows upwards)', h1 > h0 + 20, (h0, h1))
     check('…and the buttons under the pointer do not move', abs(y1 - y0) < 0.5, (y0, y1))
     shot(page, '06-sidebar-hover', 'aside .deck', pad=24)
-    title = page.evaluate("() => document.querySelector('aside .deck span.truncate')?.textContent")
-    check('sidebar card names the note', title == 'Zoom', title)
+    # The card's title is the voice note's name, the note it lives in is in the hover label (VoiceDeck.tsx
+    # SidebarDeck). Until 2026-11-07 an unnamed voice note fell back to the note's title, "Zoom".
+    title = page.evaluate("""() => { const t = document.querySelector('aside .deck span.truncate');
+      return t && [t.textContent, t.closest('[data-tip]')?.getAttribute('data-tip')] }""")
+    check('sidebar card names the recording, and its hover label the note', title == ['Untitled 1', 'Untitled 1 — in Zoom'], title)
 
     page.locator('aside .deck .deck-play').click()
     time.sleep(0.5)
