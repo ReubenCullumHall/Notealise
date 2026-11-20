@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EditorState } from '@codemirror/state'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { blockRange, canMoveBlock } from './blockMove'
+import { blockRange, canMoveBlock, dropLead, fileDropSpot } from './blockMove'
 import { parsed } from './parsedState'
 
 // The same base the real editor uses (extensions.ts), because rule 2 asks the
@@ -191,5 +191,67 @@ describe('a voice note, photo or video on its own line is a block of its own', (
     const s = state(d, 0)
     const r = blockRange(s, 2)
     expect(s.doc.sliceString(r.from, r.to)).toBe('Look at this ![](a.png) here')
+  })
+})
+
+describe('a file dropped into a note lands on a new line under the block, never inside it', () => {
+  // What the note reads as after an embed lands at the spot — the way a user would see it.
+  const dropAt = (doc: string, word: string, offset = 2, selected?: [number, number]): string => {
+    const s = state(doc, selected?.[0] ?? 0, selected?.[1])
+    const spot = fileDropSpot(s, doc.indexOf(word) + offset)
+    // added in the same change, before the embed
+    return doc.slice(0, spot.at) + dropLead(spot) + '![](pic.png)\n' + doc.slice(spot.at)
+  }
+
+  it('mid-word in a line: under that line, the word untouched, what was below pushed down', () => {
+    expect(dropAt('# Title\nSome words here\nNext line\n', 'words')).toBe('# Title\nSome words here\n![](pic.png)\nNext line\n')
+  })
+
+  it('on the last line with no newline after it: one is added first', () => {
+    expect(dropAt('# Title\nThe end', 'end')).toBe('# Title\nThe end\n![](pic.png)\n')
+  })
+
+  it('on an empty line: lands there, above the empty line', () => {
+    expect(dropAt('One\n\nTwo\n', '\nTwo', 0)).toBe('One\n![](pic.png)\n\nTwo\n')
+  })
+
+  it('inside a table: under the whole table, never between its rows', () => {
+    // (A line straight after a table with no gap IS a row of it, so the gap is part of the note.)
+    const doc = 'Intro\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\nAfter\n'
+    // …with an empty line between: straight under a table it would become a row of it.
+    expect(dropAt(doc, '| 1')).toBe('Intro\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\n![](pic.png)\n\nAfter\n')
+  })
+
+  it('on the empty line under a table, quote or list: an empty line first, so it stays apart', () => {
+    expect(dropAt('| a |\n| --- |\n| 1 |\n\nAfter\n', '\nAfter', 0)).toBe('| a |\n| --- |\n| 1 |\n\n![](pic.png)\n\nAfter\n')
+    expect(dropAt('> quoted\nNext\n', 'quoted')).toBe('> quoted\nNext\n\n![](pic.png)\n')
+    expect(dropAt('- one\n- two\n\nAfter\n', 'two')).toBe('- one\n- two\n\n![](pic.png)\n\nAfter\n')
+  })
+
+  it('under an ordinary line: straight under it, no empty line (the way a voice note is added)', () => {
+    expect(dropAt('One\nTwo\n', 'One')).toBe('One\n![](pic.png)\nTwo\n')
+  })
+
+  it('inside a code block: under the closing fence', () => {
+    const doc = 'Intro\n```\ncode\n\nmore\n```\nAfter\n'
+    expect(dropAt(doc, 'code')).toBe('Intro\n```\ncode\n\nmore\n```\n![](pic.png)\nAfter\n')
+  })
+
+  it('a selection elsewhere does not widen it (the drop names its own place)', () => {
+    const doc = 'One\nTwo\nThree\n'
+    expect(dropAt(doc, 'One', 1, [0, 13])).toBe('One\n![](pic.png)\nTwo\nThree\n')
+  })
+
+  it('on a picture already in the note: under that picture', () => {
+    expect(dropAt('Text\n![](a.png)\nMore\n', 'a.png')).toBe('Text\n![](a.png)\n![](pic.png)\nMore\n')
+  })
+
+  it('names where the block it goes under starts — the band drawn over it — and none on an empty line', () => {
+    const doc = 'Intro\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n\nAfter\n'
+    const s = state(doc, 0)
+    expect(fileDropSpot(s, doc.indexOf('| 1')).block).toBe(doc.indexOf('| a'))
+    expect(fileDropSpot(s, doc.indexOf('\nAfter')).block).toBe(null)
+    const para = 'One\nTwo\n\nThree'
+    expect(fileDropSpot(state(para, 0), para.indexOf('Three') + 2).block).toBe(para.indexOf('Three'))
   })
 })

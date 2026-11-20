@@ -199,3 +199,59 @@ export function canMoveBlock(state: EditorState): boolean {
   // (right-click), which a one-line note wants as much as any other.
   return state.doc.length > 0
 }
+
+/** Blocks that take in the line straight under them: a table makes it a row, a quote or a list
+ *  carries on into it. Something added under one of these needs an empty line first, or it
+ *  becomes part of it. */
+const SWALLOWS = new Set(['Table', 'Blockquote', 'BulletList', 'OrderedList'])
+function swallowsNextLine(state: EditorState, pos: number): boolean {
+  for (let node: { name: string; parent: unknown } | null = syntaxTree(state).resolveInner(pos, -1); node; node = node.parent as never) {
+    if (SWALLOWS.has(node.name)) return true
+  }
+  return false
+}
+
+/** Where a picture, video, voice note or document dragged in from outside lands.
+ *
+ *  Never inside the text (Reuben, 2026-11-19: dropped mid-word it split the word — "it should
+ *  create a new block below the block you're currently on, and shift whatever's below it down
+ *  … to avoid confusing any formatting rules"). So: on a new line straight under the block the
+ *  pointer is over — the same block the six-dot grip would pick up there (`blockRange`, with any
+ *  selection ignored), so a table, list item or code block is never split. An empty line is
+ *  already a place of its own: it lands there, above it.
+ *
+ *  `at` is always the START of a line, or the end of a note that has no newline at its end
+ *  (`lead`: one is added first). `gap`: what is above is a table, quote or list, which would take
+ *  the new line in — an empty line goes between. The embed goes after whatever is added. The
+ *  marker drawn while dragging is the edge just above `at` (attachInput.ts), so the line you see
+ *  is where it lands. */
+export function fileDropSpot(
+  state: EditorState,
+  pos: number
+): { at: number; lead: boolean; gap: boolean; block: number | null } {
+  const doc = state.doc
+  const line = doc.lineAt(Math.min(Math.max(pos, 0), doc.length))
+  let at: number
+  let lead = false
+  // Where the block it goes under starts — the faint band drawn over that block while a file is
+  // held (attachInput.ts). Null on an empty line: nothing is under it but the line itself.
+  let block: number | null = null
+  if (isBlank(line.text)) at = line.from
+  else {
+    const range = blockRange(state.update({ selection: { anchor: line.from } }).state, line.from)
+    block = range.from
+    if (range.to < doc.length) at = range.to + 1
+    else {
+      at = doc.length
+      lead = true
+    }
+  }
+  const above = lead ? doc.lineAt(at) : at > 0 ? doc.lineAt(at - 1) : null
+  const gap = !!above && !isBlank(above.text) && swallowsNextLine(state, above.to)
+  return { at, lead, gap, block }
+}
+
+/** What a drop at `spot` adds before the dropped thing itself: a newline when the note has none
+ *  at its end, and an empty line under a table, quote or list. Part of the SAME change as the
+ *  thing dropped, so one Cmd+Z takes both away. */
+export const dropLead = (spot: { lead: boolean; gap: boolean }): string => (spot.lead ? '\n' : '') + (spot.gap ? '\n' : '')

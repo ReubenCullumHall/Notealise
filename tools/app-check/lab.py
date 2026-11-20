@@ -72,9 +72,14 @@ def launch(ud: Path, port: int, log: Path):
     log.parent.mkdir(parents=True, exist_ok=True)
     f = open(log, "w")
     t0 = time.time()
-    proc = subprocess.Popen([str(ELECTRON), str(MAIN), f'--user-data-dir={ud}',
-                             f'--remote-debugging-port={port}', '--mute-audio'],
-                            env=env, stdout=f, stderr=subprocess.STDOUT)
+    args = [str(ELECTRON), str(MAIN), f'--user-data-dir={ud}', f'--remote-debugging-port={port}', '--mute-audio']
+    if not os.environ.get('LAB_SHOW'):
+        # Quiet: off-screen, never takes focus (Reuben works while checks run), and a hidden
+        # window still runs its timers and drawing at full speed.
+        env['NODE_OPTIONS'] = (env.get('NODE_OPTIONS', '') + f' --require "{HERE / "quiet.cjs"}"').strip()
+        args += ['--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
+                 '--disable-background-timer-throttling']
+    proc = subprocess.Popen(args, env=env, stdout=f, stderr=subprocess.STDOUT)
     return proc, t0
 
 

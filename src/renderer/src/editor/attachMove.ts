@@ -1,5 +1,5 @@
 import { BlockType, EditorView } from '@codemirror/view'
-import { EditorSelection } from '@codemirror/state'
+import { ChangeSet, EditorSelection } from '@codemirror/state'
 import { gripIcon } from './blockTable'
 import { embedSpanAt, selectEmbed } from './attachSelect'
 import { createEdgeScroller } from '../edgeScroll'
@@ -8,6 +8,8 @@ import { notePathOf, viewAtPoint } from './viewRegistry'
 import { retargetEmbeds } from '../../../shared/attachments'
 import { GHOST_MAX_PX, ghostBody, hideSource, showGhost, type Ghost } from './dragGhost'
 import { addsToPick, blockGroup, moveGroupSpec, pickedGroup, pickFromClick } from './blockPick'
+import { blockDropTarget, noteRowAt, setBlockDropTarget } from '../organise/blockDrop'
+import { linkHandlersFacet } from './linkEnv'
 
 // Dragging an image/video embed to a different line in the note — the same
 // grip-and-drag interaction blockTable.ts's column handle already uses
@@ -303,6 +305,7 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       window.removeEventListener('blur', abandon)
       window.removeEventListener('keydown', onKey)
       scroller.stop()
+      setBlockDropTarget(null)
     }
 
     /** Close the gap and open the block's place again. Not part of `cleanup`: a
@@ -377,6 +380,21 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       // so the pointer being over one leaves the target where it was rather than
       // offering a drop that would have nowhere to land.
       const over = viewAtPoint(m.clientX, m.clientY)
+      // Over a note in the sidebar: letting go moves the block to the end of that note
+      // (Reuben, 2026-11-19). Its row lights (organise/blockDrop.ts); no gap opens in any
+      // note, and the block's own place stays closed — it is leaving.
+      const row = over ? null : noteRowAt(m.clientX, m.clientY)
+      const canTake = !!row && row !== notePathOf(view) && !!view.state.facet(linkHandlersFacet)?.current?.moveToNote
+      setBlockDropTarget(canTake ? row : null)
+      if (canTake) {
+        scroller.stop()
+        showAt(dropView, null)
+        if (!group && ghost) {
+          gone = { top: srcTop, h: ghost.fullHeight }
+          hideSource(view, { from: firstLine.from, to: lastLine.to })
+        }
+        return
+      }
       if (over && over !== dropView && (over === view || notePathOf(over))) dropView = over
       lastY = m.clientY
       // Edge-scrolling always belongs to the pane being pointed at.
@@ -399,6 +417,7 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
       const wasMoved = moved
       const dropAt = target
       const into = dropView
+      const toNote = blockDropTarget()
       // Read at DROP, not at mousedown: you decide whether this is a move or a
       // copy while you are carrying it and can see where it would land.
       const copying = up.altKey
@@ -411,6 +430,25 @@ export function attachDragHandle(view: EditorView, source: DragSource = EMBED_SO
         // Already picked by the press: that was the click. A second click on a block already
         // picked is the caller's (a voice note's name menu).
         if (!pickedOnPress) source.onClick?.(view, startPos, range)
+        return
+      }
+      // --- onto a note in the sidebar: to the end of that note --------------
+      if (toNote) {
+        const handlers = view.state.facet(linkHandlersFacet)?.current
+        const from = notePathOf(view)
+        if (view.state.doc !== doc || !handlers?.moveToNote || !from || toNote === from) return
+        const carried = group ?? alone
+        // Re-pointed for the note it lands in, as a move into another pane is (see below).
+        const text = retargetEmbeds(carried.text, from, toNote)
+        const cut = ChangeSet.of(carried.cuts.map((c) => ({ from: c.from, to: c.to, insert: '' })), doc.length)
+        view.dispatch({ changes: cut, userEvent: 'move.drop' })
+        const left = view.state.doc
+        const putBack = (): boolean => {
+          if (!view.dom.isConnected || notePathOf(view) !== from || view.state.doc !== left) return false
+          view.dispatch({ changes: cut.invert(doc), userEvent: 'move.drop' })
+          return true
+        }
+        handlers.moveToNote(from, toNote, text, putBack)
         return
       }
       if (group) {

@@ -1,5 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { offerDrop, withdrawDrop } from '../dragLeaveGuard'
 import type { EditorView } from '@codemirror/view'
+import { linkDrop } from '../editor/attachInput'
+import { DRAG_NOTE } from './island'
 import { CodeEditor } from '../editor'
 import { FormatToolbar } from '../editor/FormatToolbar'
 import { Icon } from '../icons'
@@ -260,6 +263,17 @@ export function NotePane({
   const blank = path === ''
   const [titleDraft, setTitleDraft] = useState(() => stripMd(nameOf(path)))
   const [zone, setZone] = useState<DropZone | null>(null)
+  // The zone as drawn, for the drop — and offered for a drop Chromium loses
+  // (dragLeaveGuard.ts).
+  const zoneRef = useRef<DropZone | null>(null)
+  zoneRef.current = zone
+  const dropLayer = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (zone) {
+      const z = zone
+      offerDrop(dropLayer.current, () => onDropTab(z))
+    } else withdrawDrop(dropLayer.current)
+  })
 
   useEffect(() => {
     setTitleDraft(stripMd(nameOf(path)))
@@ -353,8 +367,21 @@ export function NotePane({
     return !edgeDrops ? 'center' : x < 0.28 ? 'left' : x > 0.72 ? 'right' : 'center'
   }
 
+  /** A note from the sidebar with Option (Alt) held: a link to it goes in at the editor's drop
+   *  line instead of opening the note (editor/attachInput.ts `linkDrop`, Reuben 2026-11-19). */
+  const linking = (e: React.DragEvent): EditorView | null =>
+    e.altKey && e.dataTransfer.types.includes(DRAG_NOTE) && viewRef.current ? viewRef.current : null
+
   const overZone = (e: React.DragEvent): void => {
     e.preventDefault()
+    const v = linking(e)
+    if (v) {
+      e.dataTransfer.dropEffect = 'copy'
+      setZone(null)
+      linkDrop.show(v, e.clientX, e.clientY)
+      return
+    }
+    if (viewRef.current) linkDrop.hide(viewRef.current)
     e.dataTransfer.dropEffect = 'move'
     setZone(zoneAt(e))
   }
@@ -875,13 +902,27 @@ export function NotePane({
           accent edge showing where it would land stays inside the page, above. */}
       {dragging && (
         <div
+          ref={dropLayer}
           className="absolute inset-0 z-30"
           onDragOver={overZone}
-          onDragLeave={() => setZone(null)}
+          onDragLeave={() => {
+            setZone(null)
+            if (viewRef.current) linkDrop.hide(viewRef.current)
+          }}
           onDrop={(e) => {
             e.preventDefault()
+            const v = linking(e)
+            if (v) {
+              setZone(null)
+              linkDrop.drop(v, e.dataTransfer.getData(DRAG_NOTE), e.clientX, e.clientY)
+              return
+            }
+            // The box you can SEE decides, not the pointer's last pixel: at a
+            // zone's edge those differ by a frame, and the note landed in the
+            // zone next to the one drawn (2026-11-19).
+            const z = zoneRef.current ?? zoneAt(e)
             setZone(null)
-            onDropTab(zoneAt(e))
+            onDropTab(z)
           }}
         />
       )}

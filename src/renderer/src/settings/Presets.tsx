@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { landMissedDrop } from '../dragLeaveGuard'
+import { presetDrag } from './presetDrag'
 import { createPortal } from 'react-dom'
 import { Icon } from '../icons'
 import {
@@ -175,6 +177,12 @@ function PresetRow({
       onDragStart={(e) => {
         e.dataTransfer.setData(PRESET_DRAG, preset.id)
         e.dataTransfer.effectAllowed = 'copy'
+        presetDrag.id = preset.id
+      }}
+      onDragEnd={(e) => {
+        // Let go on a lit space tab but the drop never came: give it the look anyway.
+        landMissedDrop(e)
+        presetDrag.id = null
       }}
       className="preset-row"
     >

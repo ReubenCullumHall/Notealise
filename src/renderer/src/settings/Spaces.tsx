@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { offerDrop, withdrawDrop } from '../dragLeaveGuard'
+import { presetDrag } from './presetDrag'
 import { createPortal } from 'react-dom'
 import { ContextMenu } from '../ContextMenu'
 import {
@@ -447,8 +449,13 @@ export function Spaces({
                   e.preventDefault()
                   e.dataTransfer.dropEffect = 'copy'
                   setOver(s.folder)
+                  const preset = presets.find((p) => p.id === presetDrag.id)
+                  if (preset) offerDrop(e.currentTarget, () => presetActions.onApply(preset, s.folder, ALL_PARTS))
                 }}
-                onDragLeave={() => setOver((f) => (f === s.folder ? null : f))}
+                onDragLeave={(e) => {
+                  withdrawDrop(e.currentTarget)
+                  setOver((f) => (f === s.folder ? null : f))
+                }}
                 onDrop={(e) => {
                   setOver(null)
                   if (!canDrop(e)) return

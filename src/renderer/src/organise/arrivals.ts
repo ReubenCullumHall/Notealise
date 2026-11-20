@@ -59,3 +59,26 @@ export const wasDeleted = (path: string): boolean => {
 }
 
 export const anyDeleted = (): boolean => leaving.size > 0
+
+// And a drag-and-drop move inside the place you're looking at (2026-11-18,
+// Reuben: "a nice animation to show it bouncing in, just so it isn't sharp"):
+// its old spot shrinks shut like a binned row and it grows in at the new one
+// like a new note. Marked by App's `move` with the paths as they were BEFORE
+// the move; the tree acts once that row has actually left its old spot, so a
+// drop back onto the same spot plays nothing. Lapses like the others.
+const dropped = new Map<string, number>()
+
+export const markDropped = (paths: string[]): void => {
+  const now = performance.now()
+  paths.forEach((p) => dropped.set(p, now))
+}
+
+export const anyDropped = (): boolean => dropped.size > 0
+
+/** Whether `path` was just moved by a drop — answered once. */
+export const takeDropped = (path: string): boolean => {
+  const at = dropped.get(path)
+  if (at === undefined) return false
+  dropped.delete(path)
+  return performance.now() - at < 5000
+}

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ContextMenu } from '../ContextMenu'
 import { Icon } from '../icons'
 import { dragCarriesNotes, DRAG_CHIP, DRAG_FROM_STRIP, pathsFromDrag } from './island'
+import { landMissedDrop, useClearWhenPointerLeaves } from '../dragLeaveGuard'
 import {
   BOUNCE_MS,
   BOUNCE_SOFT,
@@ -258,6 +259,14 @@ export function Island({
    *  The known cost: Escape, pressed while the pointer is outside the island,
    *  also removes. One drag to undo; the cheaper of the two mistakes. */
   const dragOut = (e: React.DragEvent, path: string): void => {
+    // A drop Chromium lost over something lit (the strip's bar, a pane's box):
+    // do what that showed rather than treat it as dropped on nothing, which
+    // removed the chip (dragLeaveGuard.ts, 2026-11-19).
+    if (landMissedDrop(e)) {
+      leave()
+      setChipDragging(false)
+      return
+    }
     const r = box.current?.getBoundingClientRect()
     const out =
       !!r &&
@@ -338,6 +347,7 @@ export function Island({
     }
   })
   const armed = before !== undefined
+  useClearWhenPointerLeaves(armed, box, () => leave())
   // You are reading one of the island's notes. It has no tab of its own (App's
   // `stripTabs` leaves island notes out), so folded, the bookmark is the only
   // thing on the strip that can say where the note on screen lives — the same
@@ -414,9 +424,20 @@ export function Island({
     />
   ) : null
 
-  const marker = (path: string | null): React.JSX.Element | null =>
+  /** The bar a drop lands at, drawn ON TOP of the 2px gap rather than as a
+   *  chip-row item, so showing it never pushes the chips aside (as an item it
+   *  moved them under the pointer and the bar blinked — 2026-11-19). At the two
+   *  ends of the row it sits just inside the chip, where the scrolling row
+   *  would clip it. */
+  const marker = (path: string | null, at: 'gap' | 'first' | 'end' = 'gap'): React.JSX.Element | null =>
     armed && before === path ? (
-      <span className="mx-px h-5 w-0.5 shrink-0 rounded-full bg-brand-400" aria-hidden="true" />
+      <span
+        className={
+          'pointer-events-none absolute top-1/2 z-10 h-5 w-0.5 -translate-y-1/2 rounded-full bg-brand-400 ' +
+          (at === 'end' ? 'right-0' : at === 'first' ? 'left-0' : '-left-[2px]')
+        }
+        aria-hidden="true"
+      />
     ) : null
 
   return (
@@ -427,8 +448,16 @@ export function Island({
       >
         <div
           ref={box}
+          data-island
           onDragOver={overIsland}
-          onDragLeave={leave}
+          onDragLeave={(e) => {
+            // Only a real leave clears the island's bar — crossing onto a chip
+            // inside it fires a dragleave too, which blinked the bar off
+            // (2026-11-19). (0, 0) is a leave with no position.
+            if (e.clientX === 0 && e.clientY === 0) return
+            const r = e.currentTarget.getBoundingClientRect()
+            if (e.clientX <= r.left || e.clientX >= r.right || e.clientY <= r.top || e.clientY >= r.bottom) leave()
+          }}
           onDrop={drop}
           className={
             expanded
@@ -475,9 +504,10 @@ export function Island({
                       : undefined
                   }
                 >
-                  {notes.map((path) => (
-                    <div key={path} className="flex shrink-0 items-center">
-                      {marker(path)}
+                  {notes.map((path, i) => (
+                    <div key={path} className="relative flex shrink-0 items-center">
+                      {marker(path, i === 0 ? 'first' : 'gap')}
+                      {i === notes.length - 1 && marker(null, 'end')}
                       <div
                         role="tab"
                         tabIndex={0}
@@ -530,7 +560,7 @@ export function Island({
                       </div>
                     </div>
                   ))}
-                  {marker(null)}
+                  {notes.length === 0 && marker(null)}
                 </div>
               )}
             </>

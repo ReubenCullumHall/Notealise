@@ -9,6 +9,10 @@ profile or real notes (`run_copy.py` reads a real vault, works on a copy, and de
     MINIFY=1 ./build.sh             # also a compressed build in $WORK/out-min  (LAB_OUT=out-min)
     python3 run_<name>.py <port> …  # pick a free port: lsof -nP -iTCP:<port> -sTCP:LISTEN
 
+**Every launch is hidden** (since 2026-11-19): `lab.launch` loads `quiet.cjs` into the scratch app, so its window opens
+off-screen and never takes focus — Reuben works while checks run. `LAB_SHOW=1` shows it; `LAB_SIZE=1280x900` makes the window bigger. Write new checks to open ONE
+window and reset between cases inside it; a launch per case flashed a window up every ~10 s.
+
 For a "before", build HEAD somewhere else (`git stash` is not safe in the shared tree — copy
 `git show HEAD:<file>` over a scratch copy of `src/`) and point `WORK` at it.
 
@@ -48,8 +52,17 @@ to run against a PACKAGED app instead. Run each on a build of HEAD and on the ch
 | `run_transcribe_quit.py <port> <build>` | quit part-way through a real transcription: what is left in the temp folder (`main_eval.mjs` asks the app to quit) |
 | `run_temp_sweep.py <port> <build>` | the launch clean-up of old temp folders — and what it leaves alone |
 | `run_recovery_sweep.py <port> <build>` | the 7-day tidy-up at launch with one expired item that can't be deleted |
+| `run_drag_sweep.py <port> <row> [release [y,y…]]` | (takes `WORK`) the drag line pixel by pixel down a seeded list (Moved group, open folder, empty folder), then — with `release` — lets go 1px each side of every edge and checks it lands where the line was. Needs a build with `;(window as any).__hint = h` added at the top of TreeView's `setHint`. A robot drag only updates on a move: wiggle sideways, never up/down, or an edge pixel reads the next row |
+| `run_drag_targets.py <port> [case,…]` | (takes `WORK`) the sidebar's other drop targets — pinned folder / pinned note, this space's and another space's button, Bin, Archive, Pinned→list: what is lit at release vs what moved |
+| `run_drag_tabs.py <port> <tab> [release [x,…]]` | (takes `WORK`) the tab strip: bar / split / swap / island at every x, then releases each side of every edge (2026-11-19: 50/50) |
+| `run_drag_panes.py <port> [release [x,…]]` | (takes `WORK`) a sidebar note over an open note: split-left / replace / split-right box at every x, then releases at each edge |
+| `run_drag_files.py <port>` | (takes `WORK`) a picture dragged in from outside over a line, a table, the heading, the last line: the drop line vs where it lands (a new line under that block, an empty line first under a table), no text caret, the line gone off the note — one window for the whole run |
+| `run_drag_extras.py <port>` | (takes `WORK`) the 2026-11-19 drag extras in ONE window: a closed folder opens while held over, Pinned takes a drop and pins it, "Moved · Undo", "2 notes" beside the pointer, Finder files onto a folder (a note at the line, a picture copied, a program left out), a file held over a tab, the band over a table + one Cmd+Z, Option-drag a link (and plain drag unchanged), a block onto a sidebar note + its Undo (26 checks). Grab rows with `scroll_into_view_if_needed` first — a row below the list's bottom edge can't be pressed |
+| `run_drag_top.py <port>` | (takes `WORK`) two notes dragged to the very top of a mixed notes-and-folders list land at the top, folders stay put (`FREE=0`: setting off) — the 2026-11-18 drag fix |
 | `run_bin_and_pin.py <port> <build>` | bin one note and pin another at the same moment, 40 times (kept everything on both builds on this Mac — the fault needs a slow disk; `main/workspaceTurns.test.ts` shows it) |
 
+Drag traps (2026-11-19): a robot drag is NOT cancelled by Escape — carry it back to where it started before letting go, or
+it drops (a "plain drag" check opened a second column that way); grab a row only after `scroll_into_view_if_needed`.
 More traps paid for: this Mac's `python3` is 3.9 — no backslash inside an f-string's braces, no
 `write_text(newline=…)`; a packaged app only takes `--inspect` if the scratch copy's `electron-builder.yml` has
 `enableNodeCliInspectArguments: true` (never the real one); opening a second note costs ~130 MB by itself, so take

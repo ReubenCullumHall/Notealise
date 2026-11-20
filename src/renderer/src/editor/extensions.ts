@@ -2,7 +2,7 @@ import { Compartment, Prec, type Extension } from '@codemirror/state'
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { search, searchKeymap } from '@codemirror/search'
-import { drawSelection, EditorView, keymap } from '@codemirror/view'
+import { drawSelection, dropCursor, EditorView, keymap } from '@codemirror/view'
 import { editorStyling } from './highlight'
 import { colorEditing } from './colorCommands'
 import { markEditing } from './markEditing'
@@ -137,6 +137,11 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // it is damage.
     EditorView.contentAttributes.of({ spellcheck: 'true' }),
     drawSelection(),
+    // Text dragged within the note shows a caret where it will land (2026-11-19).
+    // A FILE never gets the caret: it lands on a new line under the block, and
+    // attachInput.ts draws a line at that edge instead. The six-dot block drags
+    // don't use drag events, so their greyed copy never has a caret beside it.
+    dropCursor(),
     // Must come after drawSelection: it marks the editor so the selection that
     // extension paints can be suppressed over a picked embed.
     embedSelectionAttr,

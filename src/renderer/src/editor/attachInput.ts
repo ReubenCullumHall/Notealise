@@ -1,6 +1,9 @@
 import { StateEffect, StateField } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
+import { EditorView, ViewPlugin } from '@codemirror/view'
+import { dropLead, fileDropSpot } from './blockMove'
 import { dirName } from '../../../shared/links'
+import { DRAG_NOTE } from '../tabs/island'
+import { uniqueName } from '../links/model'
 import {
   encodeTarget,
   extForMime,
@@ -151,7 +154,8 @@ function insertAtTarget(
   id: number,
   kind: AttachmentKind | 'file',
   name: string,
-  notePath: string
+  notePath: string,
+  lead = ''
 ): boolean {
   if (notePathOf(view) !== notePath) return false // a different note is on screen now
   const t = view.state.field(attachTargets, false)?.get(id)
@@ -162,10 +166,10 @@ function insertAtTarget(
   // A voice note's player is a block, so it always gets a line of its own —
   // dropped partway along a sentence, the sentence is split around it. Photos,
   // videos and documents go exactly where they always went.
-  const text =
-    kind === 'audio'
-      ? ownLineInsert(view.state.doc.sliceString(view.state.doc.lineAt(from).from, from), embedText(kind, name))
-      : embedText(kind, name) + '\n'
+  // `lead` (a drop's added newline or empty line — blockMove.ts `dropLead`) goes in with the
+  // embed, in one change, so one Cmd+Z takes both away. After it the embed starts a fresh line.
+  const before = lead ? '' : view.state.doc.sliceString(view.state.doc.lineAt(from).from, from)
+  const text = lead + (kind === 'audio' ? ownLineInsert(before, embedText(kind, name)) : embedText(kind, name) + '\n')
   const after = from + text.length
   view.dispatch({
     changes: { from, to, insert: text },
@@ -188,7 +192,8 @@ async function insertFiles(
   view: EditorView,
   files: File[],
   from: number,
-  to: number = from
+  to: number = from,
+  lead = ''
 ): Promise<void> {
   const notePath = notePathOf(view)
   const dir = dirName(notePath)
@@ -221,9 +226,9 @@ async function insertFiles(
         // Saved, but the note moved on underneath it (or was swapped for
         // another one) — say both halves, because the file really is there and
         // a silent nothing reads as a broken paste.
-        if (!insertAtTarget(view, id, kind, name, notePath)) {
+        if (!insertAtTarget(view, id, kind, name, notePath, lead)) {
           notifyUser(view.state, `Saved ${name}, but couldn't add it to the note — try again.`)
-        }
+        } else lead = '' // only before the first: the rest follow it, one per line
       } catch (e) {
         // One bad file must not lose the ones before or after it, so the loop
         // carries on — but it is reported rather than swallowed, which is what
@@ -259,35 +264,205 @@ const attachHandlers = EditorView.domEventHandlers({
     const sel = view.state.selection.main
     void insertFiles(view, files, sel.from, sel.to)
     return true
-  },
-  // The browser refuses to fire `drop` at all unless `dragover` calls
-  // preventDefault() first — without this the OS just shows a "not allowed"
-  // cursor and drop() below never runs, for any file. Gated on the drag
-  // actually carrying files (not, say, a dragged wiki-link or selected text)
-  // so CodeMirror's own drag handling is untouched for everything else —
-  // `dataTransfer.items`/`.files` aren't readable yet at this stage, only
-  // `.types`, so this can't narrow to image/video specifically until drop.
-  dragover(event) {
-    if (!event.dataTransfer?.types.includes('Files')) return false
-    event.preventDefault()
-    return true
-  },
-  // Lands at the drop point, not wherever the cursor happened to be — the
-  // same as dropping into any editor. Deliberately does NOT replace the
-  // selection: a drop names its own position.
-  drop(event, view) {
-    const list = event.dataTransfer?.files
-    if (!list || list.length === 0) return false
-    const files = Array.from(list).filter((f) => kindOfFile(f.name, f.type))
-    if (!files.length) return false
-    event.preventDefault()
-    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.from
-    void insertFiles(view, files, pos)
-    return true
   }
 })
 
-export const attachInput = [attachTargets, attachHandlers]
+// --- a file dragged in from outside: the line, and the drop ---------------------
+//
+// A dropped picture, video, voice note or document lands on a new line under the block the
+// pointer is over (blockMove.ts `fileDropSpot`), and while it is held a line is drawn at that
+// edge — the same ink as the sidebar's drop line. The line and the drop come from the same
+// spot, so where the line is is where it lands (Reuben, 2026-11-19).
+//
+// Listened for on the editor's own box, in the capture phase, rather than through CodeMirror's
+// handlers: those never see a drag over a table, picture or voice note (a widget's events are
+// its own), so a drop there used to do nothing at all. Taking the event here and stopping it
+// also keeps CodeMirror's text caret (extensions.ts `dropCursor`) and its own file drop — which
+// would paste a file's text in — out of it. Only drags that carry files; a dragged wiki-link or
+// selected text goes on to CodeMirror as before. The browser refuses to fire `drop` at all
+// unless `dragover` calls preventDefault() first.
+
+type Spot = ReturnType<typeof fileDropSpot>
+
+const carriesFiles = (e: DragEvent): boolean => !!e.dataTransfer?.types.includes('Files')
+
+/** A note dragged from the sidebar with Option (Alt) held: a LINK to it goes in at the drop line,
+ *  on a line of its own like a dropped file (Reuben, 2026-11-19). Without Option the drag does
+ *  what it always has — the pane's drop boxes open the note beside or in place. */
+const carriesNoteLink = (e: DragEvent): boolean => e.altKey && !!e.dataTransfer?.types.includes(DRAG_NOTE)
+
+/** The `[[link]]` lines for the notes in a sidebar drag's payload, as the `[[` picker writes
+ *  them — a title, or the path when another note shares the title. Folders and this note itself
+ *  are left out (nothing to open, and a link to here goes nowhere). */
+export function noteLinkLines(view: EditorView, payload: string): string[] {
+  const env = view.state.field(linkEnv, false)
+  if (!env) return []
+  return payload
+    .split('\n')
+    .filter((p) => /\.md$/i.test(p) && p !== env.path)
+    .map((p) => {
+      const ref = env.notes.find((n) => n.path === p)
+      return `[[${ref ? uniqueName(env.notes, ref) : p.replace(/\.md$/i, '')}]]`
+    })
+}
+
+const fileDrop = ViewPlugin.fromClass(
+  class {
+    spot: Spot | null = null
+    readonly bar: HTMLElement
+    /** a faint wash over the whole block the drop goes under, so which block is plain from across
+     *  the screen — the line alone is thin (Reuben, 2026-11-19) */
+    readonly band: HTMLElement
+    constructor(readonly view: EditorView) {
+      this.band = document.createElement('div')
+      this.band.className = 'cm-fileDropBand'
+      this.band.style.display = 'none'
+      view.scrollDOM.appendChild(this.band)
+      this.bar = document.createElement('div')
+      this.bar.className = 'cm-fileDropLine'
+      this.bar.style.display = 'none'
+      view.scrollDOM.appendChild(this.bar)
+      view.dom.addEventListener('dragover', this.over, true)
+      view.dom.addEventListener('dragleave', this.leave, true)
+      view.dom.addEventListener('drop', this.drop, true)
+      window.addEventListener('dragover', this.away, true)
+      window.addEventListener('drop', this.clearSoon, true)
+    }
+    spotAt(e: DragEvent): Spot {
+      return fileDropSpot(this.view.state, this.view.posAtCoords({ x: e.clientX, y: e.clientY }, false))
+    }
+    over = (e: DragEvent): void => {
+      const link = carriesNoteLink(e)
+      if (!carriesFiles(e) && !link) {
+        // A note drag that let go of Option: its line goes, the pane's boxes take over.
+        if (this.spot) this.set(null)
+        return
+      }
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+      this.set(this.spotAt(e))
+    }
+    /** The same line, shown from outside — NotePane's drop layer covers the note during a
+     *  one-note sidebar drag and passes an Option drag here. */
+    showLinkDrop(x: number, y: number): void {
+      this.set(fileDropSpot(this.view.state, this.view.posAtCoords({ x, y }, false)))
+    }
+    hideLinkDrop(): void {
+      this.set(null)
+    }
+    /** Links to the dragged notes at the line: one change, so one Cmd+Z takes them out. */
+    dropLinks(payload: string, x: number, y: number): boolean {
+      const spot = this.spot ?? fileDropSpot(this.view.state, this.view.posAtCoords({ x, y }, false))
+      this.set(null)
+      const lines = noteLinkLines(this.view, payload)
+      if (!lines.length) return false
+      const insert = dropLead(spot) + lines.join('\n') + '\n'
+      const end = spot.at + insert.length - 1
+      this.view.dispatch({ changes: { from: spot.at, insert }, selection: { anchor: end }, scrollIntoView: true, userEvent: 'input.drop' })
+      this.view.focus()
+      return true
+    }
+    /** Off the note, judged by where the pointer is: a leave also fires on every hop inside it. */
+    leave = (e: DragEvent): void => {
+      if (!this.spot || (e.clientX === 0 && e.clientY === 0)) return
+      const r = this.view.dom.getBoundingClientRect()
+      const { clientX: x, clientY: y } = e
+      if (x < r.left || x >= r.right || y < r.top || y >= r.bottom) this.set(null)
+    }
+    /** Lands where the line was. A drop never replaces the selection: it names its own place. */
+    drop = (e: DragEvent): void => {
+      if (carriesNoteLink(e)) {
+        e.preventDefault()
+        e.stopPropagation()
+        this.dropLinks(e.dataTransfer?.getData(DRAG_NOTE) ?? '', e.clientX, e.clientY)
+        return
+      }
+      if (!carriesFiles(e)) return
+      e.preventDefault()
+      e.stopPropagation()
+      const spot = this.spot ?? this.spotAt(e)
+      this.set(null)
+      const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => kindOfFile(f.name, f.type))
+      if (!files.length) return
+      // A newline first if the note has none at its end; an empty line first under a table,
+      // quote or list, so the picture doesn't become part of it — in the same change as the
+      // picture, once it is saved.
+      void insertFiles(this.view, files, spot.at, spot.at, dropLead(spot))
+    }
+    /** Over anything outside this note, the line goes (a dragleave alone misses fast exits). */
+    away = (e: DragEvent): void => {
+      if (this.spot && !(e.target instanceof Node && this.view.dom.contains(e.target))) this.set(null)
+    }
+    clearSoon = (): void => void setTimeout(() => this.set(null), 0)
+    set(spot: Spot | null): void {
+      if (spot?.at === this.spot?.at && spot?.lead === this.spot?.lead && spot?.gap === this.spot?.gap && spot?.block === this.spot?.block) return
+      this.spot = spot
+      if (!spot) {
+        this.bar.style.display = 'none'
+        this.band.style.display = 'none'
+        return
+      }
+      this.view.requestMeasure({ read: () => this.measure(spot), write: (pos) => this.place(pos) })
+    }
+    /** The edge just above `at` — between the block and what follows it. */
+    measure(spot: Spot): { top: number; left: number; width: number; bandTop: number | null } | null {
+      const { view } = this
+      const doc = view.state.doc
+      if (spot.at > doc.length) return null
+      const above = spot.lead ? doc.lineAt(spot.at) : spot.at > 0 ? doc.lineAt(spot.at - 1) : null
+      const y = above ? view.lineBlockAt(above.from).bottom : view.lineBlockAt(spot.at).top
+      const outer = view.scrollDOM.getBoundingClientRect()
+      const content = view.contentDOM.getBoundingClientRect()
+      const pad = parseFloat(getComputedStyle(view.contentDOM).paddingLeft) || 0
+      const padR = parseFloat(getComputedStyle(view.contentDOM).paddingRight) || 0
+      const toScroll = view.documentTop - outer.top + view.scrollDOM.scrollTop
+      const blockTop = spot.block !== null && spot.block <= doc.length ? view.lineBlockAt(spot.block).top : null
+      return {
+        top: toScroll + y,
+        left: content.left + pad - outer.left + view.scrollDOM.scrollLeft,
+        width: Math.max(0, content.width - pad - padR),
+        bandTop: blockTop !== null && blockTop < y ? toScroll + blockTop : null
+      }
+    }
+    place(pos: { top: number; left: number; width: number; bandTop: number | null } | null): void {
+      if (!pos || !this.spot) {
+        this.bar.style.display = 'none'
+        this.band.style.display = 'none'
+        return
+      }
+      Object.assign(this.bar.style, { display: '', top: `${pos.top}px`, left: `${pos.left}px`, width: `${pos.width}px` })
+      if (pos.bandTop === null) this.band.style.display = 'none'
+      else
+        Object.assign(this.band.style, {
+          display: '',
+          top: `${pos.bandTop}px`,
+          left: `${pos.left}px`,
+          width: `${pos.width}px`,
+          height: `${pos.top - pos.bandTop}px`
+        })
+    }
+    destroy(): void {
+      this.band.remove()
+      this.bar.remove()
+      this.view.dom.removeEventListener('dragover', this.over, true)
+      this.view.dom.removeEventListener('dragleave', this.leave, true)
+      this.view.dom.removeEventListener('drop', this.drop, true)
+      window.removeEventListener('dragover', this.away, true)
+      window.removeEventListener('drop', this.clearSoon, true)
+    }
+  }
+)
+
+export const attachInput = [attachTargets, attachHandlers, fileDrop]
+
+/** NotePane's way in for an Option drag of a sidebar note (its drop layer covers the note, so
+ *  the editor's own listeners never hear it). `drop` returns whether links went in. */
+export const linkDrop = {
+  show: (view: EditorView, x: number, y: number): void => view.plugin(fileDrop)?.showLinkDrop(x, y),
+  hide: (view: EditorView): void => view.plugin(fileDrop)?.hideLinkDrop(),
+  drop: (view: EditorView, payload: string, x: number, y: number): boolean => view.plugin(fileDrop)?.dropLinks(payload, x, y) ?? false
+}
 
 /** The explicit "Attach…" command: a native file picker, filtered to images
  *  and video, for when there's nothing to paste or drag — the third of the

@@ -121,6 +121,11 @@ export interface LinkHandlers {
   /** A link to a moment in a recording that isn't in this note (momentLink.ts):
    *  open a note that holds it and play from `t` seconds. */
   moment?: (file: string, t: number, how: OpenHow) => void
+  /** A block carried by its six dots and let go on a note in the sidebar (attachMove.ts): `text`
+   *  goes on the end of note `to`, and has already been taken out of `from`. `putBack` returns it
+   *  to where it was, for the notice's Undo — false when that note has changed since. Optional:
+   *  a test editor has no sidebar. */
+  moveToNote?: (from: string, to: string, text: string, putBack: () => boolean) => void
 }
 
 /** What `confirmMediaDelete` is given. A named type because three layers pass it

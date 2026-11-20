@@ -1,14 +1,18 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
 import type { ColorStyle } from '../../shared/settings'
 import { inkOn, rgbChannels } from '../../shared/color'
 import { Icon } from './icons'
-import { asksToArchive, colorOf, importedSince, labelOf, metaOf, monthLabel, onDate, sortSiblings, splitMoved } from './organise/model'
+import { asksToArchive, colorOf, findNode, importedSince, labelOf, metaOf, monthLabel, onDate, sortSiblings, splitMoved } from './organise/model'
 import { DRAG_NOTE } from './tabs/island'
+import { clearEndLine } from './organise/endLine'
+import { landMissedDrop, offerDrop, useClearWhenPointerLeaves, withdrawDrop } from './dragLeaveGuard'
 import { UNREADABLE_FOLDER, UNREADABLE_FOLDER_TIP } from './folderUnreadable'
-import { anyDeleted, pendingCreated, takeCreated, wasDeleted } from './organise/arrivals'
+import { anyDeleted, anyDropped, pendingCreated, takeCreated, takeDropped, wasDeleted } from './organise/arrivals'
 import { BOUNCE, BOUNCE_MS, BOUNCE_SOFT, SOFT_Y1, bounceAt, motionOn } from './tabs/tabStyles'
+import { HOLD_TO_OPEN_MS, carryLabel } from './dragHold'
+import { blockDropTarget, subscribeBlockDrop } from './organise/blockDrop'
 
 // The sidebar tree. Ported from the legacy prototype's row renderers
 // (legacy/src/App.jsx:521-722) so the two apps render the same sidebar: two-line
@@ -40,8 +44,13 @@ export interface TreeActions {
    *  it was clicked on — it does not build the menu. */
   onContext: (e: React.MouseEvent, node: TreeNode | null, targets?: string[]) => void
   /** Move entries into `toDir`, optionally positioned around `anchor`. */
-  onMove: (paths: string[], toDir: string, anchor: string | null, after: boolean) => void
+  /** `unpin`: the drop was into the main list, so a pinned item dragged there leaves Pinned. */
+  onMove: (paths: string[], toDir: string, anchor: string | null, after: boolean, unpin?: boolean) => void
   onTogglePin: (paths: string[], pinned: boolean) => void
+  /** Files dragged in from outside the app (Finder, Explorer) and let go on the list: copied
+   *  into `toDir`, at the line (`anchor`/`after`, as `onMove`). Left out where a list takes no
+   *  files. */
+  onDropFiles?: (files: File[], toDir: string, anchor: string | null, after: boolean, folders?: string[]) => void
   onTrash: (paths: string[]) => void
   onRestore: (paths: string[]) => void
   onNewNoteIn: (dir: string) => void
@@ -224,15 +233,70 @@ export function TreeView({
   onContext,
   onMove,
   onTogglePin,
+  onDropFiles,
   onTrash,
   onRestore,
   onNewNoteIn,
   onNewFolderIn,
   onRename
 }: Props): React.JSX.Element {
-  const [hint, setHint] = useState<Hint>(null)
+  const [hint, setHintState] = useState<Hint>(null)
+  // The line as last shown, readable at once — `dragend` can arrive before
+  // React has redrawn, and it must see the same line the user saw.
+  const hintRef = useRef<Hint>(null)
+  const setHint = (h: Hint): void => {
+    hintRef.current = h
+    setHintState(h)
+    // Over a list now, so not over the empty space under it (Sidebar.tsx).
+    if (h) clearEndLine()
+    // What a drop Chromium loses would do (dragLeaveGuard.ts).
+    const carry = dragging
+    if (h && carry) offerDrop(box.current, () => land(carry, h))
+    else withdrawDrop(box.current)
+  }
+  // A drag that ended anywhere takes this list's line with it — the list it
+  // ended in gets dragend, the others only see `dragging` go.
+  useEffect(() => {
+    if (dragging) return
+    hintRef.current = null
+    setHintState(null)
+  }, [dragging])
   const shelved = mode === 'archive'
   const reorders = mode === 'tree'
+  // Files dragged in from outside the app (Finder, Explorer). They aren't one of the sidebar's own
+  // drags (`dragging` stays null), so this says the line is for them — set on every dragover.
+  const carryingFiles = useRef(false)
+  const takesFiles = !!onDropFiles && !shelved && !archive
+  const filesIn = (e: React.DragEvent): boolean =>
+    takesFiles && !dragging && e.dataTransfer.types.includes('Files')
+  // A drag from outside can end with nothing at all said to this window — Escape, or let go
+  // back in Finder — so its line would stay lit (and a held folder go on to open). Dragovers keep
+  // coming while the pointer is over the list, even held still (the HTML rules say at least every
+  // 350 ms ± 200); when none has come for a second, the drag has gone. Only the LINE goes: what it
+  // pointed at is kept, so a drop that does come still lands there.
+  const filesIdle = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const filesStillOver = (): void => {
+    if (filesIdle.current) clearTimeout(filesIdle.current)
+    filesIdle.current = setTimeout(() => {
+      filesIdle.current = null
+      setHintState(null)
+    }, 1000)
+  }
+  useEffect(() => () => void (filesIdle.current && clearTimeout(filesIdle.current)), [])
+
+  // Hold a drag over a closed folder and it opens, so the drop can go deeper — the same hold the
+  // space buttons have (Reuben, 2026-11-19). Armed by the line: the folder lit to take the drop.
+  const holdOpen = hint?.kind === 'into' && !expanded.has(hint.path) ? hint.path : null
+  useEffect(() => {
+    if (!holdOpen || !findNode(nodes, holdOpen)) return
+    const t = setTimeout(() => {
+      if (hintRef.current?.kind === 'into' && hintRef.current.path === holdOpen) onToggleExpand(holdOpen)
+    }, HOLD_TO_OPEN_MS)
+    return () => clearTimeout(t)
+  }, [holdOpen, nodes, onToggleExpand])
+
+  // A block carried by its six dots over a note row (organise/blockDrop.ts).
+  const blockTarget = useSyncExternalStore(subscribeBlockDrop, blockDropTarget)
 
   const isOpen = (p: string): boolean => expanded.has(p)
   const toggle = onToggleExpand
@@ -275,8 +339,24 @@ export function TreeView({
     // Dragging a row that's part of the selection carries the whole selection.
     const carry = picked(path) ? [...selection.paths] : [path]
     onDragging(carry)
-    e.dataTransfer.effectAllowed = 'move'
+    // 'copyMove', not 'move': Option held over a note's text drops a LINK to the note instead of
+    // moving it (editor/attachInput.ts), and macOS turns an Option drag into a copy, which a
+    // 'move'-only drag refuses outright. Every drop in the sidebar still asks for 'move'.
+    e.dataTransfer.effectAllowed = 'copyMove'
     e.dataTransfer.setData('text/plain', carry.join('\n'))
+    // Several rows: "3 notes" beside the pointer, not a faint copy of the one row you grabbed.
+    const label = carryLabel(carry)
+    if (label) {
+      const tag = document.createElement('div')
+      tag.className = 'drag-count'
+      const plate = document.createElement('span')
+      plate.textContent = label
+      tag.appendChild(plate)
+      document.body.appendChild(tag)
+      e.dataTransfer.setDragImage(tag, 0, 0)
+      // The picture is taken during this event; the element can go straight after.
+      setTimeout(() => tag.remove(), 0)
+    }
     // Named as well as plain, and BOTH are needed. The tree's own drops read
     // `dragging` state and never touch the payload, so this changes nothing
     // here — it is for the tab island, which is a different component and can
@@ -287,56 +367,165 @@ export function TreeView({
   const endDrag = (): void => {
     onDragging(null)
     setHint(null)
+    clearEndLine()
+  }
+  /** The drag's end, on the row that was picked up. Chromium sometimes sends no
+   *  `drop` at all when the last `dragover` redrew the list (CLAUDE.md, "An HTML
+   *  drag that re-renders on its last dragover can lose its drop"), and the row
+   *  snapped back to where it was. So a drag let go over anything lit that never
+   *  dropped does what that showed — a line in any list, a space button, the bin
+   *  (dragLeaveGuard.ts). (Escape over a lit target then keeps the move, as with
+   *  the space tabs.) */
+  const finishDrag = (e: React.DragEvent): void => {
+    // Before endDrag, which withdraws this list's own offer.
+    landMissedDrop(e)
+    endDrag()
   }
 
   /** Can the current drag legally land in `dir`? Never into itself or its own
    *  descendant, and never a no-op back into the same parent. */
   const dropOk = (dir: string): boolean => {
-    if (!dragging) return false
+    if (!dragging) return carryingFiles.current
     return !dragging.some((p) => dir === p || dir.startsWith(p + '/'))
   }
 
   const overRow = (e: React.DragEvent, node: TreeNode): void => {
-    if (!dragging) return
-    const box = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const rel = (e.clientY - box.top) / box.height
+    carryingFiles.current = filesIn(e)
+    if (carryingFiles.current) filesStillOver()
+    if (!dragging && !carryingFiles.current) return
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const next = hintFor(node, (e.clientY - r.top) / r.height)
+    if (!next) {
+      // Nothing can land on this row (the folder being dragged, or inside it).
+      // In the notes list that means no drop — not "to the bottom of the list",
+      // which is what falling through to the list behind it used to do.
+      // In Pinned it goes on to the section around the list, which pins what is dropped
+      // there (Sidebar.tsx) — unless it is files from outside, which Pinned doesn't take.
+      if (reorders && !sortedTop) {
+        e.stopPropagation()
+        setHint(null)
+      } else if (mode === 'pinned') {
+        if (carryingFiles.current) e.stopPropagation()
+        setHint(null)
+      }
+      return
+    }
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = carryingFiles.current ? 'copy' : 'move'
+    setHint(next)
+  }
+
+  /** The line for a pointer `rel` of the way down `node`'s row (0 = its top edge). */
+  const hintFor = (node: TreeNode, rel: number): Hint => {
+    if (!dragging && !carryingFiles.current) return null
     // A folder takes items *into* itself in the middle band; the outer thirds
     // reorder around it. A note only ever reorders.
     let next: Hint = null
     // A sorted top level has no drag order to set, so a row there only ever
     // takes things INTO itself (a folder) — never a line above or below it.
     const fixedLevel = sortedTop && parentOf(node.path) === rootDir
+    // A row under the "Moved" heading always sits above the ordinary rows,
+    // whatever the order says, so a line beside it promised a place nothing can
+    // land in (the drop went far down the list — Reuben, 2026-11-18). The line goes
+    // to the top of the ordinary rows instead, just under the group: the highest
+    // place a drop really lands.
+    const inMoved = !!metaOf(workspace, node.path).movedAt
     if (node.type === 'dir' && rel > 0.25 && rel < 0.75 && dropOk(node.path)) {
       next = { kind: 'into', path: node.path }
+    } else if (reorders && node.type === 'dir' && rel >= 0.75 && isOpen(node.path) && node.children?.length && dropOk(node.path)) {
+      // An OPEN folder's bottom edge is drawn between it and its first note, so the
+      // drop goes there — first inside the folder. "After the folder" put it below
+      // everything the folder holds, rows away from the line (2026-11-18).
+      // The first ordinary note, even if it is the one being dragged: a line on
+      // itself means "stays where it is", which is what that spot is.
+      const first = splitMoved(node.children, workspace, freeArrange).rest[0]
+      next = first ? { kind: 'sibling', path: first.path, after: false } : { kind: 'into', path: node.path }
+    } else if (reorders && !fixedLevel && inMoved && dropOk(parentOf(node.path))) {
+      const dir = parentOf(node.path)
+      const level = dir === rootDir ? nodes : (findNode(nodes, dir)?.children ?? [])
+      const top = splitMoved(level, workspace, freeArrange).rest[0] // even the one being dragged — see above
+      // Everything at this level is under "Moved": the one place left is just under
+      // the group, which is where "into the folder" puts it.
+      next = top ? { kind: 'sibling', path: top.path, after: false } : { kind: 'into', path: dir }
     } else if (reorders && !fixedLevel && dropOk(parentOf(node.path))) {
       next = { kind: 'sibling', path: node.path, after: rel >= 0.5 }
     } else if (node.type === 'dir' && dropOk(node.path)) {
       next = { kind: 'into', path: node.path }
     }
-    if (!next) return
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = 'move'
-    setHint(next)
+    return next
+  }
+
+  /** Over the list but between rows (the gaps, the "Moved" heading): the line goes
+   *  on the top edge of the next row down and the drop lands there. Before, a gap
+   *  meant "to the bottom of the list", with no line to say so (2026-11-18).
+   *  Below the last row stays "to the bottom of the list". `'none'` = a gap whose
+   *  next row takes nothing (a folder dragged over its own contents): no drop there.
+   *  Only the notes list — Pinned and the archive keep "a gap is the list". */
+  const gapHint = (y: number): Hint | 'none' => {
+    if (!box.current || !reorders || sortedTop) return null
+    for (const el of box.current.querySelectorAll<HTMLElement>('[data-row-path]')) {
+      if (!el.offsetParent || el.getBoundingClientRect().bottom <= y) continue
+      const node = findNode(nodes, el.dataset.rowPath ?? '')
+      return (node && hintFor(node, 0)) || 'none'
+    }
+    return null
   }
 
   const drop = (e: React.DragEvent): void => {
+    const h = hintRef.current
+    // Let go over Pinned but not on a pinned folder: the section around the list pins it
+    // (Sidebar.tsx), so the drop goes on to it.
+    if (mode === 'pinned' && dragging && !h) {
+      setHint(null)
+      return
+    }
     e.preventDefault()
     e.stopPropagation()
+    if (filesIn(e)) {
+      // A folder from Finder comes as a File too; it is told apart by its entry, and named in
+      // the notice rather than copied (Import brings a whole folder in).
+      const files: File[] = []
+      const folders: string[] = []
+      for (const item of Array.from(e.dataTransfer.items)) {
+        if (item.kind !== 'file') continue
+        const f = item.getAsFile()
+        if (!f) continue
+        if (item.webkitGetAsEntry?.()?.isDirectory) folders.push(f.name)
+        else files.push(f)
+      }
+      setHint(null)
+      carryingFiles.current = false
+      if (h && (files.length || folders.length) && onDropFiles) {
+        if (h.kind === 'into') onDropFiles(files, h.path, null, false, folders)
+        else onDropFiles(files, parentOf(h.path), h.path, h.after, folders)
+      }
+      return
+    }
     const carry = dragging
-    const h = hint
     endDrag()
+    if (!carry || !h) {
+      clearSel()
+      return
+    }
+    land(carry, h)
+  }
+  /** Move what was dragged to exactly where the line was. */
+  const land = (carry: string[], h: NonNullable<Hint>): void => {
     // A completed move ends the selection: the whole point of building the set
     // was to move it, and the items are now where you put them. Escape and
     // Clear are the only ways OUT of the mode; finishing the job is not the
     // same thing as backing out of it.
     clearSel()
-    if (!carry || !h) return
-    if (h.kind === 'into') onMove(carry, h.path, null, false)
-    else onMove(carry, parentOf(h.path), h.path, h.after)
+    // Dragged out of Pinned into the main list: it unpins and lands at the line
+    // (Reuben, 2026-11-19). Into a pinned folder it stays in Pinned anyway.
+    const unpin = mode === 'tree'
+    if (h.kind === 'into') onMove(carry, h.path, null, false, unpin)
+    else onMove(carry, parentOf(h.path), h.path, h.after, unpin)
   }
 
   const dropHintClass = (path: string): string => {
+    if (blockTarget === path) return ' drop-into'
     if (!hint) return ''
     if (hint.kind === 'into' && hint.path === path) return ' drop-into'
     if (hint.kind === 'sibling' && hint.path === path)
@@ -471,7 +660,7 @@ export function TreeView({
         style={{ marginLeft: marginFor(depth), paddingLeft: 'var(--row-pad0)', ...colorVars(c) }}
         draggable={!shelved}
         onDragStart={shelved ? undefined : (e) => startDrag(e, node.path)}
-        onDragEnd={endDrag}
+        onDragEnd={finishDrag}
         onDragOver={(e) => overRow(e, node)}
         onDrop={drop}
         onContextMenu={(e) => onContext(e, node)}
@@ -603,7 +792,7 @@ export function TreeView({
           style={{ marginLeft: marginFor(depth), paddingLeft: 'var(--row-pad0)', ...colorVars(c) }}
           draggable={!shelved}
           onDragStart={shelved ? undefined : (e) => startDrag(e, node.path)}
-          onDragEnd={endDrag}
+          onDragEnd={finishDrag}
           onDragOver={(e) => overRow(e, node)}
           onDrop={drop}
           onContextMenu={(e) => onContext(e, node)}
@@ -743,22 +932,26 @@ export function TreeView({
                 indent alone doesn't give you, so where a nested group ends is
                 as legible as where it starts. This folder's own box starts at
                 marginFor(depth) and its children's start one --row-indent step
-                further right; the line sits centred in that gutter, so it
-                clears both boxes (and their colour/selection paint) at any
-                density or depth. */}
+                further right; the line sits in that gutter, 3px short of the
+                children's boxes — as far in as it goes without touching them.
+                Inside the boxes it ran through the grip dots and the archive "?"
+                (tried 2026-11-18, Reuben: "thingymajigs overlap"). */}
             <span
               aria-hidden="true"
               className="tree-guide pointer-events-none absolute inset-y-0 border-l"
-              style={{ left: `calc((${depth} + 0.5) * var(--row-indent))` }}
+              style={{ left: `calc((${depth} + 1) * var(--row-indent) - 3px)` }}
             />
             {movedGroup(movedKids, depth + 1)}
             {restKids.map((k) => renderRow(k, depth + 1))}
             {count === 0 && (
               <p
                 onDragOver={(e) => {
+                  carryingFiles.current = filesIn(e)
+                  if (carryingFiles.current) filesStillOver()
                   if (shelved || !dropOk(node.path)) return
                   e.preventDefault()
                   e.stopPropagation()
+                  if (carryingFiles.current) e.dataTransfer.dropEffect = 'copy'
                   setHint({ kind: 'into', path: node.path })
                 }}
                 onDrop={drop}
@@ -820,6 +1013,7 @@ export function TreeView({
   // as a new tab. Only in the main tree — the other lists never show a note the
   // moment it is made. See organise/arrivals.ts for what gets marked.
   const box = useRef<HTMLDivElement | null>(null)
+  useClearWhenPointerLeaves(hint !== null, box, () => setHint(null))
   useLayoutEffect(() => {
     // The tree and the Pinned list — the lists a note is made or binned in
     // front of, archived out of or put back into (the archive is this same
@@ -880,45 +1074,70 @@ export function TreeView({
         now.set(el.dataset.rowBox as string, { el, parent: el.parentElement, next: el.nextElementSibling })
     })
     placed.current = now
+    // A drop moved a row inside this list: a copy of it goes back in its old
+    // spot and shrinks shut there, as a binned row does (the row itself grows in
+    // at its new spot — App's `move` marks it created).
+    if (anyDropped()) {
+      for (const [path, w] of [...was].reverse()) {
+        const n = now.get(path)
+        if (n && n.parent === w.parent && n.next === w.next) continue // not moved (yet)
+        if (!takeDropped(path) || !motionOn() || !w.parent.isConnected) continue
+        const copy = w.el.cloneNode(true) as HTMLElement
+        for (const e of [copy, ...copy.querySelectorAll<HTMLElement>('[data-row-box],[data-row-path],[draggable]')]) {
+          e.removeAttribute('data-row-box')
+          e.removeAttribute('data-row-path')
+          e.removeAttribute('draggable')
+        }
+        const at = w.next && w.next.isConnected && w.next.parentElement === w.parent && w.next !== n?.el ? w.next : null
+        w.parent.insertBefore(copy, at)
+        shrinkAway(copy)
+      }
+    }
     if (!anyDeleted()) return
     // Last first, so a run of binned neighbours each finds the one after it
     // already back in place to sit in front of.
     const gone = [...was.keys()].filter((p) => !now.has(p)).reverse()
-    const STEPS = 24
     for (const path of gone) {
       if (!wasDeleted(path) || !motionOn()) continue
       const { el, parent, next } = was.get(path)!
       if (!parent.isConnected) continue // inside a folder that went too
       el.removeAttribute('data-row-box')
       el.removeAttribute('data-row-path')
-      el.setAttribute('aria-hidden', 'true')
-      el.style.pointerEvents = 'none'
       parent.insertBefore(el, next && next.isConnected && next.parentElement === parent ? next : null)
-      const cs = getComputedStyle(el)
-      const h = el.getBoundingClientRect().height
-      const [pt, pb, mt, mb] = [cs.paddingTop, cs.paddingBottom, cs.marginTop, cs.marginBottom].map(parseFloat)
-      el.style.overflow = 'hidden'
-      const frames: Keyframe[] = []
-      for (let i = 0; i <= STEPS; i++) {
-        const p = bounceAt(i / STEPS)
-        const left = Math.max(0, 1 - p)
-        frames.push({
-          offset: i / STEPS,
-          height: `${h * left}px`,
-          minHeight: '0px',
-          paddingTop: `${pt * left}px`,
-          paddingBottom: `${pb * left}px`,
-          marginTop: `${mt * left}px`,
-          // Past zero the rows below keep rising for the overshoot, then settle.
-          marginBottom: `${mb * left - h * Math.max(0, p - 1)}px`
-        })
-      }
-      const shrink = el.animate(frames, { duration: BOUNCE_MS, fill: 'forwards' })
-      const bye = (): void => el.remove()
-      shrink.onfinish = bye
-      shrink.oncancel = bye
+      shrinkAway(el)
     }
   })
+
+  /** Shrink an inert stand-in row shut where it sits, and the rows below close
+   *  up on the bounce — Move to bin's motion, and a drop's old spot. */
+  const shrinkAway = (el: HTMLElement): void => {
+    const STEPS = 24
+    el.setAttribute('aria-hidden', 'true')
+    el.style.pointerEvents = 'none'
+    const cs = getComputedStyle(el)
+    const h = el.getBoundingClientRect().height
+    const [pt, pb, mt, mb] = [cs.paddingTop, cs.paddingBottom, cs.marginTop, cs.marginBottom].map(parseFloat)
+    el.style.overflow = 'hidden'
+    const frames: Keyframe[] = []
+    for (let i = 0; i <= STEPS; i++) {
+      const p = bounceAt(i / STEPS)
+      const left = Math.max(0, 1 - p)
+      frames.push({
+        offset: i / STEPS,
+        height: `${h * left}px`,
+        minHeight: '0px',
+        paddingTop: `${pt * left}px`,
+        paddingBottom: `${pb * left}px`,
+        marginTop: `${mt * left}px`,
+        // Past zero the rows below keep rising for the overshoot, then settle.
+        marginBottom: `${mb * left - h * Math.max(0, p - 1)}px`
+      })
+    }
+    const shrink = el.animate(frames, { duration: BOUNCE_MS, fill: 'forwards' })
+    const bye = (): void => el.remove()
+    shrink.onfinish = bye
+    shrink.oncancel = bye
+  }
 
   // A folder's contents open and fold shut instead of appearing and vanishing
   // (Reuben, 2026-09-25: "sidebar a bit more animated"). The same grow as a new
@@ -1060,11 +1279,40 @@ export function TreeView({
   return (
     <div
       ref={box}
+      data-tree-mode={mode}
+      data-archive={archive ? '1' : undefined}
+      data-root-dir={rootDir}
       onDragOver={(e) => {
-        if (shelved || !dropOk(rootDir)) return
+        carryingFiles.current = filesIn(e)
+        if (carryingFiles.current) filesStillOver()
+        if (shelved || (!dragging && !carryingFiles.current)) return
+        // The Pinned list only takes a drop INTO a pinned folder (its row lights
+        // up). A gap or a pinned note used to move the dragged note to the bottom
+        // of the space with nothing on screen saying so (2026-11-19).
+        if (mode === 'pinned') {
+          if (carryingFiles.current) e.stopPropagation()
+          setHint(null)
+          return
+        }
+        const gap = gapHint(e.clientY)
+        if (gap === 'none' || (!gap && !dropOk(rootDir))) {
+          setHint(null)
+          return
+        }
         e.preventDefault()
-        e.dataTransfer.dropEffect = 'move'
-        setHint({ kind: 'into', path: rootDir })
+        e.dataTransfer.dropEffect = carryingFiles.current ? 'copy' : 'move'
+        setHint(gap ?? { kind: 'into', path: rootDir })
+      }}
+      onDragLeave={(e) => {
+        // Out of the list (into a note, onto the tabs): the line goes, so a line
+        // is never left showing somewhere the drop won't land.
+        // Judged by the pointer, not relatedTarget, which a drag event may not carry.
+        // (0, 0) is a leave with no position at all — ignored, or the line blinks
+        // off at every row edge.
+        if (e.clientX === 0 && e.clientY === 0) return
+        const r = e.currentTarget.getBoundingClientRect()
+        const out = e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom
+        if ((dragging || carryingFiles.current) && out) setHint(null)
       }}
       onDrop={drop}
       onContextMenu={(e) => {

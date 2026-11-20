@@ -24,6 +24,9 @@ import { ArchiveResults, ArchiveSearchBar } from './ArchiveSearch'
 import { archRowId, type ArchiveHit } from './organise/archiveSearch'
 import { createPress } from './organise/archivePress'
 import { TreeView, type Selection, type TreeActions } from './TreeView'
+import { clearEndLine } from './organise/endLine'
+import { HOLD_TO_OPEN_MS } from './dragHold'
+import { offerDrop, useClearWhenPointerLeaves, withdrawDrop } from './dragLeaveGuard'
 import { UNREADABLE_FOLDER, UNREADABLE_FOLDER_TIP } from './folderUnreadable'
 import { motionOn } from './tabs/tabStyles'
 import {
@@ -32,6 +35,7 @@ import {
   pinnedPathSet,
   pinnedRoots,
   sortArchived,
+  splitMoved,
   withoutArchived,
   withoutPinned,
   type ArchiveSort
@@ -244,11 +248,9 @@ function SortMenu({
 const SECTION_TEXT = 'text-[11px] font-semibold uppercase tracking-wider text-ink-400'
 const SECTION_HEAD = 'px-3 pb-1 pt-1 ' + SECTION_TEXT
 
-/** How long a drag has to sit over an inactive space tab before it opens, the
- *  same "hold over a folder to open it" gesture an OS file manager uses.
- *  Long enough that passing over a tab on the way to the bin/archive doesn't
- *  switch spaces by accident; short enough not to feel unresponsive. */
-const SPACE_HOVER_OPEN_MS = 600
+/** How long a drag has to sit over an inactive space tab before it opens —
+ *  the same number a closed folder and a tab use (dragHold.ts). */
+const SPACE_HOVER_OPEN_MS = HOLD_TO_OPEN_MS
 
 /** True only when the pointer has genuinely left `currentTarget`, rather than
  *  merely crossed onto something nested inside it.
@@ -398,6 +400,54 @@ export function Sidebar({
   // timer id lives in a ref (it's fired imperatively, not read by render).
   const [armingSpace, setArmingSpace] = useState<string | null>(null)
   const spaceHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // What a drop on a space button, the bin or the archive does — one copy each,
+  // used by the drop itself and by a drop Chromium loses (dragLeaveGuard.ts).
+  const dropOnSpace = (carry: string[], folder: string, on: boolean): void => {
+    clearSpaceHover()
+    // At the top of that space, as the space buttons' comment says — for the
+    // space you're in too, which put it at the bottom until 2026-11-19.
+    const top = on ? splitMoved(shownTree, workspace, space.freeArrange).rest[0] : undefined
+    actions.onMove(carry, folder, top ? top.path : null, false, on) // into this space's list: a pinned note unpins
+    if (!on) onSwitchSpace(folder)
+    setDragging(null)
+    clearSel()
+  }
+  const dropInBin = (carry: string[] | null): void => {
+    if (carry) {
+      actions.onTrash(carry)
+      flipLid()
+      clearSel()
+    }
+    setDragging(null)
+    setDropZone(null)
+  }
+  const dropInArchive = (carry: string[] | null): void => {
+    if (carry && !inArchive) {
+      actions.onArchive(carry)
+      flipArchiveLid()
+      clearSel()
+    }
+    setDragging(null)
+    setDropZone(null)
+  }
+
+  // Pinned as a drop target (the section's handlers, below).
+  const [pinLit, setPinLit] = useState(false)
+  const pinBox = useRef<HTMLDivElement | null>(null)
+  useClearWhenPointerLeaves(pinLit, pinBox, () => setPinLit(false))
+  useEffect(() => {
+    if (!dragging) setPinLit(false)
+  }, [dragging])
+  /** Something in it isn't pinned yet. Dragging what is all pinned already over Pinned is
+   *  rearranging nothing — no light, no drop. */
+  const canPin = (carry: string[]): boolean => carry.some((p) => !workspace.entries[p]?.pinned)
+  const pinDropped = (carry: string[]): void => {
+    actions.onTogglePin(carry.filter((p) => !workspace.entries[p]?.pinned), true)
+    setPinLit(false)
+    setDragging(null)
+    clearSel()
+  }
+
   const clearSpaceHover = (): void => {
     if (spaceHoverTimer.current) {
       clearTimeout(spaceHoverTimer.current)
@@ -917,18 +967,49 @@ export function Sidebar({
           // target at all. Any row or TreeView background that already claimed
           // the drag calls stopPropagation in its own onDrop, so this only fires
           // when nothing more specific did — i.e. genuinely empty space. Drops
-          // land in the active space's root, same as dragging above the first row.
+          // land at the bottom of the active space's list, and a line under the
+          // list says so (2026-11-18). The strip ABOVE the notes list takes no
+          // drop: overshooting the top used to send a note to the bottom.
           onDragOver={(e) => {
             if (inBin || searching || !dragging) return
             if (dragging.some((p) => activeSpaceFolder === p || activeSpaceFolder.startsWith(p + '/')))
               return
+            const list = listRef.current?.querySelector<HTMLElement>('[data-tree-mode="tree"]')
+            if (list && e.clientY < list.getBoundingClientRect().bottom) {
+              clearEndLine()
+              withdrawDrop(e.currentTarget)
+              return
+            }
             e.preventDefault()
             e.dataTransfer.dropEffect = 'move'
+            list?.classList.add('tree-drop-end')
+            const carry = dragging
+            offerDrop(e.currentTarget, () => {
+              actions.onMove(carry, activeSpaceFolder, null, false, true)
+              clearSel()
+            })
+          }}
+          onDragLeave={(e) => {
+            // Left the pane (onto the bin/archive bar, a note): judged by what is
+            // under the pointer now — a drag event may carry no relatedTarget.
+            if (e.clientX === 0 && e.clientY === 0) return // a leave with no position
+            const under = document.elementFromPoint(e.clientX, e.clientY)
+            if (!under || !e.currentTarget.contains(under)) {
+              clearEndLine()
+              withdrawDrop(e.currentTarget)
+            }
           }}
           onDrop={(e) => {
             if (inBin || searching || !dragging) return
+            clearEndLine()
             e.preventDefault()
-            actions.onMove(dragging, activeSpaceFolder, null, false)
+            // Same rule as onDragOver: only below the notes list.
+            const list = listRef.current?.querySelector<HTMLElement>('[data-tree-mode="tree"]')
+            if (list && e.clientY < list.getBoundingClientRect().bottom) {
+              setDragging(null)
+              return
+            }
+            actions.onMove(dragging, activeSpaceFolder, null, false, true)
             setDragging(null)
             clearSel()
           }}
@@ -1070,7 +1151,37 @@ export function Sidebar({
                 </div>
               )}
               {pinned.length > 0 && (
-                <div className="mb-2">
+                <div
+                  ref={pinBox}
+                  className={'pin-zone mb-2' + (pinLit ? ' pin-lit' : '')}
+                  // Drag a note or folder onto Pinned — its heading, a pinned note, a gap —
+                  // and it is pinned (Reuben, 2026-11-19). A pinned FOLDER still takes it
+                  // inside: its row lights and stops the event, so this side only hears what
+                  // the rows let through. Capture first, so a pinned folder's light turns
+                  // this one off.
+                  onDragOverCapture={() => setPinLit(false)}
+                  onDragOver={(e) => {
+                    const carry = dragging
+                    if (!carry || !canPin(carry)) return
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = 'move'
+                    clearEndLine()
+                    setPinLit(true)
+                    offerDrop(e.currentTarget, () => pinDropped(carry))
+                  }}
+                  onDragLeave={(e) => {
+                    if (stillInside(e)) return
+                    setPinLit(false)
+                    withdrawDrop(e.currentTarget)
+                  }}
+                  onDrop={(e) => {
+                    const carry = dragging
+                    if (!carry || !canPin(carry)) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    pinDropped(carry)
+                  }}
+                >
                   <p className={'flex items-center gap-1.5 ' + SECTION_HEAD}>
                     <span className="text-brand-500">
                       <Icon name="starFilled" className="h-3.5 w-3.5" />
@@ -1228,13 +1339,18 @@ export function Sidebar({
                   // instead — the same "hover a folder to open it" gesture as
                   // an OS file manager — so a subfolder inside it can be the
                   // drop target instead. The active tab is already open, so
-                  // it only ever accepts a drop, never arms a timer.
+                  // it lights up the same but never arms a timer (until
+                  // 2026-11-19 it took the drop without lighting up at all).
                   onDragOver={(e) => {
                     if (!dragging) return
                     e.preventDefault()
                     e.dataTransfer.dropEffect = 'move'
-                    if (on || armingSpace === s.folder) return
+                    const carry = dragging
+                    const el = e.currentTarget
+                    offerDrop(el, () => dropOnSpace(carry, s.folder, on))
+                    if (armingSpace === s.folder) return
                     setArmingSpace(s.folder)
+                    if (on) return
                     if (spaceHoverTimer.current) clearTimeout(spaceHoverTimer.current)
                     spaceHoverTimer.current = setTimeout(() => {
                       spaceHoverTimer.current = null
@@ -1244,17 +1360,14 @@ export function Sidebar({
                   }}
                   onDragLeave={(e) => {
                     if (stillInside(e)) return // crossed onto the numbered badge, not out
+                    withdrawDrop(e.currentTarget)
                     if (armingSpace === s.folder) clearSpaceHover()
                   }}
                   onDrop={(e) => {
                     if (!dragging) return
                     e.preventDefault()
                     e.stopPropagation()
-                    clearSpaceHover()
-                    actions.onMove(dragging, s.folder, null, false)
-                    if (!on) onSwitchSpace(s.folder)
-                    setDragging(null)
-                    clearSel()
+                    dropOnSpace(dragging, s.folder, on)
                   }}
                   onContextMenu={(e) => {
                     // The vault-fallback space (folder === '') has nothing to
@@ -1270,7 +1383,7 @@ export function Sidebar({
                     // btn-edge only on the inactive ones: the selected space
                     // keeps its accent border, which is how you can see which
                     // space you're in
-                    (on
+                    (on && !arming
                       ? 'border-accent-400/60 bg-accent-500/15 text-accent-600'
                       : arming
                         ? 'scale-105 border-accent-400/70 bg-accent-500/20 text-accent-600 ring-2 ring-accent-400/50'
@@ -1409,20 +1522,17 @@ export function Sidebar({
             if (!dragging) return
             e.preventDefault()
             setDropZone('trash')
+            const carry = dragging
+            offerDrop(e.currentTarget, () => dropInBin(carry))
           }}
           onDragLeave={(e) => {
             if (stillInside(e)) return // the lid icon / count badge, not a real leave
+            withdrawDrop(e.currentTarget)
             setDropZone((z) => (z === 'trash' ? null : z))
           }}
           onDrop={(e) => {
             e.preventDefault()
-            if (dragging) {
-              actions.onTrash(dragging)
-              flipLid()
-              clearSel()
-            }
-            setDragging(null)
-            setDropZone(null)
+            dropInBin(dragging)
           }}
           data-tip={inBin ? 'Back to your notes' : 'Bin — deleted notes wait here'}
           aria-pressed={inBin}
@@ -1466,20 +1576,17 @@ export function Sidebar({
             if (!dragging || inArchive) return
             e.preventDefault()
             setDropZone('archive')
+            const carry = dragging
+            offerDrop(e.currentTarget, () => dropInArchive(carry))
           }}
           onDragLeave={(e) => {
             if (stillInside(e)) return // same nested-child bubble as the bin above
+            withdrawDrop(e.currentTarget)
             setDropZone((z) => (z === 'archive' ? null : z))
           }}
           onDrop={(e) => {
             e.preventDefault()
-            if (dragging && !inArchive) {
-              actions.onArchive(dragging)
-              flipArchiveLid()
-              clearSel()
-            }
-            setDragging(null)
-            setDropZone(null)
+            dropInArchive(dragging)
           }}
           data-tip={inArchive ? 'Back to your notes' : 'Archive — notes you have put away'}
           aria-pressed={inArchive}

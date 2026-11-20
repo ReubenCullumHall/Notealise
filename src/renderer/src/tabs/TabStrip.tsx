@@ -18,6 +18,8 @@ import {
 import type { Drag } from './NotePane'
 import { takeStripChanges } from './stripMotion'
 import { DRAG_FROM_STRIP } from './island'
+import { landMissedDrop, offerDrop, useClearWhenPointerLeaves, withdrawDrop } from '../dragLeaveGuard'
+import { HOLD_TO_OPEN_MS } from '../dragHold'
 
 interface Props {
   /** open notes in strip order (vault-relative paths) */
@@ -668,17 +670,74 @@ export function TabStrip({
     setSwapOn(null)
   }
 
+  // --- a file from outside held over a tab (see `over`) ---
+  const [holdOn, setHoldOn] = useState<string | null>(null)
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // A drag from outside can leave with nothing said to this window (Escape, back to Finder):
+  // dragovers keep coming while it is over a tab, even held still (the HTML rules say at least
+  // every 350 ms ± 200), so when none has come for a second, it has gone. Longer than the hold,
+  // so a still pointer still opens the tab.
+  const holdIdle = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stopHold = (): void => {
+    if (holdTimer.current) clearTimeout(holdTimer.current)
+    if (holdIdle.current) clearTimeout(holdIdle.current)
+    holdTimer.current = holdIdle.current = null
+    setHoldOn(null)
+  }
+  const holdFile = (path: string): void => {
+    if (holdIdle.current) clearTimeout(holdIdle.current)
+    holdIdle.current = setTimeout(stopHold, 1000)
+    if (path === active || path === BLANK) {
+      if (holdOn) stopHold()
+      return
+    }
+    if (holdOn === path) return
+    if (holdTimer.current) clearTimeout(holdTimer.current)
+    setHoldOn(path)
+    holdTimer.current = setTimeout(() => {
+      holdTimer.current = null
+      setHoldOn(null)
+      onSelect(path)
+    }, HOLD_TO_OPEN_MS)
+  }
+  useEffect(() => () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current)
+    if (holdIdle.current) clearTimeout(holdIdle.current)
+  }, [])
+  /** The tab a held file is about to bring to the front: the accent edge the drops use. */
+  const holdMark = (path: string, round: string): React.JSX.Element | null =>
+    holdOn === path ? (
+      <span aria-hidden="true" className={'pointer-events-none absolute inset-0 border-2 border-brand-400 bg-brand-500/20 ' + round} />
+    ) : null
+
   const over = (e: React.DragEvent, path: string | null): void => {
     // A column being dragged is rearranging the SPLIT, not the strip; the panes
     // handle that drop, and the strip stays out of it.
-    if (dragging?.kind !== 'tab' && !groupDrag) return
+    if (dragging?.kind !== 'tab' && !groupDrag) {
+      // A file from outside (Finder) held over a tab: that note comes to the front, so the
+      // file can be dropped into it (Reuben, 2026-11-19). The tab itself takes no drop.
+      if (path && e.dataTransfer.types.includes('Files')) {
+        e.stopPropagation()
+        holdFile(path)
+      } else if (holdOn) stopHold()
+      return
+    }
     e.preventDefault()
     e.stopPropagation()
     e.dataTransfer.dropEffect = 'move'
     if (path === null) {
-      setBefore(null)
+      // Between tabs, or beside them: the bar goes in the gap nearest the
+      // pointer — the next tab whose middle is still to the right — not at the
+      // far end of the strip, which is where every gap used to send it
+      // (2026-11-19).
+      const next = [...(strip.current?.querySelectorAll<HTMLElement>(':scope > [data-strip-item]') ?? [])].find((el) => {
+        const r = el.getBoundingClientRect()
+        return e.clientX < r.left + r.width / 2
+      })
+      const at = next ? (next.dataset.stripItem ?? null) : null
       setSplitOn(null)
       setSwapOn(null)
+      setBefore(groupDrag && at !== null && groupDrag.includes(at) ? undefined : at)
       return
     }
     // A piece of a joined tab over another piece of the SAME joined tab: this is
@@ -725,9 +784,30 @@ export function TabStrip({
     setBefore(x > 0.5 ? (tabs[at + 1] ?? null) : path)
   }
 
+  // What the strip is showing right now. A drop uses this — the bar or
+  // highlight you can see — and a drop Chromium loses (no `drop` after the last
+  // dragover redrew the strip) does the same instead of snapping back
+  // (dragLeaveGuard.ts, 2026-11-19).
+  const lit = before !== undefined || splitOn !== null || swapOn !== null
+  useClearWhenPointerLeaves(lit, strip, clear)
+  const shown = useRef({ before, splitOn, swapOn, groupDrag, dragging })
+  shown.current = { before, splitOn, swapOn, groupDrag, dragging }
+  useEffect(() => {
+    if (lit) offerDrop(strip.current, apply)
+    else withdrawDrop(strip.current)
+  })
+  const lostDrop = (e: React.DragEvent): void => {
+    landMissedDrop(e)
+  }
+
   const drop = (e: React.DragEvent): void => {
     e.preventDefault()
     e.stopPropagation()
+    apply()
+  }
+  /** Do what the strip is showing: swap, split, or move to the bar. */
+  const apply = (): void => {
+    const { before, splitOn, swapOn, groupDrag, dragging } = shown.current
     if (groupDrag) {
       if (before !== undefined) onMoveGroup(before, groupDrag)
     } else if (dragging?.kind === 'tab') {
@@ -745,9 +825,19 @@ export function TabStrip({
     setGroupDrag(null)
   }
 
-  const marker = (path: string | null): React.JSX.Element | null =>
+  /** The bar a drop lands at. Drawn ON TOP of the gap, not as a strip item:
+   *  as an item it pushed every later tab 8px aside the moment it appeared, so
+   *  a pointer near a tab's middle flipped halves and the bar blinked
+   *  (2026-11-19). `end` = the gap after the last tab. */
+  const marker = (path: string | null, end = false): React.JSX.Element | null =>
     (dragging?.kind === 'tab' || groupDrag) && before === path ? (
-      <span className="mx-px h-6 w-0.5 shrink-0 rounded-full bg-brand-400" aria-hidden="true" />
+      <span
+        className={
+          'pointer-events-none absolute top-1/2 z-10 h-6 w-0.5 -translate-y-1/2 rounded-full bg-brand-400 ' +
+          (end ? '-right-[3px]' : '-left-[3px]')
+        }
+        aria-hidden="true"
+      />
     ) : null
 
   /** The shared bits of a clickable name — a lone tab and a group segment do
@@ -797,7 +887,8 @@ export function TabStrip({
       e.dataTransfer.setData(DRAG_FROM_STRIP, '1')
       onDragTab(path)
     },
-    onDragEnd: () => {
+    onDragEnd: (e) => {
+      lostDrop(e)
       onDragTab(null)
       clear()
     },
@@ -821,8 +912,21 @@ export function TabStrip({
       role="tablist"
       aria-label="Open notes"
       onDragOver={(e) => over(e, null)}
+      // Over the island (inside the strip, with its own drop): the strip's bar
+      // goes, so only the island's shows — two would point at two places.
+      onDragOverCapture={(e) => {
+        if ((e.target as Element).closest?.('[data-island]')) clear()
+      }}
       onDrop={drop}
-      onDragLeave={clear}
+      onDragLeave={(e) => {
+        // Only a real leave clears the bar. Crossing onto anything INSIDE a tab
+        // (its name, its x) fires a dragleave too, and clearing on that blinked
+        // the bar off for a frame at every such edge (2026-11-19). (0, 0) is a
+        // leave with no position at all.
+        if (e.clientX === 0 && e.clientY === 0) return
+        const r = e.currentTarget.getBoundingClientRect()
+        if (e.clientX <= r.left || e.clientX >= r.right || e.clientY <= r.top || e.clientY >= r.bottom) clear()
+      }}
     >
       {island}
       {/* The island and the open tabs are two different questions — what you
@@ -836,13 +940,14 @@ export function TabStrip({
         <span data-strip-divider className="mx-1 h-5 w-px shrink-0 bg-ink-300/25" aria-hidden="true" />
       )}
 
-      {items.map((item) =>
+      {items.map((item, gi) =>
         item.length > 1 ? (
           // --- a joined tab: the split on screen, in screen order, or a parked
           // one waiting to be gone back to. Only the one on screen wears the
           // accent edge; a parked one has an ordinary tab's hairline.
-          <div key={'group:' + item.join('|')} className="flex shrink-0 items-center">
+          <div key={'group:' + item.join('|')} data-strip-item={item[0]} className="relative flex shrink-0 items-center">
             {marker(item[0])}
+            {gi === items.length - 1 && marker(null, true)}
             <div
               className={
                 TAB_BASE.replace('pl-3 pr-1', 'gap-0.5 px-1') +
@@ -864,7 +969,8 @@ export function TabStrip({
                   e.dataTransfer.setData('application/x-notes-tabgroup', '1')
                   setGroupDrag(item)
                 }}
-                onDragEnd={() => {
+                onDragEnd={(e) => {
+                  lostDrop(e)
                   setGroupDrag(null)
                   clear()
                 }}
@@ -906,6 +1012,7 @@ export function TabStrip({
                     {/* What a drop here would do, drawn on the piece itself:
                         it swaps places with the piece being dragged. The same
                         accent edge the lone tab and the panes use. */}
+                    {holdMark(path, 'rounded-md')}
                     {swapOn === path && (
                       <span
                         aria-hidden="true"
@@ -933,8 +1040,9 @@ export function TabStrip({
           </div>
         ) : (
           // --- an ordinary tab: open, but not on screen
-          <div key={item[0] || 'blank'} data-tab-key={item[0] || 'blank'} className="flex shrink-0 items-center">
+          <div key={item[0] || 'blank'} data-tab-key={item[0] || 'blank'} data-strip-item={item[0]} className="relative flex shrink-0 items-center">
             {marker(item[0])}
+            {gi === items.length - 1 && marker(null, true)}
             <div
               role="tab"
               tabIndex={0}
@@ -962,6 +1070,7 @@ export function TabStrip({
                   panes use for their own drop zones (NotePane's `zoneBox`) —
                   on the dark themes a wash alone is very nearly invisible, so
                   the border is what reads. */}
+              {holdMark(item[0], 'rounded-lg')}
               {splitOn === item[0] && (
                 <span
                   aria-hidden="true"
@@ -974,7 +1083,7 @@ export function TabStrip({
           </div>
         )
       )}
-      {marker(null)}
+      {items.length === 0 && marker(null)}
       {/* An empty strip has to be exactly as tall as a full one, or opening the
           first note shifts the page down — the thing reserving the space was
           meant to prevent. Held open by a real tab that happens to be invisible,

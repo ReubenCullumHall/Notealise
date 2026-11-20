@@ -9,13 +9,15 @@ import { SaveAs, type SaveAsMode } from './print/SaveAs'
 import { clearAssetCaches } from './editor/assetCache'
 import { forgetChanged } from './searchCache'
 import { checkMainIsCurrent } from './boot'
-import { encodeTarget, indexEmbeds, kindForFilename, repointFileLinks, resolveVaultPath } from '../../shared/attachments'
+import { encodeTarget, indexEmbeds, isDocFilename, kindForFilename, repointFileLinks, resolveVaultPath } from '../../shared/attachments'
 import { mediaUsage, otherNotesUsing } from './media/usage'
 import type { SectionId } from './settings/Settings'
 import { FormatToolbar } from './editor/FormatToolbar'
 import { NotePane, ROW_CLASS, type Drag } from './tabs/NotePane'
 import { PaneDivider } from './tabs/PaneDivider'
-import { markCreated, markDeleted } from './organise/arrivals'
+import { markCreated, markDeleted, markDropped } from './organise/arrivals'
+import { appendBlock } from './organise/blockDrop'
+import { offerDrop } from './dragLeaveGuard'
 import { PRACTICE_HEAD, PRACTICE_TITLE } from './settings/tutorials/tryIt'
 import { focusNoteEnd } from './editor/viewRegistry'
 import { addRecovered, flushRecordings, recordingsPending, voiceNoteMoved } from './editor/voiceRecorder'
@@ -1684,6 +1686,7 @@ export default function App(): React.JSX.Element {
         setMediaConfirm(req)
       },
       binPickedMedia: (req) => binPickedMediaRef.current(req),
+      moveToNote: (from, to, text, putBack) => moveToNoteRef.current(from, to, text, putBack),
       readNote: async (p) => docsRef.current.get(p) ?? (await window.api.readNote(p)),
       menu: (x, y, items, heading) =>
         setMenu({
@@ -1816,6 +1819,49 @@ export default function App(): React.JSX.Element {
    *  pictures and videos go to the bin in one move, under the same rule as one — a file another
    *  note, or this one, still uses stays. One notice; Undo puts the blocks and the files back
    *  (Reuben, 2026-11-07). No dialog: it would have to be one per file. */
+  /** A block dropped on a note in the sidebar (LinkHandlers.moveToNote): it goes on the end of
+   *  that note, after an empty line, and a notice offers Undo (Reuben, 2026-11-19). An OPEN note
+   *  takes it through the typing path, so its editor shows it and the autosave writes it; a
+   *  closed one is read and written here — writing disk under an open editor would be undone by
+   *  that editor's next save (the same rule as `followRename`). */
+  const moveToNoteRef = useRef<(from: string, to: string, text: string, putBack: () => boolean) => void>(() => {})
+  moveToNoteRef.current = (from, to, block, putBack) => {
+    const setText = async (path: string, next: string): Promise<void> => {
+      if (docsRef.current.has(path)) {
+        docsRef.current.set(path, next)
+        setVersions((v) => ({ ...v, [path]: (v[path] ?? 0) + 1 }))
+        onDocChange(path, next)
+      } else await window.api.writeNote(path, next)
+    }
+    const readText = async (path: string): Promise<string> => docsRef.current.get(path) ?? (await window.api.readNote(path))
+    void run(async () => {
+      let before: string
+      try {
+        before = await readText(to)
+      } catch (e) {
+        // The note has gone (binned, renamed outside): the block goes back where it was.
+        putBack()
+        throw e
+      }
+      const after = appendBlock(before, block)
+      await setText(to, after)
+      void rescanLinks([to, from])
+      showNotice({
+        text: `Moved to “${titleOf(to)}”.`,
+        action: {
+          label: 'Undo',
+          run: () =>
+            void run(async () => {
+              // All or nothing: only when neither note has been changed since.
+              if ((await readText(to)) !== after) throw new Error(`“${titleOf(to)}” has changed since, so the move was left as it is.`)
+              if (!putBack()) throw new Error(`“${titleOf(from)}” has changed since, so the move was left as it is.`)
+              await setText(to, before)
+              void rescanLinks([to, from])
+            })
+        }
+      })
+    })
+  }
   const binPickedMediaRef = useRef<(req: PickedMediaDelete) => void>(() => {})
   binPickedMediaRef.current = (req) => {
     const text = docsRef.current.get(req.note)
@@ -2960,7 +3006,7 @@ export default function App(): React.JSX.Element {
    *  until the user files them properly. An ordinary same-space move — a
    *  reorder, or dragging one of those moved items into its final spot —
    *  clears the flag: that action IS "sorting it into what's next". */
-  const move = (paths: string[], toDir: string, anchor: string | null, after: boolean): void =>
+  const move = (paths: string[], toDir: string, anchor: string | null, after: boolean, unpin = false): void =>
     void run(async () => {
       // The archive is a place of its own here: dragging something out of it
       // onto a space's tab is a crossing like any other.
@@ -2968,6 +3014,10 @@ export default function App(): React.JSX.Element {
       const toSpace = spaceFolderOf(toDir, places)
 
       const landed: string[] = []
+      // What went into ANOTHER folder, and how each one was filed before — what the notice's
+      // Undo puts back (Reuben, 2026-11-19). A reorder inside one folder isn't in it.
+      const wsBefore = await window.api.getWorkspace()
+      const shifted: { from: string; to: string }[] = []
       // Which of the landed entries genuinely arrived from ANOTHER space,
       // tracked per item rather than as one flag for the whole batch. A mixed
       // multi-select — one note already living in the destination folder,
@@ -3005,6 +3055,9 @@ export default function App(): React.JSX.Element {
             spaceFolderOf(p, places) !== toSpace
         )
       )
+      // A drop inside this place: its old spot shrinks shut once it has moved
+      // (TreeView), and it bounces in at the new one (marked created below).
+      markDropped(paths.filter((p) => spaceFolderOf(p, places) === toSpace))
       for (const from of paths) {
         if (toDir === from || toDir.startsWith(from + '/')) continue // into self/descendant
         const crossed = spaceFolderOf(from, places) !== toSpace
@@ -3021,6 +3074,7 @@ export default function App(): React.JSX.Element {
         await followMove(from, actual)
         await followRename(from, actual) // `[[Folder/Note]]` links follow it too
         landed.push(actual)
+        shifted.push({ from, to: actual })
         if (crossed) arrived.push(actual)
       }
       // The blind-drop positioning below is still decided for the drag as a
@@ -3037,7 +3091,12 @@ export default function App(): React.JSX.Element {
       const siblings =
         toDir === '' ? fresh : (findNode(fresh, toDir)?.children ?? [])
       const ws = await window.api.getWorkspace()
-      const ordered = sortSiblings(siblings, ws, false).map((n) => n.path)
+      // In the order the sidebar SHOWS it — the destination space's own "Mix notes
+      // and folders freely". Always folders-first here pushed every folder above the
+      // notes on each drop in a mixed list, so a note dragged to the top landed
+      // under them (Reuben, 2026-11-18).
+      const mixed = places.find((s) => s.folder === toSpace)?.freeArrange ?? false
+      const ordered = sortSiblings(siblings, ws, mixed).map((n) => n.path)
       const moved = new Set(landed)
       const rest = ordered.filter((p) => !moved.has(p))
       let at = rest.length
@@ -3046,6 +3105,9 @@ export default function App(): React.JSX.Element {
       } else if (anchor) {
         const i = rest.indexOf(anchor)
         if (i >= 0) at = after ? i + 1 : i
+        // The line was on a row being dragged (let go over itself): it stays put,
+        // instead of going to the bottom of the list.
+        else if (moved.has(anchor)) at = ordered.slice(0, ordered.indexOf(anchor)).filter((p) => !moved.has(p)).length
       }
       const next = [...rest.slice(0, at), ...landed.filter((p) => ordered.includes(p)), ...rest.slice(at)]
       let nextWs = await window.api.reorderEntries(next)
@@ -3066,7 +3128,123 @@ export default function App(): React.JSX.Element {
       // archived, so it forgets where it was archived from.
       const left = landed.filter((p) => !inArchiveFolder(p) && ws.entries[p]?.archivedFrom !== undefined)
       if (left.length) nextWs = await window.api.updateEntries(left, { archivedFrom: undefined, archivedAt: undefined })
+      // Dragged out of Pinned into the main list: it leaves Pinned and shows at
+      // the line it was dropped on (Reuben, 2026-11-19) — it used to stay up in
+      // Pinned, so the drop seemed to do nothing.
+      const unpinned = unpin ? landed.filter((p) => nextWs.entries[p]?.pinned) : []
+      if (unpinned.length) nextWs = await window.api.updateEntries(unpinned, { pinned: false })
+      // Bounce in at the new spot — only what really moved (a drop back onto its
+      // own spot stays still). Marked now, just before the render that puts it there.
+      for (const p of landed) {
+        if (arrived.includes(p)) continue // already marked, crossing in
+        if (!paths.includes(p) || ordered.indexOf(p) !== next.indexOf(p) || unpinned.includes(p)) markCreated(p)
+      }
       setWorkspace(nextWs)
+      if (!shifted.length) return
+      const one = shifted.length === 1 ? shifted[0] : null
+      const where = toDir ? nameOf(toDir) : 'your vault'
+      showNotice({
+        text: one ? `Moved “${stripMd(nameOf(one.to))}” to ${where}.` : `Moved ${shifted.length} items to ${where}.`,
+        action: { label: 'Undo', run: () => undoMove(shifted, wsBefore) }
+      })
+    })
+
+  /** The Undo on "Moved … to …": each thing goes back into the folder it came from, and back
+   *  where it sat there — its place in the list, pinned or not, "Moved" or not, as it was before
+   *  the drag. Links follow it back the way they followed it there. */
+  const undoMove = (shifted: { from: string; to: string }[], wsBefore: Workspace): void =>
+    void run(async () => {
+      const places = [...settingsRef.current.spaces, settingsRef.current.archive]
+      const here = settingsRef.current.activeSpaceFolder
+      // All or nothing, as the move was: if a name has been taken back there since, nothing moves.
+      {
+        const now = noteRefs(await window.api.listTree()).map((n) => n.path.toLowerCase())
+        const going = new Set(shifted.map((m) => m.to.toLowerCase()))
+        const taken = shifted.find((m) => now.includes(m.from.toLowerCase()) && !going.has(m.from.toLowerCase()))
+        if (taken) throw new Error(`Something called “${stripMd(nameOf(taken.from))}” is back in that folder, so nothing was moved back.`)
+      }
+      const back: { from: string; actual: string }[] = []
+      // Leaving the place you're looking at shrinks away; arriving grows in — as the move did.
+      markDeleted(shifted.filter((m) => spaceFolderOf(m.to, places) !== spaceFolderOf(m.from, places)).map((m) => m.to))
+      for (const { from, to } of [...shifted].reverse()) {
+        const actual = await window.api.renameEntry(to, from)
+        remapOpen(to, actual)
+        await followMove(to, actual)
+        await followRename(to, actual)
+        back.push({ from, actual })
+      }
+      let ws = await window.api.getWorkspace()
+      for (const { from, actual } of back) {
+        const was = wsBefore.entries[from]
+        ws = await window.api.updateEntry(actual, {
+          order: was?.order,
+          pinned: was?.pinned,
+          movedAt: was?.movedAt,
+          archivedFrom: was?.archivedFrom,
+          archivedAt: was?.archivedAt
+        })
+        if (spaceFolderOf(actual, places) === here || !spaceFolderOf(actual, places)) markCreated(actual)
+      }
+      setTree(await window.api.listTree())
+      setWorkspace(ws)
+    })
+
+  /** Files dragged in from Finder or Explorer and let go on the sidebar list (TreeView): copied
+   *  into `toDir` (Reuben, 2026-11-19). A Markdown file becomes a note there, at the line; a
+   *  picture, video, recording or document is copied in beside the notes, as a paste would. The
+   *  originals are left where they were. Pictures a Markdown file points at don't come with it —
+   *  that is what Import is for. */
+  const dropFiles = (files: File[], toDir: string, anchor: string | null, after: boolean, folders: string[] = []): void =>
+    void run(async () => {
+      const made: string[] = []
+      // What came in, by the name it has now, for the notice.
+      const names: string[] = []
+      const left: string[] = []
+      for (const file of files) {
+        const name = file.name
+        if (/\.(md|markdown)$/i.test(name)) {
+          // One line ending and no byte-order mark, the way the app writes a note it made.
+          const text = (await file.text()).replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n')
+          const path = await window.api.createNote(toDir, name.replace(/\.(md|markdown)$/i, ''))
+          await window.api.writeNote(path, text)
+          made.push(path)
+          names.push(stripMd(nameOf(path)))
+        } else if (kindForFilename(name) || isDocFilename(name)) {
+          const path = await window.api.writeAsset(toDir, name, new Uint8Array(await file.arrayBuffer()))
+          names.push(nameOf(path))
+        } else left.push(name)
+      }
+      const fresh = await window.api.listTree()
+      setTree(fresh)
+      if (made.length) {
+        // At the line, the way a dragged note lands (`move`).
+        const places = [...settingsRef.current.spaces, settingsRef.current.archive]
+        const mixed = places.find((sp) => sp.folder === spaceFolderOf(toDir, places))?.freeArrange ?? false
+        const siblings = toDir === '' ? fresh : (findNode(fresh, toDir)?.children ?? [])
+        const ws = await window.api.getWorkspace()
+        const rest = sortSiblings(siblings, ws, mixed).map((n) => n.path).filter((p) => !made.includes(p))
+        let at = rest.length
+        if (anchor) {
+          const i = rest.indexOf(anchor)
+          if (i >= 0) at = after ? i + 1 : i
+        }
+        for (const p of made) markCreated(p)
+        setWorkspace(await window.api.reorderEntries([...rest.slice(0, at), ...made, ...rest.slice(at)]))
+        void rescanLinks(made)
+      }
+      const where = toDir ? nameOf(toDir) : 'your vault'
+      const done =
+        names.length === 0 ? '' : names.length === 1 ? `Copied “${names[0]}” into ${where}.` : `Copied ${names.length} files into ${where}.`
+      const skipped = left.length
+        ? left.length === 1
+          ? `“${left[0]}” isn't a note, picture, video, recording or document, so it was left out.`
+          : `${left.length} files aren't notes, pictures, videos, recordings or documents, so they were left out.`
+        : ''
+      const folder = folders.length
+        ? `${folders.length === 1 ? `“${folders[0]}” is a folder` : `${folders.length} of those are folders`} — File → Import notes… brings in a whole folder.`
+        : ''
+      const text = [done, skipped, folder].filter(Boolean).join(' ')
+      if (text) showNotice({ text, linger: !!(skipped || folder) })
     })
 
   const togglePin = (paths: string[], pinned: boolean): void =>
@@ -3419,7 +3597,11 @@ export default function App(): React.JSX.Element {
       if (into !== undefined) {
         const kids = into === '' ? fresh : (findNode(fresh, into)?.children ?? [])
         const arrived = new Set(landed)
-        const rest = sortSiblings(kids, next, false)
+        // As the sidebar shows it (see `move`): folders-first here re-sorted a mixed list.
+        const mixed =
+          settingsRef.current.spaces.find((s) => s.folder === spaceFolderOf(into, settingsRef.current.spaces))
+            ?.freeArrange ?? false
+        const rest = sortSiblings(kids, next, mixed)
           .map((n) => n.path)
           .filter((p) => !arrived.has(p))
         next = await window.api.reorderEntries([...rest, ...landed])
@@ -4709,6 +4891,7 @@ export default function App(): React.JSX.Element {
           onOpen: (p, newTab) => void openNote(p, newTab),
           onContext: openMenu,
           onMove: move,
+          onDropFiles: dropFiles,
           onTogglePin: togglePin,
           onTrash: trash,
           onRestore: (paths) => void putBack(paths),
@@ -4959,6 +5142,12 @@ export default function App(): React.JSX.Element {
                 if (drag?.kind !== 'tab') return
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
+                // A drop Chromium loses here still opens it (dragLeaveGuard.ts).
+                const path = drag.path
+                offerDrop(e.currentTarget, () => {
+                  setDrag(null)
+                  applyLayout(openTab(layoutRef.current, path))
+                })
               }}
               onDrop={(e) => {
                 const d = drag

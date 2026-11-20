@@ -566,7 +566,8 @@ button.icon:hover {
   to { opacity: 1; transform: none; }
 }
 .tree-row.drop-before::before,
-.tree-row.drop-after::after {
+.tree-row.drop-after::after,
+.tree-drop-end::after {
   content: ""; position: absolute; left: 8px; right: 8px; height: 2px;
   background: rgb(var(--ink-800)); border-radius: 2px; pointer-events: none;
   transform-origin: left center;
@@ -574,6 +575,31 @@ button.icon:hover {
 }
 .tree-row.drop-before::before { top: -1px; }
 .tree-row.drop-after::after { bottom: -1px; }
+/* Under the whole notes list: "to the bottom of the list", for a drag held over the
+   empty space below it (set by Sidebar.tsx's list pane, 2026-11-18). */
+.tree-drop-end { position: relative; }
+.tree-drop-end::after { bottom: -1px; }
+/* Text dragged within a note: CodeMirror's drop caret, in the same ink as the
+   sidebar's drop line so every "it lands here" mark in the app reads alike. */
+.cm-dropCursor { border-left: 2px solid rgb(var(--ink-800)) !important; margin-left: -1px; pointer-events: none; }
+/* A picture, video, voice note or document dragged in from outside: it lands on a new
+   line under the block, and this line sits on that edge (attachInput.ts, 2026-11-19).
+   Absolute, so showing it never moves the text. */
+.cm-fileDropLine {
+  position: absolute; height: 2px; margin-top: -1px; z-index: 5;
+  background: rgb(var(--ink-800)); border-radius: 2px; pointer-events: none;
+  transform-origin: left center;
+  animation: line-in 0.16s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+/* …and a faint wash over the whole block it goes under, down to that line, so which block is
+   plain from across the screen (Reuben, 2026-11-19). Also shown for a note's link dropped with
+   Option held. Light enough that the words under it read as they were. */
+.cm-fileDropBand {
+  position: absolute; z-index: 4; pointer-events: none;
+  background: rgb(var(--ink-800) / 0.05);
+  border-radius: var(--r-control);
+  animation: fade-op 0.12s ease-out;
+}
 
 /* onboarding step transitions — a plain crossfade (2026-08-21: replaced an
    earlier horizontal slide, at Reuben's explicit request for something other
@@ -955,6 +981,44 @@ button.icon:hover {
   outline: 2px solid rgb(var(--wash) / 0.3);
   outline-offset: -2px;
   transform: scale(1.012);
+}
+
+/* Pinned, lit as a drop target: a note dragged onto it is pinned (Sidebar.tsx). The same wash
+   and edge as a folder taking a drop, round the whole section — no scale, it is a big box. */
+.pin-zone {
+  border-radius: var(--r-surface);
+  transition: background-color 0.12s ease, outline-color 0.12s ease;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+}
+.pin-zone.pin-lit {
+  background: rgb(var(--wash) / 0.09);
+  outline-color: rgb(var(--wash) / 0.3);
+}
+
+/* "3 notes" beside the pointer while several sidebar rows are dragged (TreeView.tsx
+   startDrag). The browser takes a picture of this once, so it is drawn off-screen and solid —
+   no blur, which a picture can't carry — on the hover label's plaque (Tooltip.tsx). The
+   transparent top-left padding puts the plate just below and right of the pointer. */
+.drag-count {
+  position: fixed;
+  top: -200px;
+  left: 0;
+  padding: 14px 0 0 16px;
+  pointer-events: none;
+}
+.drag-count > span {
+  display: inline-block;
+  border: 1px solid rgb(var(--ink-300) / 0.3);
+  border-radius: var(--r-control);
+  background: rgb(var(--surface));
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: rgb(var(--ink-700));
+  white-space: nowrap;
 }
 
 /* Sidebar collapse + resize, under live evaluation (Sidebar.tsx) — not yet
