@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seamless importing — Notealise</title>
+<style>
+  :root { --ink:#1c1b19; --soft:#5d5a55; --line:#e4e1db; --paper:#faf9f7; --card:#fff; --seen:#1f6f4a; --lead:#9a5b00; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --ink:#eceae6; --soft:#a5a19a; --line:#34322f; --paper:#171614; --card:#1f1e1c; --seen:#6fcf9b; --lead:#e0a64a; --bad:#ff8a80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font:16px/1.55 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 28px 18px 80px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 40px 0 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 22px 0 6px; }
+  p, li { color: var(--ink); } .soft { color: var(--soft); font-size: 14px; }
+  ol, ul { padding-left: 22px; } li { margin: 6px 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+  .tag { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:1px 7px; border-radius:99px; border:1px solid currentColor; margin-right:6px; vertical-align: 2px; }
+  .seen { color: var(--seen); } .lead { color: var(--lead); } .none { color: var(--bad); }
+  code { font: 13px/1.4 ui-monospace, Menlo, monospace; background: rgba(127,127,127,.14); padding: 1px 5px; border-radius: 4px; word-break: break-word; }
+  figure { margin: 14px 0; } figure img { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; display:block; }
+  figcaption { font-size: 13px; color: var(--soft); margin-top: 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; } td, th { border-bottom: 1px solid var(--line); padding: 7px 6px; text-align: left; vertical-align: top; }
+  .ask li { margin: 10px 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Seamless importing — and an easy way out</h1>
+<p class="soft">Started 16 Nov 2026 · Updated 20 Nov · Status: <b>PARKED — "gotta focus on users atm"</b></p>
+<div class="card"><b>Parked, 20 Nov.</b> Your real Notion export first brought in one empty note: it was the "Markdown &amp; CSV" kind, which the app couldn't read. The converter was fixed to read it (68 notes, every picture, both videos, databases as tables, every link working, checked in a test copy), and then you parked importing. The converter is kept on a side shelf in the project, not in the app. The only change in the app: the Notion step now says to export as <b>HTML</b>. You'll test the other importers yourself later.</div>
+
+<div class="card">
+<b>Goal.</b> Moving notes over from another app is the first thing a switcher tries, so it has to feel effortless — and taking notes back out (PDF, web page…) has to be as easy.<br>
+<span class="soft">Done = someone with notes in Notion, Apple Notes, Google Keep, Word, Markdown or web pages gets them in without reading instructions, sees honestly what didn't come across, and can take notes out just as easily.</span>
+</div>
+
+<h2>New · 18 Nov — the converter is in the app</h2>
+<p>Choosing <b>Notion</b> in Settings → Data → Import now uses the new converter. The step's words now say to choose <b>HTML</b> when exporting from Notion.</p>
+<figure><img src="img/built-features.jpg" alt="A Notion page imported by the app"><figcaption>Imported through the app's own Import screen: maths, colours, underline, toggles and ticked tasks.</figcaption></figure>
+<figure><img src="img/built-mitosis.jpg" alt="An imported page linking back to its parent page, with a dotted underline"><figcaption>Links between pages are the app's note links. The dotted line under "Biology" is question 2 below.</figcaption></figure>
+<h3>How much bigger the app gets</h3>
+<table>
+<tr><td>The converter</td><td><b>+9 KB</b></td></tr>
+<tr><td>The libraries it uses</td><td>+0 — already inside the app for Word and web-page imports</td></tr>
+<tr><td>The app as installed on your Mac</td><td>311 MB, so +0.003%</td></tr>
+<tr><td>For comparison: More accurate transcription</td><td>550 MB — that's why it's a download</td></tr>
+</table>
+<h3>What else changed</h3>
+<ul>
+<li>The Import Report now lists what changed shape on each page (callouts, columns, toggle headings, the contents box).</li>
+<li>If one page can't be read the new way, it comes in the old way and the report says so. One odd page no longer stops the import.</li>
+<li>Import speed: the same as before, checked on 1,500 pages.</li>
+</ul>
+<p class="soft">Checked: on a test copy of the app on the Mac with my hand-built Notion export, and every automatic check. Not checked: your real Notion export; Windows.</p>
+
+<h2>New · 17 Nov — can Notion come across properly? Yes.</h2>
+<p>I built a rough Notion converter <b>outside the app</b> and ran it on the test export. Then I opened its notes in a scratch copy of the app. Databases are left as the table Notion drew, as you allowed.</p>
+<figure><img src="img/proto-features.jpg" alt="A converted Notion page in the app: maths, coloured words, toggles and ticked tasks all drawn properly"><figcaption>The same kind of Notion page as below, through the new converter. Maths, coloured and washed words, underline, toggles (open and shut kept), and ticked tasks inside each other.</figcaption></figure>
+<figure><img src="img/proto-biology-lower.jpg" alt="Lower half of a converted page: table, note links, a PDF pill and a YouTube pill"><figcaption>Further down: the table, links to other pages as the app's own note links, the PDF as a file pill, and the Notion bookmark as a YouTube pill. (The dotted line under "Mitosis" is because my test notes folder held an older import of the same page — see the second item under "What it can't do".)</figcaption></figure>
+<table>
+<tr><th>Notion</th><th>Today</th><th>With the converter</th></tr>
+<tr><td>Ticked boxes</td><td>plain bullets</td><td>ticked boxes, kept ticked</td></tr>
+<tr><td>Toggles</td><td>bullets</td><td>the app's toggles, open or shut as left</td></tr>
+<tr><td>Highlights and coloured words</td><td>raw code on the page</td><td>the app's own colours</td></tr>
+<tr><td>Underline</td><td>lost</td><td>underlined</td></tr>
+<tr><td>Maths</td><td><code>E\=mc2E = mc^2…</code></td><td>drawn maths, in the line and in boxes</td></tr>
+<tr><td>Links between pages</td><td>file links, "No links yet"</td><td>the app's note links (they follow renames)</td></tr>
+<tr><td>Bookmarks, YouTube</td><td>a broken link over seven lines</td><td>a link pill with its title</td></tr>
+<tr><td>Callouts</td><td>emoji on one line, words on another</td><td>a quote that starts with its emoji</td></tr>
+<tr><td>Columns</td><td>one after another</td><td>one after another (the app has no columns)</td></tr>
+<tr><td>Speed</td><td colspan="2">converting 1,500 pages takes under a second; saving them is what took the 27 s</td></tr>
+</table>
+<h3>What it can't do</h3>
+<ul>
+<li>A callout's coloured box, a toggle heading's big size, columns side by side: the app has no such blocks. A real callout block would be a new kind of block — your call.</li>
+<li>Notion has 9 colours and the app has 10 different ones, so two pairs land on the same colour (orange and red → coral; brown and yellow → amber).</li>
+<li>If a page name appears twice in your notes (say, imported twice), a link to it can't tell which one you meant. The real version should write the folder into the link when that happens.</li>
+<li>Databases stay as the table Notion drew, with each row a linked note; their properties aren't carried.</li>
+</ul>
+<h3>How others do it</h3>
+<ul>
+<li><b>Obsidian's own importer</b> (free and open, MIT licence) reads Notion's <b>HTML</b> export and tells people to choose HTML. It finds the same Notion page code mine does, which is how I checked my test export is shaped right. It drops colours and turns toggles into plain lines, so ours would carry more.</li>
+<li><b>Notion's own connection</b> (new this year): an app can read pages straight from your account, as text, with nothing to export or unzip. The catch: each person must make a key on Notion's site and paste it in. The alternative, a proper "Sign in with Notion" button, needs a small web server of ours. Pictures come as links that stop working after a short time, and very long pages get cut. Notion itself says personal keys aren't meant for an app many people use. Good later, not first.</li>
+</ul>
+<p><b>Correction to yesterday:</b> "the Markdown &amp; CSV export brings in no pages" is doubtful. Your real export in August held web-page files even under that option, but other people report Markdown files. The converter should take both, and the on-screen step should say "HTML", as Obsidian's does.</p>
+<p class="soft">Checked: on a test export I built to match Notion's real page code; in a scratch copy of the app on the Mac. Not checked: your real Notion export, Windows.</p>
+
+<h2>Open — needs you</h2>
+<ol class="ask">
+<li><b>Real exports to test with.</b> Export a small Notion workspace twice (once as "HTML", once as "Markdown &amp; CSV") and download your Google Keep notes from Google Takeout; put the three downloads in one folder and tell me where. The Notion and Keep findings below come from copies of those formats I built by hand.</li>
+<li><b>Apple Notes.</b> OK for me to run it once in a scratch copy against the real Notes app on your Mac? macOS will pop up a permission question; the notes go into a temp folder I delete after.</li>
+<li><b>Which directions to plan</b> — A to E at the bottom of this page. D includes one that changes an earlier decision of yours ("every import makes a new space").</li>
+</ol>
+
+<h2>How I tried it</h2>
+<p>A scratch copy of the app on the Mac (not your test copy), real clicks through <b>Settings → Data → Import</b>, with an export from each app. Then I opened the imported notes and read the files that were written.</p>
+<p><span class="tag seen">seen</span> measured in the app. <span class="tag lead">lead</span> seen with a hand-made copy of that app's export — needs a real one to confirm. <span class="tag none">not tried</span> Apple Notes; anything on Windows.</p>
+
+<h2>1 · Confusing</h2>
+<figure><img src="img/keep-3-app.jpg" alt="The app after an import: the sidebar lists the imported notes, the main area says No note open"><figcaption>Straight after "Show me the notes" (Google Keep). Nothing is open, and the new space is the bare "6" at the bottom.</figcaption></figure>
+<ol>
+<li><span class="tag seen">seen</span>After an import the screen says <b>"No note open — Pick a note, or start a new one"</b>. Nothing opens, the Import Report isn't shown, the new space is a bare number. (The "organise" pop-up you ruled on in August was never built.)</li>
+<li><span class="tag seen">seen</span>At the window size I tested (1100 × 688) the <b>Import button is below the bottom edge</b> of Settings. The "Moving your setup from another computer?" box sits on top and pushes it down.</li>
+<li><span class="tag seen">seen</span>You have to say which app first, under "File format", in a menu listing "HTML" and "Markdown". Other words a switcher won't know: "Output folder name", "vault", "plain Markdown".</li>
+<li><span class="tag seen">seen</span>After choosing a Notion .zip the screen shows <code>/var/folders/41/…/notes-import-8cd624ca80a8/level-1</code> instead of the file's name. A chosen <i>folder</i> of 11 notes reads "1 file chosen".</li>
+<li><span class="tag seen">seen</span>A wrong pick isn't caught: the wrong folder for Google Keep reads "0 notes will be created", Import stays live, and pressing it says <b>"Import complete — 0 notes created"</b> and makes an empty space.</li>
+<li><span class="tag seen">seen</span>Every try makes another space ("Google Keep (2)", "(3)"…). <b>At 15 spaces the next import is written to disk but never appears in the app</b> — the screen still says "Import complete … now open in the sidebar".</li>
+<li><span class="tag seen">seen</span>The Import Report says <b>"Nothing was skipped or lossy."</b> after imports that lost things (section 2).</li>
+<li><span class="tag seen">seen</span>Word takes files only — a folder of Word documents can't be chosen, and ".doc" / ".rtf" aren't offered. Google Keep makes you unzip the download yourself.</li>
+<li><span class="tag seen">seen</span>One over-long name stops the whole import: "That name is too long — try something shorter, or a shallower folder." Seen in a deep test folder; Notion's 32-letter codes on every name make it likelier. <span class="soft">Whether a half-made space is left behind: unchecked.</span></li>
+<li><span class="tag seen">seen</span>A Word file that can't be read leaves a note quoting <code>Can't find end of central directory : is this a zip file ? … jszip</code>.</li>
+</ol>
+<figure><img src="img/keep-1-ready.jpg" alt="Settings, Data, Import with Google Keep chosen; the Import button is not visible"><figcaption>The Import screen with a folder already chosen. "1 file chosen" at the bottom; the Import button is further down, off the window.</figcaption></figure>
+
+<h2>2 · Loses something</h2>
+
+<h3>Notion <span class="tag lead">lead</span></h3>
+<figure><img src="img/look-0-Biology.jpg" alt="An imported Notion page: highlight shown as raw mark tags, tick boxes shown as bullets"><figcaption>An imported Notion page. The highlight is raw code; "Read chapter 3" was a ticked box; the 💡 line was a callout; the links strip says "No links yet" although the page links to another.</figcaption></figure>
+<ul>
+<li><b>The on-screen step may send people to the wrong export.</b> It says choose "Markdown &amp; CSV". With an export shaped that way (.md files) no page came across — "1 note created", an empty index, "Nothing was skipped or lossy." The importer only reads the web-page kind.</li>
+<li>Tick-box lists arrive as plain bullets. Toggles become bullets. A callout splits into an emoji line and a text line.</li>
+<li>Highlights show as raw code: <code>&lt;mark class="highlight-yellow_background"&gt;</code>. Underline is dropped.</li>
+<li>A formula arrives as <code>E\=mc2E = mc^2E\=mc2</code>. A web bookmark becomes a broken link spread over seven lines.</li>
+<li>Links between pages work but aren't the app's own links. Every note starts with a stray empty line; pictures are wrapped in a link.</li>
+</ul>
+<figure><img src="img/notion-md-2-done.jpg" alt="Import complete, 1 note created, for the Markdown-shaped Notion export"><figcaption>The Markdown-shaped Notion export: "Import complete — 1 note created". The one note is an empty index; none of the pages came in.</figcaption></figure>
+
+<h3>Markdown / Obsidian <span class="tag seen">seen</span></h3>
+<figure><img src="img/look-1-Home.jpg" alt="An imported Obsidian note: the tags, aliases and created lines drawn as a huge heading"><figcaption>An imported Obsidian note. The properties block (tags / aliases / created) is drawn as one huge heading. The links and the two pictures came through properly.</figcaption></figure>
+<ul>
+<li>The properties block at the top shows as a huge heading.</li>
+<li>Shown as raw text: <code>==highlight==</code>, <code>%%comment%%</code>, <code>&gt; [!note]</code> callouts, footnotes, <code>#tags</code>, <code>![[a note]]</code>.</li>
+<li>A link written with its folders (<code>[[Projects/Thesis/Thesis plan]]</code>) shows as a missing note. <span class="tag lead">lead</span></li>
+<li><code>.canvas</code> boards are left behind with no mention. A file saved by an old Windows editor arrives with "&#xFFFD;" for every accent, no mention.</li>
+<li>Came through fine: folders, pictures (including Obsidian's <code>![[pic.png]]</code>), tables, formulas, tick boxes, dates.</li>
+</ul>
+
+<h3>Web pages (HTML) <span class="tag seen">seen</span></h3>
+<ul>
+<li>A site's menu and footer come in as text ("Home | About", "© 2019 … Cookie settings").</li>
+<li>A link from one imported page to another copies the .html file into your notes folder instead of linking the note.</li>
+<li>Tick boxes lose their boxes; coloured and highlighted words go plain; a picture stored inside the page becomes one enormous line of code; an old-Windows page's title arrives as "Caf&#xFFFD; notes".</li>
+<li>The report fills with noise: <code>Local reference "/" could not be copied</code>.</li>
+</ul>
+
+<h3>Word <span class="tag seen">seen</span></h3>
+<figure><img src="img/look-2-Essay_on_photosynthesis.jpg" alt="An imported Word document in the app"><figcaption>An imported Word essay. Headings, bold, underline, highlight and the link are right; the footnote mark is raw code; the title is ordinary text.</figcaption></figure>
+<ul>
+<li><b>Gone with no mention:</b> words in a text box, an equation, a comment, the page header, text colour, large text, centring.</li>
+<li>A footnote mark shows as raw code: <code>&lt;a href="#footnote-2" id="footnote-ref-2"&gt;[1]&lt;/a&gt;</code>. The "Title" style arrives as ordinary text.</li>
+<li>Came through fine: headings, bold / italic / underline, highlight, H₂O, lists, the table, the picture, the link.</li>
+</ul>
+
+<h3>Google Keep <span class="tag lead">lead</span></h3>
+<ul>
+<li>Fine: ticked checklists, labels as folders, the Bin skipped, pictures.</li>
+<li>Not carried and not mentioned: pinned, archived, note colour, who it was shared with.</li>
+<li>A Keep voice recording arrives as "This recording can't be played here" with a "Make a playable copy" button.</li>
+</ul>
+
+<h3>Apple Notes <span class="tag none">not tried</span></h3>
+<p>It reads your real Notes app, so I left it (ask 2). Known from the code: pictures stay behind and locked notes can't be read.</p>
+
+<h2>3 · Slow</h2>
+<table>
+<tr><th>What</th><th>Reading it</th><th>Importing</th></tr>
+<tr><td>2,000 Markdown notes in 40 folders</td><td>0.3 s</td><td>21 s</td></tr>
+<tr><td>A 1,500-page Notion .zip</td><td>0.9 s</td><td>27 s</td></tr>
+</table>
+<p><span class="tag seen">seen</span>Not slow. <span class="soft">Not tried: an export of several GB with thousands of pictures.</span></p>
+
+<h2>4 · The way out</h2>
+<p><span class="soft">Read in the code, not re-run today.</span> <b>Save as…</b> and <b>Print…</b> work on one note at a time, as a PDF or a web page. There is no way to save a folder or a whole space in one go, no Word, and no "show my notes folder" on a right-click.</p>
+
+<h2>Directions — nothing planned yet, pick from these</h2>
+<ol type="A">
+<li><b>One door.</b> One "Bring notes in" button — or drop a file, folder or .zip on the window — and the app works out which app it came from. No "File format" menu.</li>
+<li><b>Look before it lands.</b> After choosing, you see three of your notes as they will look and a plain list of what won't come across — before anything is written. A wrong pick or zero notes says so and stops.</li>
+<li><b>Fix what gets lost</b>, app by app (ticks, highlights, toggles, the properties block, text boxes…), and make the report honest.</li>
+<li><b>Land well.</b> After importing, the first note opens, the space gets a name, and a short "here's what came in" card shows; an "Undo this import" button; never a silent 16th space. Optional: "into a space I already have" — <i>this changes your August ruling that every import makes a new space.</i></li>
+<li><b>An easy way out.</b> "Save as…" on a folder or a whole space: one PDF, a folder of PDFs or web pages, or Word files; "Show in Finder" on any note.</li>
+</ol>
+
+<h2>Checklist</h2>
+<p>☑ try each import and list what's confusing / slow / lost · ☐ your picks · ☐ plan · ☐ build · ☐ checked on the Mac · ☐ Windows · ☐ shipped</p>
+</main>
+</body>
+</html>

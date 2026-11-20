@@ -30,7 +30,7 @@ const FORMATS: FormatInfo[] = [
   {
     id: 'notion',
     label: 'Notion',
-    hint: 'Export your workspace from Notion (Settings → Export → Markdown & CSV), then choose the downloaded .zip below — or an already-unzipped folder.',
+    hint: 'Export your workspace from Notion (Settings → Export, and choose HTML), then choose the downloaded .zip below — or an already-unzipped folder.',
     helpUrl: 'https://www.notion.so/help/export-your-content',
     pickLabel: 'Choose .zip or folder…',
     fileLabel: 'Choose .zip…',
