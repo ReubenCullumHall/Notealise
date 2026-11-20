@@ -454,8 +454,20 @@ export function SidebarRecorder({ onGoTo }: { onGoTo: (note: string) => void }):
   const name = titleOf(st.notePath)
   const paused = st.phase === 'paused'
   const live = st.phase === 'recording' || st.phase === 'paused'
+  // A save that failed: the sound is still in memory, and Stop tries again.
+  const failed = st.phase === 'failed'
   const word =
-    st.phase === 'recording' ? 'Recording' : paused ? 'Paused' : st.phase === 'saving' ? 'Saving…' : st.phase === 'starting' ? 'Starting…' : 'Recording'
+    st.phase === 'recording'
+      ? 'Recording'
+      : paused
+        ? 'Paused'
+        : st.phase === 'saving'
+          ? 'Saving…'
+          : st.phase === 'starting'
+            ? 'Starting…'
+            : failed
+              ? 'Couldn’t save'
+              : 'Recording'
   return (
     <div className="fade-in mb-2">
       <div className="deck rounded-xl bg-ink-900 text-paper shadow-float" role="group" aria-label={`Recording into ${name}`}>
@@ -512,10 +524,10 @@ export function SidebarRecorder({ onGoTo }: { onGoTo: (note: string) => void }):
           <button
             type="button"
             className={DECK_BTN}
-            disabled={!live}
+            disabled={!live && !failed}
             onClick={recorderStop}
-            data-tip={`Stop — the voice note goes into ${name}`}
-            aria-label="Stop recording"
+            data-tip={failed ? 'Try saving it again' : `Stop — the voice note goes into ${name}`}
+            aria-label={failed ? 'Try saving the recording again' : 'Stop recording'}
           >
             <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="currentColor" aria-hidden="true">
               <rect x="6.5" y="6.5" width="11" height="11" rx="2" />

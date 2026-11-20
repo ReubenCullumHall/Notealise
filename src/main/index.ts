@@ -108,8 +108,27 @@ function createWindow(): BrowserWindow {
   // and by then the quit below has no window left to ask to save, so the last
   // second of typing (and the "Recovered" note) was lost. Turn the × into a quit
   // while the window is still there. A Mac window can close without quitting.
+  // A Mac window can close without quitting — but the window takes anything not yet
+  // saved with it: the last <400 ms of typing (the autosave's wait), a recording.
+  // Closing it with the red button or Close Window lost that typing (bug scan
+  // 2026-11-19, item 2). So the close waits for the same save a quit does, once.
+  let closeSaved = false
   win.on('close', (e) => {
-    if (process.platform === 'darwin' || quitting) return
+    if (process.platform === 'darwin') {
+      if (quitting || closeSaved || win.webContents.isDestroyed()) return
+      e.preventDefault()
+      closeSaved = true
+      const done = (): void => {
+        clearTimeout(timer)
+        ipcMain.removeListener(CH.flushed, done)
+        if (!win.isDestroyed()) win.close()
+      }
+      const timer = setTimeout(done, 1500)
+      ipcMain.once(CH.flushed, done)
+      win.webContents.send(CH.beforeQuit)
+      return
+    }
+    if (quitting) return
     e.preventDefault()
     app.quit()
   })

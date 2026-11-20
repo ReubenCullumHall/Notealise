@@ -1,5 +1,6 @@
 import chokidar, { type FSWatcher } from 'chokidar'
 import path from 'node:path'
+import { realpathSync } from 'node:fs'
 import type { VaultChange } from '../shared/types'
 import { setWatcherRelease, wasRecentlyWritten } from './vault'
 
@@ -23,8 +24,19 @@ export function watchIgnores(root: string, p: string): boolean {
 // - ignores dotfiles/dot-folders (incl. .mdnotes/) and node_modules
 // - ignores echoes of the app's own writes (recentWrites in vault.ts)
 // - debounces ~100ms so a burst of fs events becomes one renderer update
-export function startWatching(root: string, onChange: (change: VaultChange) => void): void {
+export function startWatching(given: string, onChange: (change: VaultChange) => void): void {
   void closeWatcher()
+  // Watched under its REAL path — the one `setVaultRoot` keeps and the app's own
+  // writes are marked under (`wasRecentlyWritten`). A vault opened through a link
+  // (a shortcut folder, /tmp, /var/folders on a Mac) reported every change under
+  // the link's path, so the app's own saves came back as changes made outside it
+  // (bug scan 2026-11-19, item 18).
+  let root = given
+  try {
+    root = realpathSync(given)
+  } catch {
+    // not there yet — watched as given
+  }
   current = { root, onChange }
 
   const batch = new Set<string>()

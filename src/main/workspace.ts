@@ -51,7 +51,29 @@ let latestRoot: string | null = null
 let writeTimer: ReturnType<typeof setTimeout> | null = null
 let writeChain: Promise<void> = Promise.resolve()
 
-async function readFromDisk(root: string | null): Promise<Workspace> {
+/** The file as this app last read or wrote it (its time and size), so a copy
+ *  that arrived from another computer since — OneDrive, the app open on both —
+ *  is noticed and read before the next change is written over it. Until
+ *  2026-11-19 the file was read once per run: bin a note on the PC, pin
+ *  anything on the Mac, and the PC's bin entry (and its pins) were gone, the
+ *  note left unreachable in .mdnotes/trash/ (bug scan 2026-11-19, item 3). */
+let latestStamp: string | null = null
+let writing = 0
+
+async function stampOf(p: string | null): Promise<string | null> {
+  if (!p) return null
+  try {
+    const st = await fs.stat(p)
+    return `${st.mtimeMs}:${st.size}`
+  } catch {
+    return null
+  }
+}
+
+/** `keep`: what to answer instead when the file can't be read — given on a
+ *  RE-read, where a copy caught half-way through arriving must not empty the
+ *  bin's list (and isn't damage worth keeping a copy of). */
+async function readFromDisk(root: string | null, keep?: Workspace): Promise<Workspace> {
   const p = workspacePathFor(root)
   if (!p) return { ...EMPTY_WORKSPACE }
   try {
@@ -59,6 +81,7 @@ async function readFromDisk(root: string | null): Promise<Workspace> {
     if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1) // tolerate a UTF-8 BOM
     return normalizeWorkspace(JSON.parse(raw))
   } catch (e) {
+    if (keep) return keep
     // A file that exists but won't parse would be overwritten by the next write
     // (emptying the bin's list) — keep a copy beside it first (bug scan 2026-10-27).
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -71,7 +94,17 @@ async function readFromDisk(root: string | null): Promise<Workspace> {
 
 async function ensureLoaded(): Promise<Workspace> {
   const root = getVaultRoot()
-  if (latest && latestRoot === root) return latest
+  const p = workspacePathFor(root)
+  if (latest && latestRoot === root) {
+    // A change of ours still waiting to be written is newer than the file.
+    if (writeTimer || writing) return latest
+    const now = await stampOf(p)
+    if (now === latestStamp) return latest
+    latestStamp = now
+    latest = await readFromDisk(root, latest)
+    return latest
+  }
+  latestStamp = await stampOf(p)
   latest = await readFromDisk(root)
   latestRoot = root
   return latest
@@ -106,12 +139,20 @@ function persist(): Promise<void> {
   const snapshot = latest
   const root = latestRoot
   if (!snapshot) return Promise.resolve()
+  writing++
   writeChain = writeChain
-    .then(() => writeAtomic(snapshot, root))
+    .then(async () => {
+      await writeAtomic(snapshot, root)
+      // What is on disk now is ours — not a copy from elsewhere to read back.
+      if (root === latestRoot) latestStamp = await stampOf(workspacePathFor(root))
+    })
     .catch((e) => {
       // Non-fatal: the in-memory state is still correct and the next change
       // retries. Losing workspace.json only loses ordering and pins.
       console.error('workspace.json write failed', e)
+    })
+    .finally(() => {
+      writing--
     })
   return writeChain
 }
@@ -509,6 +550,7 @@ export async function resetWorkspaceForVaultSwitch(): Promise<void> {
   await flushNow()
   latest = null
   latestRoot = null
+  latestStamp = null
 }
 
 // ---------------------------------------------------------------------------

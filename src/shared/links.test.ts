@@ -438,3 +438,52 @@ describe('links follow a renamed space or folder (bug scan 2026-10-27)', () => {
     )
   })
 })
+
+// Bug scan 2026-11-19, item 8: two stray backticks in different paragraphs
+// paired up as one code span, so the links between them stopped being links in
+// the editor and were left behind by a rename.
+describe('stray backticks (bug scan 2026-11-19)', () => {
+  const text = 'Press the ` key first.\n\nSee [[Optics]] here.\n\nThe ` key again.'
+  it('a code span does not run across a blank line', () => {
+    expect(scanLinks(text).map((l) => l.target)).toEqual(['Optics'])
+  })
+  it('a rename follows a link that sits between two stray backticks', () => {
+    expect(rewriteLinks(text, 'Inbox.md', 'Physics/Optics.md', 'Physics/Lenses.md', VAULT)).toBe(
+      'Press the ` key first.\n\nSee [[Lenses]] here.\n\nThe ` key again.'
+    )
+  })
+  it('a real code span on one line still hides its link', () => {
+    expect(scanLinks('write `[[Optics]]` like that')).toEqual([])
+  })
+  it('a code span over two lines of one paragraph still hides its link', () => {
+    expect(scanLinks('a `code\n[[Optics]]` b')).toEqual([])
+  })
+  it('a rename leaves a link inside a ~~~ code block alone, as the index does', () => {
+    const fenced = '~~~\nexample: [[Optics]]\n~~~\n'
+    expect(indexLinks(fenced)).toEqual([])
+    expect(rewriteLinks(fenced, 'Inbox.md', 'Physics/Optics.md', 'Physics/Lenses.md', VAULT)).toBeNull()
+  })
+})
+
+// Bug scan 2026-11-19, item 10: renaming a note to a name a nearer note already
+// has wrote the bare title, which then opened the OTHER note.
+describe('a rename onto a name another note already has (bug scan 2026-11-19)', () => {
+  const vault: NoteRef[] = [note('School/Index.md'), note('School/Notes.md'), note('School/Physics/Waves.md')]
+  it('writes a path inside the space, so the link still opens the renamed note', () => {
+    const out = rewriteLinks('See [[Waves]] for more.', 'School/Index.md', 'School/Physics/Waves.md', 'School/Physics/Notes.md', vault)
+    expect(out).toBe('See [[Physics/Notes]] for more.')
+    const after = [note('School/Index.md'), note('School/Notes.md'), note('School/Physics/Notes.md')]
+    const r = resolveLink(scanLinks(out!)[0], after, 'School/Index.md')
+    expect(r.kind === 'note' && r.path).toBe('School/Physics/Notes.md')
+  })
+  it('keeps the bare title when it still finds the renamed note', () => {
+    expect(rewriteLinks('See [[Waves]]', 'School/Index.md', 'School/Physics/Waves.md', 'School/Physics/Ripples.md', vault)).toBe(
+      'See [[Ripples]]'
+    )
+  })
+  it('keeps a heading and an alias on the path form', () => {
+    expect(rewriteLinks('[[Waves#Speed|fast]]', 'School/Index.md', 'School/Physics/Waves.md', 'School/Physics/Notes.md', vault)).toBe(
+      '[[Physics/Notes#Speed|fast]]'
+    )
+  })
+})

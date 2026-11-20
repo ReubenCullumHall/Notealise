@@ -20,7 +20,7 @@ import { appendBlock } from './organise/blockDrop'
 import { offerDrop } from './dragLeaveGuard'
 import { PRACTICE_HEAD, PRACTICE_TITLE } from './settings/tutorials/tryIt'
 import { focusNoteEnd } from './editor/viewRegistry'
-import { addRecovered, flushRecordings, recordingsPending, voiceNoteMoved } from './editor/voiceRecorder'
+import { addRecovered, flushRecordings, forgetWaitingRecordings, recorderStatus, recordingsPending, voiceNoteMoved } from './editor/voiceRecorder'
 import { deckNoteMoved, ejectDeck } from './editor/voicePlayer'
 import { noteLayoutChange, notePaneChange } from './tabs/stripMotion'
 import { TabStrip } from './tabs/TabStrip'
@@ -47,6 +47,7 @@ import {
   moveTab,
   BLANK,
   movePane,
+  openBesideLayout,
   openTab,
   paneSizes,
   resizePanes,
@@ -813,7 +814,14 @@ export default function App(): React.JSX.Element {
       let written: Promise<unknown> = Promise.resolve()
       if (pending !== undefined) {
         dirtyRef.current.delete(path)
-        written = window.api.writeNote(path, pending).then(
+        // Behind any save pass already running: one may hold an OLDER copy of this
+        // same note and write it after ours, putting the old text back (bug scan
+        // 2026-11-19, item 4; why two writes must never overlap: `flushing`).
+        const before = flushing.current ?? Promise.resolve()
+        written = before.then(
+          () => window.api.writeNote(path, pending),
+          () => window.api.writeNote(path, pending)
+        ).then(
           // its row follows this save too, as in `flush`
           () => setTree((t) => withNoteSaved(t, path, notePreview(pending), Date.now())),
           (e: Error) => flash(`Save failed: ${e.message}`)
@@ -1458,8 +1466,7 @@ export default function App(): React.JSX.Element {
    *  on a link does, and what dropping a link on a column's edge does. */
   const openBeside = useCallback(
     async (p: string): Promise<void> => {
-      const l = layoutRef.current
-      applyLayout(l.panes.length >= MAX_PANES ? showInPane(l, p, l.focus) : splitAt(l, p, l.focus + 1))
+      applyLayout(openBesideLayout(layoutRef.current, p))
       if (!docsRef.current.has(p)) await loadDoc(p)
     },
     [applyLayout, loadDoc]
@@ -1844,7 +1851,15 @@ export default function App(): React.JSX.Element {
         throw e
       }
       const after = appendBlock(before, block)
-      await setText(to, after)
+      try {
+        await setText(to, after)
+      } catch (e) {
+        // Couldn't be written (a locked or read-only file): the block was already
+        // taken out of the note it came from, so it goes back there — it used to
+        // end up in neither note (bug scan 2026-11-19, item 6).
+        putBack()
+        throw e
+      }
       void rescanLinks([to, from])
       showNotice({
         text: `Moved to “${titleOf(to)}”.`,
@@ -1853,7 +1868,11 @@ export default function App(): React.JSX.Element {
           run: () =>
             void run(async () => {
               // All or nothing: only when neither note has been changed since.
-              if ((await readText(to)) !== after) throw new Error(`“${titleOf(to)}” has changed since, so the move was left as it is.`)
+              // Compared without line endings: a note saved with Windows ones is written
+              // back with them, so it never matched and Undo was always refused (bug
+              // scan 2026-11-19, item 23).
+              const lf = (t: string): string => t.replace(/\r\n?/g, '\n')
+              if (lf(await readText(to)) !== lf(after)) throw new Error(`“${titleOf(to)}” has changed since, so the move was left as it is.`)
               if (!putBack()) throw new Error(`“${titleOf(from)}” has changed since, so the move was left as it is.`)
               await setText(to, before)
               void rescanLinks([to, from])
@@ -2079,6 +2098,11 @@ export default function App(): React.JSX.Element {
         } else {
           try {
             await window.api.writeNote(row.path, next)
+            // "Search notes" keeps its own copy of each note, refreshed only by a
+            // save here or a change outside — this write is neither, so a search
+            // showed the link's old wording until that note changed again (as in
+            // `flush`; 2026-11-20).
+            if (contentCache.current.has(row.path)) contentCache.current.set(row.path, next)
           } catch (e) {
             flash(`Couldn't update links in ${titleOf(row.path)}: ${(e as Error).message}`)
           }
@@ -2614,8 +2638,23 @@ export default function App(): React.JSX.Element {
     // vault is already open. That's what keeps the splash a startup moment
     // rather than something a mid-session vault switch retriggers.
     const firstRun = !vault
+    // A recording, or a voice note waiting for its note, is saved into THIS
+    // folder before another can open — the same save a quit does. Main switches
+    // the moment a folder is picked, so a recording stopped by the switch went
+    // into the NEW folder, into a note there with the same name (bug scan
+    // 2026-11-19, item 1). If it still can't be saved, the switch waits.
+    if (recordingsPending()) {
+      await Promise.allSettled([flush(), flushRecordings().then(flush)])
+      // (A line whose note has gone stays waiting — dropped at the switch, as at a quit.)
+      const still = recorderStatus()
+      if (still && still.phase !== 'ready') {
+        flash('Couldn’t save the recording — save it before switching folder.')
+        return
+      }
+    }
     const v = await window.api.pickVault()
     if (v) {
+      forgetWaitingRecordings()
       setVault(v)
       // A different vault means different files: drop every tab and its buffer.
       sessionReady.current = false
@@ -3082,6 +3121,16 @@ export default function App(): React.JSX.Element {
       // list the user was looking at, and the group belongs together at the
       // front. Only the `movedAt` stamp is per item.
       const crossSpace = arrived.length > 0
+      // Dragged into ANOTHER space, an open note belongs to that space now and its
+      // tab leaves the strip of the space it left, as archiving and Put back already
+      // do (Reuben, 2026-11-20: "close it like archiving a tab, since it's left that
+      // space"). `closeTabsUnder` reaches every space's strip, the one stashed by the
+      // drop's own switch to the new space included; the new space never had it
+      // open. One that lands loose at the vault's top stays — it shows in every space.
+      {
+        const away = arrived.filter((p) => spaceOf(p) !== '')
+        if (away.length) closeTabsUnder(away)
+      }
       const fresh = await window.api.listTree()
       setTree(fresh)
 
@@ -5106,7 +5155,13 @@ export default function App(): React.JSX.Element {
                   }
                   onReorder={(to) => applyLayout(movePane(layoutRef.current, i, to > i ? to + 1 : to))}
                   dragging={drag}
-                  edgeDrops={canSplit || layout.panes.includes(drag?.path ?? '')}
+                  // …and only where the model really splits: a lone note with nothing
+                  // else free to sit beside it (bug scan 2026-11-19, item 19) is refused.
+                  edgeDrops={
+                    (canSplit || layout.panes.includes(drag?.path ?? '')) &&
+                    !!drag &&
+                    splitAt(layout, drag.path, i + 1) !== layout
+                  }
                   onDropTab={(zone) => {
                     const d = drag
                     setDrag(null)

@@ -12,6 +12,7 @@ import {
   moveTab,
   moveWithinSplit,
   nudgePane,
+  openBesideLayout,
   openTab,
   renamePath,
   replaceActive,
@@ -1019,4 +1020,93 @@ describe('a split you stepped out of stays one joined tab (bug scan 2026-10-27)'
       invariants(l)
     })
   }
+})
+
+// Bug scan 2026-11-19, item 11: Alt+click on a link to a note already on screen
+// split it in again — moving it over yours, or closing a column.
+describe('openBesideLayout — Alt+click on a link', () => {
+  it('a note in another column just gets the focus', () => {
+    const l: TabLayout = { tabs: ['A', 'B', 'C'], panes: ['A', 'B', 'C'], focus: 0 }
+    const r = openBesideLayout(l, 'C')
+    expect(r.panes).toEqual(['A', 'B', 'C'])
+    expect(r.focus).toBe(2)
+  })
+  it('a link to the note you are in changes nothing (a heading link)', () => {
+    const l: TabLayout = { tabs: ['A', 'B'], panes: ['A'], focus: 0 }
+    expect(openBesideLayout(l, 'A').panes).toEqual(['A'])
+  })
+  it('two columns, link to the other one: no swap', () => {
+    const l: TabLayout = { tabs: ['A', 'B'], panes: ['A', 'B'], focus: 1 }
+    const r = openBesideLayout(l, 'A')
+    expect(r.panes).toEqual(['A', 'B'])
+    expect(r.focus).toBe(0)
+  })
+  it('a note not on screen still opens beside', () => {
+    const l: TabLayout = { tabs: ['A'], panes: ['A'], focus: 0 }
+    expect(openBesideLayout(l, 'Z').panes).toEqual(['A', 'Z'])
+  })
+})
+
+// Bug scan 2026-11-19, item 12: dragging one note of a split onto another tab's
+// middle put the target in the FOCUSED column, throwing a different note out.
+describe('splitWith — dragging a piece of the split on screen', () => {
+  it('the same result whichever column has the focus, and nobody is thrown out', () => {
+    const a: TabLayout = { tabs: ['X', 'D', 'T'], panes: ['X', 'D'], focus: 0 }
+    const b: TabLayout = { ...a, focus: 1 }
+    expect(splitWith(a, 'T', 'D').panes).toEqual(['X', 'T', 'D'])
+    expect(splitWith(b, 'T', 'D').panes).toEqual(['X', 'T', 'D'])
+    expect(splitWith(a, 'T', 'D').focus).toBe(2)
+  })
+  it('three columns already: refused rather than throwing one out', () => {
+    const l: TabLayout = { tabs: ['X', 'D', 'Y', 'T'], panes: ['X', 'D', 'Y'], focus: 0 }
+    expect(splitWith(l, 'T', 'D')).toBe(l)
+  })
+  it('two notes both on screen still just rearrange (unchanged)', () => {
+    const l: TabLayout = { tabs: ['X', 'D'], panes: ['X', 'D'], focus: 0 }
+    expect(splitWith(l, 'X', 'D').panes).toEqual(['X', 'D'])
+  })
+})
+
+// Bug scan 2026-11-19, item 19: a lone note dragged onto its own column's edge
+// pulled a member of a PARKED split on screen — it then sat in two joined tabs.
+describe('splitAt — a lone note onto its own edge, with a parked split', () => {
+  const parked: TabLayout = { tabs: ['A', 'B', 'C'], panes: ['C'], focus: 0, parked: [{ panes: ['A', 'B'], focus: 0 }] }
+  it('does not pull a member of the parked split out', () => {
+    expect(splitAt(parked, 'C', 1)).toBe(parked)
+  })
+  it('takes a free tab when there is one', () => {
+    const l: TabLayout = { ...parked, tabs: ['A', 'B', 'C', 'D'] }
+    expect(splitAt(l, 'C', 1).panes).toEqual(['D', 'C'])
+  })
+})
+
+// Bug scan 2026-11-19, item 22: the note on screen gone at relaunch, the joined
+// tab came back as separate tabs.
+describe('restoreLayout — the on-screen note gone, a joined tab parked', () => {
+  it('the parked split comes back on screen whole', () => {
+    const saved = { tabs: ['A', 'B', 'C'], panes: ['C'], focus: 0, parked: [{ panes: ['A', 'B'], focus: 0 }] }
+    const l = restoreLayout(saved, (p) => p !== 'C')
+    expect(l.panes).toEqual(['A', 'B'])
+  })
+  it('a free tab is shown instead, and the parked split is kept', () => {
+    const saved = { tabs: ['A', 'B', 'C', 'D'], panes: ['C'], focus: 0, parked: [{ panes: ['A', 'B'], focus: 0 }] }
+    const l = restoreLayout(saved, (p) => p !== 'C')
+    expect(l.panes).toEqual(['D'])
+    expect(l.parked?.[0].panes).toEqual(['A', 'B'])
+  })
+})
+
+// 2026-11-20 (seen fixing item 12): a tab NOT on screen dropped on another tab
+// that isn't either, while a split shows, replaced the focused column.
+describe('splitWith — two tabs off screen, a split on screen', () => {
+  it('parks the split whole and shows the two together', () => {
+    const l: TabLayout = { tabs: ['X', 'Y', 'T', 'D'], panes: ['X', 'Y'], focus: 0 }
+    const r = splitWith(l, 'T', 'D')
+    expect(r.panes).toEqual(['T', 'D'])
+    expect(r.parked?.map((g) => g.panes)).toEqual([['X', 'Y']])
+  })
+  it('with one note on screen it is unchanged: the target takes the screen, the dragged beside it', () => {
+    const l: TabLayout = { tabs: ['A', 'T', 'D'], panes: ['A'], focus: 0 }
+    expect(splitWith(l, 'T', 'D').panes).toEqual(['T', 'D'])
+  })
 })

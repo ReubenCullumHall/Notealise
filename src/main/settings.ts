@@ -42,19 +42,45 @@ async function keepDamagedCopy(p: string): Promise<void> {
   }
 }
 
-async function readSettingsFrom(root: string | null): Promise<AppSettings> {
+/** Read the file, trying again for a moment when something holds it — OneDrive,
+ *  antivirus, or a cloud copy still downloading answers EBUSY/EACCES/EPERM for a
+ *  few hundred milliseconds. "No file" (ENOENT) is an answer, not a hold. */
+async function readHeld(p: string): Promise<string> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fs.readFile(p, 'utf8')
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT' || i >= 4) throw e
+      await new Promise((r) => setTimeout(r, 50 * 2 ** i))
+    }
+  }
+}
+
+/** `forWrite`: a save is about to write what this returns back over the file. A
+ *  file that EXISTS but still can't be read then stops the save — answering the
+ *  defaults there wrote them over every space's look (bug scan 2026-11-19,
+ *  item 7). On a plain read the defaults are shown, as before. */
+async function readSettingsFrom(root: string | null, forWrite = false): Promise<AppSettings> {
   const p = settingsPathFor(root)
   if (p) {
+    let raw: string | null = null
     try {
-      let raw = await fs.readFile(p, 'utf8')
-      if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1) // tolerate a UTF-8 BOM
-      return normalizeSettings(JSON.parse(raw))
+      raw = await readHeld(p)
     } catch (e) {
-      // No file yet — fall through to cache/defaults. But a file that EXISTS and
-      // won't parse (cut off by a crash or a sync mid-write) is about to be
-      // overwritten by the first save, so keep a copy of it beside it first:
-      // every space's look lives in there (bug scan 2026-10-27).
-      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') await keepDamagedCopy(p)
+      // No file yet — fall through to cache/defaults.
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT' && forWrite) throw e
+    }
+    if (raw !== null) {
+      try {
+        if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1) // tolerate a UTF-8 BOM
+        return normalizeSettings(JSON.parse(raw))
+      } catch {
+        // A file that EXISTS and won't parse (cut off by a crash or a sync
+        // mid-write) is about to be overwritten by the first save, so keep a copy
+        // of it beside it first: every space's look lives in there (bug scan
+        // 2026-10-27).
+        await keepDamagedCopy(p)
+      }
     }
   }
   return settingsFromThemeCache(readThemeCacheSync())
@@ -102,7 +128,7 @@ async function applyWrite(root: string | null, partial: Partial<AppSettings>): P
   // would read the OLD vault's settings and save them into the NEW vault's
   // settings.json — handing it the previous vault's `spaces` list, so the
   // sidebar shows spaces that don't exist there.
-  const current = await readSettingsFrom(root)
+  const current = await readSettingsFrom(root, true)
   const next = normalizeSettings({ ...current, ...partial })
   if (root === getVaultRoot()) setVersionCadence(versionEveryMs(next.versionEvery))
   const p = settingsPathFor(root)

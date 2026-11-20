@@ -1522,8 +1522,11 @@ export function Sidebar({
             if (!dragging) return
             e.preventDefault()
             setDropZone('trash')
-            const carry = dragging
-            offerDrop(e.currentTarget, () => dropInBin(carry))
+            // The Bin offers no stand-in for a lost drop: Chromium ends a drag
+            // cancelled with Escape exactly like a lost one, and here guessing
+            // wrong bins a note (Reuben, 2026-11-20: "make esc cancel the drag").
+            // A drop it really misses just leaves the note where it was. It only
+            // redraws when it first lights, so a lost drop here is rare anyway.
           }}
           onDragLeave={(e) => {
             if (stillInside(e)) return // the lid icon / count badge, not a real leave

@@ -30,6 +30,18 @@ export function useClearWhenPointerLeaves(lit: boolean, el: React.RefObject<HTML
  * (2026-11-19). */
 let offered: { el: HTMLElement; apply: () => void } | null = null
 
+/** Escape pressed during this drag: the drag was CANCELLED, not lost — Chromium
+ *  ends both the same way (a dragend with no drop), so without this a drag let go
+ *  with Escape over a lit target did what it showed: Esc over the Bin binned the
+ *  note (Reuben, 2026-11-20: "make esc cancel the drag"). */
+let cancelled = false
+if (typeof window !== 'undefined') {
+  window.addEventListener('dragstart', () => (cancelled = false), true)
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') cancelled = true
+  }, true)
+}
+
 /** `el` is lit and a drop on it would do `apply`. */
 export function offerDrop(el: HTMLElement | null, apply: () => void): void {
   if (el) offered = { el, apply }
@@ -45,6 +57,9 @@ export function withdrawDrop(el: HTMLElement | null): void {
 export function landMissedDrop(e: { clientX: number; clientY: number; dataTransfer: DataTransfer }): boolean {
   const o = offered
   offered = null
+  const wasCancelled = cancelled
+  cancelled = false
+  if (wasCancelled) return false
   if (!o || e.dataTransfer.dropEffect !== 'none' || !o.el.isConnected) return false
   const r = o.el.getBoundingClientRect()
   if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return false

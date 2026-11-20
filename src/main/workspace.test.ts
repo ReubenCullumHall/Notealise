@@ -251,3 +251,52 @@ describe('restoring into a space that has gone', () => {
     expect(res.landed[binned.trash[0].id]).toBe('Personal/Idea.md')
   })
 })
+
+// Bug scan 2026-11-19, item 3: workspace.json was read once per run, so a copy
+// OneDrive brought from the other computer was written over by the next change
+// here — a note binned on the PC dropped out of the Mac's bin for good.
+describe('a workspace.json changed by the other computer', () => {
+  let root = ''
+  const file = (): string => path.join(root, '.mdnotes', 'workspace.json')
+  const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 400))
+
+  beforeEach(async () => {
+    root = await fs.mkdtemp(path.join(os.tmpdir(), 'mdnotes-sync-'))
+    await fs.mkdir(path.join(root, '.mdnotes', 'trash'), { recursive: true })
+    await fs.writeFile(path.join(root, 'Keep.md'), 'k')
+    await fs.writeFile(file(), JSON.stringify({ entries: {}, trash: [], recovery: [] }))
+    setVaultRoot(root)
+  })
+  afterEach(async () => {
+    await fs.rm(root, { recursive: true, force: true })
+  })
+
+  it('is read before the next change here, so its bin entry survives', async () => {
+    await getWorkspace() // the app open here, the file read
+    await fs.writeFile(path.join(root, '.mdnotes', 'trash', 'aaaaaaaaaaaa-Shopping.md'), 'milk')
+    const row = { id: 'aaaaaaaaaaaa', from: 'Shopping.md', name: 'Shopping.md', type: 'file', deletedAt: Date.now() }
+    await fs.writeFile(file(), JSON.stringify({ entries: { 'Other.md': { pinned: true } }, trash: [row], recovery: [] }))
+    await updateEntries(['Keep.md'], { pinned: true })
+    await settle()
+    const disk = JSON.parse(await fs.readFile(file(), 'utf8'))
+    expect(disk.trash.map((t: { id: string }) => t.id)).toEqual(['aaaaaaaaaaaa'])
+    expect(disk.entries['Keep.md']?.pinned).toBe(true)
+    expect(disk.entries['Other.md']?.pinned).toBe(true)
+  })
+
+  it('a copy caught half-way through arriving does not empty the bin list', async () => {
+    const row = { id: 'bbbbbbbbbbbb', from: 'A.md', name: 'A.md', type: 'file', deletedAt: Date.now() }
+    await fs.writeFile(path.join(root, '.mdnotes', 'trash', 'bbbbbbbbbbbb-A.md'), 'a')
+    await fs.writeFile(file(), JSON.stringify({ entries: {}, trash: [row], recovery: [] }))
+    expect((await getWorkspace()).trash).toHaveLength(1)
+    await fs.writeFile(file(), '{"entries": {"x') // cut off mid-sync
+    expect((await getWorkspace()).trash).toHaveLength(1)
+  })
+
+  it('our own write is not read back as someone else’s', async () => {
+    await updateEntries(['Keep.md'], { pinned: true })
+    await settle()
+    const ws = await getWorkspace()
+    expect(ws.entries['Keep.md']?.pinned).toBe(true)
+  })
+})

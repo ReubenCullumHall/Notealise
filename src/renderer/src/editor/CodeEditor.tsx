@@ -386,14 +386,30 @@ export function CodeEditor({
     const switching = prevPath.current !== null && prevPath.current !== path
     if (switching) perPath.set(prevPath.current as string, snapshot(view))
     const saved = switching ? perPath.get(path) : null
+    // The SAME note with new text — the app rewrote its links for a rename, a
+    // block was dropped into it, or it changed on disk. Only the lines that differ
+    // are replaced, so the cursor and the scroll stay where you were; replacing
+    // the whole text put both back at the top of a note you were working in (bug
+    // scan 2026-11-19, item 13).
+    const same = prevPath.current === path
+    const keptScroll = view.scrollDOM.scrollTop
 
     programmatic.current = true
-    view.dispatch({
-      changes: { from: 0, to: view.state.doc.length, insert: next },
-      selection: saved
-        ? { anchor: clamp(saved.anchor, next.length), head: clamp(saved.head, next.length) }
-        : { anchor: 0 }
-    })
+    if (same) {
+      const cur = view.state.doc.toString()
+      const want = next.replace(/\r\n?/g, '\n')
+      let head = 0
+      while (head < cur.length && head < want.length && cur[head] === want[head]) head++
+      let tail = 0
+      while (tail < Math.min(cur.length, want.length) - head && cur[cur.length - 1 - tail] === want[want.length - 1 - tail]) tail++
+      view.dispatch({ changes: { from: head, to: cur.length - tail, insert: want.slice(head, want.length - tail) } })
+    } else
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: next },
+        selection: saved
+          ? { anchor: clamp(saved.anchor, next.length), head: clamp(saved.head, next.length) }
+          : { anchor: 0 }
+      })
     // Throw the undo history away, because it describes a document that is no
     // longer in this editor. Without it, Cmd+Z in the note you have just opened
     // reached back past the swap and pulled the PREVIOUS note's text in — and
@@ -423,7 +439,7 @@ export function CodeEditor({
         annotations: Transaction.addToHistory.of(false)
       })
     }
-    view.scrollDOM.scrollTop = saved ? saved.scrollTop : 0
+    view.scrollDOM.scrollTop = saved ? saved.scrollTop : same ? keptScroll : 0
     prevPath.current = path
     hideToolbar()
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,3 +1,4 @@
+import { syntaxTree } from '@codemirror/language'
 import { EditorSelection, type EditorState, type Transaction } from '@codemirror/state'
 
 // Tab and Shift+Tab in a note (bug scan 2026-10-27). Neither key was bound, so
@@ -88,11 +89,28 @@ export function exitEmptyItem(state: EditorState): Transaction | null {
   const line = state.doc.lineAt(sel.head)
   if (sel.head !== line.to) return null
   if (!/^([-*+]|\d{1,9}[.)])[ \t]+(\[[ xX]\][ \t]*)?$/.test(line.text)) return null
+  // In a code block or the properties at the top of the note, `- ` is text the
+  // user is typing (a YAML list, tags), not a list to leave — this wiped it
+  // (bug scan 2026-11-19, item 14).
+  if (inCodeOrProperties(state, line.from, line.number)) return null
   return state.update({
     changes: { from: line.from, to: line.to, insert: state.lineBreak },
     selection: { anchor: line.from + state.lineBreak.length },
     userEvent: 'input'
   })
+}
+
+function inCodeOrProperties(state: EditorState, pos: number, lineNo: number): boolean {
+  for (let n: { name: string; parent: unknown } | null = syntaxTree(state).resolveInner(pos, 1); n; n = n.parent as never) {
+    if (n.name === 'FencedCode' || n.name === 'CodeBlock') return true
+  }
+  // The properties block: `---` on the first line down to the next `---` / `...`.
+  const doc = state.doc
+  if (doc.line(1).text.trim() !== '---' || lineNo === 1) return false
+  for (let i = 2; i <= doc.lines; i++) {
+    if (/^(---|\.\.\.)\s*$/.test(doc.line(i).text)) return lineNo < i
+  }
+  return false
 }
 
 export const listIndentKeys = [

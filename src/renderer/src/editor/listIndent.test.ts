@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { EditorSelection, EditorState } from '@codemirror/state'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { exitEmptyItem, listIndentChange } from './listIndent'
+import { parsed } from './parsedState'
 
 const at = (doc: string, from: number, to = from): EditorState =>
   EditorState.create({ doc, selection: EditorSelection.single(from, to) })
@@ -61,5 +63,28 @@ describe('Enter on an empty list line ends the list, with a blank line after it'
   it('leaves a line with text, and a nested empty line, to the normal Enter', () => {
     expect(exitEmptyItem(at('- one', 5))).toBeNull()
     expect(exitEmptyItem(at('- one\n  - ', 10))).toBeNull()
+  })
+})
+
+// Bug scan 2026-11-19, item 14: Enter on `- ` inside a code block or the
+// properties at the top wiped the dash — there it is text, not a list.
+describe('Enter on "- " where it is not a list', () => {
+  const md = (doc: string, pos: number): EditorState =>
+    parsed(EditorState.create({ doc, selection: EditorSelection.single(pos), extensions: [markdown({ base: markdownLanguage })] }))
+  it('inside a fenced code block it is left to the ordinary Enter', () => {
+    const doc = '```yaml\nitems:\n- \n```'
+    expect(exitEmptyItem(md(doc, doc.indexOf('- ') + 2))).toBeNull()
+  })
+  it('inside the properties block it is left alone', () => {
+    const doc = '---\ntags:\n- \n---\nBody'
+    expect(exitEmptyItem(md(doc, doc.indexOf('- ') + 2))).toBeNull()
+  })
+  it('a real list below the properties still ends', () => {
+    const doc = '---\ntags: a\n---\n- one\n- '
+    expect(exitEmptyItem(md(doc, doc.length))!.state.doc.toString()).toBe('---\ntags: a\n---\n- one\n\n')
+  })
+  it('a real list below a code block still ends', () => {
+    const doc = '```\ncode\n```\n- one\n- '
+    expect(exitEmptyItem(md(doc, doc.length))).not.toBeNull()
   })
 })

@@ -223,7 +223,11 @@ export function toggleBlock(view: EditorView, kind: MarkerKind, mode: MarkerMode
   const { state } = view
   const { from, to } = state.selection.main
   const first = state.doc.lineAt(from)
-  const last = state.doc.lineAt(to)
+  // A selection ending at the very start of a line doesn't take that line — a
+  // triple-click runs to the start of the NEXT line, and Bullet list then
+  // bulleted that one too (bug scan 2026-11-19, item 9; listIndent's linesOf).
+  const end = state.doc.lineAt(to)
+  const last = to > from && to === end.from && end.number > first.number ? state.doc.line(end.number - 1) : end
   const lines: string[] = []
   for (let n = first.number; n <= last.number; n++) lines.push(state.doc.line(n).text)
 

@@ -838,6 +838,7 @@ export async function renameEntry(fromPath: string, toPath: string): Promise<str
     crlfByPath.delete(fk)
   }
   await versionsFollow(fromAbs, toAbs)
+  await recordingsFollow(toRel(fromAbs), toRel(toAbs))
   return toRel(toAbs)
 }
 
@@ -887,6 +888,7 @@ export async function moveEntryInto(fromPath: string, toDir: string): Promise<st
     crlfByPath.delete(fk)
   }
   await versionsFollow(fromAbs, toAbs)
+  await recordingsFollow(toRel(fromAbs), toRel(toAbs))
   return toRel(toAbs)
 }
 
@@ -970,7 +972,10 @@ async function restoreHeldEntry(src: string, name: string, to: string): Promise<
   const dir = path.dirname(destRaw)
   await fs.mkdir(dir, { recursive: true })
 
-  const ext = path.extname(name)
+  // A folder's name has no extension, whatever dots it holds ("Term 1.2") — as in
+  // `moveEntryInto`. Put back beside a taken name it became "Term 1 (2).2" (bug
+  // scan 2026-11-19, item 24).
+  const ext = (await fs.stat(src)).isDirectory() ? '' : path.extname(name)
   const stem = ext ? name.slice(0, -ext.length) : name
   const candidate = path.join(dir, await uniqueName(dir, stem, ext))
   assertInVault(candidate)
@@ -1143,6 +1148,36 @@ async function versionsFollow(fromAbs: string, toAbs: string): Promise<void> {
     await versions.followMove(versionsCtx(), toRel(fromAbs), toRel(toAbs))
   } catch (e) {
     console.error('could not move earlier versions', e)
+  }
+}
+
+/** A note or folder moved: a recording being kept as it is made (`recordingBegin`)
+ *  for a note in it now names the note's NEW path. Its `.json` said where the note
+ *  was when recording began, so after a rename and a crash the recovered recording
+ *  was saved under the old name and never reached the note (bug scan 2026-11-19,
+ *  item 20). Best effort, like the copies. */
+async function recordingsFollow(fromRel: string, toPath: string): Promise<void> {
+  const dir = path.join(requireVault(), '.mdnotes', 'recording')
+  let names: string[]
+  try {
+    names = await fs.readdir(dir)
+  } catch {
+    return
+  }
+  const from = fromRel.toLowerCase()
+  for (const n of names) {
+    if (!/^[a-z0-9]{6,40}\.json$/.test(n)) continue
+    const p = path.join(dir, n)
+    try {
+      const info = JSON.parse(await fs.readFile(p, 'utf8')) as { note?: unknown }
+      if (typeof info.note !== 'string') continue
+      const note = info.note.toLowerCase()
+      if (note !== from && !note.startsWith(from + '/')) continue
+      info.note = toPath + info.note.slice(fromRel.length)
+      await fs.writeFile(p, JSON.stringify(info), 'utf8')
+    } catch (e) {
+      console.warn('[voice] could not move a kept recording to its renamed note', e)
+    }
   }
 }
 

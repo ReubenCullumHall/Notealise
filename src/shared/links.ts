@@ -172,7 +172,16 @@ export function scanLinks(text: string, base = 0): WikiLink[] {
       const fence = '`'.repeat(n)
       // An unmatched run is just a stray backtick; step over it and carry on
       // rather than swallowing the rest of the line.
-      const close = text.indexOf(fence, i + n)
+      // A code span never runs past the end of its paragraph: two stray
+      // backticks paragraphs apart ("don`t" … "the ` key") used to pair up and
+      // hide every link between them (bug scan 2026-11-19, item 8).
+      let close = text.indexOf(fence, i + n)
+      if (close !== -1) {
+        const gap = /\n[ \t]*\r?\n/g
+        gap.lastIndex = i + n
+        const end = gap.exec(text)
+        if (end && end.index < close) close = -1
+      }
       i = close === -1 ? i + n : close + n
       continue
     }
@@ -515,7 +524,11 @@ export function backlinksFor(path: string, index: LinkRow[], notes: NoteRef[]): 
  *  "Notes" would otherwise have its own name rewritten inside every unrelated
  *  `[[Notes on X]]`, and inside ordinary prose that merely looks like a link. */
 export function rewriteLinks(text: string, docPath: string, from: string, to: string, notes: NoteRef[]): string | null {
-  const links = scanLinks(text)
+  // Read the note the way the index does (`eachLinkLine`, which skips fenced
+  // code), so a rename rewrites exactly the links the backlinks list counts —
+  // it used to rewrite `[[Waves]]` inside a ~~~ block too (bug scan 2026-11-19).
+  const links: WikiLink[] = []
+  eachLinkLine(text, (l) => links.push(l))
   if (!links.length) return null
 
   const nextTitle = titleOf(to)
@@ -526,6 +539,29 @@ export function rewriteLinks(text: string, docPath: string, from: string, to: st
   // dashed, and a click made an empty note there (bug scan 2026-10-27).
   const inside = (p: string): boolean => eq(p, from) || p.toLowerCase().startsWith(from.toLowerCase() + '/')
 
+  // A bare title is written when it still finds the moved note from here. When
+  // another note nearer this one already has the new name ("Notes", "Week 1"),
+  // the bare title would open THAT note — so the link is written as a path
+  // instead: inside this space if the note is in it, else from the vault's top
+  // (bug scan 2026-11-19, item 10). Checked against the list as it will be.
+  let after: NoteRef[] | null = null
+  const titleOrPath = (moved: string): string => {
+    after ??= notes.map((n) => {
+      if (!inside(n.path)) return n
+      const p = to + n.path.slice(from.length)
+      return { ...n, path: p, title: n.kind === 'dir' ? baseName(p) : titleOf(p) }
+    })
+    const finds = (t: string): boolean => {
+      const r = resolveLink({ from: 0, to: 0, target: t, heading: null, alias: null, text: '' }, after as NoteRef[], docPath)
+      return r.kind === 'note' && eq(r.path, moved)
+    }
+    if (finds(nextTitle)) return nextTitle
+    const space = docPath.includes('/') ? docPath.slice(0, docPath.indexOf('/') + 1) : ''
+    const inSpace = space && moved.toLowerCase().startsWith(space.toLowerCase()) ? stripMd(moved.slice(space.length)) : ''
+    if (inSpace && finds(inSpace)) return inSpace
+    return stripMd(moved)
+  }
+
   for (const l of links) {
     const r = resolveLink(l, notes, docPath)
     if (r.kind !== 'note' || !inside(r.path)) continue
@@ -535,7 +571,7 @@ export function rewriteLinks(text: string, docPath: string, from: string, to: st
     // Keep the shape the user wrote: a path link stays a path link, an alias
     // survives untouched (it's their words, not the note's name), and a heading
     // rides along.
-    const target = l.target.includes('/') ? stripMd(moved) : nextTitle
+    const target = l.target.includes('/') ? stripMd(moved) : titleOrPath(moved)
     const inner = target + (l.heading ? '#' + l.heading : '') + (l.alias ? '|' + l.alias : '')
     const insert = '[[' + inner + ']]'
     if (insert !== text.slice(l.from, l.to)) edits.push({ from: l.from, to: l.to, insert })

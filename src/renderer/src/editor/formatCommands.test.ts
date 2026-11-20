@@ -309,3 +309,28 @@ describe('style toggles over a mismatched selection', () => {
     expect(read()).toBe('a« »b')
   })
 })
+
+// Bug scan 2026-11-19, item 9: a triple-click selects up to the start of the NEXT
+// line, and every block button then changed that line too.
+describe('block commands — a selection ending at the start of a line', () => {
+  it('bullets only the triple-clicked line', () => {
+    const { view, read } = harness('Milk\nEggs\nBread', 0, 5)
+    toggleBlock(view, 'bullet')
+    expect(read()).toBe('«- Milk»\nEggs\nBread')
+  })
+  it('takes a heading off a triple-clicked heading without heading the line below', () => {
+    const { view, read } = harness('# Title\nBody text', 0, 8)
+    toggleBlock(view, 'h1')
+    expect(read()).toBe('«Title»\nBody text')
+  })
+  it('a Shift+Down selection over two lines still changes just those two', () => {
+    const { view, read } = harness('Milk\nEggs\nBread', 0, 10)
+    toggleBlock(view, 'checklist')
+    expect(read().split('\n')[2]).toBe('Bread')
+  })
+  it('a cursor at the start of a line still changes that line', () => {
+    const { view, read } = harness('Milk\nEggs', 5)
+    toggleBlock(view, 'bullet')
+    expect(read()).toBe('Milk\n- |Eggs')
+  })
+})

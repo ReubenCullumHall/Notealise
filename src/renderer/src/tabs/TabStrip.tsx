@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../icons'
-import { BLANK, MAX_PANES, stripGroups, type Split } from './model'
+import { BLANK, MAX_PANES, splitWith, stripGroups, type Split } from './model'
 import {
   BOUNCE,
   BOUNCE_MS,
@@ -662,7 +662,16 @@ export function TabStrip({
     dragging?.kind === 'tab' &&
     dragging.path !== target &&
     target !== BLANK &&
-    (panes.includes(dragging.path) || panes.length < MAX_PANES)
+    (panes.includes(dragging.path) || panes.length < MAX_PANES) &&
+    // …and only where the model really makes one: onto a piece of a PARKED
+    // three-note split, the split came back full and the drop did nothing
+    // under a lit indicator (bug scan 2026-11-19, item 12).
+    splitWouldHappen(target, dragging.path)
+
+  const splitWouldHappen = (target: string, dragged: string): boolean => {
+    const probe = { tabs, panes, focus: 0, parked: parked?.length ? parked : undefined }
+    return splitWith(probe, target, dragged) !== probe
+  }
 
   const clear = (): void => {
     setBefore(undefined)

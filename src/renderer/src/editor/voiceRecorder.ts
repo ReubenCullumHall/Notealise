@@ -422,6 +422,12 @@ class Recording {
    *  under this id, in order; off once a piece fails to go */
   private readonly keepId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
   private keepOn = false
+  /** The kept files exist — set when they are begun, and only cleared when they
+   *  are removed. Separate from `keepOn` ("still appending"): one failed append
+   *  turned `keepOn` off, `forgetKept` then left the files behind, and the next
+   *  launch "recovered" a recording that had been saved — or one thrown away
+   *  (bug scan 2026-11-19, item 15). */
+  private keepBegun = false
   private keepChain: Promise<void> = Promise.resolve()
 
   private keepBegin(ext: string): void {
@@ -433,6 +439,7 @@ class Recording {
           startedAt: this.startedAt.toISOString(),
           ext
         })
+        this.keepBegun = this.keepOn
       } catch {
         this.keepOn = false
       }
@@ -456,8 +463,9 @@ class Recording {
    *  recovers. */
   private forgetKept(): void {
     this.keepChain = this.keepChain.then(async () => {
-      if (!this.keepOn) return
+      if (!this.keepBegun) return
       this.keepOn = false
+      this.keepBegun = false
       await window.api.recordingEnd(this.keepId).catch(() => {})
     })
   }
@@ -890,14 +898,14 @@ class Recording {
     } catch (e) {
       console.error('could not save the recording', e)
       notifyError(this.view.state, 'Couldn’t save the recording', e)
-      if (this.blockShowing()) {
-        // The sound is still in memory — keep it, and offer to try again.
-        this.phase = 'failed'
-        this.saving = null
-        this.render()
-      } else {
-        this.end()
-      }
+      // The sound is still in memory — keep it, and offer to try again: in the
+      // block, or (its note off screen, Stop pressed in the sidebar) on the
+      // sidebar's card and in the block once the note is back. Off screen this
+      // used to end the recording and drop it (bug scan 2026-11-19, item 5).
+      this.phase = 'failed'
+      this.saving = null
+      this.render()
+      changed()
       return
     }
     this.bytes = null
@@ -1384,6 +1392,14 @@ export function startVoiceNote(view: EditorView): void {
 export function recordingsPending(): boolean {
   const recorded = live !== null && live.phase !== 'ready' && live.phase !== 'starting'
   return recorded || waiting.size > 0
+}
+
+/** A different folder is open: a line still waiting for its note belongs to a
+ *  note in the folder just left, and a note with the same name here must not
+ *  get it (bug scan 2026-11-19, item 1). App saves everything first
+ *  (`flushRecordings`); this drops whatever that could not write. */
+export function forgetWaitingRecordings(): void {
+  waiting.clear()
 }
 
 /** Stop and save whatever is recording — App's before-quit flush waits on this,

@@ -299,6 +299,16 @@ export function openTab(l: TabLayout, path: string): TabLayout {
   return tidy({ ...keepParked(l), tabs, panes, focus: clampFocus(panes, l.focus), sizes: l.panes.length ? l.sizes : undefined })
 }
 
+/** Open a note BESIDE the focused one — Alt+click on a link, or a link dropped on
+ *  a column's edge. A note already on screen just gets the focus, as `openTab`
+ *  promises: this used to split it in again, so Alt+clicking a link to a note in
+ *  the next column moved it over yours and closed a column (bug scan 2026-11-19,
+ *  item 11). At the column limit it replaces the focused note instead. */
+export function openBesideLayout(l: TabLayout, path: string): TabLayout {
+  if (l.panes.includes(path)) return openTab(l, path)
+  return l.panes.length >= MAX_PANES ? showInPane(l, path, l.focus) : splitAt(l, path, l.focus + 1)
+}
+
 /** GO to a note — a tab clicked in the strip, Cmd/Ctrl+1…9, Ctrl+Tab. Nothing
  *  closes. Something on screen gets the focus; a note in a parked split brings
  *  that split back; anything else, while a split is on screen, parks the split
@@ -392,7 +402,20 @@ export function restoreLayout(
   const panes = saved.panes
     .filter((p, i) => saved.panes.indexOf(p) === i && tabs.includes(p))
     .slice(0, MAX_PANES)
-  if (!panes.length) panes.push(tabs[0]) // every open tab, but no pane: show one
+  if (!panes.length) {
+    // Every open tab, but no pane (the note you were on has gone): show one — but
+    // not a member of a parked split, which then fell below two notes and came
+    // apart into separate tabs. With nothing else open, that split comes back on
+    // screen whole (bug scan 2026-11-19, item 22).
+    const inParked = new Set((saved.parked ?? []).flatMap((g) => g.panes))
+    const loose = tabs.find((t) => !inParked.has(t))
+    const whole = (saved.parked ?? [])
+      .map((g) => g.panes.filter((p, i) => g.panes.indexOf(p) === i && tabs.includes(p)).slice(0, MAX_PANES))
+      .find((m) => m.length >= 2)
+    if (loose) panes.push(loose)
+    else if (whole) panes.push(...whole)
+    else panes.push(tabs[0])
+  }
   // Remembered widths only mean anything if the columns they describe all came
   // back. Drop one note (renamed, binned, deleted outside the app) and every
   // index after it refers to a different pane than the one that was measured —
@@ -538,7 +561,11 @@ export function splitAt(l: TabLayout, path: string, at: number): TabLayout {
   // leaves has to take another open tab, since showing one note in both halves
   // is what invariant 2 forbids.
   if (from !== -1 && l.panes.length === 1) {
-    const other = neighbour(l.tabs, 0, new Set(l.panes))
+    // Notes in a parked split are skipped, as closing a tab skips them: pulling one
+    // out showed it in two joined tabs at once, and a note closed from the screen
+    // later came back from inside the parked one (bug scan 2026-11-19, item 19).
+    const inParked = (l.parked ?? []).flatMap((g) => g.panes)
+    const other = neighbour(l.tabs, 0, new Set([...l.panes, ...inParked]))
     if (!other) return l
     const left = at <= 0
     return { ...l, tabs: l.tabs, panes: left ? [path, other] : [other, path], focus: left ? 0 : 1, sizes: undefined }
@@ -573,7 +600,21 @@ export function splitAt(l: TabLayout, path: string, at: number): TabLayout {
  *  one note in two panes, so there is nothing this could mean. */
 export function splitWith(l: TabLayout, target: string, dragged: string): TabLayout {
   if (target === dragged) return l
-  const shown = openTab(l, target)
+  // The dragged note is a column of the split on screen: the target comes in as
+  // a new column on its left and nobody else moves. Going through `openTab`
+  // first put the target in whichever column had the FOCUS, throwing another
+  // note out of the user's split (bug scan 2026-11-19, item 12). With no room
+  // for another column, refused.
+  const d = l.panes.indexOf(dragged)
+  if (d !== -1 && !l.panes.includes(target)) {
+    const next = splitAt(l, target, d)
+    return next === l ? l : { ...next, focus: next.panes.indexOf(dragged) }
+  }
+  // Neither note is on screen and a split is: that split is parked whole (as
+  // going to any other tab parks it — `showTab`) and the two notes take the
+  // screen together. `openTab` put the target in the focused column instead,
+  // throwing a note out of the user's split (2026-11-20, seen fixing item 12).
+  const shown = l.panes.length > 1 && !l.panes.includes(target) ? showTab(l, target) : openTab(l, target)
   const at = shown.panes.indexOf(target)
   if (at === -1) return l
   const next = splitAt(shown, dragged, at + 1)

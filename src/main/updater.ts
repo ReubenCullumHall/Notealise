@@ -122,9 +122,20 @@ function wire(): void {
   // the variable set in their environment.
   if (devTest && !app.isPackaged) au.forceDevUpdateConfig = true
 
-  au.on('checking-for-update', () => setStatus({ state: 'checking' }))
-  au.on('update-not-available', () => setStatus({ state: 'none' }))
-  au.on('update-available', (info) =>
+  // A download that is finished and waiting for a restart stays 'ready' through
+  // a later check: the every-6-hours check (or "Check for updates") used to turn
+  // it into 'checking', then 'error' when offline — and the "Restart to update"
+  // button went with it (bug scan 2026-11-19, item 21; the Mac's `checkMac`
+  // already guards this). Only a NEWER release moves it on.
+  const ready = (): boolean => status.state === 'ready'
+  au.on('checking-for-update', () => {
+    if (!ready()) setStatus({ state: 'checking' })
+  })
+  au.on('update-not-available', () => {
+    if (!ready()) setStatus({ state: 'none' })
+  })
+  au.on('update-available', (info) => {
+    if (ready() && info.version === status.version) return
     setStatus({
       // With auto-download on, electron-updater starts fetching immediately, so
       // report `downloading` straight away rather than flashing `available`.
@@ -132,12 +143,14 @@ function wire(): void {
       version: info.version,
       percent: 0
     })
-  )
-  au.on('download-progress', (p) =>
-    setStatus({ state: 'downloading', version: status.version, percent: Math.round(p.percent) })
-  )
+  })
+  au.on('download-progress', (p) => {
+    if (!ready()) setStatus({ state: 'downloading', version: status.version, percent: Math.round(p.percent) })
+  })
   au.on('update-downloaded', (info) => setStatus({ state: 'ready', version: info.version }))
-  au.on('error', (err) => setStatus({ state: 'error', message: err?.message ?? String(err) }))
+  au.on('error', (err) => {
+    if (!ready()) setStatus({ state: 'error', message: err?.message ?? String(err) })
+  })
 }
 
 /** True when this build should use the manual macOS flow: read the feed, fetch
@@ -322,7 +335,7 @@ export async function checkNow(): Promise<UpdateStatus> {
   try {
     await updater().checkForUpdates()
   } catch (e) {
-    setStatus({ state: 'error', message: (e as Error).message })
+    if (status.state !== 'ready') setStatus({ state: 'error', message: (e as Error).message })
   }
   return status
 }

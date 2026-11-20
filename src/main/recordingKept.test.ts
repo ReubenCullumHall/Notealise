@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { promises as fs, mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { recordingAppend, recordingBegin, recordingEnd, recordingsLeft, setVaultRoot } from './vault'
+import { recordingAppend, recordingBegin, recordingEnd, recordingsLeft, renameEntry, setVaultRoot } from './vault'
 
 // Save as you record (vault.ts "a recording kept as it is made").
 let root = ''
@@ -51,5 +51,24 @@ describe('a recording kept as it is made', () => {
     await recordingAppend('abc123', new Uint8Array([1]))
     expect(await recordingsLeft()).toEqual([])
     expect((await fs.readdir(path.join(root, '.mdnotes', 'recording'))).sort()).toEqual(['abc123.json', 'abc123.part'])
+  })
+})
+
+// Bug scan 2026-11-19, item 20: the note renamed mid-recording, then a crash — the
+// recovered recording was saved under the OLD name and never reached the note.
+describe('a kept recording follows its renamed note', () => {
+  it('the recovered recording goes beside the note under its new name', async () => {
+    await fs.writeFile(path.join(root, 'Bio', 'Cells.md'), 'notes\n')
+    expect(await recordingBegin('abc123', info)).toBe(true)
+    expect(await recordingAppend('abc123', new Uint8Array([1, 2, 3]))).toBe(true)
+    await renameEntry('Bio/Cells.md', 'Bio/Cell biology.md')
+    const said = JSON.parse(await fs.readFile(kept('abc123.json'), 'utf8'))
+    expect(said.note).toBe('Bio/Cell biology.md')
+  })
+  it('and the folder it is in, renamed', async () => {
+    await fs.writeFile(path.join(root, 'Bio', 'Cells.md'), 'notes\n')
+    expect(await recordingBegin('abc123', info)).toBe(true)
+    await renameEntry('Bio', 'Biology')
+    expect(JSON.parse(await fs.readFile(kept('abc123.json'), 'utf8')).note).toBe('Biology/Cells.md')
   })
 })
