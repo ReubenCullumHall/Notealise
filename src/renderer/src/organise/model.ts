@@ -218,6 +218,19 @@ export function withoutPinned(nodes: TreeNode[], hoisted: Set<string>): TreeNode
   return out
 }
 
+/** Every document (PDF, Word, Excel… — shared/docs.ts) under `nodes`, flattened. */
+export function flattenDocs(nodes: TreeNode[]): TreeNode[] {
+  const out: TreeNode[] = []
+  const walk = (list: TreeNode[]): void => {
+    for (const n of list) {
+      if (n.type === 'doc') out.push(n)
+      else if (n.children) walk(n.children)
+    }
+  }
+  walk(nodes)
+  return out
+}
+
 /** Every note under `nodes`, flattened. */
 export function flattenNotes(nodes: TreeNode[]): TreeNode[] {
   const out: TreeNode[] = []

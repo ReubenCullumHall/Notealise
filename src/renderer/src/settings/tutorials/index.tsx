@@ -4,8 +4,13 @@ import { BlocksGuide } from './BlocksGuide'
 import { ColoursGuide } from './ColoursGuide'
 import { FormatGuide } from './FormatGuide'
 import { GUIDES, AREAS, type GuideId } from './guides'
+import { KeepingGuide } from './KeepingGuide'
 import { LinkingGuide } from './LinkingGuide'
+import { MovingGuide } from './MovingGuide'
+import { TabsGuide } from './TabsGuide'
 import { TryItContext } from './tryIt'
+import { VoiceEditGuide } from './VoiceEditGuide'
+import { VoiceGuide } from './VoiceGuide'
 
 // Settings → Tutorials. An index of guides, one click deep.
 //
@@ -21,7 +26,12 @@ const BODIES: Record<GuideId, () => React.JSX.Element> = {
   linking: LinkingGuide,
   format: FormatGuide,
   colours: ColoursGuide,
-  blocks: BlocksGuide
+  blocks: BlocksGuide,
+  voice: VoiceGuide,
+  voiceEdit: VoiceEditGuide,
+  tabs: TabsGuide,
+  moving: MovingGuide,
+  keeping: KeepingGuide
 }
 
 /** `openGuide`: a Settings search result for a guide opens that guide itself.

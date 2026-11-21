@@ -1,3 +1,4 @@
+import { isListedDoc } from '../../../shared/docs'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../icons'
 import { BLANK, MAX_PANES, splitWith, stripGroups, type Split } from './model'
@@ -1215,10 +1216,16 @@ function TabGroupMenu({
     ...(grouped ? [{ label: 'Split them all apart', onClick: onUngroup }] : []),
     // The sidebar's own words for the same two actions.
     archived ? { label: 'Put back…', onClick: onPutBack } : { label: 'Move to archive', onClick: onArchive },
-    // The sidebar's words for the same thing. A blank tab has no note to look back on.
-    ...(path !== BLANK ? [{ label: 'Earlier versions…', onClick: onEarlierVersions }] : []),
-    { label: 'Save as…', onClick: () => onSaveAs('save') },
-    { label: 'Print…', onClick: () => onSaveAs('print') },
+    // A document's tab (a PDF, a Word file — shared/docs.ts) has no note versions and
+    // isn't a note to save as or print: its own app does those (docs/plans/file-tabs.md).
+    ...(path !== BLANK && isListedDoc(path)
+      ? [{ label: 'Open in its own app', onClick: () => void window.api.openVaultFile(path) }]
+      : [
+          // The sidebar's words for the same thing. A blank tab has no note to look back on.
+          ...(path !== BLANK ? [{ label: 'Earlier versions…', onClick: onEarlierVersions }] : []),
+          { label: 'Save as…', onClick: () => onSaveAs('save') },
+          { label: 'Print…', onClick: () => onSaveAs('print') }
+        ]),
     { label: `Close ${name}`, onClick: onClose, danger: true }
   ]
   // Escape closes it, like the sidebar's right-click menu — now that every tab

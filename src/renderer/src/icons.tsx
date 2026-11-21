@@ -4,6 +4,7 @@
 
 export type IconName =
   | 'doc'
+  | 'fileLines'
   | 'folder'
   | 'chevron'
   | 'toggle'
@@ -71,6 +72,15 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     <>
       <path d="M6 3h7l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
       <path d="M13 3v5h5" />
+    </>
+  ),
+  // A document that isn't a note — a PDF, a Word file (shared/docs.ts): the
+  // note's page with lines of print on it.
+  fileLines: (
+    <>
+      <path d="M6 3h7l5 5v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+      <path d="M13 3v5h5" />
+      <path d="M8.5 12.5h7M8.5 15.5h7M8.5 18h4" />
     </>
   ),
   folder: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />,

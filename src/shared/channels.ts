@@ -124,6 +124,11 @@ export const CH = {
   linkThumb: 'app:linkThumb',
   /** renderer -> main: open a document the vault holds in its own app */
   openVaultFile: 'vault:openVaultFile',
+  /** a document's contents for its tab (main/docView.ts) — never a PDF, which is
+   *  shown from its media address */
+  readDocument: 'vault:readDocument',
+  /** an edited text or CSV file saved back where it is (vault.ts writeTextDoc) */
+  writeTextDoc: 'vault:writeTextDoc',
   /** renderer -> main: may the app use the microphone (asks once on macOS) */
   microphoneAccess: 'voice:microphoneAccess',
   /** renderer -> main: convert a recording the player can't play into .m4a */

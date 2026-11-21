@@ -88,9 +88,21 @@ export async function serveMedia(request: Request): Promise<Response> {
     }
     // No Access-Control-Allow-Origin: a page may SHOW these, never read them.
     const headers: Record<string, string> = { 'Accept-Ranges': 'bytes' }
+    // A PDF is the one file shown in a FRAME — its tab, through Chromium's own PDF
+    // reader (docs/plans/file-tabs.md). It goes as `application/pdf` and may not be
+    // sniffed as anything else, so a vault `.html` renamed `.pdf` is a PDF that
+    // fails to open, never a page that runs. Everything else this address serves
+    // refuses to be framed at all — the window's policy now lets this address into
+    // a frame, and that permission is meant for PDFs only.
+    if (/\.pdf$/i.test(rel)) {
+      headers['Content-Type'] = 'application/pdf'
+      headers['X-Content-Type-Options'] = 'nosniff'
+    } else {
+      headers['X-Frame-Options'] = 'DENY'
+    }
     if (/\.svg$/i.test(rel)) {
       headers['Content-Type'] = 'image/svg+xml'
-      headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+      headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'"
     }
     const range = byteRange(request.headers.get('range'), file.size)
     if (range === 'none') {

@@ -63,7 +63,10 @@ function policy(dev: boolean, scriptHashes: string[]): string {
     // Nothing may be framed except a video player, and only the two hosts a video
     // card (editor/videoCard.ts) can point one at — on a click, never on draw. The
     // list is shared/embeds.ts's, so the card and the policy cannot drift.
-    `frame-src ${PLAYER_HOSTS.map((h) => `https://${h}`).join(' ')}`,
+    // And a PDF in its own tab, from the media address (docs/plans/file-tabs.md):
+    // main serves a .pdf as application/pdf, unsniffable, and sends every other
+    // file from that address with X-Frame-Options: DENY (mediaProtocol.ts).
+    `frame-src ${MEDIA_SCHEME}: ${PLAYER_HOSTS.map((h) => `https://${h}`).join(' ')}`,
     "base-uri 'none'",
     "form-action 'none'"
   ].join('; ')

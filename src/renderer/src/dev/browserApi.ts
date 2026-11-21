@@ -517,6 +517,8 @@ const api: VaultApi = {
   lookUpLink: async () => ({ title: null, video: null }),
   linkThumb: async () => null,
   openVaultFile: async () => false, // no shell access outside Electron
+  readDocument: async () => ({ kind: 'error', reason: 'unreadable' }),
+  writeTextDoc: async () => {},
   // Voice notes: the browser asks for the microphone itself, so "yes" here just
   // lets it; there is no converter and no native picker outside Electron.
   microphoneAccess: async () => ({ ok: true as const }),

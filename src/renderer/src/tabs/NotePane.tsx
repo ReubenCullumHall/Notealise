@@ -13,6 +13,8 @@ import { formatDateTime, formatNumber, formatWhenShort } from '../intl'
 import { HoverCard } from '../HoverCard'
 import { LinksBlock, LINKS_BLOCK_HEIGHT } from '../links/LinksBlock'
 import { NoteTape } from './VoiceDeck'
+import { DocView } from '../docs/DocView'
+import { docLabel, isListedDoc } from '../../../shared/docs'
 import type { Inspect } from '../links/LinkInspector'
 import { incomingLinks, outgoingLinks } from '../links/model'
 import { subscribeWordCounts, wordCountOf } from '../wordCounts'
@@ -261,6 +263,12 @@ export function NotePane({
   // invitation where the editor goes. Clicking any note in the sidebar fills it
   // (a plain click replaces the focused tab, and this IS the focused tab).
   const blank = path === ''
+  // A document beside the notes — a PDF, a Word or Excel file (shared/docs.ts).
+  // Same column, same chrome around it; what's inside is DocView, and nothing
+  // that belongs to a note (format buttons, links, title, word count) is drawn.
+  // (A kind it can't draw only gets here by a drag; DocView says so, with the
+  // way out above it.)
+  const isDoc = !blank && isListedDoc(path)
   const [titleDraft, setTitleDraft] = useState(() => stripMd(nameOf(path)))
   const [zone, setZone] = useState<DropZone | null>(null)
   // The zone as drawn, for the drop — and offered for a drop Chromium loses
@@ -280,12 +288,12 @@ export function NotePane({
   }, [path])
 
   const outgoing = useMemo(
-    () => (blank ? [] : outgoingLinks(path, doc, env.notes, env.spaces, env.blocks, env.headings)),
-    [blank, path, doc, env.notes, env.spaces, env.blocks, env.headings]
+    () => (blank || isDoc ? [] : outgoingLinks(path, doc, env.notes, env.spaces, env.blocks, env.headings)),
+    [blank, isDoc, path, doc, env.notes, env.spaces, env.blocks, env.headings]
   )
   const incoming = useMemo(
-    () => (blank ? [] : incomingLinks(path, linkIndex, env.notes, env.spaces)),
-    [blank, path, linkIndex, env.notes, env.spaces]
+    () => (blank || isDoc ? [] : incomingLinks(path, linkIndex, env.notes, env.spaces)),
+    [blank, isDoc, path, linkIndex, env.notes, env.spaces]
   )
 
   // Hide-on-scroll, shared by the links block (floating) and the heading row
@@ -313,7 +321,7 @@ export function NotePane({
   // Pinned, or at the bottom, none of that happens for the links block: it is
   // an ordinary row instead (above the editor when pinned, below it at the
   // bottom — see the sibling rows around `.pane-body` below).
-  const floatingTop = showLinks && linksPosition === 'top' && !pinLinks
+  const floatingTop = !isDoc && showLinks && linksPosition === 'top' && !pinLinks
   const [scrolledPastTop, setScrolledPastTop] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -526,7 +534,9 @@ export function NotePane({
             takes the whole row and scrolls, exactly as it did before. */}
         {!split && (
           <span className="note-info flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap pr-4 text-xs">
-            {!blank && (
+            {isDoc ? (
+              <span className="truncate text-ink-500">{docLabel(path)}</span>
+            ) : !blank && (
               <>
                 {/* The count first, then the date — the date is optional
                     (Settings → Note extras) and appending it must not shift
@@ -552,9 +562,29 @@ export function NotePane({
           </span>
         )}
 
+        {isDoc ? (
+          // In place of the format buttons: the file's name, and the way out to the
+          // app the computer opens it with — for anything this tab can't do.
+          <div className="flex min-w-0 flex-[2] items-center justify-center gap-2">
+            <span className="min-w-0 truncate text-sm font-medium text-ink-800" data-tip={path}>
+              {nameOf(path)}
+            </span>
+            <button
+              type="button"
+              className={ROW_BTN + ' gap-1.5 px-2 text-xs'}
+              data-tip="Open it in the app your computer uses for this kind of file"
+              aria-label="Open in its own app"
+              onClick={() => void window.api.openVaultFile(path)}
+            >
+              <Icon name="arrowUpRight" className="h-4 w-4" />
+              {!split && <span>Open in its own app</span>}
+            </button>
+          </div>
+        ) : (
         <div className={blank ? 'pointer-events-none flex min-w-0 flex-1 opacity-40' : 'contents'}>
           <FormatToolbar viewRef={viewRef} slots={slots} onSetSlot={onSetSlot} compact={split} />
         </div>
+        )}
 
         <div
           className={
@@ -624,7 +654,7 @@ export function NotePane({
         </div>
       )}
 
-      {!blank && showLinks && linksPosition === 'top' && pinLinks && (
+      {!blank && !isDoc && showLinks && linksPosition === 'top' && pinLinks && (
         <LinksBlock
           outgoing={outgoing}
           incoming={incoming}
@@ -649,6 +679,8 @@ export function NotePane({
               </p>
             </div>
           </div>
+        ) : isDoc ? (
+          <DocView path={path} version={version} />
         ) : (
           <div
             className="edit-layer has-title"
@@ -882,7 +914,7 @@ export function NotePane({
         )}
       </div>
 
-      {!blank && showLinks && linksPosition === 'bottom' && (
+      {!blank && !isDoc && showLinks && linksPosition === 'bottom' && (
         <LinksBlock
           outgoing={outgoing}
           incoming={incoming}

@@ -7,6 +7,7 @@ import { PREVIEW_BYTES, PREVIEW_CHARS, toPreviewLine } from '../shared/plainText
 import { indexLinks, stripMd, type LinkRow } from '../shared/links'
 import { sanitizeFilename } from '../shared/filenames'
 import { indexEmbeds, isDocFilename } from '../shared/attachments'
+import { isListedDoc, isOfficeLockFile } from '../shared/docs'
 import { isRecordingName } from './voice'
 import { voiceFileName } from '../shared/voiceNote'
 import { indexBlocks, indexHeadings } from '../shared/blocks'
@@ -330,7 +331,10 @@ function ignored(name: string): boolean {
   return name.startsWith('.') || name === 'node_modules'
 }
 function compareNodes(a: TreeNode, b: TreeNode): number {
-  if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+  // Folders first; notes and documents together, by name.
+  const da = a.type === 'dir' ? 0 : 1
+  const db = b.type === 'dir' ? 0 : 1
+  if (da !== db) return da - db
   return a.name.localeCompare(b.name)
 }
 
@@ -404,6 +408,18 @@ async function readDir(absDir: string): Promise<TreeNode[]> {
         preview: await readPreview(abs),
         createdAt: st ? st.birthtimeMs || undefined : undefined,
         updatedAt: st ? st.mtimeMs || undefined : undefined
+      })
+    } else if (e.isFile() && isListedDoc(e.name) && !isOfficeLockFile(e.name)) {
+      // A document beside the notes (shared/docs.ts): listed so it can be opened,
+      // never read — one stat, no preview.
+      const st = await fs.stat(abs).catch(() => null)
+      nodes.push({
+        name: e.name,
+        path: toRel(abs),
+        type: 'doc',
+        createdAt: st ? st.birthtimeMs || undefined : undefined,
+        updatedAt: st ? st.mtimeMs || undefined : undefined,
+        size: st ? st.size : undefined
       })
     }
   }
@@ -511,6 +527,41 @@ export async function writeNote(relPath: string, content: string): Promise<void>
   } catch (e) {
     // Don't leave the scratch file behind in the user's vault when the rename
     // loses — it's a dotfile so nothing shows it, and they accumulate silently.
+    await fs.unlink(tmp).catch(() => {})
+    throw e
+  }
+}
+
+/** Save an edited text or CSV file back where it is (docs/plans/file-tabs.md):
+ *  the same atomic write as a note — temp file, fsync, rename — keeping the
+ *  file's own line endings and its byte-order mark, if it had one. Only a file
+ *  that is already there, and only these two kinds: a document's tab never
+ *  makes a file, and Word, Excel and PDF files are never written. No earlier
+ *  versions are kept: those are for notes (.mdnotes/versions/). */
+export async function writeTextDoc(relPath: string, content: string): Promise<void> {
+  if (typeof relPath !== 'string' || typeof content !== 'string') throw new Error('Not a text file')
+  const editable = (p: string): boolean => /\.(txt|csv)$/i.test(p) && isListedDoc(p)
+  if (!editable(relPath)) throw new Error('Not a text file')
+  const abs = await resolveReal(relPath)
+  if (!editable(abs)) throw new Error('Not a text file')
+  assertNotConfig(abs)
+  const before = await fs.readFile(abs) // throws if it has gone: never recreated
+  const bom = before[0] === 0xef && before[1] === 0xbb && before[2] === 0xbf ? '﻿' : ''
+  const data = bom + applyEol(content, isCrlfDominant(before.toString('utf8')))
+  const dir = path.dirname(abs)
+  const tmp = path.join(dir, `.${path.basename(abs)}.${randomBytes(6).toString('hex')}.tmp`)
+  const fh = await fs.open(tmp, 'w')
+  try {
+    await fh.writeFile(data, 'utf8')
+    await fh.sync()
+  } finally {
+    await fh.close()
+  }
+  markWrite(abs)
+  markWrite(tmp)
+  try {
+    await renameWithRetry(tmp, abs)
+  } catch (e) {
     await fs.unlink(tmp).catch(() => {})
     throw e
   }
@@ -1063,6 +1114,18 @@ export async function revealInFolder(relPath: string): Promise<void> {
  *  system took it. */
 const opensInItsOwnApp = (name: string): boolean => isDocFilename(name) || isRecordingName(name)
 
+/** A document the window may READ for its tab (main/docView.ts): the same checks
+ *  as opening one in its own app — a document's name, as asked for AND as it
+ *  really is after links are followed, inside the vault, a plain file. */
+export async function resolveDocFile(relPath: string): Promise<string> {
+  if (typeof relPath !== 'string' || !isListedDoc(relPath)) throw new Error('Not a document')
+  const abs = await resolveReal(relPath)
+  if (!isListedDoc(abs)) throw new Error('Not a document')
+  const st = await fs.stat(abs)
+  if (!st.isFile()) throw new Error('Not a file')
+  return abs
+}
+
 export async function openVaultFile(relPath: string): Promise<boolean> {
   if (typeof relPath !== 'string' || !opensInItsOwnApp(relPath)) return false
   const abs = await resolveReal(relPath)
@@ -1198,6 +1261,10 @@ export async function readVersion(relPath: string, token: string): Promise<strin
 /** Keep the note as it is on disk now, before a restore or a Put back replaces
  *  it — so that can itself be taken back. */
 export async function keepVersionNow(relPath: string): Promise<void> {
+  // Notes only. A document's tab closing asks too, from the same path as a note's
+  // (App.tsx, "When you close the note"), and a PDF or Word file read as text
+  // and kept as a "note version" is nonsense (docs/plans/file-tabs.md).
+  if (typeof relPath !== 'string' || !/\.md$/i.test(relPath)) return
   const abs = await resolveReal(relPath)
   assertNotConfig(abs)
   const text = await fs.readFile(abs, 'utf8')

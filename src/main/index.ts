@@ -67,6 +67,10 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // preload needs require() for the contextBridge setup
+      // Chromium's own PDF reader, for a PDF's tab (docs/plans/file-tabs.md). It is
+      // the only plugin Electron has; the PDF is framed from the media address and
+      // the window's policy lets nothing else be framed but the two video players.
+      plugins: true,
       // The user's own language and region ("fr-FR"), for formatting dates and
       // numbers. The app's locale cannot be used for that: the packaged build
       // carries English language packs only, so on a French machine it falls

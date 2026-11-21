@@ -4,6 +4,8 @@ import type { Workspace } from '../../shared/workspace'
 import type { ColorStyle } from '../../shared/settings'
 import { inkOn, rgbChannels } from '../../shared/color'
 import { Icon } from './icons'
+import { docLabel, docViewOf } from '../../shared/docs'
+import { formatSize } from './docs/size'
 import { asksToArchive, colorOf, findNode, importedSince, labelOf, metaOf, monthLabel, onDate, sortSiblings, splitMoved } from './organise/model'
 import { DRAG_NOTE } from './tabs/island'
 import { clearEndLine } from './organise/endLine'
@@ -687,13 +689,19 @@ export function TreeView({
       >
         {!shelved && grip(node.path, asksToArchive(node, meta, Date.now(), importedSince(workspace, node.path)))}
         <span className={'shrink-0 ' + (open || picked(node.path) ? 'text-brand-600' : 'text-ink-300')}>
-          <Icon name="doc" />
+          {/* A document beside the notes (shared/docs.ts): a page with print on it, or
+              a table for a spreadsheet — never the note's blank page. */}
+          <Icon name={node.type !== 'doc' ? 'doc' : /^(sheet|csv)$/.test(docViewOf(node.name) ?? '') ? 'table' : 'fileLines'} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="tree-title truncate font-medium">{labelOf(node)}</span>
           {/* hidden entirely at ultra density — see --row-sub-display */}
           <span className="tree-sub truncate text-ink-500">
-            {stamp ? `Archived ${stamp}${from ? ` · from ${from}` : ''}` : node.preview || 'Empty note'}
+            {stamp
+              ? `Archived ${stamp}${from ? ` · from ${from}` : ''}`
+              : node.type === 'doc'
+                ? [docLabel(node.name), formatSize(node.size)].filter(Boolean).join(' · ')
+                : node.preview || 'Empty note'}
           </span>
         </span>
 

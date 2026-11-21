@@ -58,6 +58,8 @@ import { sendBugReport, sendFeatureRequest } from './support'
 import { openAllowedExternal } from './externalLinks'
 import { lookUpLink, readLinkThumb } from './linkPreview'
 import { mediaAddress } from './mediaProtocol'
+import { readDocumentResult } from './docView'
+import { isListedDoc } from '../shared/docs'
 import { convertAudio, microphoneAccess, pickAudioFiles } from './voice'
 import {
   stopAllTranscriptions,
@@ -106,6 +108,7 @@ import {
   renameEntry,
   moveEntryInto,
   openVaultFile,
+  writeTextDoc,
   revealInFolder,
   scanLinks,
   notesMentioning,
@@ -297,7 +300,13 @@ export function registerIpc(window: BrowserWindow): void {
     }
     return out
   })
-  ipcMain.handle(CH.writeNote, (_e, p: string, content: string) => writeNote(p, content))
+  // A document's tab is never written: it holds no text of its own, and a note's
+  // save aimed at a PDF would overwrite it with nothing. Refused here as well as
+  // never asked for (docs/plans/file-tabs.md).
+  ipcMain.handle(CH.writeNote, (_e, p: string, content: string) => {
+    if (typeof p === 'string' && isListedDoc(p)) throw new Error('A document is not a note')
+    return writeNote(p, content)
+  })
   ipcMain.handle(CH.listVersions, (_e, p: string) => listVersions(p))
   ipcMain.handle(CH.readVersion, (_e, p: string, token: string) => readVersion(p, token))
   ipcMain.handle(CH.keepVersionNow, (_e, p: string) => keepVersionNow(p))
@@ -418,6 +427,8 @@ export function registerIpc(window: BrowserWindow): void {
   })
   ipcMain.handle(CH.revealInFolder, (_e, p: string) => revealInFolder(p))
   ipcMain.handle(CH.openVaultFile, (_e, p: string) => openVaultFile(p))
+  ipcMain.handle(CH.readDocument, (_e, p: string) => readDocumentResult(p))
+  ipcMain.handle(CH.writeTextDoc, (_e, p: string, text: string) => writeTextDoc(p, text))
   // Voice notes (main/voice.ts). None of the three writes into the vault: a
   // recording reaches it through writeAsset, like any pasted file. The
   // converter's arguments are checked there, not trusted from here.

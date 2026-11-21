@@ -9,16 +9,18 @@ import type { IconName } from '../../icons'
 // component to `BODIES` in index.tsx (the type checker asks for each in turn).
 // The template is docs/tutorials.md.
 
-export type GuideId = 'linking' | 'format' | 'colours' | 'blocks'
+export type GuideId = 'linking' | 'format' | 'colours' | 'blocks' | 'voice' | 'voiceEdit' | 'tabs' | 'moving' | 'keeping'
 
 /** Which part of the app a guide is about — the heading it sits under in the
  *  Tutorials list, here and on the website (site/tutorials.html). */
-export type AreaId = 'writing' | 'linking'
+export type AreaId = 'writing' | 'voice' | 'linking' | 'organising'
 
 /** In the order they are shown. An area with no guide in it isn't shown. */
 export const AREAS: { id: AreaId; label: string }[] = [
   { id: 'writing', label: 'Writing in a note' },
-  { id: 'linking', label: 'Links between notes' }
+  { id: 'voice', label: 'Voice notes' },
+  { id: 'linking', label: 'Links between notes' },
+  { id: 'organising', label: 'Organising your notes' }
 ]
 
 export interface GuideInfo {
@@ -63,6 +65,24 @@ export const GUIDES: GuideInfo[] = [
       'tutorial guide maths math formula formulas equation equations latex katex symbol table tables row rows column columns cell cells grid spreadsheet toggle toggles collapse collapsible expand fold dropdown accordion hide show text add insert delete remove'
   },
   {
+    id: 'voice',
+    title: 'Voice notes',
+    blurb: 'Recording, listening, and linking to a moment.',
+    icon: 'mic',
+    area: 'voice',
+    words:
+      'tutorial guide voice note notes record recording recorder microphone mic audio sound memo voice memos lecture mark marks moment mixer volume tone speed louder faster slower cassette tape player listen play pause skip zoom waveform rename name link timestamp'
+  },
+  {
+    id: 'voiceEdit',
+    title: 'Editing and transcribing',
+    blurb: 'Turn a voice note into text, and trim or tidy the recording.',
+    icon: 'scissors',
+    area: 'voice',
+    words:
+      'tutorial guide transcribe transcription transcript text words speech to text dictation edit clip trim cut split section sections silence silences pauses remove shorten speed up save new clip scissors accurate model download'
+  },
+  {
     id: 'linking',
     title: 'Linking your notes',
     blurb: 'Every kind of [[link]], how to make each one, and how links reach across spaces.',
@@ -70,5 +90,32 @@ export const GUIDES: GuideInfo[] = [
     area: 'linking',
     words:
       'tutorial guide link links linking wiki wikilink backlinks backlink connect connecting connection brackets reference jump heading paragraph block folder path rename'
+  },
+  {
+    id: 'tabs',
+    title: 'Tabs and columns',
+    blurb: 'Several notes open at once, side by side, and changing space.',
+    icon: 'splitView',
+    area: 'organising',
+    words:
+      'tutorial guide tab tabs column columns side by side split screen two notes pane panes jump quick open find note space spaces swipe switch move column'
+  },
+  {
+    id: 'moving',
+    title: 'Moving things around',
+    blurb: 'Dragging lines, notes and files to where they belong.',
+    icon: 'grip',
+    area: 'organising',
+    words:
+      'tutorial guide drag drop dragging move moving six dots handle block blocks line lines paragraph paragraphs reorder pick several select folder pin pinned undo files finder explorer copy in link'
+  },
+  {
+    id: 'keeping',
+    title: 'Archive and earlier versions',
+    blurb: 'Putting notes away, getting them back from the archive or the Bin, and seeing what a note used to say.',
+    icon: 'archive',
+    area: 'organising',
+    words:
+      'tutorial guide archive archived put back bin trash deleted delete restore recover recovery undelete earlier versions version history old copy copies backup lost paragraph undo'
   }
 ]

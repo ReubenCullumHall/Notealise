@@ -13,8 +13,11 @@ export function isRemoteUrl(target: string): boolean {
 /** A markdown link or picture: `[text](target)` / `![alt](target)`. The target
  *  may hold backslash-escaped characters (turndown writes `photo \(1\).png`) and
  *  balanced brackets (`photo (1).png`, how Obsidian writes it) — `[^)]+` stopped
- *  at the first `)` and broke every such file (bug scan 2026-10-27). */
-export const LINK_PATTERN = /(!?\[[^\]]*\]\()((?:\\.|\([^()\s]*\)|[^()\s\\])+)(\))/g
+ *  at the first `)` and broke every such file (bug scan 2026-10-27). The WORDS
+ *  may hold one level of brackets too — a Notion page called "[Template] Weekly
+ *  review" — which `[^\]]*` couldn't, so the link was left dead and unreported
+ *  (bug scan 2026-11-19, item 17). */
+export const LINK_PATTERN = /(!?\[(?:\\.|[^[\]\\]|\[(?:\\.|[^[\]\\])*\])*\]\()((?:\\.|\([^()\s]*\)|[^()\s\\])+)(\))/g
 
 /** The file a link target names: escapes undone, then %-decoded. A stray `%`
  *  (`caf%E9.html`, `50% done`) made decodeURIComponent throw and stopped the

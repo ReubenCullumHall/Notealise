@@ -141,3 +141,20 @@ describe('Markdown / Obsidian import', () => {
     expect(dump()['M/Note.md']).toBe('See ![[missing.png]] and [[Other note]]\n')
   })
 })
+
+// Bug scan 2026-11-19, item 17: a link to a Notion page with brackets in its name
+// ("[Template] Weekly review") was never seen, so it stayed a dead link to the
+// export's .html file and the Import Report said nothing.
+describe('Notion import — a page with brackets in its name', () => {
+  it('a link to it becomes a link to the imported note', async () => {
+    writeFileSync(path.join(src, `[Template] Weekly ${ID1}.html`), page('<p>the template</p>', '[Template] Weekly'))
+    writeFileSync(
+      path.join(src, `Home ${ID2}.html`),
+      page(`<p>See <a href="%5BTemplate%5D%20Weekly%20${ID1}.html">[Template] Weekly</a> first</p>`, 'Home')
+    )
+    await notionZipImporter.run([src], 'N', () => {})
+    const home = Object.entries(dump()).find(([p]) => p.endsWith('Home.md'))![1]
+    expect(home).not.toContain('.html')
+    expect(home).toMatch(/\[\[[^\]]*Template[^\]]*\]\]|\]\([^)]*Template[^)]*\.md\)/)
+  })
+})

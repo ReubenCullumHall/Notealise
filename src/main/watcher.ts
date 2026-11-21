@@ -1,3 +1,4 @@
+import { isListedDoc, isOfficeLockFile } from '../shared/docs'
 import chokidar, { type FSWatcher } from 'chokidar'
 import path from 'node:path'
 import { realpathSync } from 'node:fs'
@@ -73,9 +74,12 @@ export function startWatching(given: string, onChange: (change: VaultChange) => 
   watcher.on('error', (e) => console.warn('folder watcher:', e))
 
   watcher.on('all', (event, abs) => {
-    // file events only matter for .md; dir add/remove always matter (tree shape)
+    // file events only matter for notes and for the documents the sidebar lists
+    // beside them (shared/docs.ts — a PDF dropped in from Finder appears, an open
+    // text file changed in another app is read again); dir add/remove always
+    // matter (tree shape)
     if (event === 'add' || event === 'change' || event === 'unlink') {
-      if (!abs.toLowerCase().endsWith('.md')) return
+      if (!abs.toLowerCase().endsWith('.md') && (!isListedDoc(abs) || isOfficeLockFile(abs))) return
     }
     if (wasRecentlyWritten(abs)) return // our own write — don't echo
     batch.add(toRel(abs))

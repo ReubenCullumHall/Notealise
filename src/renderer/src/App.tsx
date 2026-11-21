@@ -10,6 +10,19 @@ import { clearAssetCaches } from './editor/assetCache'
 import { forgetChanged } from './searchCache'
 import { checkMainIsCurrent } from './boot'
 import { encodeTarget, indexEmbeds, isDocFilename, kindForFilename, repointFileLinks, resolveVaultPath } from '../../shared/attachments'
+import { docExt, docViewOf, isListedDoc } from '../../shared/docs'
+import {
+  docEditsOwed,
+  docEditWaiting,
+  dropDocEdit,
+  flushDocEdits,
+  forgetAllDocEdits,
+  forgetDocEditsUnder,
+  keepUnsavedDocCopies,
+  moveDocEdits,
+  onDocEditKept,
+  saveDocEdit
+} from './docs/docEdits'
 import { mediaUsage, otherNotesUsing } from './media/usage'
 import type { SectionId } from './settings/Settings'
 import { FormatToolbar } from './editor/FormatToolbar'
@@ -140,6 +153,7 @@ import {
   colorOf,
   findNode,
   flattenNotes,
+  flattenDocs,
   isArchived,
   siblingColors,
   sortSiblings,
@@ -664,6 +678,10 @@ export default function App(): React.JSX.Element {
    *  the pane showing it reacts to. */
   const loadDoc = useCallback(async (path: string): Promise<void> => {
     if (path === BLANK || loadingRef.current.has(path)) return
+    // A document's tab reads its own file (DocView). It never enters the open-notes
+    // map: that map is what gets saved, counted, searched, link-scanned and kept as
+    // earlier versions, and a PDF must be none of those (docs/plans/file-tabs.md).
+    if (isListedDoc(path)) return
     loadingRef.current.add(path)
     let text = ''
     try {
@@ -831,7 +849,7 @@ export default function App(): React.JSX.Element {
       // as it leaves the screen — after its last typing is written. A note that
       // left because it was binned or deleted has nothing to keep; that refusal is
       // expected, so it is not reported.
-      if (settingsRef.current.versionEvery === 'close') {
+      if (settingsRef.current.versionEvery === 'close' && !isListedDoc(path)) {
         written = written.then(() => window.api.keepVersionNow(path)).catch(() => {})
       }
       docsRef.current.delete(path)
@@ -886,6 +904,7 @@ export default function App(): React.JSX.Element {
             : p
       remapKeys(dirtyRef.current, map)
       remapKeys(docsRef.current, map)
+      moveDocEdits(map)
       remapWordCounts(map)
       setVersions((v) => remapRecord(v, map))
       applyLayout(renamePath(layoutRef.current, oldPath, newRel))
@@ -913,6 +932,7 @@ export default function App(): React.JSX.Element {
       const inside = (p: string): boolean => roots.some((r) => p === r || p.startsWith(r + '/'))
       for (const p of [...dirtyRef.current.keys()]) if (inside(p)) dirtyRef.current.delete(p)
       for (const p of [...docsRef.current.keys()]) if (inside(p)) docsRef.current.delete(p)
+      forgetDocEditsUnder(roots)
       applyLayout(closeUnder(layoutRef.current, roots))
     },
     [applyLayout]
@@ -1109,16 +1129,54 @@ export default function App(): React.JSX.Element {
    *  so this only reads from disk the first time. */
   const openNote = useCallback(
     async (p: string, newTab = false): Promise<void> => {
+      // A document the app can't draw (slides, an old .doc…) opens in its own app,
+      // as a link to it in a note always has — no empty tab (docs/plans/file-tabs.md).
+      if (isListedDoc(p) && !docViewOf(p)) {
+        if (!(await window.api.openVaultFile(p))) flash(`Couldn't open ${nameOf(p)}`)
+        return
+      }
       applyLayout(newTab ? addTab(layoutRef.current, p) : replaceActive(layoutRef.current, p))
       if (!docsRef.current.has(p)) await loadDoc(p)
     },
-    [applyLayout, loadDoc]
+    [applyLayout, loadDoc, flash]
   )
 
+  /** A file whose change can't be saved, waiting on "Try again" or "Close anyway". */
+  const [closeAsk, setCloseAsk] = useState<{ path: string; busy: boolean; again: boolean } | null>(null)
+
+  // Every way of closing a tab comes through here. A text or CSV file's change is
+  // saved first, and if the computer refuses (another program holds the file) the
+  // tab stays until the person decides: closing it would lose the change.
   const closeNote = useCallback(
-    (path: string): void => applyLayout(closeTab(layoutRef.current, path)),
+    (path: string): void => {
+      const shut = (): void => applyLayout(closeTab(layoutRef.current, path))
+      if (!docEditWaiting(path)) return shut()
+      void saveDocEdit(path).then((saved) => (saved ? shut() : setCloseAsk({ path, busy: false, again: false })))
+    },
     [applyLayout]
   )
+
+  const retryClose = async (): Promise<void> => {
+    if (!closeAsk || closeAsk.busy) return
+    const { path } = closeAsk
+    setCloseAsk({ path, busy: true, again: false })
+    if (await saveDocEdit(path)) {
+      setCloseAsk(null)
+      applyLayout(closeTab(layoutRef.current, path))
+    } else setCloseAsk({ path, busy: false, again: true })
+  }
+
+  // Escape is "not yet": the tab and the change both stay.
+  useEffect(() => {
+    if (!closeAsk || closeAsk.busy) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      setCloseAsk(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [closeAsk])
 
   /** The top-level folder a path belongs to — "" for a note loose at the vault
    *  root, which belongs to no space and so shows in all of them. */
@@ -2160,7 +2218,10 @@ export default function App(): React.JSX.Element {
         const root = findNode(await window.api.listTree(), to)
         if (!root) return
         const isFolder = root.type === 'dir'
-        if (!parentChanged && !isFolder) return
+        // A document moved or renamed: the notes that link to it follow, whether it
+        // changed folder or only its name (docs/plans/file-tabs.md).
+        const isDoc = root.type === 'doc'
+        if (!parentChanged && !isFolder && !isDoc) return
         // Where a FILE went: with the folder, if it was inside it.
         const moved = (f: string): string =>
           f === from ? to : f.startsWith(from + '/') ? to + f.slice(from.length) : f
@@ -2169,18 +2230,20 @@ export default function App(): React.JSX.Element {
         // place its relative links were written from. A note that did not move is
         // its own "before".
         const todo = new Map<string, string>()
-        if (parentChanged) {
+        if (parentChanged && !isDoc) {
           const walk = (n: TreeNode): void => {
             if (n.type === 'dir') n.children?.forEach(walk)
             else if (/\.md$/i.test(n.path)) todo.set(n.path, from + n.path.slice(to.length))
           }
           walk(root)
         }
-        if (isFolder) {
+        if (isFolder || isDoc) {
           const name = nameOf(from)
           // `Photos/` — a path into a folder passes through its name AND the slash after
           // it, and that keeps ordinary prose that merely says "Photos" from being read.
-          const needles = [...new Set([name, encodeURIComponent(name), encodeTarget(name)])].map((n) => n + '/')
+          // A folder's name with the slash after it; a document's name as it is (its
+          // extension keeps ordinary prose from matching).
+          const needles = [...new Set([name, encodeURIComponent(name), encodeTarget(name)])].map((n) => (isDoc ? n : n + '/'))
           for (const p of await window.api.notesMentioning(needles)) {
             if (!todo.has(p)) todo.set(p, inside(p) ? from + p.slice(to.length) : p)
           }
@@ -2592,6 +2655,7 @@ export default function App(): React.JSX.Element {
       const t = await loadTree()
       await syncSpaces(t, settingsRef.current)
       const onDisk = new Set(flattenNotes(t).map((n) => n.path))
+      const docsOnDisk = new Set(flattenDocs(t).map((n) => n.path))
       // A note with unsaved typing whose FOLDER was renamed or moved outside the
       // app (Finder, a sync from another computer): follow it to its new place
       // when exactly one note of that name has just appeared, so the typing is
@@ -2613,11 +2677,23 @@ export default function App(): React.JSX.Element {
       // come back as an empty tab (and typing would recreate it). Drop them now.
       for (const [folder, stashed] of spaceTabs.current) {
         let next = stashed
-        for (const q of stashed.tabs) if (!onDisk.has(q) && !dirtyRef.current.has(q)) next = closeTab(next, q)
+        for (const q of stashed.tabs) if (!onDisk.has(q) && !docsOnDisk.has(q) && !dirtyRef.current.has(q)) next = closeTab(next, q)
         if (next !== stashed) spaceTabs.current.set(folder, next)
+      }
+      // A refused change whose file just changed or went: try it now. That try looks
+      // at the file first, so another program's own save is never written over.
+      for (const p of docEditsOwed()) {
+        if (paths.includes(p) || !docsOnDisk.has(p)) void saveDocEdit(p)
       }
       for (const p of layoutRef.current.tabs) {
         if (!paths.includes(p)) continue
+        if (isListedDoc(p)) {
+          // A document changed outside: its tab reads it again (the version is what
+          // DocView reloads on) — or closes, if it has gone.
+          if (docsOnDisk.has(p)) setVersions((v) => ({ ...v, [p]: (v[p] ?? 0) + 1 }))
+          else applyLayout(closeTab(layoutRef.current, p))
+          continue
+        }
         if (dirtyRef.current.has(p)) continue // don't clobber unsaved edits
         try {
           const text = await window.api.readNote(p)
@@ -2631,6 +2707,22 @@ export default function App(): React.JSX.Element {
       }
     })
   }, [loadTree, syncSpaces, applyLayout, rescanLinks, remapOpen, flush])
+
+  // A change that couldn't go into its file went into a note: show that note in the
+  // sidebar, say where it is, and let the tab show what the file holds now.
+  useEffect(
+    () =>
+      onDocEditKept((path, why) => {
+        flash(
+          why === 'gone'
+            ? `${nameOf(path)} was moved or deleted, so your change is in a new “Recovered” note.`
+            : `${nameOf(path)} was changed in another program, so your change is in a new “Recovered” note.`
+        )
+        void loadTree()
+        setVersions((v) => ({ ...v, [path]: (v[path] ?? 0) + 1 }))
+      }),
+    [flash, loadTree]
+  )
 
   const pick = async (): Promise<void> => {
     // Captured before the await: true only for the very first "Choose folder…"
@@ -2652,8 +2744,16 @@ export default function App(): React.JSX.Element {
         return
       }
     }
+    // A text or CSV file's change the same way: main switches the moment a folder
+    // is picked, and it would be lost, or land on a same-named file in the new one.
+    await flushDocEdits()
+    if (docEditsOwed().length) {
+      flash('Couldn’t save a change to a file. Close it in the other program before switching folder.')
+      return
+    }
     const v = await window.api.pickVault()
     if (v) {
+      forgetAllDocEdits()
       forgetWaitingRecordings()
       setVault(v)
       // A different vault means different files: drop every tab and its buffer.
@@ -3051,6 +3151,8 @@ export default function App(): React.JSX.Element {
       // onto a space's tab is a crossing like any other.
       const places = [...settings.spaces, settings.archive]
       const toSpace = spaceFolderOf(toDir, places)
+      // An edited text or CSV file's waiting change is saved where it is before it moves.
+      await flushDocEdits()
 
       const landed: string[] = []
       // What went into ANOTHER folder, and how each one was filed before — what the notice's
@@ -3379,6 +3481,7 @@ export default function App(): React.JSX.Element {
     new Promise((done) => {
       const landed: { from: string; to: string }[] = []
       void run(async () => {
+        await flushDocEdits()
         const arch = settingsRef.current.archive.folder
         // Already in the archive, or inside something else being archived: skip.
         const tops = paths.filter(
@@ -3803,6 +3906,7 @@ export default function App(): React.JSX.Element {
   const trash = (paths: string[]): void =>
     void run(async () => {
       if (!paths.length) return
+      await flushDocEdits()
       markDeleted(paths)
       setWorkspace(await window.api.trashEntries(paths))
       const t = await loadTree()
@@ -3810,7 +3914,7 @@ export default function App(): React.JSX.Element {
       // program or a sync app has open — mostly Windows) used to close its tab
       // and drop its unsaved typing anyway, with no message, while the note
       // stayed in the sidebar (bug scan 2026-10-27).
-      const still = new Set([...flattenNotes(t).map((n) => n.path), ...folderPaths(t)])
+      const still = new Set([...flattenNotes(t).map((n) => n.path), ...flattenDocs(t).map((n) => n.path), ...folderPaths(t)])
       const stayed = paths.filter((p) => still.has(p))
       forgetIfInside(paths.filter((p) => !still.has(p)))
       if (stayed.length) {
@@ -4121,9 +4225,15 @@ export default function App(): React.JSX.Element {
       // vanished from the app, still on disk, with nothing said (Reuben,
       // 2026-09-19). A folder has no extension and is shown as it is.
       const isNote = node.type === 'file'
-      const shown = isNote ? stripMd(nameOf(node.path)) : nameOf(node.path)
+      // A document is named without its extension too, and gets it back — the same
+      // vanishing-file trap: "Handout" for "Handout.pdf" left a file the sidebar
+      // doesn't list.
+      const isDoc = node.type === 'doc'
+      const ext = isDoc ? docExt(node.name) : ''
+      const shown = isNote ? stripMd(nameOf(node.path)) : isDoc && ext ? nameOf(node.path).slice(0, -ext.length) : nameOf(node.path)
       const next = await ask('Rename', shown)
       if (next == null || !next.trim() || next.trim() === shown) return
+      await flushDocEdits() // an edit waiting to be saved goes to the file's old name first
       const typed = next.trim()
       // Sanitised HERE as well as in main, because this is where the name is
       // joined onto a path: a `/` typed in the box would otherwise read as a
@@ -4134,7 +4244,11 @@ export default function App(): React.JSX.Element {
       const safe = sanitizeFilename(typed).name
       const to = joinPath(
         parentOf(node.path),
-        isNote && !safe.toLowerCase().endsWith('.md') ? `${safe}.md` : safe
+        isNote && !safe.toLowerCase().endsWith('.md')
+          ? `${safe}.md`
+          : isDoc && ext && !safe.toLowerCase().endsWith(ext.toLowerCase())
+            ? `${safe}${ext}`
+            : safe
       )
       const actualRel = await window.api.renameEntry(node.path, to)
       await loadTree()
@@ -4144,12 +4258,16 @@ export default function App(): React.JSX.Element {
       // those still resolve — but the PHOTO and FILE links that pass through its name
       // do not (`followMove`).
       if (isNote) await followRename(node.path, actualRel)
+      else if (isDoc) await followMove(node.path, actualRel)
       else {
         await followMove(node.path, actualRel)
         await followRename(node.path, actualRel) // `[[Folder/Note]]` links into it
       }
       const actualName = nameOf(actualRel)
-      if (stripMd(actualName) !== stripMd(typed)) flash(nameChangedNotice(typed, actualName))
+      if (isDoc) {
+        const want = typed.toLowerCase().endsWith(ext.toLowerCase()) ? typed : typed + ext
+        if (actualName !== want) flash(nameChangedNotice(want, actualName))
+      } else if (stripMd(actualName) !== stripMd(typed)) flash(nameChangedNotice(typed, actualName))
     })
 
   const openMenu = (e: React.MouseEvent, node: TreeNode | null, targets?: string[]): void => {
@@ -4163,6 +4281,11 @@ export default function App(): React.JSX.Element {
     // still on the folder row's own hover buttons, which is where it belongs.
     const items: MenuItem[] = node
       ? [
+          // A document: the app the computer opens it with is one click away here
+          // as well as on its tab (docs/plans/file-tabs.md).
+          ...(node.type === 'doc'
+            ? [{ label: 'Open in its own app', onClick: () => void window.api.openVaultFile(node.path) }]
+            : []),
           { label: 'Rename', onClick: () => void rename(node) },
           // Since 2026-09-05 this is the ONLY way in besides the selection
           // bar: the row's hover swatch is gone (see TreeView's
@@ -4439,13 +4562,24 @@ export default function App(): React.JSX.Element {
 
   // flush unsaved edits when the window loses focus and just before the app quits
   useEffect(() => {
-    const onBlur = (): void => void flush()
+    const onBlur = (): void => {
+      void flush()
+      void flushDocEdits()
+    }
     window.addEventListener('blur', onBlur)
     return () => window.removeEventListener('blur', onBlur)
   }, [flush])
   useEffect(() => {
     return window.api.onBeforeQuit(() => {
-      void Promise.allSettled([flush(), flushRecordings().then(flush)])
+      // An edited text or CSV file's last change too (docs/DocView.tsx). If its file is
+      // still held by another program it goes into a "Recovered" note. The wait is
+      // capped: a quit only holds so long (1.5 s on a Mac), and a refused save spends
+      // about a second retrying.
+      const docsTried = Promise.race([
+        flushDocEdits(),
+        new Promise((done) => setTimeout(done, 1200))
+      ]).then(keepUnsavedDocCopies)
+      void Promise.allSettled([flush(), flushRecordings().then(flush), docsTried])
         .then(async () => {
           // Typing whose save still fails (its folder vanished, a locked file)
           // would otherwise die with the window: write each to a "Recovered"
@@ -5494,6 +5628,43 @@ export default function App(): React.JSX.Element {
               </button>
               <button className="danger" onClick={() => closeMediaConfirm(false)}>
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {closeAsk && (
+        <div className="confirm-backdrop" onClick={() => !closeAsk.busy && setCloseAsk(null)}>
+          <div
+            className="prompt confirm"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Couldn’t save this change"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="prompt-title">Couldn’t save this change</div>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-500" role={closeAsk.again ? 'alert' : undefined}>
+              {closeAsk.again
+                ? `${nameOf(closeAsk.path)} is still open in another program. Close it there, then try again.`
+                : `Another program may have ${nameOf(closeAsk.path)} open. Close it there and try again, or close this tab and lose the change.`}
+            </p>
+            <div className="prompt-actions">
+              {/* The safe answer takes the focus, so Enter can't throw the change away. */}
+              {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
+              <button autoFocus disabled={closeAsk.busy} onClick={() => void retryClose()}>
+                {closeAsk.busy ? 'Trying…' : 'Try again'}
+              </button>
+              <button
+                className="danger"
+                disabled={closeAsk.busy}
+                onClick={() => {
+                  dropDocEdit(closeAsk.path)
+                  setCloseAsk(null)
+                  applyLayout(closeTab(layoutRef.current, closeAsk.path))
+                }}
+              >
+                Close anyway
               </button>
             </div>
           </div>

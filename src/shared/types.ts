@@ -22,6 +22,7 @@ import type {
   TransferInventory
 } from './transfer'
 import type { PrintNoteRequest, PrintNoteResult } from './printNote'
+import type { DocResult } from './docs'
 import type { NoteVersion } from './noteVersions'
 
 /** A node in the vault file tree. `path` is always vault-relative, POSIX-style
@@ -30,7 +31,11 @@ export interface TreeNode {
   name: string
   /** vault-relative path, e.g. "notes/todo.md" ("" for the root) */
   path: string
-  type: 'dir' | 'file'
+  /** 'file' is a NOTE (.md). 'doc' is a document beside the notes — a PDF, a
+   *  Word or Excel file, slides (shared/docs.ts) — listed so it can be opened in
+   *  a tab or in its own app, and never treated as a note: no preview, no word
+   *  count, no links, never written (docs/plans/file-tabs.md). */
+  type: 'dir' | 'file' | 'doc'
   /** present only when type === 'dir' */
   children?: TreeNode[]
   /** folders only: set when the folder couldn't be read (no permission, or
@@ -44,6 +49,8 @@ export interface TreeNode {
    *  why the UI must treat them as optional rather than as "1970". */
   createdAt?: number
   updatedAt?: number
+  /** documents only: the file's size in bytes */
+  size?: number
 }
 
 /** Pushed to the renderer (debounced) when the watcher sees external changes.
@@ -387,6 +394,11 @@ export interface VaultApi {
    *  computer uses for it. False if it isn't a document we open, isn't there, or
    *  the system couldn't. Main decides what counts — see `openVaultFile`. */
   openVaultFile(path: string): Promise<boolean>
+  /** A Word, Excel, CSV or text file as its tab shows it (main/docView.ts). Never
+   *  rejects: a file that can't be shown comes back as `{ kind: 'error' }`. */
+  readDocument(path: string): Promise<DocResult>
+  /** Save an edited .txt or .csv back where it is. Rejects for any other file. */
+  writeTextDoc(path: string, content: string): Promise<void>
 
   // --- voice notes (docs/feature-editor.md "Voice notes") ------------------
   /** Make sure the app may use the microphone. On a Mac this asks the system

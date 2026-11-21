@@ -99,6 +99,29 @@ export function Sample({ children }: { children: React.ReactNode }): React.JSX.E
   )
 }
 
+/** What a card shows when the thing is a button, a menu item or a message: the
+ *  app's own glyph for it (from icons.tsx) and the words it carries on screen.
+ *  Never a drawing of the whole control — the website has the real picture. */
+export function Face({ icon, children }: { icon?: IconName; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <Sample>
+      {icon && <Icon name={icon} className="h-3.5 w-3.5 opacity-70" />}
+      <span>{children}</span>
+    </Sample>
+  )
+}
+
+/** A short lead-in and one tip per line, under the cards (docs/tutorials.md:
+ *  "tips are lines, not a paragraph"). */
+export function Tips({ lead, children }: { lead: string; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="mt-6 text-[11.5px] leading-relaxed text-ink-400">
+      <p>{lead}</p>
+      <div className="mt-1 flex flex-col gap-1">{children}</div>
+    </div>
+  )
+}
+
 /** How a link looks in the note, so the page shows the real thing. */
 export function Chip({ children, icon = 'doc' }: { children: React.ReactNode; icon?: IconName }): React.JSX.Element {
   return (

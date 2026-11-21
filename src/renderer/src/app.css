@@ -6854,3 +6854,145 @@ html.space-vt::view-transition-new(root) {
 .cm-block-frame {
   display: flow-root;
 }
+
+/* ---------------------------------------------------------------------------
+   A document's tab (docs/DocView.tsx, docs/plans/file-tabs.md). Drawn in the
+   space's own colours and note fonts, so a Word page, a spreadsheet or a text
+   file changes with the theme the way a note does.
+   --------------------------------------------------------------------------- */
+.doc-scroll {
+  background: rgb(var(--paper));
+}
+/* A PDF's pages are white paper. In a dark space they are inverted and dimmed so
+   the tab isn't a white sheet in a dark window; hue-rotate puts colours back
+   near where they were (a red heading stays red-ish). The corner button turns
+   it off for a PDF full of photos, which inverting can't make right. */
+.doc-pdf {
+  background: rgb(var(--paper));
+}
+.doc-pdf[data-dim] {
+  filter: invert(0.9) hue-rotate(180deg) brightness(0.95);
+}
+/* A Word file as a page: the note's reading column. */
+.doc-word {
+  max-width: var(--editor-max-width, 46rem);
+  margin: 0 auto;
+  padding: 28px 28px 80px;
+}
+.doc-word img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--r-control);
+}
+.doc-word table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.92em;
+}
+.doc-word td,
+.doc-word th {
+  border: 1px solid rgb(var(--ink-300) / 0.45);
+  padding: 4px 8px;
+  vertical-align: top;
+}
+.doc-word td p,
+.doc-word th p {
+  margin: 0;
+}
+/* A spreadsheet: a quiet grid, its row and column names like the app's chrome. */
+.doc-sheet {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--note-font-sans);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--ink-800));
+}
+.doc-sheet th,
+.doc-sheet td {
+  border-right: 1px solid rgb(var(--ink-300) / 0.3);
+  border-bottom: 1px solid rgb(var(--ink-300) / 0.3);
+  padding: 4px 8px;
+  max-width: 320px;
+  min-width: 56px;
+  height: 26px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+.doc-sheet td.num {
+  text-align: right;
+}
+.doc-sheet thead th,
+.doc-sheet tbody th {
+  position: sticky;
+  background: rgb(var(--surface));
+  color: rgb(var(--ink-500));
+  font-weight: 500;
+  font-size: 11.5px;
+  z-index: 1;
+}
+.doc-sheet thead th {
+  top: 0;
+  text-align: center;
+  z-index: 2;
+}
+.doc-sheet tbody th {
+  left: 0;
+  min-width: 40px;
+  text-align: right;
+}
+.doc-sheet thead th.doc-corner {
+  left: 0;
+  z-index: 3;
+}
+.doc-sheet td.can-edit {
+  cursor: text;
+}
+.doc-sheet td.can-edit:hover {
+  background: rgb(var(--wash) / 0.04);
+}
+.doc-sheet td:has(> input) {
+  padding: 0;
+  overflow: visible;
+}
+.doc-sheet td > input {
+  width: 100%;
+  min-width: 120px;
+  height: 25px;
+  padding: 0 7px;
+  border: none;
+  outline: 2px solid rgb(var(--accent-500));
+  outline-offset: -2px;
+  background: rgb(var(--paper));
+  color: rgb(var(--ink-900));
+  font: inherit;
+}
+.doc-sheet .doc-new-row th {
+  color: rgb(var(--ink-300));
+}
+/* A text file: the app's editor, plain, in the code font. */
+.doc-text .cm-editor {
+  min-height: 100%;
+  background: transparent;
+  color: rgb(var(--ink-800));
+}
+.doc-text .cm-editor.cm-focused {
+  outline: none;
+}
+.doc-text .cm-scroller {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.doc-text .cm-content {
+  max-width: var(--editor-max-width, 46rem);
+  margin: 0 auto;
+  padding: 24px 28px 80px;
+  caret-color: rgb(var(--ink-900));
+}
+.doc-text .cm-selectionBackground,
+.doc-text .cm-focused .cm-selectionBackground {
+  background: rgb(var(--accent-500) / 0.25) !important;
+}
