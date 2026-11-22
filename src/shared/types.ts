@@ -15,6 +15,7 @@ import type {
   ImportProgress,
   ImportResult
 } from './notesImport'
+import type { EditBeside } from './sideBySide'
 import type { DownloadFontResult, ImportCustomFontResult, InstalledFont } from './fonts'
 import type {
   TransferExportSummary,
@@ -394,6 +395,13 @@ export interface VaultApi {
    *  computer uses for it. False if it isn't a document we open, isn't there, or
    *  the system couldn't. Main decides what counts — see `openVaultFile`. */
   openVaultFile(path: string): Promise<boolean>
+  /** The app that would edit this PDF, Word or Excel file ("Excel"); null for any
+   *  other kind, or when nothing on this computer opens it. */
+  docAppName(path: string): Promise<string | null>
+  /** Open the file in that app and line its window up beside this one. */
+  editBeside(path: string): Promise<EditBeside>
+  /** Put this window back to the size it was before `editBeside`. */
+  undoEditBeside(): Promise<void>
   /** A Word, Excel, CSV or text file as its tab shows it (main/docView.ts). Never
    *  rejects: a file that can't be shown comes back as `{ kind: 'error' }`. */
   readDocument(path: string): Promise<DocResult>

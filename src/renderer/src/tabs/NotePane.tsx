@@ -14,7 +14,8 @@ import { HoverCard } from '../HoverCard'
 import { LinksBlock, LINKS_BLOCK_HEIGHT } from '../links/LinksBlock'
 import { NoteTape } from './VoiceDeck'
 import { DocView } from '../docs/DocView'
-import { docLabel, isListedDoc } from '../../../shared/docs'
+import { useDocApp } from '../docs/useDocApp'
+import { docLabel, docViewOf, isListedDoc } from '../../../shared/docs'
 import type { Inspect } from '../links/LinkInspector'
 import { incomingLinks, outgoingLinks } from '../links/model'
 import { subscribeWordCounts, wordCountOf } from '../wordCounts'
@@ -55,6 +56,8 @@ interface Props {
   timezone: string
   /** the vault as this column's editor sees it, for resolving `[[links]]` */
   env: Omit<LinkEnv, 'path'> & { path: string }
+  /** a document's "Edit in Excel": App opens it beside the window and says how it went */
+  onEditBeside: (path: string) => void
   /** what a link clicked or dragged INSIDE the editor does */
   linkHandlers: LinkHandlers
   /** every note's outgoing links, for the backlink half of the block */
@@ -203,6 +206,7 @@ function WordCount({ path, numberFormat }: { path: string; numberFormat: AppSett
  *  With `path === ''` this is the blank column the "+" button and the split
  *  button open: same chrome, inert, waiting for a note to be clicked. */
 export function NotePane({
+  onEditBeside,
   path,
   doc,
   version,
@@ -269,6 +273,8 @@ export function NotePane({
   // (A kind it can't draw only gets here by a drag; DocView says so, with the
   // way out above it.)
   const isDoc = !blank && isListedDoc(path)
+  // PDF, Word and Excel: "Edit in Excel". Text and CSV are edited right here.
+  const besideApp = useDocApp(isDoc && /^(pdf|word|sheet)$/.test(docViewOf(path) ?? '') ? path : null)
   const [titleDraft, setTitleDraft] = useState(() => stripMd(nameOf(path)))
   const [zone, setZone] = useState<DropZone | null>(null)
   // The zone as drawn, for the drop — and offered for a drop Chromium loses
@@ -569,16 +575,29 @@ export function NotePane({
             <span className="min-w-0 truncate text-sm font-medium text-ink-800" data-tip={path}>
               {nameOf(path)}
             </span>
-            <button
-              type="button"
-              className={ROW_BTN + ' gap-1.5 px-2 text-xs'}
-              data-tip="Open it in the app your computer uses for this kind of file"
-              aria-label="Open in its own app"
-              onClick={() => void window.api.openVaultFile(path)}
-            >
-              <Icon name="arrowUpRight" className="h-4 w-4" />
-              {!split && <span>Open in its own app</span>}
-            </button>
+            {besideApp ? (
+              <button
+                type="button"
+                className={ROW_BTN + ' gap-1.5 px-2 text-xs'}
+                data-tip={`Open it in ${besideApp}, lined up beside Notealise. Changes show here when you save.`}
+                aria-label={`Edit in ${besideApp}`}
+                onClick={() => onEditBeside(path)}
+              >
+                <Icon name="arrowUpRight" className="h-4 w-4" />
+                {!split && <span>Edit in {besideApp}</span>}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={ROW_BTN + ' gap-1.5 px-2 text-xs'}
+                data-tip="Open it in the app your computer uses for this kind of file"
+                aria-label="Open in its own app"
+                onClick={() => void window.api.openVaultFile(path)}
+              >
+                <Icon name="arrowUpRight" className="h-4 w-4" />
+                {!split && <span>Open in its own app</span>}
+              </button>
+            )}
           </div>
         ) : (
         <div className={blank ? 'pointer-events-none flex min-w-0 flex-1 opacity-40' : 'contents'}>

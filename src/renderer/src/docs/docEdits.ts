@@ -119,15 +119,16 @@ async function attempt(path: string, text: string, view: DocResult): Promise<boo
   const settled = (): void => {
     if (inFlight.get(path) === text) inFlight.delete(path)
   }
-  // Only a change that was already refused can be behind the file: the other
-  // program had it all that time, and may have saved its own work.
+  // Another program may have saved this file since the tab last read it, even in
+  // the moment between typing and this save: its version is never written over.
   const was = owed.get(path)
-  if (was?.base) {
+  const base = was?.base ?? onDisk.get(path)
+  if (base) {
     const now = await window.api.readDocument(path)
     if (at !== session) return false
     const moved = now.kind === 'error' && now.reason === 'gone'
-    if (moved || (now.kind !== 'error' && wordsOf(now) !== wordsOf(was.base) && wordsOf(now) !== wordsOf(view))) {
-      owed.set(path, { ...was, text, view })
+    if (moved || (now.kind !== 'error' && wordsOf(now) !== wordsOf(base) && wordsOf(now) !== wordsOf(view))) {
+      owed.set(path, { text, view, base })
       settled()
       return rescue(path, moved ? 'gone' : 'changed')
     }
@@ -142,8 +143,12 @@ async function attempt(path: string, text: string, view: DocResult): Promise<boo
   settled()
   if (saved) {
     owed.delete(path)
-    if (watchers.has(path)) onDisk.set(path, view)
-  } else owed.set(path, { text, view, base: was?.base ?? onDisk.get(path) })
+    // Read back rather than assumed: the next save compares like with like, so a
+    // file's own quoting or line endings can never look like another program's save.
+    const fresh = await window.api.readDocument(path)
+    if (at !== session) return saved
+    if (fresh.kind !== 'error' && watchers.has(path)) onDisk.set(path, fresh)
+  } else owed.set(path, { text, view, base })
   watchers.get(path)?.forEach((w) => w.heard(saved ? null : COULD_NOT_SAVE))
   return saved
 }

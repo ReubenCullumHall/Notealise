@@ -124,6 +124,12 @@ export const CH = {
   linkThumb: 'app:linkThumb',
   /** renderer -> main: open a document the vault holds in its own app */
   openVaultFile: 'vault:openVaultFile',
+  /** the app that would edit a PDF, Word or Excel file ("Excel") (main/sideBySide.ts) */
+  docAppName: 'vault:docAppName',
+  /** open a document in that app, lined up beside this window */
+  editBeside: 'vault:editBeside',
+  /** this window back to the size it was before `editBeside` */
+  undoEditBeside: 'vault:undoEditBeside',
   /** a document's contents for its tab (main/docView.ts) — never a PDF, which is
    *  shown from its media address */
   readDocument: 'vault:readDocument',

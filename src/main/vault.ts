@@ -1126,12 +1126,17 @@ export async function resolveDocFile(relPath: string): Promise<string> {
   return abs
 }
 
-export async function openVaultFile(relPath: string): Promise<boolean> {
-  if (typeof relPath !== 'string' || !opensInItsOwnApp(relPath)) return false
+export async function openableFile(relPath: string): Promise<string | null> {
+  if (typeof relPath !== 'string' || !opensInItsOwnApp(relPath)) return null
   const abs = await resolveReal(relPath)
-  if (!opensInItsOwnApp(abs)) return false
+  if (!opensInItsOwnApp(abs)) return null
   const st = await fs.stat(abs).catch(() => null)
-  if (!st?.isFile()) return false
+  return st?.isFile() ? abs : null
+}
+
+export async function openVaultFile(relPath: string): Promise<boolean> {
+  const abs = await openableFile(relPath)
+  if (!abs) return false
   const { shell } = await import('electron')
   return (await shell.openPath(abs)) === ''
 }

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { TreeNode } from '../../shared/types'
 import type { Workspace } from '../../shared/workspace'
@@ -33,6 +33,7 @@ import { appendBlock } from './organise/blockDrop'
 import { offerDrop } from './dragLeaveGuard'
 import { PRACTICE_HEAD, PRACTICE_TITLE } from './settings/tutorials/tryIt'
 import { focusNoteEnd } from './editor/viewRegistry'
+import { placeNotice } from './noticePlace'
 import { addRecovered, flushRecordings, forgetWaitingRecordings, recorderStatus, recordingsPending, voiceNoteMoved } from './editor/voiceRecorder'
 import { deckNoteMoved, ejectDeck } from './editor/voicePlayer'
 import { noteLayoutChange, notePaneChange } from './tabs/stripMotion'
@@ -534,6 +535,43 @@ export default function App(): React.JSX.Element {
   /** Say one line and let it fade. The plain form — everything that is only
    *  telling you something, which is everything but the undo above. */
   const flash = useCallback((msg: string): void => showNotice({ text: msg }), [showNotice])
+
+  // A document's "Edit in Excel": the real app, lined up beside this window (main/sideBySide.ts).
+  const editInItsApp = useCallback(
+    (p: string): void => {
+      void window.api.editBeside(p).then((r) => {
+        if (r.ok) {
+          showNotice({
+            text: `${r.app} is open beside this tab. Changes show here when you save.`,
+            action: { label: 'Undo', run: () => void window.api.undoEditBeside() }
+          })
+        } else if (r.why === 'permission') {
+          showNotice({ text: `Turn on Notealise in the Mac’s Accessibility settings, then press Edit in ${r.app} again.`, linger: true })
+        } else if (r.why === 'no-app') {
+          showNotice({ text: 'No app on this computer opens this kind of file.', linger: true })
+        } else if (r.why === 'narrow') {
+          showNotice({ text: `${r.app} is open. This screen is too small to line the two up.`, linger: true })
+        } else if (r.why === 'not-placed') {
+          showNotice({ text: `${r.app} is open, but its window couldn’t be moved.`, linger: true })
+        } else {
+          showNotice({ text: `Couldn’t open ${p.slice(p.lastIndexOf('/') + 1)}`, linger: true })
+        }
+      })
+    },
+    [showNotice]
+  )
+
+  // The message rises clear of a note's corner buttons, and checks again when the
+  // window or the columns change while it is up (noticePlace.ts).
+  const noticeRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = noticeRef.current
+    if (!el) return
+    placeNotice(el)
+    const again = (): void => placeNotice(el)
+    window.addEventListener('resize', again)
+    return () => window.removeEventListener('resize', again)
+  }, [notice, layout])
 
   // in-app prompt (window.prompt is unreliable in Electron)
   const [prompt, setPrompt] = useState<{ title: string; value: string } | null>(null)
@@ -5199,6 +5237,7 @@ export default function App(): React.JSX.Element {
                     />
                   )}
                   <NotePane
+                  onEditBeside={editInItsApp}
                   path={p}
                   size={paneWidths[i]}
                   archived={!!p && !inArchive && inArchiveFolder(p)}
@@ -5465,7 +5504,7 @@ export default function App(): React.JSX.Element {
       )}
 
       {notice && (
-        <div className="notice">
+        <div ref={noticeRef} className="notice">
           <span>{notice.text}</span>
           {notice.action && (
             <button

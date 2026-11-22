@@ -59,6 +59,7 @@ import { openAllowedExternal } from './externalLinks'
 import { lookUpLink, readLinkThumb } from './linkPreview'
 import { mediaAddress } from './mediaProtocol'
 import { readDocumentResult } from './docView'
+import { docAppName, editBeside, undoEditBeside } from './sideBySide'
 import { isListedDoc } from '../shared/docs'
 import { convertAudio, microphoneAccess, pickAudioFiles } from './voice'
 import {
@@ -427,6 +428,9 @@ export function registerIpc(window: BrowserWindow): void {
   })
   ipcMain.handle(CH.revealInFolder, (_e, p: string) => revealInFolder(p))
   ipcMain.handle(CH.openVaultFile, (_e, p: string) => openVaultFile(p))
+  ipcMain.handle(CH.docAppName, (_e, p: string) => docAppName(p))
+  ipcMain.handle(CH.editBeside, (_e, p: string) => editBeside(activeWindow(), p))
+  ipcMain.handle(CH.undoEditBeside, () => undoEditBeside(activeWindow()))
   ipcMain.handle(CH.readDocument, (_e, p: string) => readDocumentResult(p))
   ipcMain.handle(CH.writeTextDoc, (_e, p: string, text: string) => writeTextDoc(p, text))
   // Voice notes (main/voice.ts). None of the three writes into the vault: a
