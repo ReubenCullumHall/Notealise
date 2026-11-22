@@ -23,7 +23,7 @@
 <link rel="stylesheet" href="edges.css" />
 <link rel="stylesheet" href="align.css" />
 <link rel="stylesheet" href="highlights.css" />
-<link rel="stylesheet" href="motion.css?v=20261031c" />
+<link rel="stylesheet" href="motion.css?v=20261122b" />
 </head>
 <body class="page page-theme-updates">
   <header class="topbar is-visible">
@@ -63,9 +63,59 @@
          pop-up below. -->
     <div class="rels">
       <!-- whats-new:start -->
+      <article class="rel" data-version="1.7.5">
+        <header class="rel-head">
+          <p class="rel-meta"><span class="rel-tag">Latest</span><time datetime="2026-11-22">22 November 2026</time><span class="rel-dot" aria-hidden="true">&middot;</span><span class="rel-count">40 changes</span></p>
+          <h2 class="rel-title">Version <span class="hl">1.7.5</span></h2>
+          <span class="rel-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg></span>
+        </header>
+        <ol class="rel-list">
+          <li><span class="rel-n">01</span><p><strong>A dragged note lands exactly where its line shows</strong> — in the sidebar, on the space buttons, in the tab strip, onto split columns and with saved looks. A note dragged to the very top of a list goes to the top, and a moved note bounces in at its new spot.</p></li>
+          <li><span class="rel-n">02</span><p><strong>A pinned note dragged into the notes list leaves Pinned</strong> and lands where you let go.</p></li>
+          <li><span class="rel-n">03</span><p><strong>Drag a note onto Pinned to pin it</strong> — its heading, a pinned note or the space between them.</p></li>
+          <li><span class="rel-n">04</span><p><strong>Hold a dragged note over a closed folder and it opens</strong>, so you can drop it deeper inside.</p></li>
+          <li><span class="rel-n">05</span><p><strong>Moving notes into another folder says so, with Undo</strong> — “Moved “Plan” to Physics”. Undo puts them back where they were.</p></li>
+          <li><span class="rel-n">06</span><p><strong>Dragging several notes shows how many</strong> beside the pointer.</p></li>
+          <li><span class="rel-n">07</span><p><strong>A picture, video, voice note or file dropped into a note goes on a new line under the block you let go on</strong> — never inside a sentence, a table or a list. A line and a light band show where it will go, and one Cmd/Ctrl+Z takes it back out. Dropping onto a table, a picture or a voice note works now too.</p></li>
+          <li><span class="rel-n">08</span><p><strong>Hold a file from Finder or Explorer over a tab</strong> and that note comes to the front, so you can drop the file into it.</p></li>
+          <li><span class="rel-n">09</span><p><strong>Hold Option (Alt on Windows) while dragging a note into another note</strong> to drop a link to it on its own line.</p></li>
+          <li><span class="rel-n">10</span><p><strong>Drag a block by its six dots onto a note in the sidebar</strong> to move it to the end of that note, with Undo.</p></li>
+          <li><span class="rel-n">11</span><p><strong>Drop notes and files from Finder or Explorer onto a sidebar folder</strong> to copy them in — a Markdown file becomes a note at the line, pictures, videos, recordings and documents are copied beside it.</p></li>
+          <li><span class="rel-n">12</span><p><strong>Switching folder while a voice note records</strong> saves the recording into the note you were recording into first — it used to land in the new folder.</p></li>
+          <li><span class="rel-n">13</span><p><strong>Closing the window on a Mac straight after typing</strong> keeps the last few letters.</p></li>
+          <li><span class="rel-n">14</span><p><strong>A note binned on one computer stays in the other’s Bin</strong> when the app is open on both.</p></li>
+          <li><span class="rel-n">15</span><p><strong>Safer saving:</strong> closing a tab while a save is running can’t put older text back, and a settings file locked for a moment by OneDrive or antivirus can no longer reset every space’s look.</p></li>
+          <li><span class="rel-n">16</span><p><strong>Voice notes:</strong> a save that fails while the note isn’t on screen keeps the recording, with Try again on the sidebar card; no more extra “(recovered)” voice notes after a hiccup while recording; a recording recovered after a crash goes into its note even if the note was renamed while recording.</p></li>
+          <li><span class="rel-n">17</span><p><strong>Links:</strong> a stray backtick no longer stops the links after it from working; renaming a note to a name another folder already uses keeps links pointing at the right note; Search finds a renamed note’s new link wording straight away.</p></li>
+          <li><span class="rel-n">18</span><p><strong>Editing:</strong> triple-click a line and a formatting button changes only that line; Enter on “- ” inside a code block or the properties keeps the dash; renaming a note no longer jumps the note you’re in back to the top.</p></li>
+          <li><span class="rel-n">19</span><p><strong>Notes side by side:</strong> Alt+click on a link to a note that’s already showing just takes you to it; dragging tabs onto tabs never throws a note out of a pair; two notes side by side come back together after a relaunch.</p></li>
+          <li><span class="rel-n">20</span><p><strong>A note dragged into another space closes its tab in the space it left. Esc cancels a drag</strong> — nothing is dropped, and nothing goes in the Bin.</p></li>
+          <li><span class="rel-n">21</span><p><strong>A block dragged onto a note that can’t be saved goes back where it came from</strong>, and Undo after moving a block works on notes saved in the Windows format.</p></li>
+          <li><span class="rel-n">22</span><p><strong>“Restart now” stays</strong> after an update check made while offline (Windows and Linux).</p></li>
+          <li><span class="rel-n">23</span><p><strong>Your own saves aren’t mistaken for outside changes</strong> when your notes folder is opened through a shortcut, and putting back a folder named like “Term 1.2” gives “Term 1.2 (2)”.</p></li>
+          <li><span class="rel-n">24</span><p><strong>Importing from Notion:</strong> the step now says to export as HTML — Notion’s Markdown export brought in almost nothing.</p></li>
+          <li><span class="rel-n">25</span><p><strong>Importing:</strong> a link to a page with [brackets] in its name now leads to the imported note.</p></li>
+          <li><span class="rel-n">26</span><p><strong>Files in their own tabs:</strong> PDFs, Word documents, Excel spreadsheets, CSV and text files sit in the sidebar beside your notes and open in a tab that follows your space’s light or dark look. Changes to a text or CSV file save straight into the file.</p></li>
+          <li><span class="rel-n">27</span><p><strong>Your changes are safe when another program has a file open:</strong> the change stays with the file and saves once the program lets go, and closing its tab asks first. If you quit, the other program saves its own version, or the file is deleted, your words are kept in a “Recovered” note.</p></li>
+          <li><span class="rel-n">28</span><p><strong>Edit a file in its real app, side by side:</strong> on Mac and Windows, a PDF, Word or Excel tab has a button such as “Edit in Word”. It opens the file in that app, lined up beside Notealise, and the tab updates when you save.</p></li>
+          <li><span class="rel-n">29</span><p><strong>Another program’s save is never written over:</strong> if it saves a text or CSV file just after you type in that file’s tab, its version stays and your words go into a “Recovered” note.</p></li>
+          <li><span class="rel-n">30</span><p><strong>Another program’s save to a note is no longer missed.</strong> If it saved just after Notealise’s own autosave, the note used to keep showing the old words.</p></li>
+          <li><span class="rel-n">31</span><p><strong>A read-only note says so.</strong> A save or a moved block it refuses now tells you the file is read-only, instead of blaming OneDrive.</p></li>
+          <li><span class="rel-n">32</span><p><strong>Copying cells from a spreadsheet tab</strong> leaves the row numbers and column letters behind.</p></li>
+          <li><span class="rel-n">33</span><p><strong>The “Moved … Undo” message no longer covers a note’s corner buttons.</strong></p></li>
+          <li><span class="rel-n">34</span><p><strong>Five new tutorials</strong> in Settings → Help: Voice notes, Editing and transcribing, Tabs and columns, Moving things around, and Archive and earlier versions.</p></li>
+          <li><span class="rel-n">35</span><p><strong>A new What we offer page on the website.</strong> It follows one trip from the first idea to sending the plan to friends, showing each feature along the way with a link to its tutorial. You can play, skip and trim a real voice note right on the page. The top bar is now Notealise for students and What we offer, and Tutorials and What’s new open from inside it.</p></li>
+          <li><span class="rel-n">36</span><p><strong>One cursor on the website.</strong> The normal cursor no longer shows on top of the website’s own over tick boxes and scrollbars, on any page.</p></li>
+          <li><span class="rel-n">37</span><p><strong>Flow charts you can walk through.</strong> Type <code>/flow</code> for a Mermaid chart. It sits in your note as a small card and opens in its own tab, on its own or beside the note, where you go box by box, choose an answer at each decision, go back or restart, and edit its text. Mermaid charts already in your notes show the same way, and the file stays a standard Mermaid block.</p></li>
+          <li><span class="rel-n">38</span><p><strong>Chemistry in formulas.</strong> Write reactions, ions and units the short way, such as <code>\ce{2H2 + O2 -&gt; 2H2O}</code>, in any formula, including in tables and when you save as a PDF.</p></li>
+          <li><span class="rel-n">39</span><p><strong>Clicking straight after renaming a note</strong> can no longer bring its old name back.</p></li>
+          <li><span class="rel-n">40</span><p><strong>Rename starts with the name highlighted.</strong> Right-click → Rename on a note or folder, rename on a tab group, the Name box under Settings → Spaces and the title at the top of an open note all select the whole name, so one Backspace empties it and typing replaces it — every time, even for something renamed before.</p></li>
+        </ol>
+        <button class="rel-open" type="button" aria-haspopup="dialog">See all 40 changes</button>
+      </article>
       <article class="rel" data-version="1.7.1">
         <header class="rel-head">
-          <p class="rel-meta"><span class="rel-tag">Latest</span><time datetime="2026-11-15">15 November 2026</time><span class="rel-dot" aria-hidden="true">&middot;</span><span class="rel-count">17 changes</span></p>
+          <p class="rel-meta"><time datetime="2026-11-15">15 November 2026</time><span class="rel-dot" aria-hidden="true">&middot;</span><span class="rel-count">17 changes</span></p>
           <h2 class="rel-title">Version <span class="hl">1.7.1</span></h2>
           <span class="rel-icon" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M13.5 2.5 9 7M6.5 13.5h-4v-4M2.5 13.5 7 9"/></svg></span>
         </header>
@@ -341,6 +391,6 @@
   <script src="nav.js"></script>
   <script src="updates.js?v=20260928a"></script>
 <script src="hover.js"></script>
-<script src="motion.js?v=20261031c"></script>
+<script src="motion.js?v=20261122b"></script>
 </body>
 </html>

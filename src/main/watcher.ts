@@ -3,7 +3,7 @@ import chokidar, { type FSWatcher } from 'chokidar'
 import path from 'node:path'
 import { realpathSync } from 'node:fs'
 import type { VaultChange } from '../shared/types'
-import { setWatcherRelease, wasRecentlyWritten } from './vault'
+import { changedByAnotherProgram, setWatcherRelease, wasRecentlyWritten } from './vault'
 
 let watcher: FSWatcher | null = null
 // What the watcher was started with, kept so it can be started again after a pause.
@@ -81,7 +81,18 @@ export function startWatching(given: string, onChange: (change: VaultChange) => 
     if (event === 'add' || event === 'change' || event === 'unlink') {
       if (!abs.toLowerCase().endsWith('.md') && (!isListedDoc(abs) || isOfficeLockFile(abs))) return
     }
-    if (wasRecentlyWritten(abs)) return // our own write — don't echo
+    if (wasRecentlyWritten(abs)) {
+      // Our own write — don't echo. Unless the note now holds words we never wrote:
+      // another program saved it in the moments after one of our saves.
+      if (event === 'add' || event === 'change') {
+        void changedByAnotherProgram(abs).then((theirs) => {
+          if (!theirs) return
+          batch.add(toRel(abs))
+          schedule()
+        })
+      }
+      return
+    }
     batch.add(toRel(abs))
     schedule()
   })

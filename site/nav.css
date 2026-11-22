@@ -81,6 +81,9 @@
   --c-tutorials: #a9d5f3;
   --c-updates: #b8dfa9;
   --c-students: #f5c518;
+  /* What we offer holds Tutorials and What's new, so its colour sits between
+     their sky and sage (Reuben turned down pink, 2026-11-21). */
+  --c-offer: #8fd3c7;
   /* Text sitting ON one of those fills. Dark in both themes: they are all
      light colours, so light text on them would never read. */
   --on-accent: oklch(22% 0.02 55);
@@ -196,6 +199,36 @@
 @view-transition { navigation: auto; }
 ::view-transition-old(root),
 ::view-transition-new(root) { animation-duration: 200ms; }
+
+/* What we offer and the pages inside it (Tutorials, every guide, What's new)
+   behave like the install guide (Reuben, 2026-11-21): the page rises into place
+   the way the guide does, and the top bar doesn't move or fade at all.
+   The rules are read from the page being arrived at. */
+body:is(.page-theme-offer, .page-theme-tutorials, .page-theme-updates) .topbar {
+  view-transition-name: site-topbar;
+}
+/* What's new already keeps this space for the scrollbar (updates.css). All of
+   them must, or the bar's links shift sideways between these pages. */
+html:has(> body:is(.page-theme-offer, .page-theme-tutorials, .page-theme-updates)) { scrollbar-gutter: stable; }
+::view-transition-group(site-topbar) { animation: none; }
+/* The previous page's bar, already complete, stays on top for the whole change,
+   so a long page whose links are still being set up never shows a gap. Arriving
+   from outside these pages there is no previous bar, and the new one shows. */
+:root:has(> body:is(.page-theme-offer, .page-theme-tutorials, .page-theme-updates))::view-transition-old(site-topbar) {
+  animation: none; opacity: 1; mix-blend-mode: normal; z-index: 1;
+}
+:root:has(> body:is(.page-theme-offer, .page-theme-tutorials, .page-theme-updates))::view-transition-new(site-topbar) {
+  animation: none; opacity: 1; mix-blend-mode: normal;
+}
+:root:has(> body:is(.page-theme-offer, .page-theme-tutorials, .page-theme-updates))::view-transition-old(root) {
+  animation: 120ms ease-out both nested-fade-out;
+}
+/* Starts as the old page finishes leaving, so two pages' words never overlap. */
+:root:has(> body:is(.page-theme-offer, .page-theme-tutorials, .page-theme-updates))::view-transition-new(root) {
+  animation: 460ms cubic-bezier(0.22, 1, 0.36, 1) 110ms both nested-rise;
+}
+@keyframes nested-fade-out { to { opacity: 0; } }
+@keyframes nested-rise { from { opacity: 0; transform: translateY(14px); } }
 @media (prefers-reduced-motion: reduce) {
   @view-transition { navigation: none; }
 }
@@ -278,13 +311,23 @@
 .topbar-links a[href$="tutorials.html"] { --tab-c: var(--c-tutorials); }
 .topbar-links a[href$="students.html"] { --tab-c: var(--c-students); }
 .topbar-links a[href$="updates.html"] { --tab-c: var(--c-updates); }
+.topbar-links a[href$="what-we-offer.html"] { --tab-c: var(--c-offer); }
 .topbar-links a:hover { color: var(--ink); }
+/* nav.js swaps the links in. Held back until then so the old three never flash;
+   if the script never arrives, the page's own links appear after a moment. */
+@media (scripting: enabled) {
+  .topbar-links:not(.is-built) { visibility: hidden; animation: topbar-links-fallback 0s linear 1.2s forwards; }
+}
+@keyframes topbar-links-fallback { to { visibility: visible; } }
 /* The Students link reads "Notealise for students" on desktop; at the mobile
    breakpoint that label overflows the crammed nav, so it shortens to
    "Students" (the label the footer keeps in full). */
 .topbar-links .tb-narrow { display: none; }
 .topbar-links a.is-active { color: var(--ink); font-weight: 600; }
 body[class*="page-theme-"] .topbar { border-bottom: 2px solid var(--accent); }
+/* Tutorials and What's new keep What we offer's bar exactly; only their own
+   highlighter colour inside the page differs. */
+body[class*="page-theme-"] .topbar.in-offer { border-bottom-color: var(--c-offer); }
 
 .topbar-social {
   justify-self: end;

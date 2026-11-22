@@ -30,6 +30,7 @@ import {
   setWatcherRelease,
   trashEntry,
   wasRecentlyWritten,
+  changedByAnotherProgram,
   writeNote
 } from './vault'
 import { RECOVERY_DIR, heldPath, isSafeHeldSegment } from '../shared/workspace'
@@ -151,6 +152,14 @@ describe('the echo guard', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('tells another program’s save from our own, inside that window', async () => {
+    const abs = path.join(root, 'echo-other.md')
+    await writeNote('echo-other.md', 'ours')
+    expect(await changedByAnotherProgram(abs)).toBe(false)
+    await fs.writeFile(abs, 'theirs')
+    expect(await changedByAnotherProgram(abs)).toBe(true)
   })
 })
 
@@ -401,6 +410,21 @@ describe('renameWithRetry and the folder watcher', () => {
       expect(resume).toHaveBeenCalledTimes(1)
       expect((await fs.stat(path.join(dir, 'c', 'b'))).isDirectory()).toBe(true)
     } finally {
+      await fs.rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('says a read-only file is read-only, rather than blaming another program', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdnotes-ren-'))
+    const target = path.join(dir, 'locked.md')
+    try {
+      await fs.writeFile(path.join(dir, 'n.md'), 'x')
+      await fs.writeFile(target, 'y')
+      await fs.chmod(target, 0o444)
+      vi.spyOn(fs, 'rename').mockRejectedValue(eperm())
+      await expect(renameWithRetry(path.join(dir, 'n.md'), target, 2)).rejects.toThrow(/read-only/)
+    } finally {
+      await fs.chmod(target, 0o644).catch(() => {})
       await fs.rm(dir, { recursive: true, force: true })
     }
   })

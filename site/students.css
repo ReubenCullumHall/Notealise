@@ -89,7 +89,6 @@ body.st-page {
 ::selection { background: color-mix(in oklab, var(--hl-pink) 45%, var(--bg)); color: var(--ink); }
 /* Solid, so the page doesn't show through behind the links (Reuben, 2026-10-29). */
 body.st-page .topbar { background: var(--bg); border-bottom-color: var(--accent); }
-.st-page .topbar-links a { font-family: var(--face); font-weight: 600; }
 .st-page .footer-brand { font-family: var(--face); font-weight: 800; }
 
 .st { flex: 1 0 auto; width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 clamp(20px, 6vw, 96px); }

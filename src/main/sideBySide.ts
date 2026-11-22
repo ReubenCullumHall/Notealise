@@ -9,7 +9,7 @@
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { screen, shell, systemPreferences, type BrowserWindow } from 'electron'
-import { oursBeside, shortAppName, splitScreen, type Box, type EditBeside } from '../shared/sideBySide'
+import { outerBox, oursBeside, shortAppName, splitScreen, type Box, type EditBeside, type Insets } from '../shared/sideBySide'
 import { docViewOf } from '../shared/docs'
 import { MAC_LOOKUP, MAC_PLACE, WIN_LOOKUP, WIN_PLACE } from './sideBySideScripts'
 import { openableFile } from './vault'
@@ -107,8 +107,14 @@ function putBack(win: BrowserWindow, was: NonNullable<typeof before>): void {
   if (was.full) win.setFullScreen(true)
 }
 
-/** Put the other app's window in `box`; where it really ended up, or null. */
-async function placeWindow(win: BrowserWindow, app: DocApp, abs: string, box: Box): Promise<Box | null> {
+/** Put the other app's window in `box`; where it really ended up, or null. On Windows
+ *  also our own window's invisible border, so the two visibly meet. */
+async function placeWindow(
+  win: BrowserWindow,
+  app: DocApp,
+  abs: string,
+  box: Box
+): Promise<{ box: Box; inset?: Insets } | null> {
   const stem = path.basename(abs, path.extname(abs))
   try {
     if (isMac) {
@@ -124,7 +130,7 @@ async function placeWindow(win: BrowserWindow, app: DocApp, abs: string, box: Bo
         },
         20_000
       )
-      return out ? (JSON.parse(out) as Box) : null
+      return out ? { box: JSON.parse(out) as Box } : null
     }
     const px = screen.dipToScreenRect(win, box)
     const handle = win.getNativeWindowHandle()
@@ -133,15 +139,19 @@ async function placeWindow(win: BrowserWindow, app: DocApp, abs: string, box: Bo
       WIN_PLACE,
       {
         BESIDE_STEM: stem,
+        BESIDE_EXT: path.extname(abs).toLowerCase(),
         BESIDE_OURS: String(ours),
         BESIDE_X: String(px.x),
         BESIDE_Y: String(px.y),
         BESIDE_W: String(px.width),
         BESIDE_H: String(px.height)
       },
-      20_000
+      // The script waits up to a minute for an app that is starting from cold.
+      75_000
     )
-    return out ? screen.screenToDipRect(win, JSON.parse(out) as Box) : null
+    if (!out) return null
+    const { inset, ...seen } = JSON.parse(out) as Box & { inset: Insets }
+    return { box: screen.screenToDipRect(win, seen), inset }
   } catch {
     return null
   }
@@ -173,13 +183,16 @@ export async function editBeside(win: BrowserWindow, relPath: string): Promise<E
     putBack(win, { ...was, placed: was.bounds })
     return { ok: false, why: 'narrow', app: name }
   }
-  const theirs = await placeWindow(win, app, abs, split.theirs)
+  const placed = await placeWindow(win, app, abs, split.theirs)
   if (win.isDestroyed()) return { ok: true, app: name }
-  if (!theirs) {
+  if (!placed) {
     putBack(win, { ...was, placed: was.bounds })
     return { ok: false, why: 'not-placed', app: name }
   }
-  const ours = oursBeside(work, theirs)
+  const seen = oursBeside(work, placed.box)
+  const ours = placed.inset
+    ? screen.screenToDipRect(win, outerBox(screen.dipToScreenRect(win, seen), placed.inset))
+    : seen
   // A second file lined up while already beside one keeps the size to go back to.
   const already = before && before.placed.x === was.bounds.x && before.placed.width === was.bounds.width
   if (!already) before = { ...was, placed: ours }

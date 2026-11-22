@@ -45,7 +45,11 @@ html.mo-scroll { scroll-behavior: auto !important; }
    picture. They glide after the mouse; the real cursor is only turned off once
    the first mouse movement has put this one on screen. */
 html.mo-cursor-on, html.mo-cursor-on *, html.mo-cursor-on ::backdrop { cursor: none !important; }
-html.mo-cursor-on input:not([type="range"]), html.mo-cursor-on textarea,
+/* Only boxes you type in keep the real cursor. Tick boxes are <input>s too, so
+   without these exceptions the real arrow sat on top of the drawn hand. This
+   list matches the "text" list in motion.js. */
+html.mo-cursor-on input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]),
+html.mo-cursor-on textarea,
 html.mo-cursor-on [contenteditable] { cursor: auto !important; }
 
 /* It is a popover so it sits in the top layer, above a pop-up that is open as
@@ -75,3 +79,5 @@ html.mo-cursor-on [contenteditable] { cursor: auto !important; }
 /* out of the window, or over a text box (which keeps the real I-beam) */
 .mo-cur.is-out .mo-pos { opacity: 0; }
 .mo-cur[data-state="text"] .mo-pos { display: none; }
+/* over a scrollbar, where the browser always shows its own arrow */
+.mo-cur.is-bar .mo-pos { display: none; }

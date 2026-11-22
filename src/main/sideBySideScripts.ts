@@ -109,43 +109,100 @@ public static class BesideLookup {
 [BesideLookup]::Name($env:BESIDE_EXT)
 `
 
-/** Windows: find the visible window whose title holds BESIDE_STEM (never our own,
- *  BESIDE_OURS) and put it at BESIDE_X/Y/W/H, in screen pixels. Prints where it ended up. */
+/** Windows: find the visible window of the app that opens BESIDE_EXT whose title holds
+ *  BESIDE_STEM (never our own, BESIDE_OURS), waiting for an app that is still starting,
+ *  and make the part of it you can SEE fill BESIDE_X/Y/W/H, in screen pixels. Prints
+ *  where it ended up, and the invisible border of our own window. */
 export const WIN_PLACE = String.raw`
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
-using System; using System.Text; using System.Runtime.InteropServices;
+using System; using System.IO; using System.Text; using System.Runtime.InteropServices;
 public static class BesidePlace {
   public delegate bool Each(IntPtr h, IntPtr l);
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
   [DllImport("user32.dll")] static extern bool EnumWindows(Each e, IntPtr l);
   [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
-  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int t, uint f);
-  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out Rect r);
-  public static IntPtr Find(string stem, long ours) {
+  [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int t, uint f);
+  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out Rect r);
+  [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int a, out Rect r, int size);
+  [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint a, bool i, uint pid);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern bool QueryFullProcessImageName(IntPtr h, int f, StringBuilder s, ref uint n);
+  [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)] static extern int AssocQueryString(int flags, int str, string assoc, string extra, StringBuilder o, ref uint n);
+  public static string AppFile(string ext) {
+    uint n = 1024; var s = new StringBuilder(1024);
+    return AssocQueryString(0, 2, ext, null, s, ref n) == 0 ? s.ToString() : "";
+  }
+  static bool IsApp(IntPtr h, string app) {
+    if (app.Length == 0) return true;
+    uint pid; GetWindowThreadProcessId(h, out pid);
+    IntPtr p = OpenProcess(0x1000, false, pid);
+    if (p == IntPtr.Zero) return false;
+    try {
+      uint n = 1024; var s = new StringBuilder(1024);
+      if (!QueryFullProcessImageName(p, 0, s, ref n)) return false;
+      string name = Path.GetFileName(s.ToString());
+      if (name.Equals(Path.GetFileName(app), StringComparison.OrdinalIgnoreCase)) return true;
+      // A Store app's window belongs to this host program.
+      return app.IndexOf("\\WindowsApps\\", StringComparison.OrdinalIgnoreCase) >= 0
+        && name.Equals("ApplicationFrameHost.exe", StringComparison.OrdinalIgnoreCase);
+    } finally { CloseHandle(p); }
+  }
+  public static IntPtr Find(string stem, long ours, string app) {
     IntPtr hit = IntPtr.Zero;
     EnumWindows((h, l) => {
       if (h.ToInt64() == ours || !IsWindowVisible(h)) return true;
       var s = new StringBuilder(512); GetWindowText(h, s, 512);
       if (s.ToString().IndexOf(stem, StringComparison.OrdinalIgnoreCase) < 0) return true;
+      if (!IsApp(h, app)) return true;
       hit = h; return false;
     }, IntPtr.Zero);
     return hit;
   }
+  public static Rect Seen(IntPtr h) {
+    Rect r;
+    if (DwmGetWindowAttribute(h, 9, out r, Marshal.SizeOf(typeof(Rect))) != 0) GetWindowRect(h, out r);
+    return r;
+  }
+  public static Rect Inset(IntPtr h) {
+    Rect r, f = Seen(h), o = new Rect();
+    GetWindowRect(h, out r);
+    o.Left = f.Left - r.Left; o.Top = f.Top - r.Top; o.Right = r.Right - f.Right; o.Bottom = r.Bottom - f.Bottom;
+    return o;
+  }
+  public static void Place(IntPtr h, int x, int y, int w, int t) {
+    Rect i = Inset(h);
+    SetWindowPos(h, IntPtr.Zero, x - i.Left, y - i.Top, w + i.Left + i.Right, t + i.Top + i.Bottom, 0x0014);
+  }
 }
 '@
 [Console]::OutputEncoding = [Text.Encoding]::UTF8
+$app = [BesidePlace]::AppFile($env:BESIDE_EXT)
+$ours = [IntPtr]::new([long]$env:BESIDE_OURS)
 $h = [IntPtr]::Zero
-for ($i = 0; $i -lt 40 -and $h -eq [IntPtr]::Zero; $i++) {
-  $h = [BesidePlace]::Find($env:BESIDE_STEM, [long]$env:BESIDE_OURS)
+# Word or Excel starting from cold can take many seconds to show the file, and Word
+# turning a PDF into a document takes longer still (over 30 s measured).
+for ($i = 0; $i -lt 300 -and $h -eq [IntPtr]::Zero; $i++) {
+  $h = [BesidePlace]::Find($env:BESIDE_STEM, [long]$env:BESIDE_OURS, $app)
   if ($h -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 200 }
 }
 if ($h -eq [IntPtr]::Zero) { exit 0 }
 [void][BesidePlace]::ShowWindow($h, 9)
-[void][BesidePlace]::SetWindowPos($h, [IntPtr]::Zero, [int]$env:BESIDE_X, [int]$env:BESIDE_Y, [int]$env:BESIDE_W, [int]$env:BESIDE_H, 0x0014)
-$r = New-Object BesidePlace+Rect
-[void][BesidePlace]::GetWindowRect($h, [ref]$r)
-'{"x":' + $r.Left + ',"y":' + $r.Top + ',"width":' + ($r.Right - $r.Left) + ',"height":' + ($r.Bottom - $r.Top) + '}'
+$x = [int]$env:BESIDE_X; $y = [int]$env:BESIDE_Y; $w = [int]$env:BESIDE_W; $t = [int]$env:BESIDE_H
+# An app that is still starting can put its window back, so hold it until it stays.
+$good = 0
+for ($i = 0; $i -lt 16 -and $good -lt 3; $i++) {
+  if ([BesidePlace]::IsZoomed($h)) { [void][BesidePlace]::ShowWindow($h, 9) }
+  [BesidePlace]::Place($h, $x, $y, $w, $t)
+  Start-Sleep -Milliseconds 150
+  $s = [BesidePlace]::Seen($h)
+  if ([Math]::Abs($s.Left - $x) -le 1 -and [Math]::Abs($s.Top - $y) -le 1 -and [Math]::Abs($s.Right - $x - $w) -le 1 -and [Math]::Abs($s.Bottom - $y - $t) -le 1) { $good++ } else { $good = 0 }
+}
+$r = [BesidePlace]::Seen($h)
+$o = [BesidePlace]::Inset($ours)
+'{"x":' + $r.Left + ',"y":' + $r.Top + ',"width":' + ($r.Right - $r.Left) + ',"height":' + ($r.Bottom - $r.Top) + ',"inset":{"left":' + $o.Left + ',"top":' + $o.Top + ',"right":' + $o.Right + ',"bottom":' + $o.Bottom + '}}'
 `

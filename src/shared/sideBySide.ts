@@ -32,6 +32,25 @@ export function oursBeside(work: Box, theirs: Box): Box {
   return { x: work.x, y: work.y, width: Math.max(OUR_MIN_WIDTH, left), height: work.height }
 }
 
+/** A Windows window's invisible resize border, on each side, in screen pixels. */
+export interface Insets {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+/** The box to ask Windows for so the part you can SEE fills `visible`: a window's
+ *  size there includes its invisible border. */
+export function outerBox(visible: Box, inset: Insets): Box {
+  return {
+    x: visible.x - inset.left,
+    y: visible.y - inset.top,
+    width: visible.width + inset.left + inset.right,
+    height: visible.height + inset.top + inset.bottom
+  }
+}
+
 /** "Microsoft Excel.app" → "Excel": what fits on the button. */
 export function shortAppName(name: string): string {
   return name.replace(/\.app$/i, '').replace(/^Microsoft\s+/i, '').trim()

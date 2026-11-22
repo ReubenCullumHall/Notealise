@@ -272,12 +272,35 @@
     shown = false; cur.classList.add("is-out"); root.classList.remove("mo-cursor-on");
   }
 
+  // Over a scrollbar the browser always draws its own arrow, whatever the page
+  // asks for, so this cursor steps aside there rather than showing as a second one.
+  var barFor = null, boxHasBar = false, onBar = false;
+  function overBar(e) {
+    if (e.clientX > window.innerWidth - 40 && e.clientX >= root.clientWidth) return root.scrollHeight > root.clientHeight;
+    if (e.clientY > window.innerHeight - 40 && e.clientY >= root.clientHeight) return root.scrollWidth > root.clientWidth;
+    var t = e.target;
+    if (t !== barFor) {   // a box with a scrollbar of its own, such as a long pop-up
+      barFor = t;
+      boxHasBar = false;
+      if (t && t.nodeType === 1 && t !== root && t !== document.body && t.clientWidth > 0 && t.clientHeight > 0) {
+        var c = window.getComputedStyle(t);
+        boxHasBar = t.offsetWidth - t.clientWidth - parseFloat(c.borderLeftWidth) - parseFloat(c.borderRightWidth) > 1 ||
+          t.offsetHeight - t.clientHeight - parseFloat(c.borderTopWidth) - parseFloat(c.borderBottomWidth) > 1;
+      }
+    }
+    if (!boxHasBar) return false;
+    var r = t.getBoundingClientRect();
+    return e.clientX >= r.left + t.clientLeft + t.clientWidth || e.clientY >= r.top + t.clientTop + t.clientHeight;
+  }
+
   window.addEventListener("pointermove", function (e) {
     if (e.pointerType && e.pointerType !== "mouse") return;
     tx = e.clientX; ty = e.clientY;
     if (!shown) show();
     if (!shown) return;
     hit(e.target);
+    var bar = overBar(e);
+    if (bar !== onBar) { onBar = bar; cur.classList.toggle("is-bar", bar); }
     wake();
   }, { passive: true });
   window.addEventListener("pointerdown", function (e) {

@@ -47,6 +47,29 @@
   var bar = document.querySelector('.topbar');
   if (!bar) return;
 
+  // The bar has two links on every page: Students and What we offer (Reuben,
+  // 2026-11-21). Tutorials and What's new sit inside What we offer, so on them
+  // and on every guide What we offer stays the lit link. Built here so no page
+  // can be missed. With no script a page keeps its own links, which all work.
+  var nav = bar.querySelector('.topbar-links');
+  var path = location.pathname;
+  if (nav && !/prototype\.html$/i.test(path) && !nav.querySelector('a[href$="what-we-offer.html"]')) {
+    var studentsLink = nav.querySelector('a[href$="students.html"]');
+    var base = studentsLink ? studentsLink.getAttribute('href').replace(/students\.html$/, '') : '';
+    var old = nav.querySelectorAll('a[href$="tutorials.html"], a[href$="updates.html"]');
+    for (var o = 0; o < old.length; o++) old[o].parentNode.removeChild(old[o]);
+    var offer = document.createElement('a');
+    offer.setAttribute('href', base + 'what-we-offer.html');
+    offer.textContent = 'What we offer';
+    nav.appendChild(offer);
+    if (/\/(tutorials|updates)\.html$|\/tutorials\/[^/]+$/i.test(path)) {
+      offer.classList.add('is-active');
+      offer.setAttribute('aria-current', 'true');
+      bar.classList.add('in-offer');
+    }
+  }
+  if (nav) nav.classList.add('is-built');
+
   // Mark the active link.
   var here = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
   var links = bar.querySelectorAll('.topbar-links a');

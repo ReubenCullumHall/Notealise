@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { OUR_MIN_WIDTH, oursBeside, shortAppName, splitScreen } from './sideBySide'
+import { OUR_MIN_WIDTH, outerBox, oursBeside, shortAppName, splitScreen } from './sideBySide'
 
 const laptop = { x: 0, y: 25, width: 1440, height: 875 }
 
@@ -39,6 +39,13 @@ describe('oursBeside', () => {
 
   it('never goes under Notealise’s own minimum', () => {
     expect(oursBeside(laptop, { x: 300, y: 25, width: 1140, height: 875 }).width).toBe(OUR_MIN_WIDTH)
+  })
+})
+
+describe('outerBox', () => {
+  it('adds a Windows window’s invisible border, so the part you see fills the box', () => {
+    const seen = { x: 960, y: 0, width: 960, height: 1032 }
+    expect(outerBox(seen, { left: 7, top: 0, right: 7, bottom: 7 })).toEqual({ x: 953, y: 0, width: 974, height: 1039 })
   })
 })
 

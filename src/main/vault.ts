@@ -288,8 +288,13 @@ export async function renameWithRetry(from: string, to: string, attempts = 6): P
           }
         }
         if (i >= attempts - 1) {
+          // Windows refuses to replace a read-only file with the same error a lock
+          // gives, and "wait a moment" would never help that one.
+          const readOnly = await fs.stat(to).then((s) => (s.mode & 0o200) === 0, () => false)
           throw new Error(
-            'Something else has it open (OneDrive or another sync app, an antivirus scan, or another program). Wait a moment, or close it, and try again.'
+            readOnly
+              ? 'This file is set to read-only. Turn that off in its Properties, then try again.'
+              : 'Something else has it open (OneDrive or another sync app, an antivirus scan, or another program). Wait a moment, or close it, and try again.'
           )
         }
         await sleep(Math.min(1000, 30 * 2 ** i)) // 30, 60, 120, 240, 480, 960ms, then capped at 1s
@@ -313,14 +318,36 @@ const DIR_RENAME_ATTEMPTS = 16
 // first write's timer cleared the mark ~1.5s in, while the second write's echo —
 // slower to arrive on Windows — was still on its way, and reached the editor.
 const recentWrites = new Map<string, NodeJS.Timeout>()
-function markWrite(abs: string): void {
+// What a note's own saves put in it during that window, so another program's save
+// landing inside it isn't taken for ours and missed (Windows pass, 2026-11-22).
+const recentNoteText = new Map<string, Set<string>>()
+const fingerprint = (data: string | Buffer): string => createHash('sha256').update(data).digest('hex')
+function markWrite(abs: string, noteText?: string): void {
   const k = key(abs)
   const earlier = recentWrites.get(k)
   if (earlier) clearTimeout(earlier)
-  recentWrites.set(k, setTimeout(() => recentWrites.delete(k), 1500).unref())
+  if (noteText === undefined) recentNoteText.delete(k)
+  else recentNoteText.set(k, (recentNoteText.get(k) ?? new Set<string>()).add(fingerprint(noteText)))
+  recentWrites.set(
+    k,
+    setTimeout(() => {
+      recentWrites.delete(k)
+      recentNoteText.delete(k)
+    }, 1500).unref()
+  )
 }
 export function wasRecentlyWritten(abs: string): boolean {
   return recentWrites.has(key(abs))
+}
+/** Inside the echo window: does this note now hold something none of our saves wrote? */
+export async function changedByAnotherProgram(abs: string): Promise<boolean> {
+  const ours = recentNoteText.get(key(abs))
+  if (!ours) return false
+  try {
+    return !ours.has(fingerprint(await fs.readFile(abs)))
+  } catch {
+    return false
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -520,7 +547,7 @@ export async function writeNote(relPath: string, content: string): Promise<void>
   } finally {
     await fh.close()
   }
-  markWrite(abs)
+  markWrite(abs, data)
   markWrite(tmp)
   try {
     await renameWithRetry(tmp, abs)
