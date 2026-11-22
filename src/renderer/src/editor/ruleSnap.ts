@@ -12,7 +12,7 @@ import { ViewPlugin, type EditorView, type ViewUpdate } from '@codemirror/view'
 
 // A picture or video alone on its line too (blockLines.ts marks the line), so on Lined it takes
 // whole rules like a formula and the lines below stay on theirs (2026-11-08).
-const SELECTOR = '.cm-math-display, .cm-block-line > .cm-image, .cm-block-line > .cm-video, .cm-block-line > .cm-video-card'
+const SELECTOR = '.cm-math-display, .cm-chart, .cm-block-line > .cm-image, .cm-block-line > .cm-video, .cm-block-line > .cm-video-card'
 
 export const ruleSnap = ViewPlugin.fromClass(
   class {

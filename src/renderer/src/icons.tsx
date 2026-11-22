@@ -45,6 +45,7 @@ export type IconName =
   | 'quote'
   | 'code'
   | 'codeBlock'
+  | 'flowChart'
   | 'link'
   | 'noteLink'
   | 'book'
@@ -305,6 +306,14 @@ const PATHS: Record<IconName, React.JSX.Element> = {
     </>
   ),
   code: <path d="M9 7l-5 5 5 5M15 7l5 5-5 5" />,
+  flowChart: (
+    <>
+      <rect x="8.5" y="3" width="7" height="5" rx="1" />
+      <rect x="3" y="16" width="7" height="5" rx="1" />
+      <rect x="14" y="16" width="7" height="5" rx="1" />
+      <path d="M12 8v4M6.5 16v-2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v2" />
+    </>
+  ),
   codeBlock: (
     <>
       <rect x="3" y="4" width="18" height="16" rx="2" />

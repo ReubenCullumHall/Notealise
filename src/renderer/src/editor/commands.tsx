@@ -8,6 +8,7 @@ import type { MarkerKind } from './formatModel'
 import {
   codeBlock,
   inlineCode,
+  insertFlowChart,
   insertInlineMath,
   insertMath,
   link,
@@ -236,6 +237,15 @@ export const EDITOR_COMMANDS: EditorCommand[] = [
     glyph: textFace('ƒx', 'font-display italic'),
     terms: ['math', 'latex', 'formula', 'equation', 'tex', 'block'],
     run: insert(insertMath)
+  },
+  {
+    id: 'flowChart',
+    label: 'Flow chart',
+    hint: 'A Mermaid chart you can walk through',
+    group: 'Blocks',
+    glyph: iconFace('flowChart'),
+    terms: ['flow', 'chart', 'flowchart', 'mermaid', 'diagram', 'simulator', 'decision'],
+    run: insert(insertFlowChart)
   },
   {
     // Ahead of the web link, so "/link" offers the note link first: linking notes

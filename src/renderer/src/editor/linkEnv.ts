@@ -126,6 +126,9 @@ export interface LinkHandlers {
    *  to where it was, for the notice's Undo — false when that note has changed since. Optional:
    *  a test editor has no sidebar. */
   moveToNote?: (from: string, to: string, text: string, putBack: () => boolean) => void
+  /** A chart card's Open button: the note's `index`th chart, in its own tab (charts/). Optional:
+   *  a test editor has no tabs. */
+  openChart?: (notePath: string, index: number) => void
 }
 
 /** What `confirmMediaDelete` is given. A named type because three layers pass it

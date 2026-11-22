@@ -1,6 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import 'katex/dist/katex.min.css'
+// Chemistry in formulas (`\ce{H2O}`, `\pu{5 kJ/mol}`). It teaches the one shared
+// KaTeX its two commands, so every place a formula is drawn gets them.
+import 'katex/contrib/mhchem'
 import App from './App'
 import { ErrorBoundary } from './ErrorBoundary'
 import './theme.css'

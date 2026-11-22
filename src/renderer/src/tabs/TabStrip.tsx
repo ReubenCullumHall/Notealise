@@ -1,4 +1,6 @@
 import { isListedDoc } from '../../../shared/docs'
+import { isChartTab } from '../../../shared/charts'
+import { chartTabTitle } from '../charts/chartTabs'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../icons'
 import { BLANK, MAX_PANES, splitWith, stripGroups, type Split } from './model'
@@ -94,7 +96,8 @@ const FADE_UNDER_X =
 /** One offscreen canvas for measuring text, made on first use. */
 let measureCanvas: HTMLCanvasElement | undefined
 const stripMd = (s: string): string => (s.toLowerCase().endsWith('.md') ? s.slice(0, -3) : s)
-const titleOf = (p: string): string => (p === BLANK ? 'Select a note' : stripMd(nameOf(p)))
+const titleOf = (p: string): string =>
+  p === BLANK ? 'Select a note' : isChartTab(p) ? chartTabTitle(p) : stripMd(nameOf(p))
 
 
 /** The strip of open notes across the top of the editor area. Click to focus,
@@ -1057,7 +1060,7 @@ export function TabStrip({
               role="tab"
               tabIndex={0}
               aria-selected={item[0] === active}
-              data-tip={item[0] || 'Waiting for a note'}
+              data-tip={(isChartTab(item[0]) ? titleOf(item[0]) : item[0]) || 'Waiting for a note'}
               draggable
               {...nameProps(item[0])}
               {...tabDragProps(item[0])}
@@ -1215,10 +1218,15 @@ function TabGroupMenu({
     ...(grouped && canTakeOut ? [{ label: `Take ${name} out of the split`, onClick: onTakeOut }] : []),
     ...(grouped ? [{ label: 'Split them all apart', onClick: onUngroup }] : []),
     // The sidebar's own words for the same two actions.
-    archived ? { label: 'Put back…', onClick: onPutBack } : { label: 'Move to archive', onClick: onArchive },
+    // A chart's tab belongs to its note: archiving or printing is done from the note.
+    ...(isChartTab(path)
+      ? []
+      : [archived ? { label: 'Put back…', onClick: onPutBack } : { label: 'Move to archive', onClick: onArchive }]),
     // A document's tab (a PDF, a Word file — shared/docs.ts) has no note versions and
     // isn't a note to save as or print: its own app does those (docs/plans/file-tabs.md).
-    ...(path !== BLANK && isListedDoc(path)
+    ...(isChartTab(path)
+      ? []
+      : path !== BLANK && isListedDoc(path)
       ? [{ label: 'Open in its own app', onClick: () => void window.api.openVaultFile(path) }]
       : [
           // The sidebar's words for the same thing. A blank tab has no note to look back on.

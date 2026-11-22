@@ -3,6 +3,7 @@ import { syntaxTree } from '@codemirror/language'
 import { Decoration, EditorView, keymap, type DecorationSet } from '@codemirror/view'
 import { isRaw } from './rawView'
 import { findTranscript } from '../../../shared/transcript'
+import { chartsField } from './chartsField'
 
 // No cursor on a block's own line (Reuben, 2026-11-07: "for any mathematic blocks and for any
 // audio blocks and any bigger blocks other than just headings and actual ones where you type,
@@ -90,6 +91,7 @@ export function guardedBlocks(state: EditorState): GuardedBlock[] {
       return node.name === 'Document' || node.name === 'Blockquote' || node.name === 'BulletList' || node.name === 'OrderedList' || node.name === 'ListItem'
     }
   })
+  for (const c of state.field(chartsField, false) ?? []) out.push({ from: c.from, to: c.to, afterText: false })
   return out.sort((a, b) => a.from - b.from)
 }
 

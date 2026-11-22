@@ -46,7 +46,7 @@ const blockLineMarks = ViewPlugin.fromClass(
 /** A picked table or formula wears the same outline as a picked voice note, picture or video
  *  (rule 9). Those three draw it themselves; a table and a formula are drawn by their own passes,
  *  which don't know about picking, so the class is put on here once the editor has redrawn. */
-const RINGED = ':scope > .cm-table table, :scope > .cm-math-display'
+const RINGED = ':scope > .cm-table table, :scope > .cm-math-display, :scope > .cm-chart > .cm-chart-card'
 
 const pickRing = ViewPlugin.fromClass(
   class {
@@ -109,11 +109,11 @@ function blockAtGap(view: EditorView, target: HTMLElement, y: number): { from: n
   }
   const frame = target.classList.contains('cm-block-frame')
     ? target
-    : target.classList.contains('cm-table')
+    : target.classList.contains('cm-table') || target.classList.contains('cm-chart')
       ? target.closest<HTMLElement>('.cm-block-frame')
       : null
   if (!frame) return null
-  const inner = frame.querySelector<HTMLElement>(':scope > .cm-table table, :scope > .cm-math-display')
+  const inner = frame.querySelector<HTMLElement>(':scope > .cm-table table, :scope > .cm-math-display, :scope > .cm-chart > .cm-chart-card')
   if (!inner) return null
   const r = inner.getBoundingClientRect()
   if (y >= r.top && y <= r.bottom) return null

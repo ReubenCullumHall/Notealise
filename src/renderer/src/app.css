@@ -6856,6 +6856,287 @@ html.space-vt::view-transition-new(root) {
 }
 
 /* ---------------------------------------------------------------------------
+   A Mermaid chart (docs/plans/flow-charts.md). The drawing reads these variables, so it follows
+   the space's theme and accent with no redraw.
+   --------------------------------------------------------------------------- */
+.chart-svg {
+  /* Behind an arrow's label: the page's own colour, so the line stops either side of the word. */
+  --pele-bg: rgb(var(--paper));
+  --pele-fg: rgb(var(--ink-800));
+  --pele-muted: rgb(var(--ink-500));
+  --pele-line: rgb(var(--ink-500));
+  --pele-surface: rgb(var(--surface));
+  --pele-surface-alt: rgb(var(--ink-200) / 0.5);
+  --pele-border: rgb(var(--ink-400));
+  --pele-accent: rgb(var(--accent-500));
+  --pele-radius: var(--r-control);
+  --pele-font: 'Inter', var(--font-sans);
+  --pele-font-mono: var(--font-mono);
+}
+
+/* The card in a note: a block like a formula, so it keeps the same gap and takes whole rules on
+   Lined and Worn (editor/ruleSnap.ts measures it). A fixed height: see blockChart.ts. */
+.cm-chart {
+  display: flow-root;
+  /* 28px: the note's text gutter, so the card lines up with the words and tables round it. */
+  margin: var(--block-clear) 28px;
+}
+.cm-editor .cm-chart.cm-in-toggle { margin-left: calc(28px + var(--toggle-depth, 0) * var(--toggle-indent)); }
+:is([data-page-look='lined'], [data-page-look='worn']) .cm-chart {
+  --snap-pad: calc((round(up, calc(var(--snap-h, 0px) + 2 * var(--block-clear)), var(--page-rule)) - var(--snap-h, 0px)) / 2);
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: var(--snap-pad);
+  padding-bottom: var(--snap-pad);
+}
+.cm-chart-card {
+  display: flex;
+  flex-direction: column;
+  height: 212px;
+  max-width: 100%;
+  border: 1px solid rgb(var(--ink-300) / 0.45);
+  border-radius: var(--r-surface);
+  background: rgb(var(--paper));
+  font-family: var(--font-sans);
+  overflow: hidden;
+  cursor: default;
+}
+:root:not([data-page-look='none']) .cm-chart-card { background: var(--page-solid); --pele-bg: var(--page-solid); }
+.cm-chart-card.cm-attach-selected { outline-offset: 2px; }
+.cm-chart-picture {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.cm-chart-broken .cm-chart-picture {
+  color: rgb(var(--ink-500));
+  font-size: 13px;
+}
+.cm-chart-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 6px 4px 12px;
+  border-top: 1px solid rgb(var(--ink-300) / 0.3);
+  font-size: 13px;
+  line-height: 1.3;
+}
+.cm-chart-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgb(var(--ink-800));
+  font-weight: 500;
+}
+.cm-chart-count {
+  flex: none;
+  color: rgb(var(--ink-500));
+}
+.cm-chart-open {
+  flex: none;
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid rgb(var(--ink-300));
+  border-radius: var(--r-control);
+  background: transparent;
+  color: rgb(var(--ink-800));
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.cm-chart-open:hover {
+  background: rgb(var(--ink-200) / 0.5);
+  border-color: rgb(var(--ink-400));
+}
+.cm-chart-open:focus-visible {
+  outline: 2px solid rgb(var(--accent-500));
+  outline-offset: 1px;
+}
+
+/* A chart's own tab (charts/ChartView.tsx). */
+.chart-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--paper));
+  color: rgb(var(--ink-800));
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+}
+.chart-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgb(var(--ink-300) / 0.25);
+}
+.chart-zoom { display: flex; align-items: center; gap: 4px; }
+.chart-percent {
+  min-width: 42px;
+  text-align: center;
+  color: rgb(var(--ink-500));
+  font-variant-numeric: tabular-nums;
+}
+.chart-btn {
+  flex: none;
+  min-height: 26px;
+  padding: 2px 9px;
+  border: 1px solid rgb(var(--ink-300) / 0.6);
+  border-radius: var(--r-control);
+  background: transparent;
+  color: rgb(var(--ink-800));
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.chart-btn:hover:not(:disabled) { background: rgb(var(--ink-200) / 0.5); border-color: rgb(var(--ink-400)); }
+.chart-btn:disabled { color: rgb(var(--ink-400)); border-color: rgb(var(--ink-300) / 0.3); cursor: default; }
+.chart-btn.on { background: rgb(var(--ink-200) / 0.6); border-color: rgb(var(--ink-400)); }
+.chart-btn:focus-visible,
+.chart-way:focus-visible,
+.chart-canvas:focus-visible {
+  outline: 2px solid rgb(var(--accent-500));
+  outline-offset: 1px;
+}
+.chart-canvas:focus-visible { outline-offset: -2px; }
+.chart-line {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 4px 12px;
+  border-bottom: 1px solid rgb(var(--ink-300) / 0.25);
+  background: rgb(var(--surface) / 0.6);
+  color: rgb(var(--ink-700));
+}
+.chart-line-problem { color: rgb(var(--ink-900)); font-weight: 500; }
+.chart-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.chart-text {
+  flex: 0 0 min(340px, 42%);
+  min-width: 0;
+  padding: 12px;
+  border: none;
+  border-right: 1px solid rgb(var(--ink-300) / 0.25);
+  border-radius: 0;
+  outline: none;
+  resize: none;
+  background: rgb(var(--surface) / 0.45);
+  color: rgb(var(--ink-900));
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+}
+.chart-text:focus { box-shadow: inset 0 0 0 1px rgb(var(--accent-500) / 0.6); }
+.chart-canvas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.chart-canvas:active { cursor: grabbing; }
+.chart-stage { position: absolute; left: 0; top: 0; transition: opacity 120ms ease; }
+.chart-stage.chart-following { transition: left 200ms ease, top 200ms ease, opacity 120ms ease; }
+.chart-dim .chart-stage { opacity: 0.35; }
+.chart-stage .pele-node.is-walked > :is(rect, polygon, circle, ellipse, path) {
+  fill: rgb(var(--accent-500) / 0.14);
+  stroke: rgb(var(--accent-500) / 0.7);
+}
+.chart-stage .pele-node.is-here > :is(rect, polygon, circle, ellipse, path) {
+  fill: rgb(var(--accent-500) / 0.32);
+  stroke: rgb(var(--accent-500));
+  stroke-width: 2.5;
+}
+.chart-stage .pele-edge.is-walked > path { stroke: rgb(var(--accent-500)); stroke-width: 2; }
+.chart-stage .pele-edge.is-walked > .pele-marker { fill: rgb(var(--accent-500)); stroke: none; }
+.chart-walk {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px 12px;
+  border-top: 1px solid rgb(var(--ink-300) / 0.25);
+  background: rgb(var(--surface) / 0.45);
+}
+.chart-walk-here {
+  display: flex;
+  flex-direction: column;
+  min-width: 96px;
+  max-width: 260px;
+}
+.chart-walk-step { color: rgb(var(--ink-500)); font-size: 12px; }
+.chart-walk-box {
+  color: rgb(var(--ink-900));
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chart-walk-ways {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.chart-walk-end { color: rgb(var(--ink-500)); }
+.chart-walk-starts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: 6px;
+  color: rgb(var(--ink-500));
+}
+.chart-way {
+  max-width: 240px;
+  min-height: 30px;
+  padding: 3px 12px;
+  border: 1px solid rgb(var(--accent-500) / 0.75);
+  border-radius: var(--r-control);
+  background: rgb(var(--accent-500) / 0.14);
+  color: rgb(var(--ink-900));
+  font: inherit;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.chart-way:hover { background: rgb(var(--accent-500) / 0.28); }
+.chart-walk-nav { display: flex; gap: 6px; margin-left: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .chart-stage, .chart-stage.chart-following { transition: none; }
+}
+
+/* ---------------------------------------------------------------------------
    A document's tab (docs/DocView.tsx, docs/plans/file-tabs.md). Drawn in the
    space's own colours and note fonts, so a Word page, a spreadsheet or a text
    file changes with the theme the way a note does.

@@ -20,6 +20,8 @@
 // for a word count and a preview line, and it is why nothing that MATTERS (the
 // decoration engine) is allowed to work this way (see docs/decorations.md).
 
+import { withoutCharts } from './charts'
+
 /** What a reader sees, with every syntax mark removed but the words kept.
  *
  *  Line structure is preserved — callers that want one line collapse it
@@ -86,7 +88,9 @@ export function toPlainText(md: string): string {
  *  line reported eight. `\p{L}` rather than `a-z` so an accented or non-Latin
  *  word still counts. */
 export function countWords(md: string): number {
-  const tokens = toPlainText(md).match(/\S+/g) ?? []
+  // A chart's words are not the note's writing (Reuben, 2026-11-22). Search still reads
+  // them, which is why this is here and not in toPlainText.
+  const tokens = toPlainText(withoutCharts(md)).match(/\S+/g) ?? []
   return tokens.filter((t) => /[\p{L}\p{N}]/u.test(t)).length
 }
 
@@ -103,7 +107,8 @@ export const PREVIEW_CHARS = 90
  *  to `now ,` and the preview read "now , bold". The count could just ignore the
  *  token; a line someone reads has to close the gap. */
 export function toPreviewLine(md: string, max: number): string {
-  return toPlainText(md)
+  // Often only the first PREVIEW_BYTES of a file, so a chart may have lost its closing fence.
+  return toPlainText(withoutCharts(md, true))
     .replace(/\s+/g, ' ')
     .replace(/\s+([,.;:!?%)\]}])/g, '$1') // a gap a stripped tag left behind
     .replace(/([([{])\s+/g, '$1')

@@ -165,6 +165,14 @@ const bundledAssets = [
     license: 'MIT',
     licenseText: readFileSync(path.join(ROOT, 'tools/licenses/emojibase-data-LICENSE.txt'), 'utf8').trim()
   },
+  // Chemistry in formulas: part of the katex package, but under its own licence
+  // (Apache-2.0, not KaTeX's MIT), so the katex entry above doesn't cover it.
+  {
+    name: 'mhchem for KaTeX (chemistry in formulas)',
+    version: seen.get('katex')?.version ?? 'unknown',
+    license: 'Apache-2.0',
+    licenseText: readFileSync(path.join(ROOT, 'tools/licenses/mhchem-LICENSE.txt'), 'utf8').trim()
+  },
   // Transcribe (docs/plans/transcribe.md): the Whisper program and the Base file ship in
   // every download's resources (electron-builder.yml extraResources), not through npm.
   // Keep the version in step with WHISPER_COMMIT in tools/whisper/build.sh.

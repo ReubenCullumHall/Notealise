@@ -32,7 +32,10 @@ import { markCreated, markDeleted, markDropped } from './organise/arrivals'
 import { appendBlock } from './organise/blockDrop'
 import { offerDrop } from './dragLeaveGuard'
 import { PRACTICE_HEAD, PRACTICE_TITLE } from './settings/tutorials/tryIt'
-import { focusNoteEnd } from './editor/viewRegistry'
+import { focusNoteEnd, viewsShowing } from './editor/viewRegistry'
+import { formatEdit } from './editor/markPairs'
+import { chartNames, chartTabKey, chartTabNote, findCharts, isChartTab, type ChartEdit } from '../../shared/charts'
+import { chartNoteChanged, chartTabTitle, forgetChartTab, makeChartTab, openTabFor, type ChartBridge } from './charts/chartTabs'
 import { placeNotice } from './noticePlace'
 import { addRecovered, flushRecordings, forgetWaitingRecordings, recorderStatus, recordingsPending, voiceNoteMoved } from './editor/voiceRecorder'
 import { deckNoteMoved, ejectDeck } from './editor/voicePlayer'
@@ -216,7 +219,8 @@ const nameChangedNotice = (typed: string, actual: string): string => {
  *  it sits between, so "Resize Meeting notes and Ideas" tells a screen reader
  *  which seam it has landed on. Matches the name `NotePane` puts on its own
  *  `<section>`, including the blank column's standing question. */
-const paneLabel = (p: string): string => (p === BLANK ? 'Select a note' : stripMd(nameOf(p)))
+const paneLabel = (p: string): string =>
+  p === BLANK ? 'Select a note' : isChartTab(p) ? chartTabTitle(p) : stripMd(nameOf(p))
 
 // Steps up to the nearest shared ancestor folder, then back down — 0 for two
 // notes in the same folder, 1 for parent/child, etc. Used to bias search
@@ -396,6 +400,8 @@ export default function App(): React.JSX.Element {
   // tabs/model.ts; App only holds the result and the documents behind it.
   const [layout, setLayout] = useState<TabLayout>(EMPTY_LAYOUT)
   const openPath = activePath(layout) // the focused pane's note
+  // A chart's tab counts as its note for the sidebar, the path bar and search.
+  const openNotePath = openPath ? chartTabNote(openPath) : openPath
   const layoutRef = useRef(layout)
   layoutRef.current = layout
   // The FOCUSED pane's own scroll position, true once scrolled past the very
@@ -686,6 +692,8 @@ export default function App(): React.JSX.Element {
       // Keep the loaded copy current too: a pane that shows this note again
       // later re-seeds from here, and stale text would look like lost edits.
       docsRef.current.set(path, text)
+      // An open chart tab on this note follows it (charts/chartTabs.ts).
+      chartNoteChanged(path, text)
       // Counted a moment from now, off this keystroke's path, and without redrawing
       // the whole window for it (wordCounts.ts).
       countSoon(path, text)
@@ -719,7 +727,7 @@ export default function App(): React.JSX.Element {
     // A document's tab reads its own file (DocView). It never enters the open-notes
     // map: that map is what gets saved, counted, searched, link-scanned and kept as
     // earlier versions, and a PDF must be none of those (docs/plans/file-tabs.md).
-    if (isListedDoc(path)) return
+    if (isListedDoc(path) || isChartTab(path)) return
     loadingRef.current.add(path)
     let text = ''
     try {
@@ -866,6 +874,12 @@ export default function App(): React.JSX.Element {
   const dropDoc = useCallback(
     (path: string): void => {
       if (path === BLANK) return // the "+" tab never had a file
+      if (isChartTab(path)) {
+        // A rename gives the tab a new path under the same key: only a real close forgets it.
+        const key = chartTabKey(path)
+        if (!layoutRef.current.tabs.some((t) => chartTabKey(t) === key)) forgetChartTab(path)
+        return
+      }
       const pending = dirtyRef.current.get(path)
       let written: Promise<unknown> = Promise.resolve()
       if (pending !== undefined) {
@@ -1713,6 +1727,123 @@ export default function App(): React.JSX.Element {
     [vaultNotes, spaceMarks, settings.voiceSkip]
   )
 
+  // --- Mermaid charts' own tabs (docs/plans/flow-charts.md) ---------------------------
+
+  /** Where a note is now, waiting out a rename in progress. Mid-rename its old name is already
+   *  gone from disk, and reading it there would make a chart look deleted. */
+  const settledPath = useCallback(async (noteNow: () => string): Promise<string> => {
+    for (let i = 0; i < 200 && renamingRef.current.has(noteNow()); i++) {
+      await new Promise((r) => setTimeout(r, 25))
+    }
+    // Asked again, not remembered: the tab may have heard its new path while this waited.
+    // `movedTo` covers the moment before it has.
+    const note = noteNow()
+    return movedToRef.current.get(note) ?? note
+  }, [])
+
+  /** Change a note from outside its editor, by the one route that fits how it is open:
+   *  - on screen: a change in its editor, so its undo, autosave and versions all carry on;
+   *  - open in a tab with no editor up: its loaded copy, then the normal save;
+   *  - not open at all: read, change and write the file.
+   *  Never a whole-note reload under a live editor, which would wipe its undo. */
+  const editNote = useCallback(
+    async (noteNow: () => string, make: (text: string) => ChartEdit | null): Promise<boolean> => {
+      const note = await settledPath(noteNow)
+      const splice = (t: string, e: ChartEdit): string => t.slice(0, e.from) + e.insert + t.slice(e.to)
+      const view = viewsShowing(note)[0]
+      if (view) {
+        const e = make(view.state.doc.toString())
+        if (!e) return false
+        // `formatEdit`: this is a deliberate rewrite, so the filters that mend colour and mark
+        // tags as you type leave it alone.
+        view.dispatch({ changes: e, annotations: formatEdit.of(true), userEvent: 'input.chart' })
+        return true
+      }
+      const open = docsRef.current.get(note)
+      if (open !== undefined) {
+        const e = make(open)
+        if (!e) return false
+        const next = splice(open, e)
+        docsRef.current.set(note, next)
+        setVersions((v) => ({ ...v, [note]: (v[note] ?? 0) + 1 }))
+        onDocChange(note, next)
+        return true
+      }
+      await flush()
+      const text = await window.api.readNote(note)
+      const e = make(text)
+      if (!e) return false
+      const next = splice(text, e)
+      await window.api.writeNote(note, next)
+      if (contentCache.current.has(note)) contentCache.current.set(note, next)
+      setTree((t) => withNoteSaved(t, note, notePreview(next), Date.now()))
+      chartNoteChanged(note, next)
+      return true
+    },
+    [flush, onDocChange, settledPath]
+  )
+
+  const chartBridge = useMemo(
+    (): ChartBridge => ({
+      // The loaded copy rather than an editor's: every keystroke keeps it current, and after a
+      // change from outside it is ahead of the editor, which takes the new text a moment later.
+      read: async (noteNow) => {
+        const note = await settledPath(noteNow)
+        return docsRef.current.get(note) ?? (await window.api.readNote(note))
+      },
+      edit: editNote,
+      // The strip and column labels read a chart's name from outside React.
+      named: () => setVersions((v) => ({ ...v }))
+    }),
+    [editNote, settledPath]
+  )
+
+  /** A chart card's Open: its own tab, or the one already open on it. The note's columns are
+   *  left as they are: a split on screen is put aside whole, as going to any other tab does. */
+  const openChart = useCallback(
+    async (note: string, index: number): Promise<void> => {
+      let text: string
+      try {
+        text = await chartBridge.read(() => note)
+      } catch {
+        flash('Couldn’t open that chart.')
+        return
+      }
+      const charts = findCharts(text)
+      if (!charts[index]) return
+      const l = layoutRef.current
+      const known = openTabFor(l.tabs, note, charts, index)
+      const name = chartNames(charts, stripMd(nameOf(note)))[index]
+      applyLayout(showTab(l, known ?? makeChartTab(note, charts, index, name)))
+    },
+    [chartBridge, applyLayout, flash]
+  )
+
+  /** Split: the chart beside its note, note on the left. */
+  const chartBeside = useCallback(
+    (tab: string): void => {
+      const note = chartTabNote(tab)
+      const next = splitWith(layoutRef.current, note, tab)
+      if (next === layoutRef.current) {
+        flash('There’s no room for another column.')
+        return
+      }
+      applyLayout(next)
+      if (!docsRef.current.has(note)) void loadDoc(note)
+    },
+    [applyLayout, loadDoc, flash]
+  )
+
+  /** Single view: the chart takes the screen, and the notes beside it stay open as tabs. */
+  const chartSingle = useCallback(
+    (tab: string): void => {
+      const l = layoutRef.current
+      const at = l.panes.indexOf(tab)
+      if (at !== -1) applyLayout(ungroupPanes({ ...l, focus: at }))
+    },
+    [applyLayout]
+  )
+
   const linkHandlers = useMemo(
     (): LinkHandlers => ({
       open: (p, how, heading) => void openLink(p, how, heading),
@@ -1791,6 +1922,7 @@ export default function App(): React.JSX.Element {
       binPickedMedia: (req) => binPickedMediaRef.current(req),
       moveToNote: (from, to, text, putBack) => moveToNoteRef.current(from, to, text, putBack),
       readNote: async (p) => docsRef.current.get(p) ?? (await window.api.readNote(p)),
+      openChart: (note, index) => void openChart(note, index),
       menu: (x, y, items, heading) =>
         setMenu({
           x,
@@ -1803,7 +1935,7 @@ export default function App(): React.JSX.Element {
       setVoiceSkip: (side, seconds) =>
         void changeSettings({ voiceSkip: { ...settingsRef.current.voiceSkip, [side]: seconds } })
     }),
-    [openLink, createFromLink, reveal, flash, showNotice, requestHeading, changeSettings, openMoment]
+    [openLink, createFromLink, reveal, flash, showNotice, requestHeading, changeSettings, openMoment, openChart]
   )
 
   // Delete-then-confirm for a photo or video pulled out of a note. The editor
@@ -2355,7 +2487,8 @@ export default function App(): React.JSX.Element {
           if (!owner) return home !== s.archive.folder
           return owner === home || (owner !== s.archive.folder && !s.spaces.some((sp) => sp.folder === owner))
         }
-        applyLayout(restoreLayout(s.session, (p) => mine(p) && !!findNode(t, p)), true)
+        // A chart's tab comes back with its note.
+        applyLayout(restoreLayout(s.session, (p) => mine(p) && !!findNode(t, chartTabNote(p))), true)
       }
       // From here the layout is the user's, and worth saving. Until it is, an
       // empty layout must NOT be written back — that would wipe the session
@@ -2715,7 +2848,11 @@ export default function App(): React.JSX.Element {
       // come back as an empty tab (and typing would recreate it). Drop them now.
       for (const [folder, stashed] of spaceTabs.current) {
         let next = stashed
-        for (const q of stashed.tabs) if (!onDisk.has(q) && !docsOnDisk.has(q) && !dirtyRef.current.has(q)) next = closeTab(next, q)
+        for (const tab of stashed.tabs) {
+          // A chart's tab stands or falls with its note.
+          const q = chartTabNote(tab)
+          if (!onDisk.has(q) && !docsOnDisk.has(q) && !dirtyRef.current.has(q)) next = closeTab(next, tab)
+        }
         if (next !== stashed) spaceTabs.current.set(folder, next)
       }
       // A refused change whose file just changed or went: try it now. That try looks
@@ -2743,6 +2880,13 @@ export default function App(): React.JSX.Element {
           applyLayout(closeTab(layoutRef.current, p))
         }
       }
+      // Chart tabs: gone with their note, and told when it changed outside the app.
+      for (const p of layoutRef.current.tabs) {
+        if (!isChartTab(p)) continue
+        const n = chartTabNote(p)
+        if (!onDisk.has(n) && !dirtyRef.current.has(n)) applyLayout(closeTab(layoutRef.current, p))
+      }
+      for (const p of paths) chartNoteChanged(p, docsRef.current.get(p))
     })
   }, [loadTree, syncSpaces, applyLayout, rescanLinks, remapOpen, flush])
 
@@ -3618,7 +3762,7 @@ export default function App(): React.JSX.Element {
   )
 
   const archiveOpenNote = (p: string | null): void => {
-    if (!p) return
+    if (!p || isChartTab(p)) return
     if (inArchiveFolder(p)) {
       flash('That note is already in the archive.')
       return
@@ -4766,8 +4910,8 @@ export default function App(): React.JSX.Element {
     // default (tree) order alone. Otherwise a stable sort nudges hits that
     // share a folder with the open note ahead of ones that don't, without
     // hiding anything the plain substring match already found.
-    if (openPath) {
-      const home = parentOf(openPath)
+    if (openNotePath) {
+      const home = parentOf(openNotePath)
       hits.sort((a, b) => folderDistance(parentOf(a.path), home) - folderDistance(parentOf(b.path), home))
     }
     // Tag hits that live outside the active space — only meaningful once
@@ -4784,11 +4928,11 @@ export default function App(): React.JSX.Element {
         spaceEmoji: h.spaceFolder && sp?.emoji ? shownEmoji(sp.emoji, settings.emojiStyle) : undefined
       }
     })
-  }, [query, deep, allNotes, cacheVersion, openPath, allSpaces, space.folder, settings.spaces, settings.emojiStyle])
+  }, [query, deep, allNotes, cacheVersion, openNotePath, allSpaces, space.folder, settings.spaces, settings.emojiStyle])
 
   // Shown in the results header so the reordering isn't invisible — only when
   // it actually did something (an open note outside the space root).
-  const searchContextLabel = openPath ? nameOf(parentOf(openPath)) || null : null
+  const searchContextLabel = openNotePath ? nameOf(parentOf(openNotePath)) || null : null
 
   // The notes the sidebar Search can reach with its current "this space / every
   // space" toggle (`allNotes`), less the archived ones — and, with its "contents"
@@ -5084,7 +5228,7 @@ export default function App(): React.JSX.Element {
         }}
         spaceActions={spaceActions}
         workspace={workspace}
-        openPath={openPath}
+        openPath={openNotePath}
         settings={settings}
         onChangeSettings={(p) => void changeSettingsAndSpace(p)}
         presets={presets}
@@ -5211,7 +5355,7 @@ export default function App(): React.JSX.Element {
             a bar that came and went per note would move the text under you. */}
         {space.showPath && (
           <PathBar
-            path={openPath ?? ''}
+            path={openNotePath ?? ''}
             spaces={linkEnvBase.spaces}
             onReveal={(folder) => void reveal(folder)}
             hidden={!!openPath && !space.pinPath && focusedScrolledPastTop}
@@ -5238,9 +5382,12 @@ export default function App(): React.JSX.Element {
                   )}
                   <NotePane
                   onEditBeside={editInItsApp}
+                  chartBridge={chartBridge}
+                  onChartBeside={() => chartBeside(p)}
+                  onChartSingle={() => chartSingle(p)}
                   path={p}
                   size={paneWidths[i]}
-                  archived={!!p && !inArchive && inArchiveFolder(p)}
+                  archived={!!p && !isChartTab(p) && !inArchive && inArchiveFolder(p)}
                   onPutBack={(x, y) => putBackMenu([p], x, y)}
                   doc={docsRef.current.get(p) ?? ''}
                   version={versions[p] ?? 0}
@@ -5310,7 +5457,12 @@ export default function App(): React.JSX.Element {
                     next[slot] = id
                     void changeSettings(withSpacePatch(settings, space.folder, { toolbarSlots: next }))
                   }}
-                  onFocus={() => applyLayout(layout.focus === i ? layout : { ...layout, focus: i })}
+                  // From the ref, not this render's `layout`: a press landing just after a rename,
+                  // before the redraw, put the note's OLD path back (found 2026-11-22).
+                  onFocus={() => {
+                    const l = layoutRef.current
+                    if (l.focus !== i) applyLayout({ ...l, focus: i })
+                  }}
                   onDocChange={(text) => onDocChange(p, text)}
                   onRename={(title) => renameOpen(p, title)}
                   // Beside THIS column, not "the focused one": the button is in
@@ -5542,7 +5694,7 @@ export default function App(): React.JSX.Element {
           allSpaces={allSpaces}
           onToggleAllSpaces={() => setAllSpaces((a) => !a)}
           onWantText={wantJumpText}
-          activePath={openPath}
+          activePath={openNotePath}
           onOpen={openJumpNote}
           onClose={closeJump}
         />

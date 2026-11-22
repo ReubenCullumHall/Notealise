@@ -7,10 +7,11 @@ import { history } from '@codemirror/commands'
 import { baseExtensions, historyBox } from './extensions'
 import { applyColor, clearColor } from './colorCommands'
 import { SelectionToolbar } from './SelectionToolbar'
+import { chartsField } from './chartsField'
 import { setLinkEnv, type LinkEnv, type LinkHandlers } from './linkEnv'
 import { selectionIsEmbed } from './attachSelect'
 import { isDotPick } from './blockPick'
-import { rawViewOf } from './rawView'
+import { isRaw, rawViewOf } from './rawView'
 import { separateBlocks } from './separateBlocks'
 import { mediaSourceOf } from './mediaSource'
 import type { Layer } from './palette'
@@ -524,8 +525,10 @@ export function CodeEditor({
     if (at === null) return // not in this note's text (a title match) — leave the cursor
     const opened = openTogglesAround(view, at)
     const from = opened ? findVisibleText(view.state, revealText) ?? at : at
+    // Words inside a chart are behind its card, so the search lands on the card, picked.
+    const chart = isRaw(view.state) ? undefined : view.state.field(chartsField, false)?.find((c) => from >= c.from && from < c.to)
     view.dispatch({
-      selection: { anchor: from, head: from + revealText.length },
+      selection: chart ? { anchor: chart.from, head: chart.to } : { anchor: from, head: from + revealText.length },
       effects: EditorView.scrollIntoView(from, { y: 'center' })
     })
     flashLines(view, view.state.doc.lineAt(from).from, view.state.doc.lineAt(from).from)

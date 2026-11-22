@@ -1,3 +1,4 @@
+import { chartsField } from './chartsField'
 import type { EditorState } from '@codemirror/state'
 import { syntaxTree } from '@codemirror/language'
 import { findToggles, toggleAtTitle } from './toggleModel'
@@ -90,6 +91,10 @@ export function blockRange(state: EditorState, at?: number): BlockRange {
   // when you grab its title, open or shut (Notion's rule).
   const toggle = toggleAtTitle(findToggles(state), doc.lineAt(head).number)
   if (toggle) return { from: toggle.from, to: doc.line(toggle.endLine).to }
+
+  // A chart is one block however far the parser has got (chartsField.ts works from the text).
+  const chart = state.field(chartsField, false)?.find((c) => head >= c.from && head <= c.to)
+  if (chart) return { from: chart.from, to: chart.to }
 
   const fence = fenceAt(state, head)
   if (fence) {

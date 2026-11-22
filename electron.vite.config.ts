@@ -127,6 +127,9 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()]
   },
   renderer: {
+    // The chart worker (charts/chartWorker.ts) loads each chart type only when it is needed,
+    // which takes real modules: the default worker format can't be split into pieces.
+    worker: { format: 'es' },
     plugins: [react(), csp()]
   }
 })

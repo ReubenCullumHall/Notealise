@@ -16,6 +16,9 @@ import { NoteTape } from './VoiceDeck'
 import { DocView } from '../docs/DocView'
 import { useDocApp } from '../docs/useDocApp'
 import { docLabel, docViewOf, isListedDoc } from '../../../shared/docs'
+import { isChartTab } from '../../../shared/charts'
+import { ChartView } from '../charts/ChartView'
+import { chartTabTitle, type ChartBridge } from '../charts/chartTabs'
 import type { Inspect } from '../links/LinkInspector'
 import { incomingLinks, outgoingLinks } from '../links/model'
 import { subscribeWordCounts, wordCountOf } from '../wordCounts'
@@ -121,6 +124,10 @@ interface Props {
   onSplit: () => void
   /** false at the column cap — the only thing that can stop a new column now */
   canSplit: boolean
+  /** A chart tab's way to its note, and to split or single view (charts/). */
+  chartBridge?: ChartBridge
+  onChartBeside?: () => void
+  onChartSingle?: () => void
   /** the column's x: closes the NOTE, tab and all, exactly like the x on its
    *  tab — keeping it open is a drag of its tab out of the split (Reuben,
    *  2026-09-27) */
@@ -258,7 +265,10 @@ export function NotePane({
   onDropTab,
   size,
   archived = false,
-  onPutBack
+  onPutBack,
+  chartBridge,
+  onChartBeside,
+  onChartSingle
 }: Props): React.JSX.Element {
   // This pane's live CodeMirror, for its own format bar. Per pane, not per app:
   // each column's commands act on the column they sit in.
@@ -273,6 +283,9 @@ export function NotePane({
   // (A kind it can't draw only gets here by a drag; DocView says so, with the
   // way out above it.)
   const isDoc = !blank && isListedDoc(path)
+  // A Mermaid chart's own tab (charts/ChartView.tsx): like a document, nothing that belongs
+  // to a note is drawn round it.
+  const isChart = !blank && isChartTab(path)
   // PDF, Word and Excel: "Edit in Excel". Text and CSV are edited right here.
   const besideApp = useDocApp(isDoc && /^(pdf|word|sheet)$/.test(docViewOf(path) ?? '') ? path : null)
   const [titleDraft, setTitleDraft] = useState(() => stripMd(nameOf(path)))
@@ -294,12 +307,12 @@ export function NotePane({
   }, [path])
 
   const outgoing = useMemo(
-    () => (blank || isDoc ? [] : outgoingLinks(path, doc, env.notes, env.spaces, env.blocks, env.headings)),
-    [blank, isDoc, path, doc, env.notes, env.spaces, env.blocks, env.headings]
+    () => (blank || isDoc || isChart ? [] : outgoingLinks(path, doc, env.notes, env.spaces, env.blocks, env.headings)),
+    [blank, isDoc, isChart, path, doc, env.notes, env.spaces, env.blocks, env.headings]
   )
   const incoming = useMemo(
-    () => (blank || isDoc ? [] : incomingLinks(path, linkIndex, env.notes, env.spaces)),
-    [blank, isDoc, path, linkIndex, env.notes, env.spaces]
+    () => (blank || isDoc || isChart ? [] : incomingLinks(path, linkIndex, env.notes, env.spaces)),
+    [blank, isDoc, isChart, path, linkIndex, env.notes, env.spaces]
   )
 
   // Hide-on-scroll, shared by the links block (floating) and the heading row
@@ -327,7 +340,7 @@ export function NotePane({
   // Pinned, or at the bottom, none of that happens for the links block: it is
   // an ordinary row instead (above the editor when pinned, below it at the
   // bottom — see the sibling rows around `.pane-body` below).
-  const floatingTop = !isDoc && showLinks && linksPosition === 'top' && !pinLinks
+  const floatingTop = !isDoc && !isChart && showLinks && linksPosition === 'top' && !pinLinks
   const [scrolledPastTop, setScrolledPastTop] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -459,7 +472,7 @@ export function NotePane({
       style={{ flexGrow: size, flexShrink: 1, flexBasis: 0 }}
       onMouseDownCapture={onFocus}
       onFocusCapture={onFocus}
-      aria-label={blank ? 'Select a note' : stripMd(nameOf(path))}
+      aria-label={blank ? 'Select a note' : isChart ? chartTabTitle(path) : stripMd(nameOf(path))}
     >
       {/* The column's drag handle, in a split: the 10px of padding between the
           top of the column and the format buttons (Reuben, 2026-09-26). Not
@@ -540,7 +553,9 @@ export function NotePane({
             takes the whole row and scrolls, exactly as it did before. */}
         {!split && (
           <span className="note-info flex min-w-0 flex-1 items-center gap-2 whitespace-nowrap pr-4 text-xs">
-            {isDoc ? (
+            {isChart ? (
+              <span className="truncate text-ink-500">Chart</span>
+            ) : isDoc ? (
               <span className="truncate text-ink-500">{docLabel(path)}</span>
             ) : !blank && (
               <>
@@ -568,7 +583,34 @@ export function NotePane({
           </span>
         )}
 
-        {isDoc ? (
+        {isChart ? (
+          // In place of the format buttons: the chart's name, and single or split view.
+          <div className="flex min-w-0 flex-[2] items-center justify-center gap-2">
+            <span className="min-w-0 truncate text-sm font-medium text-ink-800">{chartTabTitle(path)}</span>
+            {split ? (
+              <button
+                type="button"
+                className={ROW_BTN + ' gap-1.5 px-2 text-xs'}
+                data-tip="Show this chart on its own"
+                aria-label="Single view"
+                onClick={() => onChartSingle?.()}
+              >
+                Single view
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={ROW_BTN + ' gap-1.5 px-2 text-xs'}
+                data-tip="Put this chart beside its note"
+                aria-label="Split view beside its note"
+                onClick={() => onChartBeside?.()}
+              >
+                <Icon name="splitView" className="h-4 w-4" />
+                <span>Split</span>
+              </button>
+            )}
+          </div>
+        ) : isDoc ? (
           // In place of the format buttons: the file's name, and the way out to the
           // app the computer opens it with — for anything this tab can't do.
           <div className="flex min-w-0 flex-[2] items-center justify-center gap-2">
@@ -622,7 +664,7 @@ export function NotePane({
               ~80px of commands wide, and a button that can do nothing is dead
               weight taking space Bold and Italic need. A blank column has
               nothing to split off in the first place. */}
-          {!blank && canSplit && (
+          {!blank && !isChart && canSplit && (
           <button
             className={ROW_BTN}
             data-tip={'Open another column  (Cmd/Ctrl+\\)  ·  or drag a tab to the edge'}
@@ -673,7 +715,7 @@ export function NotePane({
         </div>
       )}
 
-      {!blank && !isDoc && showLinks && linksPosition === 'top' && pinLinks && (
+      {!blank && !isDoc && !isChart && showLinks && linksPosition === 'top' && pinLinks && (
         <LinksBlock
           outgoing={outgoing}
           incoming={incoming}
@@ -698,6 +740,8 @@ export function NotePane({
               </p>
             </div>
           </div>
+        ) : isChart && chartBridge ? (
+          <ChartView key={path.slice(path.lastIndexOf('/') + 1)} path={path} bridge={chartBridge} />
         ) : isDoc ? (
           <DocView path={path} version={version} />
         ) : (
@@ -933,7 +977,7 @@ export function NotePane({
         )}
       </div>
 
-      {!blank && !isDoc && showLinks && linksPosition === 'bottom' && (
+      {!blank && !isDoc && !isChart && showLinks && linksPosition === 'bottom' && (
         <LinksBlock
           outgoing={outgoing}
           incoming={incoming}

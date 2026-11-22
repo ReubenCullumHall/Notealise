@@ -20,6 +20,8 @@ import { blockPick } from './blockPick'
 import { taskClick } from './taskPass'
 import { blockMath } from './blockMath'
 import { blockGuard } from './blockGuard'
+import { blockChart } from './blockChart'
+import { chartSearch } from './chartsField'
 import { transcriptFold } from './transcriptFold'
 import { ruleSnap } from './ruleSnap'
 import { blockLines } from './blockLines'
@@ -99,6 +101,8 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     search({ top: true }),
     // ...which never finds words inside the hidden colour/toggle/voice tags.
     searchSkipsHiddenTags,
+    // ...and goes round a chart's hidden text (chartsField.ts).
+    chartSearch,
     // A SEPARATE keymap extension, placed AFTER the one above — CM6 resolves
     // a key by extension order, so this is what lets our own bindings keep
     // winning collisions rather than searchKeymap's. There is exactly one:
@@ -177,6 +181,8 @@ export function baseExtensions(links?: LinkHandlersRef): Extension[] {
     // Ahead of blockMath and blockTable, which ask it what is hidden.
     toggleList,
     blockMath,
+    // A Mermaid chart as a card (blockChart.ts). Ahead of blockGuard, which keeps the cursor off it.
+    blockChart,
     // The same for voice notes, pictures, videos and tables: no cursor on their lines (blockGuard.ts).
     blockGuard,
     // A voice note's transcript, drawn under it as part of it (transcriptFold.ts).

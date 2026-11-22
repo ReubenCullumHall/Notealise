@@ -1,3 +1,4 @@
+import { drawChart } from '../charts/chartEngine'
 import DOMPurify from 'dompurify'
 import { isInlineDataUrl, kindForFilename, resolveVaultPath } from '../../../shared/attachments'
 import { baseName, titleOf } from '../../../shared/links'
@@ -173,6 +174,27 @@ export async function buildBody(text: string, notePath: string): Promise<string>
       const url = await pictureDataUrl(rel)
       if (!url) img.replaceWith(standIn(null, rel))
       else img.setAttribute('src', url)
+    })
+  )
+
+  // A chart prints as its picture. Added after the check above, which is for pictures named in
+  // the note; this one is made here. A chart that can't be drawn stays as its text, so nothing
+  // is lost from the page.
+  await Promise.all(
+    Array.from(root.querySelectorAll('pre > code.language-mermaid')).map(async (code) => {
+      const pre = code.parentElement
+      if (!pre || pre.closest('li, blockquote')) return // stays code in the note too
+      const drawn = await drawChart((code.textContent ?? '').replace(/\n+$/, ''))
+      if (!drawn.ok) return
+      const img = document.createElement('img')
+      const bytes = new TextEncoder().encode(drawn.svg)
+      let binary = ''
+      for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+      img.setAttribute('src', `data:image/svg+xml;base64,${btoa(binary)}`)
+      img.setAttribute('alt', 'Chart')
+      // Its own white ground: a picture can't read the page's colours, and "Keep my look" may be dark.
+      img.setAttribute('style', 'display:block;margin:12px auto;max-width:100%;height:auto;background:#fff;padding:8px;border-radius:4px')
+      pre.replaceWith(img)
     })
   )
   return root.innerHTML

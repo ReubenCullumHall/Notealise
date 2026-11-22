@@ -290,6 +290,37 @@ export function codeBlock(view: EditorView): void {
   }
 }
 
+/** A flow chart to start from, as a standard Mermaid block (shared/charts.ts). On an empty line
+ *  it takes that line; otherwise it goes under this one. The cursor ends on the line below it,
+ *  because a chart is a block and has no line of its own to rest on (blockGuard.ts). */
+export function insertFlowChart(view: EditorView): void {
+  const { state } = view
+  const br = state.lineBreak
+  const line = state.doc.lineAt(state.selection.main.head)
+  const block = [
+    '```mermaid',
+    'flowchart TD',
+    '  A[Start] --> B{Is it working?}',
+    '  B -->|Yes| C[Done]',
+    '  B -->|No| D[Try again]',
+    '  D --> B',
+    '```'
+  ].join(br)
+  const empty = line.text.trim() === ''
+  const lead = empty ? '' : br + br
+  const at = empty ? line.from : line.to
+  const hasNext = line.number < state.doc.lines
+  // At the note's end it brings a line of its own, or there would be nowhere to type under it.
+  const insert = lead + block + (hasNext ? '' : br)
+  view.dispatch({
+    changes: { from: at, to: empty ? line.to : at, insert },
+    selection: { anchor: at + lead.length + block.length + br.length },
+    scrollIntoView: true,
+    userEvent: 'input'
+  })
+  view.focus()
+}
+
 /** `[text](url)` — a selection becomes the label and the cursor lands on the
  *  URL, which is the half you still have to fill in. */
 export function link(view: EditorView): void {
