@@ -667,6 +667,14 @@ function NameField({
       disabled={disabled}
       placeholder="Unnamed"
       maxLength={40}
+      // Clicking in highlights the whole name so Backspace empties it. The mouse-up is
+      // swallowed once, or Chromium drops the highlight the moment the click finishes.
+      onFocus={(e) => {
+        const el = e.currentTarget
+        el.select()
+        const keep = (ev: Event): void => ev.preventDefault()
+        el.addEventListener('mouseup', keep, { once: true })
+      }}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => draft.trim() !== value && onCommit(draft.trim())}
       onKeyDown={(e) => {

@@ -5930,6 +5930,9 @@ export default function App(): React.JSX.Element {
             {/* eslint-disable-next-line jsx-a11y/no-autofocus */}
             <input
               autoFocus
+              // The whole name starts highlighted, so typing (or Backspace) replaces it
+              // — every time the box opens, even for a note renamed before (Reuben, 2026-11-22).
+              onFocus={(e) => e.currentTarget.select()}
               value={prompt.value}
               onChange={(e) => setPrompt({ ...prompt, value: e.target.value })}
               onKeyDown={(e) => {

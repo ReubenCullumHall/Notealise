@@ -407,6 +407,7 @@ export function Island({
   const renameField = editing ? (
     <input
       autoFocus
+      onFocus={(e) => e.currentTarget.select()} // name starts highlighted, ready to type over
       value={draft}
       maxLength={40}
       aria-label="Island name"
