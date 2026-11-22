@@ -798,6 +798,14 @@ export function NotePane({
                 value={titleDraft}
                 placeholder="Untitled"
                 data-tip={path}
+                // Clicking in highlights the whole title, so Backspace empties it and typing
+                // replaces it (Reuben, 2026-11-22). The first mouse-up is swallowed, or
+                // Chromium drops the highlight as the click finishes. Click again to place a caret.
+                onFocus={(e) => {
+                  const el = e.currentTarget
+                  el.select()
+                  el.addEventListener('mouseup', (ev) => ev.preventDefault(), { once: true })
+                }}
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={commitTitle}
                 onKeyDown={(e) => {
